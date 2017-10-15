@@ -3,19 +3,19 @@
 
 This repository contains Prolog code:
 
-- [Source/context.pl](context.pl): An implementation of a Contextual Object Oriented Logic Programming paradigm for SWI-Prolog,
-- [Source/eapi.pl](eapi.pl): A DCG Grammar for reading EAPI-6 (or earlier) compliant Gentoo ebuild information into Prolog facts and rules,
+- [context](Source/context.pl): An implementation of a Contextual Object Oriented Logic Programming paradigm for SWI-Prolog,
+- [eapi](Source/eapi.pl): A DCG Grammar for reading EAPI-6 (or earlier) compliant Gentoo ebuild information into Prolog facts and rules,
 
-- [Source/repository.pl](repository.pl): A Prolog class representing a Gentoo Portage repository (with Git, Rsync or Web-rsync syncronisation support),
-- [Source/knowledgebase.pl](knowledgebase.pl)A datalog-style query language for query-ing a knowledge based with Gentoo Portage facts and rules. 
+- [repository](Source/repository.pl): A Prolog class representing a Gentoo Portage repository (with Git, Rsync or Web-rsync syncronisation support),
+- [knowledgebase](Source/knowledgebase.pl)A datalog-style query language for query-ing a knowledge based with Gentoo Portage facts and rules. 
 
 
-- An ebuild [Source/reader.pl](reader) & [Source/parser.pl](parser), 
-- An [Source/prover.pl](prover) which uses declarative reasoning to compute a Model and a logic Proof for realisation of a given ebuild,
-- A [Source/planner.pl](planner) capable of creating a build plan (Makefile) for realisation of a given ebuid proof,
-- A pretty [Source/printer.pl](printer) for build plans,
-- A [Source/grapher.pl](grapher) capable of creating graphviz DOT files and interactive SVG files,
-- Domain-specific [Source/rules.pl](rules) for reasoning about ebuilds and their possible configurations, 
+- An ebuild [reader](Source/reader.pl) & [parser](Source/parser.pl), 
+- A [prover](Source/prover.pl) which uses declarative reasoning to compute a Model and a logic Proof for realisation of a given ebuild,
+- A [planner](Source/planner.pl) capable of creating a build plan (Makefile) for realisation of a given ebuid proof,
+- A pretty [printer](Source/printer.pl) for build plans,
+- A [grapher](Source/grapher.pl) capable of creating graphviz DOT files and interactive SVG files,
+- Domain-specific [rules](Source/rules.pl) for reasoning about ebuilds and their possible configurations, 
 
 This repository also contains some bash scripts to emulate Gentoo emerge.
 
