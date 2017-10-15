@@ -20,32 +20,45 @@ This repository also contains some bash [scripts](.bash_profile) to emulate Gent
 
 ## Some examples: 
 
+## Portage SVG Graphs
+
+The code is able to automatically generate interactive SVG graphs for all ebuilds, allowing you to walk
+through the Ebuild dependency graph.
+
+![Portage SVG Graphs](https://i.imgur.com/WhuEGxx.png)
+
+
 ## Contextual logic programming 
 
-![Imgur](https://i.imgur.com/KxLU7tL.png)
+The following screenshot shows a simple 'Person' class being instantiated. Private data member can be set and retrieved, but not accessed 
+directly. 
 
-In the example shown, we create an instance from the 'person' class. We shown rules are properly guarded and the instance has its own data members. 
+![Imgur](https://i.imgur.com/O7Luag9.png)
+
+
+## Syncing repositories
+
+The following screenshot shows a Gentoo Portage repository and a Gentoo overlay being synced using git. Only the changed ebuilds have their 
+Logic metadata updated. 
+
+![Imgur](https://i.imgur.com/HNp6QYD.png)
 
 
 ## Reading, parsing & querying ebuilds 
 
-![Imgur](https://i.imgur.com/14mCiGp.png)
+In the following screenshots we show Gentoo ebuilds being read, parsed and queried using Prolog
 
-In the example shown, we sync a Gentoo Portage repository using Prolog. 
+![Imgur](https://i.imgur.com/jHNSVdl.png)
 
+![Imgur](https://i.imgur.com/oGplVXX.png)
 
+![Imgur](https://i.imgur.com/wWAdjXn.png)
 
-## Proving & Planning & Building ebuilds
-
-
-![Imgur](https://i.imgur.com/14mCiGp.png)
-
-In the example shown, we construct a proof for installation of an ebuild. 
-
+![Imgur](https://i.imgur.com/yVED5fZ.png)
 
 
 ## Licence: GPL v3
 
 ## Installation instructions: 
 
-This code has as audience: Experienced Prolog programmers. 
+Not available at this time.
