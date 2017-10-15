@@ -33,6 +33,12 @@ through the Ebuild dependency graph.
 The following screenshot shows a simple 'Person' class being instantiated. Private data member can be set and retrieved, but not accessed 
 directly. 
 
+The class code:
+
+![Imgur](https://i.imgur.com/MRZwVUS.png)
+
+The instance:
+
 ![Imgur](https://i.imgur.com/O7Luag9.png)
 
 
@@ -56,8 +62,6 @@ In the following screenshots we show Gentoo ebuilds being read, parsed and queri
 
 ![Imgur](https://i.imgur.com/yVED5fZ.png)
 
-
-## Licence: GPL v3
 
 ## Installation instructions: 
 
