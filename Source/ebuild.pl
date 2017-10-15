@@ -1,11 +1,3 @@
-% Copyright 2005-2016 Pieter Van den Abeele 
-%
-% Author: pvdabeel@mac.com
-%
-% $Header$
-
-% ensure loaded eapi
-
 % *******************
 % EBUILD declarations
 % *******************
