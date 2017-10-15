@@ -1,0 +1,12 @@
+#!/bin/sh
+REPOSITORY=${1}
+CACHE=${2}
+
+cd ${CACHE}
+
+
+# need to regenerate metadata cache from ebuilds here:
+
+# egencache
+
+# find . -type f | sed -e "s/.\//metadata(\'/" | sed -e "s/$/\')./" 
