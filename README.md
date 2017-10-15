@@ -6,8 +6,10 @@ This repository contains Prolog code:
 - [context](Source/context.pl): An implementation of a Contextual Object Oriented Logic Programming paradigm for SWI-Prolog,
 - [eapi](Source/eapi.pl): A DCG Grammar for reading EAPI-6 (or earlier) compliant Gentoo ebuild information into Prolog facts and rules,
 
-- [repository](Source/repository.pl): A Prolog class representing a Gentoo Portage repository (with Git, Rsync or Web-rsync syncronisation support),
-- [knowledgebase](Source/knowledgebase.pl)A datalog-style query language for query-ing a knowledge based with Gentoo Portage facts and rules. 
+Besides these files, the following is also available:
+
+- A Prolog class representing a Gentoo Portage [repository](Source/repository.pl) (with Git, Rsync or Web-rsync syncronisation support),
+- [knowledgebase](Source/knowledgebase.pl): A structure to which overlays and repositories can be declared. Implements a datalog-style query language for query-ing a knowledge base with Gentoo Portage facts and rules. 
 
 
 - An ebuild [reader](Source/reader.pl) & [parser](Source/parser.pl), 
