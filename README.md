@@ -16,7 +16,7 @@ Other interesting files:
 - A [grapher](Source/grapher.pl) capable of creating graphviz DOT files and interactive SVG files,
 - Domain-specific [rules](Source/rules.pl) for reasoning about ebuilds and their possible configurations, 
 
-This repository also contains some bash scripts to emulate Gentoo emerge.
+This repository also contains some bash [scripts](.bash_profile) to emulate Gentoo emerge.
 
 ## Some examples: 
 
