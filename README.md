@@ -23,7 +23,7 @@ This repository also contains some bash [scripts](.bash_profile) to emulate Gent
 ## Portage SVG Graphs
 
 The code is able to automatically generate interactive SVG graphs for all ebuilds, allowing you to walk
-through the Ebuild dependency graph.
+through the Ebuild dependency graph. Dot files and corresponding SVG can be found ![here](https://www.github.com/pvdabeel/portage-svg)
 
 ![Portage SVG Graphs](https://i.imgur.com/WhuEGxx.png)
 
