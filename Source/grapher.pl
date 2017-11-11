@@ -262,11 +262,22 @@ grapher:handle(detail,_Style,_Arrow,Master,S,[]) :-
   nl.
 
 
-
-grapher:test(_) :-
+grapher:test(Repository) :-
   config:graph_directory(D),
   system:exists_directory(D),!,
-  message:failure('Directory already exists!').
+  message:inform(['Directory already exists! Updating...']),
+  foreach((Repository:entry(Id,Time),
+           Repository:get_ebuild(Id,Ebuild),
+           system:time_file(Ebuild,Modified),
+           Modified > Time),
+         (message:success(Id),
+          atomic_list_concat([D,'/',Id,'.dot'],F),
+          tell(F),
+          grapher:graph(detail,Id),
+          told
+         )),
+  script:exec(graph,['dot',D]).
+
 
 grapher:test(Repository) :-
   config:graph_directory(D),
@@ -280,3 +291,6 @@ grapher:test(Repository) :-
           told
          )),
   script:exec(graph,['dot',D]).
+
+
+
