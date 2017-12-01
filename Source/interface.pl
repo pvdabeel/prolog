@@ -18,6 +18,7 @@ interface:spec(S) :-
         [opt(resume),  type(boolean), default(false), shortflags(['r']), longflags(['resume'])],   % OPTION
         [opt(newuse),  type(boolean), default(false), shortflags(['n']), longflags(['newuse'])],   % OPTION
         [opt(sync),    type(boolean), default(false),                    longflags(['sync'])],     % ACTION
+        [opt(graph),   type(boolean), default(false),                    longflags(['graph'])],     % ACTION
         [opt(depclean),type(boolean), default(false), shortflags(['c']), longflags(['depclean'])], % ACTION
         [opt(info),    type(boolean), default(false),                    longflags(['info'])],     % ACTION
         [opt(search),  type(boolean), default(false), shortflags(['s']), longflags(['search'])],   % ACTION
@@ -37,6 +38,7 @@ interface:process_requests :-
   ( member(version(true),Options)  -> (message:inform(['portage-ng development version - ',Version]),  halt) ; 
     member(info(true),Options)     -> (message:inform(['portage-ng development version - ',Version]),  halt) ; 
     member(sync(true),Options)     -> (kb:sync, kb:save,                                               halt) ; 
+    member(graph(true),Options)    -> (grapher:test(portage),                                          halt) ; 
     member(unmerge(true),Options)  -> (message:warning('unmerge action to be implemented'),            halt) ;
     member(depclean(true),Options) -> (message:warning('depclean action to be implemented'),           halt) ;
     member(search(true),Options)   -> (message:warning('search action to be implemented'),             halt) ; 
