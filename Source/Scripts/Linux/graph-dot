@@ -5,7 +5,7 @@
 # ${1} = remote
 # ${2} = local
 
-find "${1}" -iname *.dot -mnewer "${1}/.lastgraph" | parallel --no-notice dot -Tsvg {} -o {.}.svg
+find "${1}" -iname *.dot -cnewer "${1}/.lastgraph" | parallel --no-notice dot -Tsvg {} -o {.}.svg
 touch "${1}/.lastgraph"
 
 # Graphviz sometimes produces incorrect output (indeterministicly) 
