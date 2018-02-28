@@ -1,0 +1,25 @@
+#!/bin/bash
+
+# ${1} = remote
+# ${2} = local
+
+rsync \
+           ${1} \
+           --recursive \
+           --links \
+           --safe-links \
+           --perms \
+           --times \
+           --force \
+           --whole-file \
+           --delete \
+           --delete-after \
+           --stats \
+           --timeout=180 \
+           --exclude="/distfiles" \
+           --exclude="/local" \
+           --exclude="/packages" \
+           --no-motd \
+           --human-readable \
+           --out-format ">>> %n %L" \
+            ${2}

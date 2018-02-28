@@ -1,0 +1,11 @@
+#!/bin/bash
+
+# curl --proxy proxy.mynetwork:8080
+
+# ${1} = remote
+# ${2} = local
+
+
+mkdir -p "${2}"
+curl "${1}" -o "${2}/portage-latest.tar.bz2"
+tar jxvp --strip-components 1 -C "${2}" -f "${2}/portage-latest.tar.bz2"

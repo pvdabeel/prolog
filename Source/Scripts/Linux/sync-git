@@ -1,0 +1,10 @@
+#!/bin/bash
+
+# ${1} = remote
+# ${2} = local
+
+if [ -d "${2}" ]; then 
+  git -C "${2}" pull 
+else
+  git -C "`dirname ${2}`" clone "${1}"
+fi
