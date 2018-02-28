@@ -4,9 +4,13 @@
 
 # ${1} = remote
 # ${2} = local
-
-find "${1}" -iname *.dot -mnewer "${1}/.lastgraph" | parallel --no-notice dot -Tsvg {} -o {.}.svg
+if [ -f "${1}/.lastgraph" ]; then
+  find "${1}" -iname *.dot -mnewer "${1}/.lastgraph" | parallel --no-notice dot -Tsvg {} -o {.}.svg
+else 
+  find "${1}" -iname *.dot | parallel --no-notice dot -Tsvg {} -o {.}.svg
+fi
 touch "${1}/.lastgraph"
+
 
 # Graphviz sometimes produces incorrect output (indeterministicly) 
 # We can detect the incorrect graphs, and recreate them
