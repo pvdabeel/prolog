@@ -73,7 +73,7 @@
 
 :- module(context, [ class/0,
                      class/1,
-                     endclass/0,
+                     %endclass/0,
                      newinstance/1,
                      dpublic/1,
                      dprotected/1,
