@@ -9,8 +9,6 @@
 :- ensure_loaded(library('thread')).
 :- ensure_loaded(library('apply_macros')).
 
-:- ensure_loaded('Source/Attic/bug.pl').
-
 :- ensure_loaded('Source/context.pl').
 :- ensure_loaded('Source/instances.pl').
 :- ensure_loaded('Source/message.pl').
