@@ -14,6 +14,6 @@
 
 script:exec(S,Args) :-
   is_list(Args),
-  atomic_list_concat(['source/scripts/',S],Call),
+  atomic_list_concat(['Source/Scripts/',S],Call),
   atomic_list_concat([Call|Args],' ',Cmd),
   shell(Cmd),!.
