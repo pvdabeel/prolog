@@ -1036,15 +1036,21 @@ eapi:untildash([C|R]) -->
 %
 % This basically reads all chars until a stopchar is encountered
 
-eapi:untilstop([]) -->
-  [41], { !,fail }.                                   % char: )
+% EAPI 6 allows for ( and ) in src_uri ! 
 
 eapi:untilstop([]) -->
-  [40], { !,fail }.                                   % char: (
+  [41,32], { !,fail }.                                   % char: ) 
+
+eapi:untilstop([]) -->
+  [40,32], { !,fail }.                                   % char: (
+
+%eapi:untilstop([]) -->
+%  [C], { code_type(C,white),! }.
 
 eapi:untilstop([C|R]) -->
   [C], { not(code_type(C,white)),! },
   eapi:untilstop(R).
+
 
 eapi:untilstop([]) -->
   [],!.
@@ -1052,6 +1058,7 @@ eapi:untilstop([]) -->
 eapi:untilstop1(C) -->
   eapi:untilstop(C),
   { not(C = []) }.
+
 
 
 % DCG uri
