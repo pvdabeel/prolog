@@ -6,6 +6,8 @@
 % PORTAGE-NG
 % **********
 
+:- use_module(library(aggregate)).
+
 :- ensure_loaded(library('thread')).
 :- ensure_loaded(library('apply_macros')).
 

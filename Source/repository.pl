@@ -111,7 +111,7 @@ sync(repository) ::-
 % public predicate
 
 sync(metadata) ::-
-  foreach((:entry(Id,Time),
+  forall((:entry(Id,Time),
            :get_ebuild(Id,Ebuild),
            system:time_file(Ebuild,Modified),
            Modified > Time),
