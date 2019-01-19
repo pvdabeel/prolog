@@ -1,0 +1,35 @@
+#!/bin/bash
+
+while true
+do
+
+#move into your git repo where your jekyll site is
+cd ~/Repository/portage-git/;
+
+git fetch;
+LOCAL=$(git rev-parse HEAD);
+REMOTE=$(git rev-parse @{u});
+
+#if our local revision id doesn't match the remote, we will need to pull the changes
+if [ $LOCAL != $REMOTE ]; then
+    
+    echo -e ">>> Commit found, updating"
+    echo -e "--- `date`" 
+    echo
+    portage-ng --sync  # sync repository
+    portage-ng --graph # update graph
+    
+    pushd ~/Graph/ 
+
+    git add .
+    git commit -m "Update" 
+    git push -u origin master 
+
+    popd
+    echo
+else 
+    echo -e ">>> No commit found, sleeping" 
+    echo -e "--- `date`" 
+fi
+sleep 60
+done
