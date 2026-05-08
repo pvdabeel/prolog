@@ -263,7 +263,14 @@ ebuild_exec:collect_use_string(Repo, Entry, Ctx, UseString) :-
       ( State0 == positive -> State = positive ; State = negative )
     ),
     BasePairs),
-  list_to_assoc(BasePairs, BaseAssoc),
+  % `list_to_assoc/2` throws `domain_error(unique_key_pairs, _)` when a
+  % flag is declared more than once -- which happens in practice for
+  % packages that inherit several eclasses contributing IUSE (e.g.
+  % www-servers/apache declares `ssl` via both ssl.eclass and
+  % apache-2.eclass). Fold with `put_assoc/4` so duplicates are merged
+  % deterministically (last-write-wins); when both copies carry the
+  % same state -- which is the common case -- the result is the same.
+  ebuild_exec:pairs_to_assoc_dedup(BasePairs, BaseAssoc),
   ebuild_exec:apply_ctx_use_overrides(Ctx, BaseAssoc, MergedAssoc),
   assoc_to_keys(MergedAssoc, AllFlags),
   findall(Token,
@@ -313,6 +320,21 @@ ebuild_exec:apply_ctx_use_overrides(Ctx, AssocIn, AssocOut) :-
 
 ebuild_exec:apply_use_override(Flag-State, AssocIn, AssocOut) :-
   put_assoc(Flag, AssocIn, State, AssocOut).
+
+
+%! ebuild_exec:pairs_to_assoc_dedup(+Pairs, -Assoc) is det.
+%
+% Build an assoc from a list of `Key-Value` pairs, tolerating duplicate
+% keys (last occurrence wins). Use this in place of `list_to_assoc/2`
+% whenever the input may contain a key more than once: the standard
+% `list_to_assoc/2` raises `domain_error(unique_key_pairs, _)` on the
+% first duplicate, which previously caused the worker to throw mid-way
+% through `install` and the result to be silently dropped by the
+% jobserver collector.
+
+ebuild_exec:pairs_to_assoc_dedup(Pairs, Assoc) :-
+  empty_assoc(Empty),
+  foldl(ebuild_exec:apply_use_override, Pairs, Empty, Assoc).
 
 
 % =============================================================================
