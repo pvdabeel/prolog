@@ -680,6 +680,312 @@ cmd_exec() {
 }
 
 # =============================================================================
+# Subcommands: portage-ng / emerge (build-engine convenience wrappers)
+# =============================================================================
+#
+# Both run a Gentoo build inside an existing session. They differ only in
+# which engine they invoke:
+#
+#   portage-ng  -> /opt/portage-ng/Source/Application/Wrapper/portage-ng-dev
+#                  --mode standalone --ci --build <args>
+#   emerge      -> /usr/bin/emerge --color=y --oneshot --verbose <args>
+#
+# Use --pretend to get the plan without executing. Both wrappers route
+# through cmd_exec so logs land in $session/logs/exec-<stamp>.log and
+# exit codes propagate. The point of having both is that
+# `tinderbox-ng compare` can drive identical apples-to-apples runs.
+#
+# Default flags reflect the comparison use case:
+#   - emerge: -1 (oneshot; do not modify @world), -v (verbose phase header)
+#   - portage-ng: --mode standalone --ci --build (matches the rest of
+#     the matrix harness)
+#
+# Pass extra emerge/portage-ng options after the session name and they
+# get forwarded verbatim, so e.g.:
+#
+#   tinderbox-ng emerge sess --pretend www-servers/apache
+#   tinderbox-ng portage-ng sess --pretend www-servers/apache
+#
+# both work and let you A/B the two planners without invoking compare.
+
+cmd_portage_ng() {
+  require_root
+  require_kernel_overlay
+  require_unshare
+  require_dirs
+  require_session "${1:-}"
+  local name="$1"; shift
+  [[ $# -gt 0 ]] || die "usage: tinderbox-ng portage-ng <name> [--pretend|--build] <args...>"
+
+  local mode_flag="--build"
+  local positional=()
+  for arg in "$@"; do
+    case "$arg" in
+      --pretend|-p) mode_flag="--pretend" ;;
+      --build|-b)   mode_flag="--build"   ;;
+      *)            positional+=("$arg")  ;;
+    esac
+  done
+  [[ ${#positional[@]} -gt 0 ]] || die "no portage-ng arguments after flags"
+
+  local cmd="cd /opt/portage-ng && timeout ${TINDERBOX_BUILD_TIMEOUT:-7200} ./Source/Application/Wrapper/portage-ng-dev --mode standalone --ci $mode_flag ${positional[*]}"
+  cmd_exec "$name" -- "$cmd"
+}
+
+cmd_emerge() {
+  require_root
+  require_kernel_overlay
+  require_unshare
+  require_dirs
+  require_session "${1:-}"
+  local name="$1"; shift
+  [[ $# -gt 0 ]] || die "usage: tinderbox-ng emerge <name> [-p|--pretend] <args...>"
+
+  # Default to --oneshot so we don't pollute @world. Caller can override
+  # by passing their own emerge atoms/flags after the session name.
+  local emerge_flags="--color=y --oneshot --verbose"
+  local cmd="timeout ${TINDERBOX_BUILD_TIMEOUT:-7200} /usr/bin/emerge $emerge_flags $*"
+  cmd_exec "$name" -- "$cmd"
+}
+
+# =============================================================================
+# Subcommand: compare (run portage-ng + emerge side by side)
+# =============================================================================
+#
+# Spins two fresh sessions from the same baseline, runs the same target
+# package through portage-ng and through emerge in parallel (each in its
+# own mount namespace), captures the logs, and prints a concise
+# side-by-side summary plus a delta report.
+#
+# Use this whenever you suspect "portage-ng can't do X but emerge can"
+# (or vice-versa). It's the difference between guessing and knowing.
+#
+#   tinderbox-ng compare www-servers/apache
+#   tinderbox-ng compare --build www-servers/apache
+#   tinderbox-ng compare --pretend dev-libs/glib            # default
+#   tinderbox-ng compare --keep app-shells/zsh              # don't destroy sessions after
+#   tinderbox-ng compare --label apache-mpms www-servers/apache
+#
+# Sessions are named pkg-cmp-{portage-ng,emerge}-<label>. <label> defaults
+# to the sanitized package atom. Both sessions are destroyed at the end
+# unless --keep is passed.
+
+cmd_compare() {
+  require_root
+  require_kernel_overlay
+  require_unshare
+  require_dirs
+
+  local mode="--pretend"
+  local keep=0
+  local label=""
+  local positional=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --pretend|-p)   mode="--pretend"; shift ;;
+      --build|-b)     mode="--build";   shift ;;
+      --keep)         keep=1;           shift ;;
+      --label)        label="$2";       shift 2 ;;
+      --label=*)      label="${1#--label=}"; shift ;;
+      --)             shift; positional+=("$@"); break ;;
+      -*)             die "compare: unknown flag $1" ;;
+      *)              positional+=("$1"); shift ;;
+    esac
+  done
+  [[ ${#positional[@]} -gt 0 ]] || die "usage: tinderbox-ng compare [--pretend|--build] [--keep] [--label NAME] <pkg>..."
+
+  local target="${positional[*]}"
+  if [[ -z "$label" ]]; then
+    label="$(printf '%s' "$target" | tr -c '[:alnum:]' '_' | sed 's/^_//;s/_$//' | head -c 40)"
+  fi
+
+  local sess_pn="pkg-cmp-portage-ng-$label"
+  local sess_em="pkg-cmp-emerge-$label"
+
+  log_info "compare: target='$target'  mode=$mode  label=$label"
+  log_info "  portage-ng session: $sess_pn"
+  log_info "  emerge     session: $sess_em"
+
+  # Fresh sessions both ways, sequentially (cheap; mount-only)
+  for s in "$sess_pn" "$sess_em"; do
+    if [[ -d "$(session_dir "$s")" ]]; then
+      log_info "  destroying stale session $s"
+      cmd_destroy "$s" >/dev/null 2>&1 || true
+    fi
+    cmd_new "$s" >/dev/null
+  done
+
+  local logdir="$LOG_DIR/compare-$label-$(date +%Y%m%dT%H%M%S)"
+  install -d "$logdir"
+
+  local pn_log="$logdir/portage-ng.log"
+  local em_log="$logdir/emerge.log"
+
+  log_info "  running both engines in parallel (logs: $logdir)"
+
+  local pn_cmd="cd /opt/portage-ng && timeout ${TINDERBOX_BUILD_TIMEOUT:-7200} ./Source/Application/Wrapper/portage-ng-dev --mode standalone --ci $mode $target"
+  local em_pretend_flag=""
+  [[ "$mode" == "--pretend" ]] && em_pretend_flag="--pretend"
+  local em_cmd="timeout ${TINDERBOX_BUILD_TIMEOUT:-7200} /usr/bin/emerge --color=n --oneshot --verbose $em_pretend_flag $target"
+
+  # Forks; we don't use cmd_exec here to avoid its `exit` at the end
+  # (we want both halves to finish and then summarize).
+  ( unshare --mount --propagation=private -- \
+      "$0" __ns-helper session "$sess_pn" /bin/bash -l -c "$pn_cmd" \
+      >"$pn_log" 2>&1; \
+    printf '%d\n' $? >"$pn_log.exit" ) &
+  local pn_pid=$!
+
+  ( unshare --mount --propagation=private -- \
+      "$0" __ns-helper session "$sess_em" /bin/bash -l -c "$em_cmd" \
+      >"$em_log" 2>&1; \
+    printf '%d\n' $? >"$em_log.exit" ) &
+  local em_pid=$!
+
+  wait "$pn_pid" || true
+  wait "$em_pid" || true
+
+  local pn_rc em_rc
+  pn_rc="$(cat "$pn_log.exit" 2>/dev/null || echo "?")"
+  em_rc="$(cat "$em_log.exit" 2>/dev/null || echo "?")"
+
+  _compare_summarize "$target" "$mode" "$sess_pn" "$sess_em" "$pn_log" "$em_log" "$pn_rc" "$em_rc" "$logdir"
+
+  if [[ $keep -eq 0 ]]; then
+    log_info "  cleaning up sessions (use --keep to preserve)"
+    cmd_destroy "$sess_pn" >/dev/null 2>&1 || true
+    cmd_destroy "$sess_em" >/dev/null 2>&1 || true
+  else
+    log_info "  --keep: sessions preserved at $sess_pn / $sess_em"
+  fi
+
+  # Exit code: 0 if both succeeded, 1 if one failed, 2 if both failed.
+  if [[ "$pn_rc" == "0" && "$em_rc" == "0" ]]; then
+    exit 0
+  elif [[ "$pn_rc" != "0" && "$em_rc" != "0" ]]; then
+    exit 2
+  else
+    exit 1
+  fi
+}
+
+# Internal: render a side-by-side comparison summary.
+#
+# Pulls a few key signals out of each engine's log:
+#   - exit code (success vs failure)
+#   - planner verdict (count of actions or "unable to satisfy")
+#   - ebuilds actually installed/registered (parsed from VDB after build)
+#   - first failed phase / first error keyword
+#
+# Output is plain stdout so it's easy to redirect or pipe to less.
+_compare_summarize() {
+  # Don't let a failing grep or empty pipeline kill the summary mid-render.
+  set +e
+  local target="$1" mode="$2"
+  local sess_pn="$3" sess_em="$4"
+  local pn_log="$5" em_log="$6"
+  local pn_rc="$7" em_rc="$8"
+  local logdir="$9"
+
+  local pn_status em_status
+  if [[ "$pn_rc" == "0" ]]; then pn_status="OK"; else pn_status="FAIL($pn_rc)"; fi
+  if [[ "$em_rc" == "0" ]]; then em_status="OK"; else em_status="FAIL($em_rc)"; fi
+
+  # portage-ng renders with ANSI color codes, so we strip them before matching.
+  # ESC[...m sequences appear around numbers in lines like "Total: \e[32m16\e[00m completed."
+  local _strip='s/\x1b\[[0-9;]*[a-zA-Z]//g'
+  local pn_clean em_clean
+  pn_clean="$(sed -E "$_strip" "$pn_log" 2>/dev/null)"
+  em_clean="$(sed -E "$_strip" "$em_log" 2>/dev/null)"
+
+  # portage-ng's plan: "Total: N actions" line; emerge: "Total: N packages"
+  local pn_plan_actions em_plan_actions
+  pn_plan_actions="$(printf '%s\n' "$pn_clean" | grep -oE 'Total:[[:space:]]*[0-9]+ actions?' | tail -n1 | grep -oE '[0-9]+')"
+  em_plan_actions="$(printf '%s\n' "$em_clean" | grep -oE 'Total:[[:space:]]*[0-9]+ packages?' | tail -n1 | grep -oE '[0-9]+')"
+  [[ -z "$pn_plan_actions" ]] && pn_plan_actions="?"
+  [[ -z "$em_plan_actions" ]] && em_plan_actions="?"
+
+  local pn_completed em_completed
+  pn_completed="$(printf '%s\n' "$pn_clean" | grep -oE 'Total:[[:space:]]*[0-9]+ completed' | tail -n1 | grep -oE '[0-9]+')"
+  [[ -z "$pn_completed" ]] && pn_completed=0
+  em_completed="$(printf '%s\n' "$em_clean" | grep -cE '^>>> Completed')"
+  [[ -z "$em_completed" ]] && em_completed=0
+
+  # First error / failure marker, trimmed (use stripped-ANSI version).
+  local pn_first_err em_first_err
+  pn_first_err="$(printf '%s\n' "$pn_clean" | grep -m1 -iE '\b(error|fail|aborting|REQUIRED_USE|unmet|unsatisfied)' | head -c 200)"
+  em_first_err="$(printf '%s\n' "$em_clean" | grep -m1 -iE '\b(error|fail|aborting|REQUIRED_USE|unmet|unsatisfied)' | head -c 200)"
+
+  # Final installed CPV list from each session's VDB upper layer
+  local pn_vdb em_vdb
+  pn_vdb="$(_compare_vdb_list "$sess_pn")"
+  em_vdb="$(_compare_vdb_list "$sess_em")"
+  local pn_n em_n
+  pn_n="$(printf '%s' "$pn_vdb" | awk 'NF{c++} END{print c+0}')"
+  em_n="$(printf '%s' "$em_vdb" | awk 'NF{c++} END{print c+0}')"
+
+  local only_pn only_em both pn_sorted em_sorted
+  pn_sorted="$(printf '%s\n' "$pn_vdb" | sort -u)"
+  em_sorted="$(printf '%s\n' "$em_vdb" | sort -u)"
+  only_pn="$(comm -23 <(printf '%s\n' "$pn_sorted") <(printf '%s\n' "$em_sorted") 2>/dev/null)"
+  only_em="$(comm -13 <(printf '%s\n' "$pn_sorted") <(printf '%s\n' "$em_sorted") 2>/dev/null)"
+  both="$(   comm -12 <(printf '%s\n' "$pn_sorted") <(printf '%s\n' "$em_sorted") 2>/dev/null)"
+
+  printf '\n'
+  printf '┌────────────────────────────────────────────────────────────────────────┐\n'
+  printf '│ tinderbox-ng compare report                                            │\n'
+  printf '├────────────────────────────────────────────────────────────────────────┤\n'
+  printf '│ target : %-62s│\n' "$target"
+  printf '│ mode   : %-62s│\n' "$mode"
+  printf '│ logs   : %-62s│\n' "$logdir"
+  printf '├──────────────────┬─────────────────────────┬───────────────────────────┤\n'
+  printf '│ %-16s │ %-23s │ %-25s │\n' '(metric)' 'portage-ng' 'emerge'
+  printf '├──────────────────┼─────────────────────────┼───────────────────────────┤\n'
+  printf '│ %-16s │ %-23s │ %-25s │\n' 'exit'         "$pn_status"        "$em_status"
+  printf '│ %-16s │ %-23s │ %-25s │\n' 'plan actions' "$pn_plan_actions"  "$em_plan_actions"
+  printf '│ %-16s │ %-23s │ %-25s │\n' 'completed'    "$pn_completed"     "$em_completed"
+  printf '│ %-16s │ %-23s │ %-25s │\n' 'merged into VDB' "$pn_n"          "$em_n"
+  printf '└──────────────────┴─────────────────────────┴───────────────────────────┘\n'
+
+  if [[ -n "$pn_first_err" || -n "$em_first_err" ]]; then
+    printf '\nFirst error/warning per engine:\n'
+    [[ -n "$pn_first_err" ]] && printf '  portage-ng: %s\n' "$pn_first_err"
+    [[ -n "$em_first_err" ]] && printf '  emerge    : %s\n' "$em_first_err"
+  fi
+
+  if [[ -n "$only_pn$only_em" ]]; then
+    printf '\nVDB delta (after build):\n'
+    if [[ -n "$only_pn" ]]; then
+      printf '  only in portage-ng:\n'
+      printf '%s\n' "$only_pn" | sed 's/^/    + /'
+    fi
+    if [[ -n "$only_em" ]]; then
+      printf '  only in emerge:\n'
+      printf '%s\n' "$only_em" | sed 's/^/    + /'
+    fi
+    if [[ -n "$both" ]]; then
+      local nb
+      nb="$(printf '%s' "$both" | awk 'NF{c++} END{print c+0}')"
+      printf '  in both: %s packages\n' "$nb"
+    fi
+  fi
+
+  printf '\nFull logs:\n  portage-ng: %s\n  emerge    : %s\n\n' "$pn_log" "$em_log"
+  set -e
+}
+
+# Internal: list installed CPV atoms in a session's upper VDB layer.
+# Returns one cat/name-version per line, sorted.
+_compare_vdb_list() {
+  local name="$1"
+  local vdb_root
+  vdb_root="$(session_upper "$name")/var/db/pkg"
+  [[ -d "$vdb_root" ]] || return 0
+  ( cd "$vdb_root" && find . -mindepth 2 -maxdepth 2 -type d 2>/dev/null \
+      | sed 's|^\./||' | sort )
+}
+
+# =============================================================================
 # Subcommand: exit (legacy no-op)
 # =============================================================================
 #
@@ -903,6 +1209,16 @@ Subcommands:
   reset <name>             Discard the upper layer (revert to baseline).
   destroy <name>           Remove the session directory entirely.
 
+  portage-ng <name> [--pretend|--build] <args...>
+                           Run portage-ng-dev inside session. Default: --build.
+  emerge <name> [--pretend] <args...>
+                           Run /usr/bin/emerge inside session (--oneshot).
+  compare [--pretend|--build] [--keep] [--label NAME] <pkg>
+                           Spin two fresh sessions, run portage-ng AND emerge
+                           on the same target in parallel, print a side-by-side
+                           summary (exit codes, plan size, completed steps,
+                           VDB delta, first error). Default: --pretend.
+
   list                     Show sessions, mount status, upper size, age.
   diff <name>              Print files modified in the session's upper layer.
   status                   Show tinderbox-ng global state (paths, pin, sizes).
@@ -936,6 +1252,13 @@ main() {
     exit)         cmd_exit         "$@" ;;
     reset)        cmd_reset        "$@" ;;
     destroy)      cmd_destroy      "$@" ;;
+    portage-ng)   cmd_portage_ng   "$@" ;;
+    portage_ng)   cmd_portage_ng   "$@" ;;
+    pn)           cmd_portage_ng   "$@" ;;
+    emerge)       cmd_emerge       "$@" ;;
+    em)           cmd_emerge       "$@" ;;
+    compare)      cmd_compare      "$@" ;;
+    cmp)          cmd_compare      "$@" ;;
     list)         cmd_list         "$@" ;;
     diff)         cmd_diff         "$@" ;;
     status)       cmd_status       "$@" ;;
