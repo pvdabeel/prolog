@@ -2,3 +2,4 @@ Feature exploration
 ===================
 
 - Dark & Light mode colors
+- Split up tinderbox-ng to a separate package

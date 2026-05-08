@@ -1,0 +1,911 @@
+#!/bin/bash
+#
+# tinderbox-ng - Gentoo build-testing rig with overlayfs sessions
+#
+# Builds an immutable baseline (latest stage3 + SWI-Prolog + portage-ng + kb.qlf)
+# and exposes it as the lower layer of an overlayfs-backed chroot. Each
+# experiment runs in its own session whose writes land in an upper layer that
+# can be discarded with one command.
+#
+# The host OS root is never touched: the chroot lives entirely under
+# $TINDERBOX_ROOT (default /srv/tinderbox-ng), the Portage tree binds in
+# read-only, and host-side caches like /var/db/pkg are not mounted in.
+#
+# See Source/Application/Wrapper/Linux/README.md for deployment notes.
+
+set -euo pipefail
+
+# =============================================================================
+# Configuration (env overridable)
+# =============================================================================
+
+TINDERBOX_ROOT="${TINDERBOX_ROOT:-/srv/tinderbox-ng}"
+BASELINE_DIR="$TINDERBOX_ROOT/baseline"
+SHARED_DIR="$TINDERBOX_ROOT/shared"
+SESSIONS_DIR="$TINDERBOX_ROOT/sessions"
+SCRIPTS_DIR="$TINDERBOX_ROOT/scripts"
+LOG_DIR="$TINDERBOX_ROOT/logs"
+
+TREE_DIR="$SHARED_DIR/portage-tree"
+DISTFILES_DIR="$SHARED_DIR/distfiles"
+CCACHE_DIR="$SHARED_DIR/ccache"
+BINPKGS_DIR="$SHARED_DIR/binpkgs"
+STAGE3_CACHE="$SHARED_DIR/stage3"
+
+# Stage3 settings
+#
+# IMPORTANT: the default `amd64-openrc` stage3 is **merged-usr** since 23.0.
+# Source/config.pl:96 pins `default/linux/amd64/23.0/split-usr/no-multilib`.
+# A merged-usr stage3 + split-usr profile fails every ebuild setup phase with
+# "ERROR: 23.0 split-usr profile, but disk is merged-usr". So the default here
+# is the split-usr variant; flip to amd64-openrc if you also flip
+# config:gentoo_profile/1 to a merged-usr profile.
+STAGE3_VARIANT="${STAGE3_VARIANT:-amd64-openrc-splitusr}"
+STAGE3_ARCH="${STAGE3_ARCH:-amd64}"
+STAGE3_BASE_URL="${STAGE3_BASE_URL:-https://distfiles.gentoo.org/releases/${STAGE3_ARCH}/autobuilds}"
+GENTOO_RELENG_KEY="${GENTOO_RELENG_KEY:-0xBB572E0E2D182910}"
+
+# Portage tree (gentoo-mirror gives a stable git history; rsync would also work)
+PORTAGE_TREE_URL="${PORTAGE_TREE_URL:-https://github.com/gentoo-mirror/gentoo.git}"
+PORTAGE_TREE_PIN="${PORTAGE_TREE_PIN:-}"
+
+# portage-ng repo - default to the parent checkout this script lives in.
+# Resolve symlinks so /usr/local/sbin/tinderbox-ng -> /usr/local/share/...
+# still finds its template directory.
+SCRIPT_PATH="$(readlink -f -- "$0" 2>/dev/null || printf '%s' "$0")"
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$SCRIPT_PATH")" && pwd)"
+PORTAGE_NG_DEFAULT_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/../../../.." 2>/dev/null && pwd || echo "")"
+PORTAGE_NG_URL="${PORTAGE_NG_URL:-}"      # If set: git clone. If empty: rsync from PORTAGE_NG_LOCAL.
+PORTAGE_NG_LOCAL="${PORTAGE_NG_LOCAL:-$PORTAGE_NG_DEFAULT_ROOT}"
+PORTAGE_NG_REF="${PORTAGE_NG_REF:-HEAD}"
+
+# Library / template directory. In a development checkout this is the .d
+# directory next to the (resolved) script; in an installed deployment it is
+# typically /usr/local/share/tinderbox-ng/tinderbox-ng.d.
+LIB_DIR="${TINDERBOX_LIB_DIR:-$SCRIPT_DIR/tinderbox-ng.d}"
+if [[ ! -d "$LIB_DIR" ]] && [[ -d /usr/local/share/tinderbox-ng/tinderbox-ng.d ]]; then
+  LIB_DIR=/usr/local/share/tinderbox-ng/tinderbox-ng.d
+fi
+
+# Profile + locale (must match Source/config.pl:96 and what the baseline runs)
+GENTOO_PROFILE="${GENTOO_PROFILE:-default/linux/amd64/23.0/split-usr/no-multilib}"
+GENTOO_LOCALE="${GENTOO_LOCALE:-en_US.UTF-8 UTF-8}"
+GENTOO_LOCALE_NAME="${GENTOO_LOCALE_NAME:-en_US.utf8}"
+
+# In-chroot paths used by the existing Source/Config/vm-linux.local.pl
+CHROOT_TREE_PATH="/usr/portage"
+CHROOT_DISTFILES_PATH="/var/cache/distfiles"
+CHROOT_CCACHE_PATH="/var/cache/ccache"
+CHROOT_BINPKGS_PATH="/var/cache/binpkgs"
+CHROOT_PORTAGE_NG="/opt/portage-ng"
+CHROOT_GRAPH_DIR="/root/Graph"
+
+# =============================================================================
+# Logging helpers
+# =============================================================================
+
+_RED=$'\033[31m' _YEL=$'\033[33m' _GRN=$'\033[32m' _BLU=$'\033[34m' _RST=$'\033[0m'
+[[ -t 2 ]] || { _RED= _YEL= _GRN= _BLU= _RST=; }
+
+log_info()  { printf '%s[tinderbox-ng]%s %s\n' "$_BLU" "$_RST" "$*" >&2; }
+log_warn()  { printf '%s[tinderbox-ng warn]%s %s\n' "$_YEL" "$_RST" "$*" >&2; }
+log_error() { printf '%s[tinderbox-ng error]%s %s\n' "$_RED" "$_RST" "$*" >&2; }
+log_ok()    { printf '%s[tinderbox-ng ok]%s %s\n' "$_GRN" "$_RST" "$*" >&2; }
+
+die() { log_error "$*"; exit 1; }
+
+# =============================================================================
+# Pre-flight
+# =============================================================================
+
+require_root() {
+  [[ $EUID -eq 0 ]] || die "must be run as root (try: sudo $0 $*)"
+}
+
+require_kernel_overlay() {
+  if ! grep -qw overlay /proc/filesystems; then
+    if ! modprobe overlay 2>/dev/null; then
+      die "overlay filesystem not available in kernel; load CONFIG_OVERLAY_FS"
+    fi
+  fi
+}
+
+require_unshare() {
+  command -v unshare >/dev/null 2>&1 \
+    || die "unshare(1) not found; install sys-apps/util-linux"
+  # Sanity-check the kernel supports private mount namespaces - this should
+  # always succeed on a modern Linux but is worth confirming so we bail out
+  # before mounting anything.
+  if ! unshare --mount --propagation=private true 2>/dev/null; then
+    die "kernel refused 'unshare --mount --propagation=private'; check CONFIG_NAMESPACES"
+  fi
+}
+
+require_dirs() {
+  [[ -d "$TINDERBOX_ROOT" ]] || die "$TINDERBOX_ROOT does not exist; run 'tinderbox-ng bootstrap' first"
+  [[ -d "$BASELINE_DIR/usr" ]] || die "$BASELINE_DIR is not a populated baseline; run 'tinderbox-ng bootstrap' first"
+}
+
+# =============================================================================
+# Session helpers
+# =============================================================================
+
+session_dir()    { printf '%s/%s' "$SESSIONS_DIR" "$1"; }
+session_upper()  { printf '%s/%s/upper' "$SESSIONS_DIR" "$1"; }
+session_work()   { printf '%s/%s/work' "$SESSIONS_DIR" "$1"; }
+session_merged() { printf '%s/%s/merged' "$SESSIONS_DIR" "$1"; }
+session_logs()   { printf '%s/%s/logs' "$SESSIONS_DIR" "$1"; }
+session_lock()   { printf '%s/%s/.lock' "$SESSIONS_DIR" "$1"; }
+
+require_session() {
+  local name="$1"
+  [[ -n "$name" ]] || die "session name required"
+  [[ -d "$(session_dir "$name")" ]] || die "session '$name' does not exist (try 'tinderbox-ng new $name')"
+}
+
+session_is_mounted() {
+  local merged
+  merged="$(session_merged "$1")"
+  mountpoint -q "$merged"
+}
+
+acquire_lock() {
+  local name="$1" lock
+  lock="$(session_lock "$name")"
+  exec 9>"$lock"
+  if ! flock -n 9; then
+    die "session '$name' is locked by another process"
+  fi
+  printf '%d\n' $$ >&9
+}
+
+# =============================================================================
+# Mount stack (per-session) - mount-namespace isolated
+# =============================================================================
+#
+# All chrooting happens inside `unshare --mount --propagation=private`. Mounts
+# made in that namespace are 100% invisible to the host; on namespace exit the
+# kernel discards them automatically. We never call umount in the host
+# namespace, never call `umount -l`, and never `--rbind` /dev (we mount a
+# fresh devtmpfs per session). This is the bulletproof safety design after
+# the May 2026 host-/dev incident.
+
+_mount_quiet() {
+  if ! mount "$@" 2>/tmp/tinderbox-ng-mount.err; then
+    log_error "mount failed: $*"
+    cat /tmp/tinderbox-ng-mount.err >&2 || true
+    return 1
+  fi
+}
+
+# Mount the session's overlay + binds onto $merged. Must run inside an
+# unshared mount namespace (called via __ns-helper).
+_ns_session_mount() {
+  local name="$1"
+  local upper work merged
+  upper="$(session_upper "$name")"
+  work="$(session_work "$name")"
+  merged="$(session_merged "$name")"
+
+  mkdir -p "$upper" "$work" "$merged"
+
+  # Defensive: even though unshare --propagation=private already set this,
+  # explicitly re-mark / as rprivate inside our namespace.
+  mount --make-rprivate / 2>/dev/null || true
+
+  log_info "mounting overlay for session '$name' (in mount-ns)"
+  _mount_quiet -t overlay "tinderbox-$name" \
+    -o "lowerdir=$BASELINE_DIR,upperdir=$upper,workdir=$work,index=off,redirect_dir=off" \
+    "$merged"
+
+  # Fresh /dev — completely independent of host /dev
+  _mount_quiet -t devtmpfs -o mode=0755,size=10M devtmpfs "$merged/dev"
+  install -d "$merged/dev/pts" "$merged/dev/shm"
+  _mount_quiet -t devpts  -o newinstance,ptmxmode=0620,gid=5 devpts "$merged/dev/pts"
+  _mount_quiet -t tmpfs   -o mode=1777 tmpfs "$merged/dev/shm"
+
+  _mount_quiet -t proc  proc  "$merged/proc"
+  _mount_quiet -t sysfs sysfs "$merged/sys"
+  _mount_quiet -t tmpfs -o nosuid,nodev,mode=755,size=128M tmpfs "$merged/run"
+
+  # Portage tree (read-only bind; two-step is required by the kernel)
+  mkdir -p "$merged$CHROOT_TREE_PATH"
+  _mount_quiet --bind "$TREE_DIR" "$merged$CHROOT_TREE_PATH"
+  mount -o remount,bind,ro "$merged$CHROOT_TREE_PATH"
+
+  # Distfiles (rw, persistent across sessions)
+  mkdir -p "$merged$CHROOT_DISTFILES_PATH" "$DISTFILES_DIR"
+  _mount_quiet --bind "$DISTFILES_DIR" "$merged$CHROOT_DISTFILES_PATH"
+
+  if [[ -d "$CCACHE_DIR" ]]; then
+    mkdir -p "$merged$CHROOT_CCACHE_PATH"
+    _mount_quiet --bind "$CCACHE_DIR" "$merged$CHROOT_CCACHE_PATH"
+  fi
+
+  if [[ -d "$BINPKGS_DIR" ]]; then
+    mkdir -p "$merged$CHROOT_BINPKGS_PATH"
+    _mount_quiet --bind "$BINPKGS_DIR" "$merged$CHROOT_BINPKGS_PATH"
+  fi
+
+  # DNS - bind so DHCP changes propagate. Target must exist. Stage3 ships
+  # it; if missing (rare), create once. We never truncate via `>` because
+  # of frozen-baseline / overlay copy-up edge cases.
+  if [[ ! -e "$merged/etc/resolv.conf" ]]; then
+    install -m 0644 /dev/null "$merged/etc/resolv.conf" 2>/dev/null || true
+  fi
+  if [[ -e "$merged/etc/resolv.conf" ]]; then
+    _mount_quiet --bind /etc/resolv.conf "$merged/etc/resolv.conf"
+  fi
+
+  # Verify ro on tree (defensive)
+  if findmnt -no OPTIONS "$merged$CHROOT_TREE_PATH" | grep -qw rw; then
+    die "tree bind ended up rw; refusing to chroot"
+  fi
+}
+
+# unmount_session and session_is_mounted are now no-ops because all mounts
+# live inside per-invocation mount namespaces and disappear when those exit.
+# Kept as stubs so external callers / future subcommands don't break.
+unmount_session()    { :; }
+session_is_mounted() { return 1; }
+
+# =============================================================================
+# Subcommand: bootstrap
+# =============================================================================
+
+cmd_bootstrap() {
+  require_root
+  require_kernel_overlay
+  require_unshare
+
+  log_info "bootstrap: building baseline at $BASELINE_DIR"
+  log_info "this takes a long time (stage3 download + emerge swi-prolog + portage-ng sync)"
+
+  if [[ -d "$BASELINE_DIR/usr" ]] && [[ -z "${TINDERBOX_REBOOTSTRAP:-}" ]]; then
+    die "baseline already populated at $BASELINE_DIR; set TINDERBOX_REBOOTSTRAP=1 to overwrite"
+  fi
+
+  mkdir -p "$BASELINE_DIR" "$SHARED_DIR" "$SESSIONS_DIR" "$SCRIPTS_DIR" "$LOG_DIR" \
+           "$STAGE3_CACHE" "$DISTFILES_DIR"
+
+  bootstrap_fetch_stage3
+  bootstrap_unpack_stage3
+  bootstrap_pin_tree
+  bootstrap_post_stage3
+  bootstrap_install_swipl
+  bootstrap_install_portage_ng
+  bootstrap_install_kb_qlf
+  bootstrap_freeze
+
+  log_ok "bootstrap complete; baseline frozen at $BASELINE_DIR"
+  log_info "next: tinderbox-ng new <name> && tinderbox-ng enter <name>"
+}
+
+bootstrap_fetch_stage3() {
+  local pointer_url="$STAGE3_BASE_URL/latest-stage3-${STAGE3_VARIANT}.txt"
+  log_info "resolving latest stage3 ($STAGE3_VARIANT) from $pointer_url"
+
+  local pointer
+  pointer="$(curl -fsSL "$pointer_url")"
+  local rel
+  rel="$(printf '%s' "$pointer" | grep -E '^[0-9]+T[0-9]+Z/stage3-' | awk '{print $1}' | head -n1)"
+  [[ -n "$rel" ]] || die "could not parse latest-stage3 pointer file"
+
+  local tarball="${rel##*/}"
+  local url_tar="$STAGE3_BASE_URL/$rel"
+  local url_dig="$STAGE3_BASE_URL/$rel.DIGESTS"
+  local url_asc="$STAGE3_BASE_URL/$rel.asc"
+
+  ( cd "$STAGE3_CACHE"
+    log_info "fetching $tarball"
+    curl -fL --remote-name-all -C - "$url_tar" "$url_dig" "$url_asc" || \
+      curl -fL --remote-name-all "$url_tar" "$url_dig" "$url_asc"
+
+    log_info "verifying GPG signature on .DIGESTS"
+    if ! gpg --homedir "$STAGE3_CACHE/.gnupg" --list-keys "$GENTOO_RELENG_KEY" >/dev/null 2>&1; then
+      mkdir -p "$STAGE3_CACHE/.gnupg" && chmod 700 "$STAGE3_CACHE/.gnupg"
+      gpg --homedir "$STAGE3_CACHE/.gnupg" --keyserver hkps://keys.gentoo.org \
+          --recv-keys "$GENTOO_RELENG_KEY"
+    fi
+    gpg --homedir "$STAGE3_CACHE/.gnupg" --verify "$tarball.asc"
+
+    # Modern GnuPG auto-spawns long-lived per-homedir daemons (keyboxd,
+    # gpg-agent) on first use and keeps them resident for ~10min idle.
+    # Bootstrap is a one-shot; ask gpgconf to shut them down cleanly so
+    # we don't leak a few MB of RSS holding fds on the keybox indefinitely.
+    gpgconf --homedir "$STAGE3_CACHE/.gnupg" --kill all 2>/dev/null || true
+
+    log_info "verifying SHA512 from .DIGESTS"
+    local expected actual
+    expected="$(awk -v f="$tarball" '
+      /^# SHA512 HASH$/ { in_sha=1; next }
+      /^# / && in_sha   { in_sha=0 }
+      in_sha && $2==f   { print $1; exit }
+    ' "$tarball.DIGESTS")"
+    [[ -n "$expected" ]] || die "no SHA512 entry for $tarball in .DIGESTS"
+    actual="$(sha512sum "$tarball" | awk '{print $1}')"
+    [[ "$expected" == "$actual" ]] || die "SHA512 mismatch on $tarball"
+  )
+
+  printf '%s\n' "$rel" >"$STAGE3_CACHE/.current"
+  log_ok "stage3 verified: $rel"
+}
+
+bootstrap_unpack_stage3() {
+  local rel
+  rel="$(<"$STAGE3_CACHE/.current")"
+  local tarball="$STAGE3_CACHE/${rel##*/}"
+
+  log_info "unpacking stage3 into $BASELINE_DIR"
+
+  # Refuse to touch baseline if anything is mounted inside it (host-namespace).
+  # With the mount-ns design no stale mounts should ever exist here, but if
+  # they do, we ABORT rather than risk umount propagation. The user must
+  # reboot or manually clean up before retrying.
+  if command -v findmnt >/dev/null; then
+    local stale
+    stale="$(findmnt -R "$BASELINE_DIR" -no TARGET 2>/dev/null | head -5 || true)"
+    if [[ -n "$stale" ]]; then
+      log_error "stale mounts under $BASELINE_DIR (refusing to unpack):"
+      printf '  %s\n' "$stale" >&2
+      die "reboot the host or manually umount these and retry"
+    fi
+  fi
+
+  if [[ -d "$BASELINE_DIR/usr" ]]; then
+    log_warn "overwriting existing baseline (TINDERBOX_REBOOTSTRAP set)"
+
+    # Drop +i bits in case a previous bootstrap got far enough to freeze
+    if command -v chattr >/dev/null; then
+      chattr -R -i "$BASELINE_DIR" 2>/dev/null || true
+    fi
+    chmod -R u+w "$BASELINE_DIR" 2>/dev/null || true
+
+    rm -rf --one-file-system "${BASELINE_DIR:?}/"*
+    rm -rf --one-file-system "${BASELINE_DIR:?}"/.[!.]* 2>/dev/null || true
+  fi
+  tar -xpf "$tarball" -C "$BASELINE_DIR" --xattrs-include='*.*' --numeric-owner
+  log_ok "stage3 unpacked"
+}
+
+bootstrap_pin_tree() {
+  if [[ -d "$TREE_DIR/.git" ]]; then
+    log_info "tree already cloned at $TREE_DIR; fetching"
+    if [[ -n "$PORTAGE_TREE_PIN" ]]; then
+      git -C "$TREE_DIR" fetch origin "$PORTAGE_TREE_PIN" 2>/dev/null \
+        || git -C "$TREE_DIR" fetch --unshallow origin 2>/dev/null \
+        || git -C "$TREE_DIR" fetch origin
+    else
+      git -C "$TREE_DIR" fetch --depth=1 origin master
+    fi
+  else
+    log_info "cloning Portage tree from $PORTAGE_TREE_URL"
+    if [[ -n "$PORTAGE_TREE_PIN" ]]; then
+      git clone "$PORTAGE_TREE_URL" "$TREE_DIR"
+    else
+      git clone --depth=1 "$PORTAGE_TREE_URL" "$TREE_DIR"
+    fi
+  fi
+  if [[ -n "$PORTAGE_TREE_PIN" ]]; then
+    log_info "pinning tree to $PORTAGE_TREE_PIN"
+    git -C "$TREE_DIR" checkout "$PORTAGE_TREE_PIN"
+  fi
+  local pin_commit
+  pin_commit="$(git -C "$TREE_DIR" rev-parse HEAD)"
+  printf '%s\n' "$pin_commit" >"$SHARED_DIR/portage-tree.commit"
+  log_ok "tree pinned at $pin_commit"
+}
+
+bootstrap_post_stage3() {
+  log_info "post-stage3 setup (profile, locale, env, mtab, /etc/portage)"
+
+  install -d "$BASELINE_DIR/etc/portage/repos.conf"
+  cp_template baseline.repos.conf "$BASELINE_DIR/etc/portage/repos.conf/gentoo.conf"
+  cp_template baseline.make.conf  "$BASELINE_DIR/etc/portage/make.conf"
+
+  install -d "$BASELINE_DIR/var/cache/distfiles" \
+             "$BASELINE_DIR/var/cache/binpkgs" \
+             "$BASELINE_DIR/var/cache/ccache" \
+             "$BASELINE_DIR$CHROOT_TREE_PATH" \
+             "$BASELINE_DIR$CHROOT_PORTAGE_NG" \
+             "$BASELINE_DIR/root/Graph"
+
+  ln -sf /proc/self/mounts "$BASELINE_DIR/etc/mtab"
+
+  printf '%s\n' "$GENTOO_LOCALE" >>"$BASELINE_DIR/etc/locale.gen"
+
+  in_baseline_chroot bash -e <<EOF
+eselect profile set "$GENTOO_PROFILE"
+locale-gen
+eselect locale set "$GENTOO_LOCALE_NAME"
+env-update
+. /etc/profile
+gcc-config -l
+binutils-config -l
+emerge --info | head -n 5
+EOF
+
+  log_ok "post-stage3 setup done"
+}
+
+bootstrap_install_swipl() {
+  log_info "emerge dev-lang/swi-prolog (long; cached in baseline)"
+  in_baseline_chroot bash -e <<'EOF'
+. /etc/profile
+emerge --quiet-build=y --jobs="$(nproc)" --load-average="$(nproc)" \
+       --keep-going=y dev-lang/swi-prolog dev-vcs/git net-misc/curl
+EOF
+  log_ok "swi-prolog installed in baseline"
+}
+
+bootstrap_install_portage_ng() {
+  log_info "installing portage-ng into baseline at $CHROOT_PORTAGE_NG"
+
+  if [[ -n "$PORTAGE_NG_URL" ]]; then
+    in_baseline_chroot bash -e <<EOF
+. /etc/profile
+git clone "$PORTAGE_NG_URL" "$CHROOT_PORTAGE_NG"
+git -C "$CHROOT_PORTAGE_NG" checkout "$PORTAGE_NG_REF"
+EOF
+  else
+    [[ -d "$PORTAGE_NG_LOCAL" ]] || die "PORTAGE_NG_LOCAL=$PORTAGE_NG_LOCAL is not a directory"
+    log_info "rsync from $PORTAGE_NG_LOCAL"
+    rsync -a --delete \
+          --exclude='.git/objects/pack/*.idx.lock' \
+          --exclude='Source/Snapshots/' \
+          "$PORTAGE_NG_LOCAL/" "$BASELINE_DIR$CHROOT_PORTAGE_NG/"
+  fi
+
+  install -m 0755 "$LIB_DIR/portage-ng-dev.in" "$BASELINE_DIR/usr/local/bin/portage-ng-dev"
+  sed -i "s|@PORTAGE_NG_ROOT@|$CHROOT_PORTAGE_NG|g" \
+      "$BASELINE_DIR/usr/local/bin/portage-ng-dev"
+
+  install -d "$BASELINE_DIR$CHROOT_PORTAGE_NG/Source/Knowledge/Sets/world"
+  : >"$BASELINE_DIR$CHROOT_PORTAGE_NG/Source/Knowledge/Sets/world/vm-linux.local"
+
+  install -m 0755 "$LIB_DIR/run-matrix.sh" "$BASELINE_DIR/usr/local/bin/tinderbox-matrix"
+
+  log_ok "portage-ng installed at $CHROOT_PORTAGE_NG"
+}
+
+bootstrap_install_kb_qlf() {
+  log_info "generating kb.qlf via portage-ng-dev --sync"
+  log_info "(temporarily mounting tree rw so prolog-side git pull can run)"
+
+  in_baseline_chroot \
+    --tree-rw \
+    bash -e <<'EOF'
+. /etc/profile
+cd /opt/portage-ng
+/usr/local/bin/portage-ng-dev --mode standalone --sync
+EOF
+
+  if [[ -f "$BASELINE_DIR$CHROOT_PORTAGE_NG/Knowledge/kb.qlf" ]]; then
+    log_ok "kb.qlf generated ($(stat -c%s "$BASELINE_DIR$CHROOT_PORTAGE_NG/Knowledge/kb.qlf" 2>/dev/null) bytes)"
+  else
+    log_warn "kb.qlf not found after --sync; check the bootstrap log"
+  fi
+
+  bootstrap_pin_tree
+}
+
+bootstrap_freeze() {
+  log_info "freezing baseline (chmod a-w)"
+  # IMPORTANT: We deliberately do NOT use `chattr +i` here. chattr's immutable
+  # attribute on lower-layer files propagates EPERM through overlayfs's
+  # copy-up path, which makes the entire session read-only - users cannot
+  # write anywhere inside the chroot. chmod a-w is the right tool: it
+  # prevents accidental host-side writes to baseline (you have to chmod
+  # u+w explicitly) without interfering with overlay copy-up, because
+  # copy-up creates a fresh file in upper with default permissions.
+  chmod -R a-w "$BASELINE_DIR" 2>/dev/null || true
+  log_ok "baseline frozen"
+}
+
+# =============================================================================
+# Subcommand: refresh-tree
+# =============================================================================
+
+cmd_refresh_tree() {
+  require_root
+  local pin="${1:-master}"
+
+  [[ -d "$TREE_DIR/.git" ]] || die "$TREE_DIR is not a git checkout"
+
+  log_info "refreshing tree to $pin"
+  git -C "$TREE_DIR" fetch origin "$pin" 2>/dev/null \
+    || git -C "$TREE_DIR" fetch --unshallow origin 2>/dev/null \
+    || git -C "$TREE_DIR" fetch origin
+  git -C "$TREE_DIR" checkout "$pin"
+  git -C "$TREE_DIR" rev-parse HEAD >"$SHARED_DIR/portage-tree.commit"
+
+  log_warn "tree changed; existing sessions still see the OLD bind until reset"
+  log_warn "kb.qlf is now stale; run 'tinderbox-ng refresh-kb' to regenerate"
+  log_ok "tree refreshed to $(cat "$SHARED_DIR/portage-tree.commit")"
+}
+
+# =============================================================================
+# Subcommand: refresh-kb
+# =============================================================================
+
+cmd_refresh_kb() {
+  require_root
+  require_kernel_overlay
+  require_unshare
+  require_dirs
+
+  log_info "regenerating kb.qlf inside baseline against pinned tree"
+  log_info "this temporarily unfreezes the baseline; bootstrap_freeze re-runs at the end"
+
+  if command -v chattr >/dev/null 2>&1; then
+    chattr -R -i "$BASELINE_DIR" 2>/dev/null || true
+  fi
+  chmod -R u+w "$BASELINE_DIR" 2>/dev/null || true
+
+  in_baseline_chroot \
+    --tree-rw \
+    bash -e <<'EOF'
+. /etc/profile
+cd /opt/portage-ng
+/usr/local/bin/portage-ng-dev --mode standalone --sync
+EOF
+
+  bootstrap_pin_tree
+  bootstrap_freeze
+  log_ok "kb.qlf refreshed"
+}
+
+# =============================================================================
+# Subcommand: new
+# =============================================================================
+
+cmd_new() {
+  require_root
+  require_dirs
+  local name="${1:-}"
+  [[ -n "$name" ]] || die "usage: tinderbox-ng new <name>"
+  [[ ! -d "$(session_dir "$name")" ]] || die "session '$name' already exists"
+
+  install -d "$(session_upper "$name")" "$(session_work "$name")" \
+             "$(session_merged "$name")" "$(session_logs "$name")"
+  printf '%s\n' "created=$(date -Iseconds)" >"$(session_dir "$name")/info"
+  log_ok "session '$name' created"
+}
+
+# =============================================================================
+# Subcommand: enter
+# =============================================================================
+#
+# Re-execs into a private mount namespace via the internal __ns-helper, which
+# performs the overlay+bind mounts and then chroots. When the inner shell
+# exits, the namespace dies and every mount with it - no teardown path can
+# ever leak into the host.
+
+cmd_enter() {
+  require_root
+  require_kernel_overlay
+  require_unshare
+  require_dirs
+  require_session "${1:-}"
+  local name="$1"
+
+  acquire_lock "$name"
+  log_info "entering session '$name' in private mount namespace"
+  exec unshare --mount --propagation=private -- \
+    "$0" __ns-helper session "$name" /bin/bash -l
+}
+
+# =============================================================================
+# Subcommand: exec
+# =============================================================================
+
+cmd_exec() {
+  require_root
+  require_kernel_overlay
+  require_unshare
+  require_dirs
+  require_session "${1:-}"
+  local name="$1"; shift
+  if [[ "${1:-}" == "--" ]]; then shift; fi
+  [[ $# -gt 0 ]] || die "usage: tinderbox-ng exec <name> -- <cmd...>"
+
+  acquire_lock "$name"
+
+  local logdir stamp logfile
+  logdir="$(session_logs "$name")"
+  install -d "$logdir"
+  stamp="$(date +%Y%m%dT%H%M%S)"
+  logfile="$logdir/exec-$stamp.log"
+
+  log_info "exec in session '$name' (mount-ns): $* (log: $logfile)"
+  printf 'exit=PENDING\nstamp=%s\ncmd=%q\n' "$stamp" "$*" \
+    >"$logdir/exec-$stamp.meta"
+
+  local rc=0
+  if command -v ts >/dev/null 2>&1; then
+    unshare --mount --propagation=private -- \
+      "$0" __ns-helper session "$name" /bin/bash -l -c "$*" 2>&1 \
+      | ts '%H:%M:%S' | tee "$logfile" \
+      || rc=${PIPESTATUS[0]}
+  else
+    unshare --mount --propagation=private -- \
+      "$0" __ns-helper session "$name" /bin/bash -l -c "$*" 2>&1 \
+      | tee "$logfile" \
+      || rc=${PIPESTATUS[0]}
+  fi
+
+  sed -i "s/^exit=PENDING/exit=$rc/" "$logdir/exec-$stamp.meta"
+  exit "$rc"
+}
+
+# =============================================================================
+# Subcommand: exit (legacy no-op)
+# =============================================================================
+#
+# Kept for backwards-compatible muscle memory. With mount-ns isolation, every
+# session's mounts vanish automatically on chroot exit, so there is nothing
+# to tear down.
+
+cmd_exit() {
+  require_session "${1:-}"
+  log_info "session '$1' is mount-ns isolated; no teardown required"
+}
+
+# =============================================================================
+# Subcommand: reset
+# =============================================================================
+
+cmd_reset() {
+  require_root
+  require_session "${1:-}"
+  local name="$1"
+  unmount_session "$name"
+  log_info "wiping upper and work dirs for session '$name'"
+  rm -rf --one-file-system "$(session_upper "$name")" "$(session_work "$name")"
+  install -d "$(session_upper "$name")" "$(session_work "$name")"
+  log_ok "session '$name' reset to baseline"
+}
+
+# =============================================================================
+# Subcommand: destroy
+# =============================================================================
+
+cmd_destroy() {
+  require_root
+  require_session "${1:-}"
+  local name="$1"
+  unmount_session "$name"
+  log_info "destroying session '$name' ($(session_dir "$name"))"
+  rm -rf --one-file-system "$(session_dir "$name")"
+  log_ok "session '$name' destroyed"
+}
+
+# =============================================================================
+# Subcommand: list
+# =============================================================================
+
+cmd_list() {
+  require_dirs
+  printf '%-20s  %-8s  %-12s  %s\n' NAME MOUNTED UPPER_SIZE CREATED
+  if [[ ! -d "$SESSIONS_DIR" ]]; then return; fi
+  local s name mounted size info created
+  for s in "$SESSIONS_DIR"/*/; do
+    [[ -d "$s" ]] || continue
+    name="$(basename "$s")"
+    if session_is_mounted "$name"; then mounted=yes; else mounted=no; fi
+    size="$(du -sh "$(session_upper "$name")" 2>/dev/null | awk '{print $1}')"
+    info="$s/info"
+    created="-"
+    [[ -f "$info" ]] && created="$(awk -F= '$1=="created"{print $2}' "$info")"
+    printf '%-20s  %-8s  %-12s  %s\n' "$name" "$mounted" "${size:--}" "$created"
+  done
+}
+
+# =============================================================================
+# Subcommand: diff
+# =============================================================================
+
+cmd_diff() {
+  require_session "${1:-}"
+  local name="$1" upper
+  upper="$(session_upper "$name")"
+  [[ -d "$upper" ]] || die "no upper layer for session '$name'"
+  if [[ ! "$(ls -A "$upper" 2>/dev/null)" ]]; then
+    log_info "session '$name' has no upper-layer changes"
+    return 0
+  fi
+  log_info "files changed in session '$name' (relative to baseline):"
+  ( cd "$upper" && find . -mindepth 1 -printf '%y  %p\n' )
+}
+
+# =============================================================================
+# Subcommand: status
+# =============================================================================
+
+cmd_status() {
+  printf 'tinderbox-ng status\n'
+  printf '  TINDERBOX_ROOT       %s\n' "$TINDERBOX_ROOT"
+  printf '  baseline             %s\n' "$([[ -d $BASELINE_DIR/usr ]] && echo populated || echo MISSING)"
+  printf '  tree pin             %s\n' "$([[ -f $SHARED_DIR/portage-tree.commit ]] && cat "$SHARED_DIR/portage-tree.commit" || echo MISSING)"
+  printf '  kb.qlf               %s\n' "$([[ -f $BASELINE_DIR$CHROOT_PORTAGE_NG/Knowledge/kb.qlf ]] && echo present || echo MISSING)"
+  printf '  distfiles size       %s\n' "$(du -sh "$DISTFILES_DIR" 2>/dev/null | awk '{print $1}')"
+  printf '  ccache size          %s\n' "$(du -sh "$CCACHE_DIR" 2>/dev/null | awk '{print $1}')"
+  printf '  sessions             %s\n' "$(find "$SESSIONS_DIR" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | wc -l)"
+}
+
+# =============================================================================
+# Internal: chroot the baseline directly (bootstrap-time only)
+# =============================================================================
+#
+# Used during bootstrap and refresh-kb. Re-execs through the __ns-helper so
+# all mounts live in a private mount namespace and disappear automatically on
+# exit. With --tree-rw, binds the tree rw (sync needs to write to .git);
+# otherwise binds it ro to match session semantics.
+
+in_baseline_chroot() {
+  local tree_mode=ro
+  if [[ "${1:-}" == "--tree-rw" ]]; then
+    tree_mode=rw
+    shift
+  fi
+  local ns_mode="baseline-${tree_mode}"
+  unshare --mount --propagation=private -- \
+    "$0" __ns-helper "$ns_mode" "$@"
+}
+
+# Mount the bare minimum onto the baseline. Must run inside an unshared
+# mount namespace (called via __ns-helper).
+_ns_baseline_mount() {
+  local mode="$1"   # ro | rw
+  local M="$BASELINE_DIR"
+
+  install -d "$M/dev" "$M/proc" "$M/sys" "$M/run" \
+             "$M$CHROOT_TREE_PATH" "$M$CHROOT_DISTFILES_PATH"
+
+  mount --make-rprivate / 2>/dev/null || true
+
+  # Fresh /dev in this namespace - no link to host /dev
+  _mount_quiet -t devtmpfs -o mode=0755,size=10M devtmpfs "$M/dev"
+  install -d "$M/dev/pts" "$M/dev/shm"
+  _mount_quiet -t devpts -o newinstance,ptmxmode=0620,gid=5 devpts "$M/dev/pts"
+  _mount_quiet -t tmpfs  -o mode=1777 tmpfs "$M/dev/shm"
+
+  _mount_quiet -t proc  proc  "$M/proc"
+  _mount_quiet -t sysfs sysfs "$M/sys"
+  _mount_quiet -t tmpfs -o nosuid,nodev,mode=755,size=128M tmpfs "$M/run"
+
+  _mount_quiet --bind "$TREE_DIR" "$M$CHROOT_TREE_PATH"
+  if [[ "$mode" == "ro" ]]; then
+    mount -o remount,bind,ro "$M$CHROOT_TREE_PATH"
+  fi
+
+  _mount_quiet --bind "$DISTFILES_DIR" "$M$CHROOT_DISTFILES_PATH"
+
+  # DNS bind - same caveat as session: don't truncate, just create if missing.
+  if [[ ! -e "$M/etc/resolv.conf" ]]; then
+    install -m 0644 /dev/null "$M/etc/resolv.conf" 2>/dev/null || true
+  fi
+  if [[ -e "$M/etc/resolv.conf" ]]; then
+    _mount_quiet --bind /etc/resolv.conf "$M/etc/resolv.conf"
+  fi
+}
+
+# =============================================================================
+# Internal: __ns-helper (re-entered inside unshare -m)
+# =============================================================================
+#
+# Performs the mounts then exec-chroots. Never returns. Stdin/stdout/stderr
+# are inherited from the outer process (so heredocs to in_baseline_chroot
+# and interactive bash sessions both work).
+
+_ns_helper_main() {
+  local mode="${1:-}"
+  shift || true
+  case "$mode" in
+    session)
+      local name="${1:-}"
+      shift || true
+      [[ -n "$name" ]] || die "__ns-helper session: missing name"
+      _ns_session_mount "$name"
+      exec chroot "$(session_merged "$name")" "$@"
+      ;;
+    baseline-rw)
+      _ns_baseline_mount rw
+      exec chroot "$BASELINE_DIR" "$@"
+      ;;
+    baseline-ro)
+      _ns_baseline_mount ro
+      exec chroot "$BASELINE_DIR" "$@"
+      ;;
+    *)
+      die "__ns-helper: unknown mode '$mode'"
+      ;;
+  esac
+}
+
+# =============================================================================
+# Helpers
+# =============================================================================
+
+cp_template() {
+  local name="$1" dest="$2"
+  [[ -f "$LIB_DIR/$name" ]] || die "missing template $LIB_DIR/$name"
+  local nproc_val
+  nproc_val="$(nproc 2>/dev/null || echo 4)"
+  sed -e "s|@NPROC@|$nproc_val|g" \
+      -e "s|@GENTOO_PROFILE@|$GENTOO_PROFILE|g" \
+      "$LIB_DIR/$name" >"$dest"
+  chmod 0644 "$dest"
+}
+
+# =============================================================================
+# Usage / dispatch
+# =============================================================================
+
+usage() {
+  cat <<'USAGE'
+tinderbox-ng - Gentoo build-testing rig with overlayfs sessions
+
+Subcommands:
+  bootstrap                Build the immutable baseline (stage3 + swi-prolog
+                           + portage-ng + kb.qlf). Long-running.
+  refresh-tree [<commit>]  Re-pin shared/portage-tree to <commit> (default: master).
+                           Existing sessions keep the old tree until reset.
+  refresh-kb               Regenerate kb.qlf inside baseline against the pinned
+                           tree (requires baseline to be unfrozen briefly).
+
+  new <name>               Create an empty session.
+  enter <name>             Mount overlay + binds and chroot in (interactive).
+  exec <name> -- <cmd...>  Mount, run <cmd> non-interactively, capture log,
+                           unmount. Exits with the command's exit code.
+  exit <name>              Tear down all mounts for <name> (idempotent).
+  reset <name>             Discard the upper layer (revert to baseline).
+  destroy <name>           Remove the session directory entirely.
+
+  list                     Show sessions, mount status, upper size, age.
+  diff <name>              Print files modified in the session's upper layer.
+  status                   Show tinderbox-ng global state (paths, pin, sizes).
+
+Environment:
+  TINDERBOX_ROOT           Root for everything (default /srv/tinderbox-ng).
+  STAGE3_VARIANT           e.g. amd64-openrc (default).
+  PORTAGE_TREE_URL         Default https://github.com/gentoo-mirror/gentoo.git
+  PORTAGE_TREE_PIN         Optional commit to pin during bootstrap.
+  PORTAGE_NG_URL           If set: git clone. Otherwise rsync PORTAGE_NG_LOCAL.
+  PORTAGE_NG_LOCAL         Local portage-ng checkout to seed (default: parent of script).
+  TINDERBOX_REBOOTSTRAP=1  Allow `bootstrap` to overwrite an existing baseline.
+
+See Source/Application/Wrapper/Linux/README.md for deployment notes.
+USAGE
+}
+
+main() {
+  local sub="${1:-}"
+  if [[ -z "$sub" ]]; then usage; exit 2; fi
+  shift
+
+  case "$sub" in
+    # User-facing subcommands
+    bootstrap)    cmd_bootstrap    "$@" ;;
+    refresh-tree) cmd_refresh_tree "$@" ;;
+    refresh-kb)   cmd_refresh_kb   "$@" ;;
+    new)          cmd_new          "$@" ;;
+    enter)        cmd_enter        "$@" ;;
+    exec)         cmd_exec         "$@" ;;
+    exit)         cmd_exit         "$@" ;;
+    reset)        cmd_reset        "$@" ;;
+    destroy)      cmd_destroy      "$@" ;;
+    list)         cmd_list         "$@" ;;
+    diff)         cmd_diff         "$@" ;;
+    status)       cmd_status       "$@" ;;
+    -h|--help|help) usage; exit 0 ;;
+
+    # Internal: re-entered inside `unshare --mount --propagation=private`
+    # by cmd_enter / cmd_exec / in_baseline_chroot. Not for user use.
+    __ns-helper) _ns_helper_main   "$@" ;;
+
+    *)            usage; die "unknown subcommand: $sub" ;;
+  esac
+}
+
+main "$@"

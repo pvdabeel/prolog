@@ -942,8 +942,40 @@ config:failsilenton(version).
 % means fully live (equivalent to old dry_run_build(false)).
 % When --buildpkg is active, the `package` phase appears between
 % `install` and `merge` (added dynamically by ebuild_exec:build_phases/1).
+%
+% Note: ebuild_exec:build_phases/1 is responsible for omitting the
+% `test` phase based on FEATURES (see config:features_test_enabled).
+% Compute_live_prefix stops at the first phase NOT in this list, so
+% removing intermediate phases here would also stub install/merge.
 
 config:build_live_phases([clean, setup, unpack, prepare, configure, compile, test]).
+
+
+%! config:features_test_enabled is semidet.
+%
+% True iff FEATURES (env > make.conf > fallback) contains 'test' with
+% positive sense, applying Portage's incremental left-to-right semantics
+% ('-test' removes, 'test' adds, last occurrence wins). Returns false if
+% FEATURES is unset or preference:getenv is unavailable.
+
+config:features_test_enabled :-
+  catch(
+    ( preference:getenv('FEATURES', Atom),
+      Atom \== '',
+      atomic_list_concat(Tokens, ' ', Atom),
+      config:features_resolve_test(Tokens, false, true)
+    ),
+    _,
+    fail
+  ).
+
+config:features_resolve_test([], State, State).
+config:features_resolve_test([test | Rest], _, Out) :-
+  !, config:features_resolve_test(Rest, true, Out).
+config:features_resolve_test(['-test' | Rest], _, Out) :-
+  !, config:features_resolve_test(Rest, false, Out).
+config:features_resolve_test([_ | Rest], State, Out) :-
+  config:features_resolve_test(Rest, State, Out).
 
 
 %! config:dry_run_build(?Bool)
