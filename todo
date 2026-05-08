@@ -4,6 +4,25 @@ Feature exploration
 - Dark & Light mode colors
 - Split up tinderbox-ng to a separate package
 
+- test all ebuilds (currently the matrix is hand-curated;
+  see Reports/tinderbox-compare-2026-05-08-7b2f0fc.md for the latest run)
+(- develop a graphical interface to visualise progress) -> not sure about this yet
+
+
+Open follow-ups (from latest compare report)
+============================================
+
+- Investigate why emerge plan-fails on www-servers/nginx and
+  media-gfx/graphviz while portage-ng plans both with assumptions.
+  Decide whether portage-ng should also reject (or whether emerge is
+  too strict here).
+- net-irc/irssi: portage-ng pulls in dev-lang/perl-5.42.2 even though
+  perl is part of stage3. Likely a vartree-vs-VDB lookup difference
+  in build-time-only dep handling. Trace through prover/vdb.
+- net-irc/irssi: portage-ng selects irssi-1.4.5-r2, emerge picks
+  irssi-1.4.5. Check preference predicate / version-selection logic.
+
+
 Bugs (evidence-based, found via tinderbox-ng compare)
 =====================================================
 
