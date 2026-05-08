@@ -830,16 +830,29 @@ cmd_compare() {
 
   # Forks; we don't use cmd_exec here to avoid its `exit` at the end
   # (we want both halves to finish and then summarize).
-  ( unshare --mount --propagation=private -- \
+  #
+  # set +e inside each subshell: the surrounding script runs under
+  # `set -euo pipefail`, which would otherwise abort the subshell as
+  # soon as unshare/the inner command returns non-zero -- *before* the
+  # printf that records the exit code into <log>.exit. Without that
+  # file, _compare_summarize sees pn_rc="?" and the summary degrades
+  # to FAIL(?). portage-ng in particular returns 2 for "plan with
+  # domain assumptions" which is a normal outcome, not a crash, so
+  # this guard is essential.
+  ( set +e
+    unshare --mount --propagation=private -- \
       "$0" __ns-helper session "$sess_pn" /bin/bash -l -c "$pn_cmd" \
-      >"$pn_log" 2>&1; \
-    printf '%d\n' $? >"$pn_log.exit" ) &
+      >"$pn_log" 2>&1
+    printf '%d\n' $? >"$pn_log.exit"
+  ) &
   local pn_pid=$!
 
-  ( unshare --mount --propagation=private -- \
+  ( set +e
+    unshare --mount --propagation=private -- \
       "$0" __ns-helper session "$sess_em" /bin/bash -l -c "$em_cmd" \
-      >"$em_log" 2>&1; \
-    printf '%d\n' $? >"$em_log.exit" ) &
+      >"$em_log" 2>&1
+    printf '%d\n' $? >"$em_log.exit"
+  ) &
   local em_pid=$!
 
   wait "$pn_pid" || true
@@ -887,8 +900,20 @@ _compare_summarize() {
   local pn_rc="$7" em_rc="$8"
   local logdir="$9"
 
+  # portage-ng exit-code semantics (per .cursorrules):
+  #   0 = no assumptions
+  #   1 = only prover cycle-break assumptions
+  #   2 = at least one domain assumption (e.g. masked dep)
+  # All three indicate the planner produced a plan; only larger codes
+  # (or a missing rc altogether) mean a real crash. emerge follows the
+  # standard 0=success/non-zero=failure convention.
   local pn_status em_status
-  if [[ "$pn_rc" == "0" ]]; then pn_status="OK"; else pn_status="FAIL($pn_rc)"; fi
+  case "$pn_rc" in
+    0) pn_status="OK" ;;
+    1) pn_status="OK(cycles)" ;;
+    2) pn_status="OK(assumed)" ;;
+    *) pn_status="FAIL($pn_rc)" ;;
+  esac
   if [[ "$em_rc" == "0" ]]; then em_status="OK"; else em_status="FAIL($em_rc)"; fi
 
   # portage-ng renders with ANSI color codes, so we strip them before matching.

@@ -1,0 +1,10 @@
+target	mode	pn_exit	em_exit	pn_actions	em_actions	pn_completed	em_completed	pn_vdb	em_vdb	vdb_delta
+app-arch/bzip2	--build	OK	OK	2	1	3	1	1	1	=
+sys-libs/zlib	--build	OK	OK	2	1	3	1	1	1	=
+app-arch/xz-utils	--build	OK	OK	2	1	3	1	1	1	=
+net-misc/wget	--build	OK	OK	3	1	4	1	1	1	=
+app-editors/nano	--build	OK	OK	3	1	4	1	1	1	=
+app-shells/zsh	--build	OK	OK	3	1	4	1	1	1	=
+sys-process/htop	--build	OK	OK	3	1	4	1	1	1	=
+net-irc/irssi	--build	OK	OK	5	1	6	1	2	1	+1
+www-servers/apache	--build	OK	OK	16	6	17	6	6	6	=
