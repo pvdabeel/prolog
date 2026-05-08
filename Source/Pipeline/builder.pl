@@ -938,29 +938,53 @@ builder:finalize_download(ExitCode, FileIdx, Filename, ExpSize, Pairs, DestPath,
 
 %! builder:try_upstream_fallback(+FileIdx, +Filename, +ExpSize, +Pairs, +DestPath, +Repo, +Entry, +TotalLines, +FileStartLine, +Distdir, -OK) is det.
 %
-% Attempts to download a distfile directly from its upstream SRC_URI
-% when the mirror download has failed.
+% Attempts to download a distfile from its upstream SRC_URI peers when
+% the Gentoo distfiles mirror has failed. Walks every URL yielded by
+% download:upstream_url/4 (canonical mirror:// expansions first, then
+% direct URIs) and stops at the first success that also passes size +
+% checksum verification. This matches Portage's behaviour: when the
+% Gentoo mirror prunes a distfile, the original upstream and its
+% thirdpartymirror peers usually still serve it.
 
 builder:try_upstream_fallback(FileIdx, Filename, ExpSize, Pairs, DestPath, Repo, Entry,
                                TotalLines, FileStartLine, Distdir, OK) :-
-  ( download:upstream_url(Repo, Entry, Filename, UpstreamURL)
-  -> with_mutex(build_display,
-       build:update_file_subslot(FileIdx, FileStartLine, TotalLines, progress(0, 0), Filename, ExpSize, Distdir)),
-     download:curl_download(UpstreamURL, DestPath, FallbackExit),
-     ( FallbackExit =:= 0,
-       download:verify_size(DestPath, ExpSize),
-       download:verify_hashes(DestPath, Pairs)
-     -> OK = true,
-        with_mutex(build_display,
-          build:update_file_subslot(FileIdx, FileStartLine, TotalLines, done, Filename, ExpSize, Distdir))
-     ;  catch(delete_file(DestPath), _, true),
-        OK = false,
-        with_mutex(build_display,
-          build:update_file_subslot(FileIdx, FileStartLine, TotalLines, failed, Filename, ExpSize, Distdir))
-     )
-  ;  OK = false,
+  findall(U, download:upstream_url(Repo, Entry, Filename, U), URLs0),
+  list_to_set(URLs0, URLs),
+  ( URLs == []
+  -> OK = false,
      with_mutex(build_display,
        build:update_file_subslot(FileIdx, FileStartLine, TotalLines, failed, Filename, ExpSize, Distdir))
+  ;  with_mutex(build_display,
+       build:update_file_subslot(FileIdx, FileStartLine, TotalLines, progress(0, 0), Filename, ExpSize, Distdir)),
+     builder:try_url_chain(URLs, FileIdx, Filename, ExpSize, Pairs, DestPath,
+                           TotalLines, FileStartLine, Distdir, OK)
+  ).
+
+
+%! builder:try_url_chain(+URLs, +FileIdx, +Filename, +ExpSize, +Pairs, +DestPath, +TotalLines, +FileStartLine, +Distdir, -OK) is det.
+%
+% Walk a list of candidate download URLs in order. Stops at the first
+% URL whose curl exits 0 AND whose downloaded file passes size +
+% checksum verification; on success marks the file as done. If every
+% URL fails, the file is marked as failed.
+
+builder:try_url_chain([], FileIdx, Filename, ExpSize, _Pairs, _DestPath,
+                      TotalLines, FileStartLine, Distdir, false) :-
+  with_mutex(build_display,
+    build:update_file_subslot(FileIdx, FileStartLine, TotalLines, failed, Filename, ExpSize, Distdir)).
+
+builder:try_url_chain([URL|Rest], FileIdx, Filename, ExpSize, Pairs, DestPath,
+                      TotalLines, FileStartLine, Distdir, OK) :-
+  download:curl_download(URL, DestPath, ExitCode),
+  ( ExitCode =:= 0,
+    download:verify_size(DestPath, ExpSize),
+    download:verify_hashes(DestPath, Pairs)
+  -> OK = true,
+     with_mutex(build_display,
+       build:update_file_subslot(FileIdx, FileStartLine, TotalLines, done, Filename, ExpSize, Distdir))
+  ;  catch(delete_file(DestPath), _, true),
+     builder:try_url_chain(Rest, FileIdx, Filename, ExpSize, Pairs, DestPath,
+                           TotalLines, FileStartLine, Distdir, OK)
   ).
 
 
