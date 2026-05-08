@@ -12,9 +12,9 @@
 
 set -euo pipefail
 
-GRAPH_ROOT="$HOME/Graph/portage"
-REPO_DIR="$HOME/Repository/portage-git"
-EMERGE_VP="$HOME/gentoo-prefix/bin/emerge-vp"
+GRAPH_ROOT="/Volumes/Storage/Graph/portage"
+REPO_DIR="/Volumes/Storage/Repository/portage-git"
+EMERGE_VP="/Volumes/Storage/gentoo-prefix/bin/emerge-vp"
 JOBS=1
 FORCE=0
 TARGET_REGEX=""
