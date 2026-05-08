@@ -168,6 +168,47 @@ Verified facts from the parent checkout (versions in this commit):
 the real production VDB; the existing `vm-linux.local.pl` would point
 at it. Always run `portage-ng-dev` from inside a `tinderbox-ng` session.
 
+## Side-by-side comparison: portage-ng vs emerge
+
+`tinderbox-ng` ships a comparison harness that runs the same target through
+both engines in **separate, identical, fresh sessions** and prints a table
+of their differences. Use it instead of guessing whether one engine
+"would" succeed or fail.
+
+```sh
+# Default: --pretend (planner-only), both sessions destroyed at the end
+tinderbox-ng compare www-servers/apache
+
+# Actually run the build phases on both sides
+tinderbox-ng compare --build www-servers/apache
+
+# Keep the sessions afterwards so you can inspect VDB / file system
+tinderbox-ng compare --build --keep --label apache-debug www-servers/apache
+
+# Convenience wrappers (single-engine, when you just want to drive one):
+tinderbox-ng portage-ng <session> [--pretend|--build] <pkg>...
+tinderbox-ng emerge     <session> [--pretend]        <pkg>...
+```
+
+The summary table contrasts:
+
+- **exit**: 0/non-zero from each engine
+- **plan actions**: number reported by each planner (portage-ng: actions,
+  emerge: packages)
+- **completed**: number of completion markers (portage-ng: `Total: N
+  completed`, emerge: `>>> Completed`)
+- **merged into VDB**: `cat/name-version` directories that ended up in the
+  session's upper VDB (`var/db/pkg`)
+- **VDB delta**: which packages only one side merged
+
+Logs land in `/srv/tinderbox-ng/logs/compare-<label>-<stamp>/` as
+`portage-ng.log` and `emerge.log`. With `--keep`, the upper layer of
+each session is preserved at
+`/srv/tinderbox-ng/sessions/pkg-cmp-{portage-ng,emerge}-<label>/upper/`.
+
+Exit code: `0` if both succeeded, `1` if exactly one failed, `2` if both
+failed. Useful for CI sweeps.
+
 ## Test matrix
 
 `tinderbox-matrix` is installed at `/usr/local/bin/tinderbox-matrix` in
