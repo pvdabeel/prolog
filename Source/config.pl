@@ -550,12 +550,19 @@ config:graph_asset_source(meslo_ttf, Source) :-
 config:mirror_root('/Volumes/Storage/Distfiles/distfiles').
 
 
-%! config:mirror_url(?URL)
+%! config:mirror_url(?URL) is multi.
 %
-% HTTP base URL of the local distfiles mirror. The mirror has the same
-% GLEP 75 directory layout as mirror_root/1, served over HTTP.
+% HTTP base URL(s) of distfiles mirrors. The mirror has the same GLEP 75
+% directory layout as mirror_root/1, served over HTTP. Multiple facts may
+% be present; the downloader will try them in declaration order, then fall
+% back to the SRC_URI chain (mirror://+thirdpartymirror+direct upstream).
+%
+% Order: list the fastest / most-complete mirror first. mac-pro.local is a
+% private LAN mirror that retains older distfiles which Gentoo's main
+% mirror has pruned.
 
 config:mirror_url('http://mac-pro.local/distfiles').
+config:mirror_url('https://distfiles.gentoo.org/distfiles').
 
 
 %! config:mirror_verify_hashes_default(?Policy)
@@ -943,12 +950,18 @@ config:failsilenton(version).
 % When --buildpkg is active, the `package` phase appears between
 % `install` and `merge` (added dynamically by ebuild_exec:build_phases/1).
 %
+% Default is fully live: `--build` behaves like `emerge` and actually
+% installs each ebuild into the live filesystem and VDB. Without merge,
+% downstream packages cannot find their build deps in /usr (e.g.
+% apr-util's configure cannot locate apr-1-config). To dry-run a build
+% without touching the live FS, use `--pretend` instead.
+%
 % Note: ebuild_exec:build_phases/1 is responsible for omitting the
 % `test` phase based on FEATURES (see config:features_test_enabled).
 % Compute_live_prefix stops at the first phase NOT in this list, so
 % removing intermediate phases here would also stub install/merge.
 
-config:build_live_phases([clean, setup, unpack, prepare, configure, compile, test]).
+config:build_live_phases([clean, setup, unpack, prepare, configure, compile, test, install, merge]).
 
 
 %! config:features_test_enabled is semidet.

@@ -1,5 +1,6 @@
 Feature exploration
 ===================
 
+- implement use setting & unmasking actions, then test in tinderbox-ng
 - Dark & Light mode colors
 - Split up tinderbox-ng to a separate package

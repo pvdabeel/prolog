@@ -799,9 +799,8 @@ builder:run_download_parallel(Repo, Entry, _Ctx, LineOff, TotalLines, PlanStep, 
      -> FinalStatus = done, Outcome = done
      ;  FinalStatus = failed('manual fetch required'), Outcome = failed('manual fetch required')
      )
-  ;  config:mirror_url(MirrorUrl),
-     download:mirror_layout(Layout),
-     builder:prepare_download_jobs(MirrorUrl, Layout, Distdir, DistFiles, 0, Repo, Entry, DlJobs),
+  ;  download:mirror_layout(Layout),
+     builder:prepare_download_jobs(Layout, Distdir, DistFiles, 0, Repo, Entry, DlJobs),
      get_time(T0),
      builder:init_speed_tracking(DlJobs, T0, FileStartLine),
      builder:poll_download_loop(DlJobs, TotalLines, FileStartLine, Distdir, FailCount),
@@ -818,24 +817,44 @@ builder:run_download_parallel(Repo, Entry, _Ctx, LineOff, TotalLines, PlanStep, 
 %  Parallel download helpers
 % =============================================================================
 
-%! builder:prepare_download_jobs(+MirrorUrl, +Layout, +Distdir, +DistFiles, +Idx, +Repo, +Entry, -DlJobs) is det.
+%! builder:prepare_download_jobs(+Layout, +Distdir, +DistFiles, +Idx, +Repo, +Entry, -DlJobs) is det.
 %
 % Start async curl processes for files not already present. Returns
-% dl_job/8 terms for tracking. Already-present files are skipped
-% (they already show checkmarks from print_file_subslots).
+% dl_job/8 terms for tracking. Already-present files are skipped (they
+% already show checkmarks from print_file_subslots). Each curl walks
+% every configured mirror_url in declaration order, exiting at the first
+% successful download. Upstream SRC_URI fallback is handled later by
+% builder:try_upstream_fallback/11 when the file still fails verification.
 
-builder:prepare_download_jobs(_, _, _, [], _, _, _, []).
+builder:prepare_download_jobs(_, _, [], _, _, _, []).
 
-builder:prepare_download_jobs(MirrorUrl, Layout, Distdir, [dist(Filename, Size, Pairs)|Rest], Idx, Repo, Entry, Jobs) :-
+builder:prepare_download_jobs(Layout, Distdir, [dist(Filename, Size, Pairs)|Rest], Idx, Repo, Entry, Jobs) :-
   Idx1 is Idx + 1,
   ( mirror:flat_present(Distdir, Filename)
-  -> builder:prepare_download_jobs(MirrorUrl, Layout, Distdir, Rest, Idx1, Repo, Entry, Jobs)
-  ;  download:mirror_download_url(MirrorUrl, Layout, Filename, URL),
+  -> builder:prepare_download_jobs(Layout, Distdir, Rest, Idx1, Repo, Entry, Jobs)
+  ;  builder:mirror_urls_for_file(Layout, Filename, URLs),
      atomic_list_concat([Distdir, '/', Filename], DestPath),
-     download:start_curl_async(URL, DestPath, Pid),
+     download:start_curl_async(URLs, DestPath, Pid),
      Jobs = [dl_job(Pid, Idx, Filename, Size, Pairs, DestPath, Repo, Entry)|MoreJobs],
-     builder:prepare_download_jobs(MirrorUrl, Layout, Distdir, Rest, Idx1, Repo, Entry, MoreJobs)
+     builder:prepare_download_jobs(Layout, Distdir, Rest, Idx1, Repo, Entry, MoreJobs)
   ).
+
+
+%! builder:mirror_urls_for_file(+Layout, +Filename, -URLs) is det.
+%
+% Build the ordered list of HTTP mirror URLs to try for Filename. One URL
+% per configured config:mirror_url/1 fact, expanded through the same GLEP
+% 75 layout. Empty list never returned: caller is only invoked when a
+% mirror_url is configured (which the rest of the build pipeline already
+% requires).
+
+builder:mirror_urls_for_file(Layout, Filename, URLs) :-
+  findall(URL,
+          ( config:mirror_url(MirrorUrl),
+            download:mirror_download_url(MirrorUrl, Layout, Filename, URL)
+          ),
+          URLs0),
+  list_to_set(URLs0, URLs).
 
 
 % -----------------------------------------------------------------------------

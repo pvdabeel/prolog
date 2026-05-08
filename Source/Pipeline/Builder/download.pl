@@ -50,16 +50,29 @@ download:mirror_layout(Layout) :-
   download:cached_mirror_layout(Layout), !.
 
 download:mirror_layout(Layout) :-
-  config:mirror_url(MirrorUrl),
-  atomic_list_concat([MirrorUrl, '/layout.conf'], LayoutUrl),
-  ( download:fetch_layout_conf(LayoutUrl, Contents)
-  -> ( mirror:parse_layout_conf(Contents, Layout0)
-     -> Layout = Layout0
-     ;  Layout = flat
-     )
-  ;  Layout = flat
-  ),
+  download:mirror_layout_from_any(Layout0),
+  ( var(Layout0) -> Layout = flat ; Layout = Layout0 ),
   assertz(download:cached_mirror_layout(Layout)).
+
+
+%! download:mirror_layout_from_any(-Layout) is det.
+%
+% Tries every configured mirror_url in order, returning the layout from
+% the first one that serves a parseable layout.conf. Falls through to
+% `flat` if none does (legacy Portage default).
+
+download:mirror_layout_from_any(Layout) :-
+  findall(M, config:mirror_url(M), Mirrors),
+  download:mirror_layout_walk(Mirrors, Layout).
+
+download:mirror_layout_walk([], flat).
+download:mirror_layout_walk([MirrorUrl|Rest], Layout) :-
+  atomic_list_concat([MirrorUrl, '/layout.conf'], LayoutUrl),
+  ( download:fetch_layout_conf(LayoutUrl, Contents),
+    mirror:parse_layout_conf(Contents, Layout0)
+  -> Layout = Layout0
+  ;  download:mirror_layout_walk(Rest, Layout)
+  ).
 
 
 %! download:fetch_layout_conf(+URL, -Contents) is semidet.
@@ -271,30 +284,102 @@ download:mirror_download_url(MirrorUrl, Layout, Filename, URL) :-
 %  Curl and verification
 % -----------------------------------------------------------------------------
 
-%! download:curl_download(+URL, +DestPath, -ExitCode) is det.
+%! download:curl_args(-Args) is det.
 %
-% Download a file from URL to DestPath using curl (blocking).
+% Common curl flags used everywhere we fetch a distfile. Mirrors emerge's
+% robustness: follow redirects, fail on HTTP >= 400, restrict protocols,
+% retry transient errors, resume partial downloads, hard cap per attempt.
+% --connect-timeout bounds the initial connect (so a dead mirror does not
+% eat the full --max-time before we move on to the next URL).
+
+download:curl_args(['-L', '-s', '-f',
+                    '--proto', '=https,http,ftp',
+                    '--connect-timeout', '15',
+                    '--retry', '3',
+                    '--retry-delay', '2',
+                    '--retry-connrefused',
+                    '-C', '-',
+                    '--max-time', '600']).
+
+
+%! download:curl_download(+URLOrList, +DestPath, -ExitCode) is det.
+%
+% Download a file to DestPath using curl (blocking). URLOrList is either
+% a single URL atom or a list of URLs to try in order; first successful
+% URL wins (curl exits 0). All curl invocations include the standard
+% retry/resume flags from download:curl_args/1.
 
 download:curl_download(URL, DestPath, ExitCode) :-
-  process_create(
-    path(curl),
-    ['-L', '-s', '-f', '--proto', '=https,http,ftp',
-     '--max-time', '600', '-o', DestPath, URL],
-    [stdout(null), stderr(null), process(Pid)]),
-  process_wait(Pid, exit(ExitCode)).
+  ( is_list(URL) -> URLs = URL ; URLs = [URL] ),
+  download:curl_args(BaseArgs),
+  download:curl_walk(URLs, BaseArgs, DestPath, ExitCode).
+
+download:curl_walk([], _, _, 22).
+download:curl_walk([URL|Rest], BaseArgs, DestPath, ExitCode) :-
+  append(BaseArgs, ['-o', DestPath, URL], Args),
+  process_create(path(curl), Args,
+                 [stdout(null), stderr(null), process(Pid)]),
+  process_wait(Pid, exit(EC)),
+  ( EC =:= 0
+  -> ExitCode = 0
+  ;  ( Rest == [] -> ExitCode = EC
+     ;  catch(delete_file(DestPath), _, true),
+        download:curl_walk(Rest, BaseArgs, DestPath, ExitCode)
+     )
+  ).
 
 
-%! download:start_curl_async(+URL, +DestPath, -Pid) is det.
+%! download:start_curl_async(+URLOrList, +DestPath, -Pid) is det.
 %
-% Start a curl download without blocking. Returns the process Pid
-% for later polling via check_process_done/2.
+% Start a curl download without blocking. Returns the process Pid for
+% later polling via check_process_done/2. URLOrList is either a single
+% URL atom or a list of URLs; for a list, a small bash trampoline is
+% used to walk the URLs sequentially (curl exits 0 at first success).
+% The same retry/resume flags as download:curl_args/1 are applied to
+% every attempt.
 
 download:start_curl_async(URL, DestPath, Pid) :-
-  process_create(
-    path(curl),
-    ['-L', '-s', '-f', '--proto', '=https,http,ftp',
-     '--max-time', '600', '-o', DestPath, URL],
-    [stdout(null), stderr(null), process(Pid)]).
+  ( is_list(URL) -> URLs = URL ; URLs = [URL] ),
+  ( URLs = [Single]
+  -> download:curl_args(BaseArgs),
+     append(BaseArgs, ['-o', DestPath, Single], Args),
+     process_create(path(curl), Args,
+                    [stdout(null), stderr(null), process(Pid)])
+  ;  download:async_multi_url_curl(URLs, DestPath, Pid)
+  ).
+
+
+%! download:async_multi_url_curl(+URLs, +DestPath, -Pid) is det.
+%
+% Spawn a small bash process that loops over URLs, invoking curl with
+% the standard retry/resume flags for each, and exits at the first
+% successful download.
+
+download:async_multi_url_curl(URLs, DestPath, Pid) :-
+  download:curl_args(BaseArgs),
+  atomic_list_concat(BaseArgs, ' ', BaseArgsAtom),
+  download:shell_quote_list(URLs, QuotedUrls),
+  atomic_list_concat(QuotedUrls, ' ', UrlsAtom),
+  format(atom(Cmd),
+         'for u in ~w; do curl ~w -o "$0" "$u" && exit 0; rm -f "$0"; done; exit 22',
+         [UrlsAtom, BaseArgsAtom]),
+  process_create(path(bash),
+                 ['-c', Cmd, DestPath],
+                 [stdout(null), stderr(null), process(Pid)]).
+
+
+%! download:shell_quote_list(+Atoms, -Quoted) is det.
+%
+% Quote each atom in single quotes for safe inclusion in a bash command
+% line. Embedded single quotes are escaped as '\''.
+
+download:shell_quote_list([], []).
+download:shell_quote_list([A|As], [Q|Qs]) :-
+  atom_string(A, S),
+  split_string(S, "'", "", Parts),
+  atomic_list_concat(Parts, '\'\\\'\'', Inner),
+  atomic_list_concat(['\'', Inner, '\''], Q),
+  download:shell_quote_list(As, Qs).
 
 
 %! download:check_process_done(+Pid, -ExitCode) is semidet.

@@ -80,6 +80,13 @@ CHROOT_BINPKGS_PATH="/var/cache/binpkgs"
 CHROOT_PORTAGE_NG="/opt/portage-ng"
 CHROOT_GRAPH_DIR="/root/Graph"
 
+# Hosts that must be resolvable inside the chroot but are only known to
+# the host via mDNS / Avahi (e.g. *.local). The chroot's nsswitch.conf
+# only has 'files dns', so without nss-mdns these names fail to resolve.
+# We resolve them once on the host (which has nss-mdns) at session-mount
+# time and inject the IPs into the session's /etc/hosts. Space-separated.
+TINDERBOX_MDNS_HOSTS="${TINDERBOX_MDNS_HOSTS:-mac-pro.local imac-pro.local}"
+
 # =============================================================================
 # Logging helpers
 # =============================================================================
@@ -178,6 +185,31 @@ _mount_quiet() {
   fi
 }
 
+# Resolve every mDNS hostname listed in $TINDERBOX_MDNS_HOSTS via the
+# host's nsswitch (Avahi / nss-mdns) and append the result to the
+# session's /etc/hosts file. Idempotent: skips entries already present.
+# Silently skips names that cannot be resolved (mDNS responder offline,
+# host removed from network, etc.) so the session can still proceed.
+_inject_mdns_hosts() {
+  local merged="$1"
+  local hosts_file="$merged/etc/hosts"
+  local h entry ip name
+
+  [[ -n "${TINDERBOX_MDNS_HOSTS:-}" ]] || return 0
+  [[ -f "$hosts_file" ]] || install -m 0644 /dev/null "$hosts_file" 2>/dev/null || return 0
+
+  for h in $TINDERBOX_MDNS_HOSTS; do
+    entry="$(getent hosts "$h" 2>/dev/null | head -n1)" || continue
+    [[ -n "$entry" ]] || continue
+    read -r ip name _ <<<"$entry"
+    [[ -n "$ip" && -n "$name" ]] || continue
+    if grep -qE "^[[:space:]]*[0-9a-fA-F:.]+[[:space:]]+(.*[[:space:]])?${name//./\\.}([[:space:]]|$)" "$hosts_file" 2>/dev/null; then
+      continue
+    fi
+    printf '%s\t%s\t# tinderbox-ng mDNS injection\n' "$ip" "$name" >>"$hosts_file" 2>/dev/null || true
+  done
+}
+
 # Mount the session's overlay + binds onto $merged. Must run inside an
 # unshared mount namespace (called via __ns-helper).
 _ns_session_mount() {
@@ -236,6 +268,15 @@ _ns_session_mount() {
   if [[ -e "$merged/etc/resolv.conf" ]]; then
     _mount_quiet --bind /etc/resolv.conf "$merged/etc/resolv.conf"
   fi
+
+  # Inject host-resolved mDNS entries into the session's /etc/hosts. The
+  # baseline doesn't ship nss-mdns, so '.local' names cannot resolve from
+  # inside the chroot; without this the local distfiles mirror at
+  # http://mac-pro.local/distfiles is unreachable and downloads fall back
+  # to the (slower, often pruned) public Gentoo mirror. Runs in the
+  # namespace BEFORE chroot, so getent uses the host's nsswitch (which
+  # has mdns4_minimal).
+  _inject_mdns_hosts "$merged"
 
   # Verify ro on tree (defensive)
   if findmnt -no OPTIONS "$merged$CHROOT_TREE_PATH" | grep -qw rw; then
