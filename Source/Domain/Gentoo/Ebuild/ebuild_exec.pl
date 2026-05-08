@@ -60,9 +60,16 @@ ebuild_exec:action_phases(uninstall, _Ctx, [unmerge]).
 % is active, the `package` phase is inserted after `install` before
 % merging. When --resume is active, the `clean` phase is omitted so
 % ebuild can pick up from the preserved work directory.
+%
+% The `test` phase follows Portage semantics: it is included only
+% when FEATURES contains positive `test` (see config:features_test_enabled).
+% Otherwise it is omitted entirely from the phase list -- matching
+% emerge's behaviour, where `src_test` is skipped unless explicitly
+% enabled via FEATURES="test".
 
 ebuild_exec:build_phases(Phases) :-
   ( ebuild_exec:resuming -> Clean = [] ; Clean = [clean] ),
+  ( config:features_test_enabled -> Test = [test] ; Test = [] ),
   ( (preference:flag(buildpkgonly) ; preference:flag(buildpkg))
   -> Pkg = [package]
   ;  Pkg = []
@@ -71,7 +78,7 @@ ebuild_exec:build_phases(Phases) :-
   -> Merge = []
   ;  Merge = [merge]
   ),
-  append([Clean, [setup, unpack, prepare, configure, compile, test, install], Pkg, Merge], Phases).
+  append([Clean, [setup, unpack, prepare, configure, compile], Test, [install], Pkg, Merge], Phases).
 
 
 % =============================================================================

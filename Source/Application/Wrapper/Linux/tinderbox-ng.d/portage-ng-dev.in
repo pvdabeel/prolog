@@ -1,0 +1,77 @@
+#!/bin/sh
+#
+# portage-ng-dev -- in-chroot launcher for portage-ng
+#
+# Installed by `tinderbox-ng bootstrap` at /usr/local/bin/portage-ng-dev
+# inside the baseline. Mirrors the macOS dev alias from CONTRIBUTING.md so
+# in-chroot invocations match what you'd type on a developer workstation.
+#
+# @PORTAGE_NG_ROOT@ is substituted by the bootstrap step (defaults to
+# /opt/portage-ng).
+
+set -eu
+
+ROOT_DIR="@PORTAGE_NG_ROOT@"
+
+# Forward --timeout to the upstream wrapper if the user passed it; otherwise
+# go straight to swipl with sensible stack limits.
+HARD_LIMIT=""
+prev=""
+NEW_ARGS=""
+for a in "$@"; do
+  if [ "$prev" = "--timeout" ]; then
+    HARD_LIMIT="$a"; NEW_ARGS="$NEW_ARGS$(printf '\n%s' "$a")"; prev=""
+    continue
+  fi
+  case "$a" in
+    --timeout)    prev="--timeout"; NEW_ARGS="$NEW_ARGS$(printf '\n%s' "$a")" ;;
+    --timeout=*)  HARD_LIMIT="${a#*=}"; NEW_ARGS="$NEW_ARGS$(printf '\n%s' "$a")" ;;
+    *)            NEW_ARGS="$NEW_ARGS$(printf '\n%s' "$a")" ;;
+  esac
+done
+
+IFS='
+'
+set -- $NEW_ARGS
+unset IFS
+
+is_pos_int() {
+  case "${1:-}" in
+    ''|*[!0-9]*) return 1 ;;
+    *) [ "$1" -gt 0 ] 2>/dev/null ;;
+  esac
+}
+
+if is_pos_int "$HARD_LIMIT" && command -v python3 >/dev/null 2>&1; then
+  exec python3 -c '
+import os, signal, subprocess, sys, time
+def killpg(pid, sig):
+    try: os.killpg(pid, sig)
+    except Exception:
+        try: os.kill(pid, sig)
+        except Exception: pass
+limit = int(sys.argv[1]); cmd = sys.argv[2:]
+p = subprocess.Popen(cmd, stdin=sys.stdin, stdout=sys.stdout, stderr=sys.stderr, start_new_session=True)
+deadline = time.time() + limit
+while True:
+    rc = p.poll()
+    if rc is not None: sys.exit(rc)
+    if time.time() >= deadline: break
+    time.sleep(0.1)
+killpg(p.pid, signal.SIGTERM); time.sleep(2.0); killpg(p.pid, signal.SIGKILL)
+rc = p.wait(); sys.exit(rc if rc is not None else 124)
+' "$HARD_LIMIT" \
+    swipl -O \
+      --stack-limit=32G \
+      -f "$ROOT_DIR/portage-ng.pl" \
+      -p "portage=$ROOT_DIR" \
+      -Dverbose_autoload=false \
+      -g main -- "$@"
+fi
+
+exec swipl -O \
+  --stack-limit=32G \
+  -f "$ROOT_DIR/portage-ng.pl" \
+  -p "portage=$ROOT_DIR" \
+  -Dverbose_autoload=false \
+  -g main -- "$@"
