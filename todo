@@ -7,15 +7,4 @@ Feature exploration
 Bugs (evidence-based, found via tinderbox-ng compare)
 =====================================================
 
-- portage-ng silently no-ops install/merge for the top-level target.
-  Reproducer:
-    ssh root@vm-linux.local 'tinderbox-ng compare --build www-servers/apache'
-  Symptoms:
-    - portage-ng reports "Total: 16 completed" and
-      "[step 9] OK   register www-servers/apache"
-    - All 5 dependency packages land in VDB and on disk
-    - The target itself (www-servers/apache-2.4.67) never appears in
-      var/db/pkg and /usr/sbin/apache2 is missing
-    - emerge in the parallel session merges all 6 packages including
-      apache (auto-selects the prefork MPM via the apache eclass)
-  Suggests register-without-merge for the chain-tail target.
+(none open at this time)

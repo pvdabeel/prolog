@@ -109,16 +109,54 @@ jobserver:worker_loop(Slot, Executor) :-
     ( Job == done
     -> !
     ; jobserver:wait_for_load_average,
+      jobserver:job_line_offset(Job, LineOff),
       ( catch(
           call(Executor, Job, Slot, Result),
           Error,
-          Result = error(Error)
+          ( jobserver:log_worker_error(Job, Error),
+            % Synthesise a properly-typed result so jobserver:collect
+            % can dispatch it as a failure; otherwise the bare
+            % `error(...)` term would not match `result(_,_)` and the
+            % outcome would be silently dropped (no FAIL line printed,
+            % no slot_outcome recorded, no exit-code propagation).
+            Result = result(LineOff, failed(exception(Error)))
+          )
         )
       -> jobserver:post_result(Job, Result)
-      ;  jobserver:post_result(Job, failed)
+      ;  jobserver:log_worker_error(Job, executor_failed),
+         jobserver:post_result(Job, result(LineOff, failed(executor_failed)))
       ),
       fail
     ).
+
+
+%! jobserver:job_line_offset(+Job, -LineOff) is det.
+%
+% Extract the slot/line-offset from a slotted/7 job so the worker can
+% synthesise a properly-typed `result(LineOff, _)` even when the
+% executor never gets a chance to bind it (because of an exception or
+% an unexpected failure). LineOff is `unknown` for shapes we don't
+% recognise.
+
+jobserver:job_line_offset(slotted(LineOff, _, _, _, _, _, _), LineOff) :- !.
+jobserver:job_line_offset(_, unknown).
+
+
+%! jobserver:log_worker_error(+Job, +Error) is det.
+%
+% Print a worker-side error to stderr so silent-drop bugs become
+% visible. We deliberately do not raise: the caller has its own
+% recovery path and we don't want to crash the worker pool.
+
+jobserver:log_worker_error(Job, Error) :-
+  ( Job = slotted(_, _, _, _, _, rule(Target:Action?{_}, _), _)
+  -> format(user_error,
+            '[jobserver worker error] action=~w target=~w error=~q~n',
+            [Action, Target, Error])
+  ;  format(user_error,
+            '[jobserver worker error] job=~q error=~q~n',
+            [Job, Error])
+  ).
 
 
 %! jobserver:wait_for_load_average is det.
@@ -176,7 +214,9 @@ jobserver:collect(Remaining, Callback) :-
   jobserver:get_result(_Job, Result),
   ( Result = result(Slot, Outcome)
   -> call(Callback, Slot, Outcome)
-  ; true
+  ;  format(user_error,
+            '[jobserver collect] dropped result not matching result(_,_): ~q~n',
+            [Result])
   ),
   R1 is Remaining - 1,
   jobserver:collect(R1, Callback).
