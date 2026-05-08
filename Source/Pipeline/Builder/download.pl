@@ -339,26 +339,29 @@ download:verify_hashes(Path, Pairs) :-
 %  Upstream SRC_URI resolution
 % -----------------------------------------------------------------------------
 
-%! download:upstream_url(+Repo, +Entry, +Filename, -URL) is semidet.
+%! download:upstream_url(+Repo, +Entry, +Filename, -URL) is nondet.
 %
-% Resolves the upstream download URL for a distfile by looking up the
+% Enumerates upstream download URLs for a distfile by looking up the
 % original SRC_URI metadata. Handles mirror:// URIs by resolving them
-% through profiles/thirdpartymirrors. For direct http/https/ftp URIs,
-% constructs the URL from the stored protocol and path. Tries mirror://
-% URIs first (they are typically the canonical source), then falls back
-% to direct URIs.
+% through profiles/thirdpartymirrors (each thirdpartymirror entry
+% becomes a separate solution). For direct http/https/ftp URIs,
+% constructs the URL from the stored protocol and path. Yields all
+% mirror:// expansions before direct URIs (canonical-source first).
+%
+% This predicate intentionally has NO cut, so callers can enumerate
+% every candidate URL via findall/3 or a backtracking retry loop --
+% Gentoo's distfiles mirror prunes old files, but the original
+% upstream and its thirdpartymirror peers usually still serve them.
 
 download:upstream_url(Repo, Entry, Filename, URL) :-
   kb:query(src_uri(uri(mirror, Base, Filename)), Repo://Entry),
-  download:resolve_mirror_uri(Base, Filename, URL),
-  !.
+  download:resolve_mirror_uri(Base, Filename, URL).
 
 download:upstream_url(Repo, Entry, Filename, URL) :-
   kb:query(src_uri(uri(Proto, Base, Filename)), Repo://Entry),
   Proto \= '',
   Proto \= mirror,
-  atomic_list_concat([Proto, '://', Base], URL),
-  !.
+  atomic_list_concat([Proto, '://', Base], URL).
 
 
 % -----------------------------------------------------------------------------
