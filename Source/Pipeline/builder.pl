@@ -569,7 +569,7 @@ builder:execute_build_job(
   ;  builder:run_action(Action, Repo, Entry, Ctx, Outcome),
      ResultOutcome = Outcome
   ),
-  builder:dispatch_suggestions(Ctx).
+  builder:dispatch_suggestions(Repo, Entry, Ctx).
 
 builder:execute_build_job(
     slotted(LineOff, TotalLines, PlanStep, NumSteps, ActionIdx, rule(world(Atom):Action?{_Ctx}, _Body), _FileInfo),
@@ -1300,41 +1300,263 @@ builder:execute_world(unregister, _Arg).
 
 
 % =============================================================================
-%  Suggestion dispatch (stubs)
+%  Suggestion dispatch (auto-config writers)
 % =============================================================================
-
-%! builder:dispatch_suggestions(+Ctx) is det.
 %
-% Extracts suggestion tags from a rule's context and dispatches them
-% to stub handlers. Currently no-ops; future implementation will
-% write to /etc/portage/package.{unmask,accept_keywords,use}.
+% The prover tags fully-resolved literals with three flavors of suggestion:
+%
+%   suggestion(unmask, Repo://Entry)
+%   suggestion(accept_keyword, Kw)
+%   suggestion(use_change, Repo://Entry, Changes)
+%
+% These describe the /etc/portage overrides the prover had to assume in
+% order to build a working plan (e.g. picking apache2_mpms_event to
+% satisfy a `|| (...)` REQUIRED_USE group, or accepting ~amd64 for a
+% candidate ebuild). For the current build the overrides are already
+% applied via the proof context (ebuild_exec:apply_ctx_use_overrides), so
+% this layer's job is purely persistence: write them into
+%
+%   $portage_confdir/package.{unmask,accept_keywords,use}/00portage-ng-auto
+%
+% so that subsequent builds (in this session OR later sessions) start
+% from the same configured state. The file format is the standard
+% Portage one; lines are line-deduped so retries never accumulate
+% duplicates. After every successful write, userconfig:load is invoked
+% so the next ebuild in the same build sees the freshly persisted
+% override without restarting.
+%
+% No-op when config:portage_confdir/1 is unset (e.g. dev-Mac setup that
+% relies on Source/Domain/Gentoo/Preference/fallback.pl).
+%
+% Thread-safe: a global mutex (build_auto_config) serializes the
+% read-modify-write cycle across parallel build workers.
 
-builder:dispatch_suggestions(Ctx) :-
+:- mutex_create(build_auto_config).
+
+
+%! builder:dispatch_suggestions(+Repo, +Entry, +Ctx) is det.
+%
+% Persists suggestions tagged on the (Repo, Entry, Ctx) literal. Repo
+% and Entry are the outer literal's identifier; the proof-context
+% suggestion(unmask, ...) and suggestion(use_change, ..., ...) terms
+% may carry their own Repo://Entry, but that's typically a candidate
+% the prover is *introducing*, distinct from the outer literal.
+
+builder:dispatch_suggestions(Repo, Entry, Ctx) :-
   is_list(Ctx), !,
-  ( memberchk(suggestion(unmask, Repo://Entry), Ctx)
-  -> builder:execute_suggestion(unmask, Repo, Entry)
+  ( memberchk(suggestion(unmask, UR://UE), Ctx)
+  -> builder:execute_suggestion(unmask, UR, UE)
   ;  true
   ),
   ( memberchk(suggestion(accept_keyword, Kw), Ctx)
-  -> builder:execute_suggestion(accept_keyword, Kw)
+  -> ( memberchk(suggestion(unmask, KR://KE), Ctx)
+     -> builder:execute_suggestion(accept_keyword, KR, KE, Kw)
+     ;  builder:execute_suggestion(accept_keyword, Repo, Entry, Kw)
+     )
   ;  true
   ),
-  ( memberchk(suggestion(use_change, Repo://Entry, Changes), Ctx)
-  -> builder:execute_suggestion(use_change, Repo, Entry, Changes)
+  ( memberchk(suggestion(use_change, UCR://UCE, Changes), Ctx)
+  -> builder:execute_suggestion(use_change, UCR, UCE, Changes)
   ;  true
   ).
 
-builder:dispatch_suggestions(_).
+builder:dispatch_suggestions(_, _, _).
 
 
-%! builder:execute_suggestion(+Type, ...) is det.
+%! builder:execute_suggestion(+Type, +Repo, +Entry) is det.
+%! builder:execute_suggestion(+Type, +Repo, +Entry, +Arg) is det.
 %
-% Stub predicates for suggestion execution. Each will eventually
-% write to the corresponding /etc/portage/package.* file.
+% Persist a single prover suggestion to the corresponding /etc/portage
+% package.* file. Each handler is defensive: invalid arguments, missing
+% portage_confdir, or unwritable confdir all silently no-op rather than
+% break the build.
 
-builder:execute_suggestion(unmask, _Repo, _Entry).
-builder:execute_suggestion(accept_keyword, _Kw).
-builder:execute_suggestion(use_change, _Repo, _Entry, _Changes).
+builder:execute_suggestion(unmask, Repo, Entry) :-
+  ( builder:auto_confdir(ConfDir),
+    builder:atom_for_entry(Repo, Entry, Atom)
+  -> builder:write_auto_config(ConfDir, 'package.unmask', Atom)
+  ;  true
+  ).
+
+
+builder:execute_suggestion(accept_keyword, Repo, Entry, Kw) :-
+  ( builder:auto_confdir(ConfDir),
+    builder:atom_for_entry(Repo, Entry, Atom),
+    builder:keyword_token(Kw, KwTok)
+  -> atomic_list_concat([Atom, ' ', KwTok], Line),
+     builder:write_auto_config(ConfDir, 'package.accept_keywords', Line)
+  ;  true
+  ).
+
+
+builder:execute_suggestion(use_change, Repo, Entry, Changes) :-
+  ( builder:auto_confdir(ConfDir),
+    builder:atom_for_entry(Repo, Entry, Atom),
+    builder:format_use_changes(Changes, FlagsAtom),
+    FlagsAtom \== ''
+  -> atomic_list_concat([Atom, ' ', FlagsAtom], Line),
+     builder:write_auto_config(ConfDir, 'package.use', Line)
+  ;  true
+  ).
+
+
+% -----------------------------------------------------------------------------
+%  Auto-config helpers
+% -----------------------------------------------------------------------------
+
+%! builder:auto_confdir(-Dir) is semidet.
+%
+% Succeed with the configured /etc/portage directory; fail if no
+% portage_confdir is configured (e.g. development setups that rely on
+% Source/Domain/Gentoo/Preference/fallback.pl).
+
+builder:auto_confdir(Dir) :-
+  current_predicate(config:portage_confdir/1),
+  config:portage_confdir(Dir).
+
+
+%! builder:atom_for_entry(+Repo, +Entry, -Atom) is semidet.
+%
+% Build an exact-version Portage atom (=cat/name-version) from a
+% repo entry. Fails when the entry can't be resolved.
+%
+% Version comes back from cache:ordered_entry/5 as a `version/7`
+% compound term whose 7th argument is the canonical version string;
+% see Source/Domain/Gentoo/version.pl. We extract that here.
+
+builder:atom_for_entry(Repo, Entry, Atom) :-
+  cache:ordered_entry(Repo, Entry, Cat, Name, Version),
+  atom(Cat), atom(Name),
+  builder:version_atom(Version, VAtom),
+  VAtom \== '',
+  atomic_list_concat(['=', Cat, '/', Name, '-', VAtom], Atom).
+
+
+%! builder:version_atom(+Version, -Atom) is det.
+%
+% Project a version representation (`version/7` compound, atom, or
+% `version_none`) onto the canonical version string used in Portage
+% atoms. Mirrors plan:version_string/2.
+
+builder:version_atom(version(_,_,_,_,_,_,Full), Atom) :- !,
+  ( atom(Full) -> Atom = Full ; format(atom(Atom), '~w', [Full]) ).
+builder:version_atom(version_none, '') :- !.
+builder:version_atom(V, V) :- atom(V), !.
+builder:version_atom(V, A) :- format(atom(A), '~w', [V]).
+
+
+%! builder:format_use_changes(+Changes, -Atom) is det.
+%
+% Convert a list of use_change(Flag, enable/disable) terms into a
+% portage-style flag list ("flag1 -flag2 flag3"). Empty atom if no
+% supported changes are present.
+
+builder:format_use_changes(Changes, Atom) :-
+  findall(Tok,
+    ( member(use_change(F, Dir), Changes),
+      atom(F),
+      ( Dir == enable  -> Tok = F
+      ; Dir == disable -> atom_concat('-', F, Tok)
+      )
+    ),
+    Toks),
+  ( Toks == []
+  -> Atom = ''
+  ;  atomic_list_concat(Toks, ' ', Atom)
+  ).
+
+
+%! builder:keyword_token(+Kw, -Atom) is semidet.
+%
+% Normalize a keyword argument from the prover (atom, string, or term
+% like keyword(Arch)) to a single atom suitable for the second column
+% of a package.accept_keywords line.
+
+builder:keyword_token(Kw, Atom) :- atom(Kw), !, Atom = Kw.
+builder:keyword_token(Kw, Atom) :- string(Kw), !, atom_string(Atom, Kw).
+builder:keyword_token(keyword(K), Atom) :- !, builder:keyword_token(K, Atom).
+builder:keyword_token(Kw, Atom) :- format(atom(Atom), '~w', [Kw]).
+
+
+%! builder:write_auto_config(+ConfDir, +SubDir, +Line) is det.
+%
+% Idempotently append `Line` to ConfDir/SubDir/00portage-ng-auto. On
+% first use, creates the SubDir (if missing) and writes a clarifying
+% header. Skips when the line is already present (whitespace- and
+% trailing-comment-tolerant compare). After writing, reload userconfig
+% so the next ebuild in this build picks up the override.
+%
+% Safe to call from parallel workers; serialized via build_auto_config.
+
+builder:write_auto_config(ConfDir, SubDir, Line) :-
+  catch(
+    with_mutex(build_auto_config,
+      builder:write_auto_config_locked(ConfDir, SubDir, Line)),
+    Err,
+    ( print_message(warning,
+        format('portage-ng: failed to persist ~w override "~w": ~w', [SubDir, Line, Err])),
+      true
+    )).
+
+builder:write_auto_config_locked(ConfDir, SubDir, Line) :-
+  atomic_list_concat([ConfDir, '/', SubDir], DirPath),
+  ( exists_directory(DirPath) -> true ; make_directory_path(DirPath) ),
+  atomic_list_concat([DirPath, '/00portage-ng-auto'], Path),
+  ( builder:line_already_present(Path, Line)
+  -> true
+  ;  builder:append_with_header(Path, SubDir, Line),
+     catch(userconfig:load, _, true)
+  ).
+
+
+%! builder:line_already_present(+Path, +Line) is semidet.
+%
+% True if Path exists and contains Line (after stripping trailing
+% comments and surrounding whitespace from each existing line).
+
+builder:line_already_present(Path, Line) :-
+  exists_file(Path),
+  read_file_to_string(Path, S, []),
+  split_string(S, "\n", "", Lines),
+  member(L0, Lines),
+  builder:strip_comment_and_trim(L0, LStr),
+  LStr \== "",
+  atom_string(LAtom, LStr),
+  LAtom == Line, !.
+
+
+%! builder:strip_comment_and_trim(+Line0, -Line) is det.
+%
+% Drop `# ...` trailing comments and surrounding whitespace.
+
+builder:strip_comment_and_trim(L0, L) :-
+  ( sub_string(L0, Before, _, _, "#")
+  -> sub_string(L0, 0, Before, _, L1)
+  ;  L1 = L0
+  ),
+  split_string(L1, "", " \t\r", [L]).
+
+
+%! builder:append_with_header(+Path, +SubDir, +Line) is det.
+%
+% Append Line to Path, creating Path with a clear "auto-managed" header
+% on first use. Header explains the file's purpose and gives the user
+% an out (delete or edit). SubDir is included so the header is unique
+% per file (helps when grepping /etc/portage).
+
+builder:append_with_header(Path, SubDir, Line) :-
+  ( exists_file(Path) -> true
+  ;  setup_call_cleanup(
+       open(Path, write, S),
+       format(S,
+         '# Auto-managed by portage-ng (~w/00portage-ng-auto).~n~c Lines below are persisted prover suggestions: REQUIRED_USE picks,~n~c keyword acceptance, mask overrides, etc. Safe to edit or delete;~n~c missing entries will be re-derived on the next --build invocation.~n',
+         [SubDir, 0'#, 0'#, 0'#]),
+       close(S))
+  ),
+  setup_call_cleanup(
+    open(Path, append, S2),
+    format(S2, '~w~n', [Line]),
+    close(S2)).
 
 
 % =============================================================================

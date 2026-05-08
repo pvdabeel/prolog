@@ -13,6 +13,19 @@
 
 
 % -----------------------------------------------------------------------------
+%  /etc/portage configuration directory
+% -----------------------------------------------------------------------------
+%
+% Real /etc/portage. userconfig:load reads make.conf, package.use,
+% package.mask, package.unmask, package.accept_keywords, package.license
+% from this directory. builder:execute_suggestion writes prover-derived
+% overrides into the package.{use,unmask,accept_keywords}/00portage-ng-auto
+% file under it.
+
+config:portage_confdir('/etc/portage').
+
+
+% -----------------------------------------------------------------------------
 %  Portage repository - sync via git
 % -----------------------------------------------------------------------------
 
