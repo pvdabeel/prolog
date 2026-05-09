@@ -804,7 +804,7 @@ builder:run_download_parallel(Repo, Entry, _Ctx, LineOff, TotalLines, PlanStep, 
      -> FinalStatus = done, Outcome = done
      ;  FinalStatus = failed('manual fetch required'), Outcome = failed('manual fetch required')
      )
-  ;  download:mirror_layout(Layout),
+  ;  builder:safe_mirror_layout(Layout),
      builder:prepare_download_jobs(Layout, Distdir, DistFiles, 0, Repo, Entry, DlJobs),
      get_time(T0),
      builder:init_speed_tracking(DlJobs, T0, FileStartLine),
@@ -816,6 +816,36 @@ builder:run_download_parallel(Repo, Entry, _Ctx, LineOff, TotalLines, PlanStep, 
   ),
   with_mutex(build_display,
     build:update_slot(LineOff, TotalLines, FinalStatus, PlanStep, NumSteps, ActionIdx, Action, Repo://Entry)).
+
+
+%! builder:safe_mirror_layout(-Layout) is det.
+%
+% Defense-in-depth wrapper around download:mirror_layout/1. The
+% downstream layout fetch is now thread-safe and tmp_file_stream-free,
+% but this catch ensures that any *future* unrelated failure (DNS hiccup,
+% mirror down at process start, parse error in layout.conf) degrades
+% gracefully to the legacy `flat` layout instead of aborting the whole
+% download job (which would propagate to a [jobserver worker error]
+% and SKIP every dependent install/run/register in the plan).
+%
+% The legacy `flat` layout is the safe fallback: it's what Portage used
+% before GLEP 75, our local mirror has always served files from the
+% flat layout, and the upstream Gentoo mirrors still expose flat-named
+% paths. So this fallback strictly preserves correctness for any
+% mirror that doesn't actively reject flat lookups.
+
+builder:safe_mirror_layout(Layout) :-
+  catch(
+    download:mirror_layout(Layout),
+    E,
+    ( print_message(warning,
+        format("mirror_layout failed (~q); falling back to flat layout", [E])),
+      Layout = flat,
+      ( download:cached_mirror_layout(_)
+      -> true
+      ;  catch(assertz(download:cached_mirror_layout(flat)), _, true)
+      )
+    )).
 
 
 % =============================================================================

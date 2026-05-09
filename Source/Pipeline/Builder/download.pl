@@ -45,14 +45,31 @@ rendering is handled by the builder and build printer.
 %
 % Get the GLEP 75 layout of the HTTP mirror. Fetches layout.conf from
 % the mirror URL on first call, then caches the result.
+%
+% Concurrency note: the cached-fact check happens lock-free on the fast
+% path; only the (rare) cache-miss branch enters the mutex, so the
+% fast path stays cheap. Without the mutex, when many parallel download
+% jobs race their first call (typical with --jobs 16 and 30+ distfiles
+% in the same wave), every worker enters mirror_layout_from_any and
+% issues its own curl + tmp file. The wasted work was at best harmless,
+% but combined with concurrent SWI tmp_file_stream/4 calls it surfaced
+% as `existence_error(temporary_file, '')` from `$tmp_file_stream`/4
+% under high load (libX11/libXdmcp/libXt class A failures in the
+% tinderbox-ng 1000-package matrix). Single-shot mutex eliminates the
+% pile-up; the layout fetch itself no longer uses tmp_file_stream
+% (see fetch_layout_conf below).
 
 download:mirror_layout(Layout) :-
   download:cached_mirror_layout(Layout), !.
 
 download:mirror_layout(Layout) :-
-  download:mirror_layout_from_any(Layout0),
-  ( var(Layout0) -> Layout = flat ; Layout = Layout0 ),
-  assertz(download:cached_mirror_layout(Layout)).
+  with_mutex(download_mirror_layout,
+    (   download:cached_mirror_layout(Layout)
+    ->  true
+    ;   download:mirror_layout_from_any(Layout0),
+        ( var(Layout0) -> Layout = flat ; Layout = Layout0 ),
+        assertz(download:cached_mirror_layout(Layout))
+    )).
 
 
 %! download:mirror_layout_from_any(-Layout) is det.
@@ -78,19 +95,31 @@ download:mirror_layout_walk([MirrorUrl|Rest], Layout) :-
 %! download:fetch_layout_conf(+URL, -Contents) is semidet.
 %
 % Fetch layout.conf from the mirror via curl. Fails if the fetch fails.
+%
+% Implementation note: we deliberately do NOT use tmp_file_stream/4
+% (or any other temp-file-then-curl-then-read-then-delete dance) here.
+% Under high-concurrency load (16+ workers calling layout fetch
+% before the result is cached, plus other ebuild driver threads),
+% SWI's `$tmp_file_stream`/4 was observed to throw
+% `existence_error(temporary_file, '')` with context "Not a directory"
+% on the call to canonicaliseDir for the tmp_dir. This surfaced as
+% the class-A "download cascade SKIP" failures in tinderbox-ng's
+% 1000-package comparison matrix (12 of 22 portage-ng-only failures).
+% Piping curl directly to a Prolog string sidesteps the bug entirely
+% and is also a touch faster (no tmp file lifecycle, no extra read).
 
 download:fetch_layout_conf(URL, Contents) :-
-  tmp_file_stream(text, TmpPath, Stream),
-  close(Stream),
   process_create(
     path(curl),
     ['-L', '-s', '-f', '--proto', '=https,http,ftp',
-     '--max-time', '30', '--max-filesize', '1048576', '-o', TmpPath, URL],
-    [stdout(null), stderr(null), process(Pid)]),
+     '--max-time', '30', '--max-filesize', '1048576', URL],
+    [stdout(pipe(Out)), stderr(null), process(Pid)]),
+  set_stream(Out, encoding(utf8)),
+  call_cleanup(
+    read_string(Out, _Len, Contents),
+    close(Out)),
   process_wait(Pid, exit(ExitCode)),
-  ExitCode =:= 0,
-  read_file_to_string(TmpPath, Contents, []),
-  delete_file(TmpPath).
+  ExitCode =:= 0.
 
 
 % -----------------------------------------------------------------------------
