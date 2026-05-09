@@ -1,8 +1,6 @@
 Feature exploration
 ===================
 
-- investigate number of times layout.conf is downloaded on mirror
-
 - Dark & Light mode colors
 - Split up tinderbox-ng to a separate package
 
@@ -67,13 +65,50 @@ Bugs (evidence-based, found via tinderbox-ng compare)
     * 54/65 BOTH_OK, 9/65 BOTH_FAIL (upstream issues, emerge also
       fails), 2/65 PN-only FAIL (download bug, see below)
 
+- [FIXED 2026-05-09 commit 329a228c] Class A: SWI-Prolog
+  $tmp_file_stream/4 throws existence_error(temporary_file, '') in
+  download:fetch_layout_conf/2 under high parallelism (jed/lighttpd
+  in the 65-pkg matrix; libX11/libXdmcp/libXt cascade-skipped 12 of
+  22 portage-ng-only failures in the 1000-pkg matrix). Root cause was
+  a race between concurrent download workers in the same process all
+  hitting the cache-miss branch of download:mirror_layout/1 and each
+  spawning their own tmp_file_stream-backed curl pipeline. Fix:
+    * Source/Pipeline/Builder/download.pl: replaced tmp_file_stream
+      with stdout(pipe(Out)) + read_string (no tmp file lifecycle).
+    * Wrapped the cache-miss branch of download:mirror_layout/1 in
+      with_mutex(download_mirror_layout, ...).
+    * Source/Pipeline/builder.pl: defense-in-depth safe_mirror_layout
+      wrapper falls back to flat layout on any unexpected exception.
+  Verified on app-emacs/corfu (previously failing on this bug): no
+  more tmp_file_stream errors, download cascade completes cleanly.
+
+- [FIXED 2026-05-09 commit 162f2fde] Class B: fallback:env('USE',...)
+  hardcoded 129-flag list (alsa, cairo, dbus, gif, gpm, harfbuzz,
+  jpeg, png, sqlite, tiff, ...) was leaking into chroots even when
+  config:portage_confdir/1 was set, as long as /etc/portage/make.conf
+  omitted a USE= line. Tinderbox baseline make.conf intentionally has
+  no USE=, so every chroot silently inherited the dev-machine flag
+  set, making portage-ng pull unrelated cascades (alsa-lib + alsa-*
+  for app-emacs/chess where emerge built emacs with -alsa). Fix:
+  preference:getenv/2 skips fallback:env/2 when portage_confdir is
+  configured. chess plan dropped 74 -> 28 actions; 0 portage-ng-only
+  failures in the post-fix slice of the 1000-pkg matrix.
+
+- [FIXED 2026-05-09 commit 29c1c223] Class C precursor: tinderbox
+  baseline had no ACCEPT_KEYWORDS, so after the Class B fix removed
+  the dev-fallback ~amd64, portage-ng had no keyword filter and
+  selected live 9999 ebuilds (emacs-32.0.9999, java-config-9999)
+  over emerge's stable picks. Fix: ACCEPT_KEYWORDS="~amd64" in
+  Source/Application/Wrapper/Linux/tinderbox-ng.d/baseline.make.conf.
+
+- [FIXED 2026-05-09 commit 08b6759f] mirror layout.conf was fetched
+  once per process, which meant tinderbox-ng compare matrices (one
+  fresh portage-ng-dev per session) issued ~1000 throwaway curls per
+  full run AND degraded sessions to `flat` whenever the mirror
+  flapped. Added on-disk cache under <distdir>/.mirror-layout.cache
+  (24h TTL via config:mirror_layout_cache_ttl/1, only successful
+  fetches are persisted, atomic write via tmp+rename). Verified
+  inside chroot: 150ms cold -> 0ms warm-disk-hit on fresh process.
+
 Open
 ====
-
-- portage-ng download: SWI-Prolog $tmp_file_stream/4 throws
-  existence_error(temporary_file, '') for app-editors/jed and
-  www-servers/lighttpd builds (only 2/65 packages affected).
-  Same chroot, same downloader, ~53 packages succeed. Likely a race
-  in tmp dir resolution under high parallelism (--jobs 8). Trace
-  through Source/Pipeline/Builder/download.pl fetch_layout_conf and
-  see if SWI's TMPDIR resolution is thread-safe.
