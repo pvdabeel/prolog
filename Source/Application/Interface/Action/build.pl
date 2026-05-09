@@ -36,7 +36,7 @@ action:process_build([], _Options) :-
   !,
   message:failure('No targets specified for --build.').
 
-action:process_build(ArgsSets, _Options) :-
+action:process_build(ArgsSets, Options) :-
   eapi:substitute_sets(ArgsSets, Args),
   interface:report_unresolvable_targets(run, Args),
   findall(target(Q,Arg):run?{[]},
@@ -49,5 +49,36 @@ action:process_build(ArgsSets, _Options) :-
   !,
   ( Proposal == []
   -> message:failure('No valid targets found.')
-  ;  builder:build(Proposal)
+  ;  builder:build(Proposal),
+     action:maybe_ci_exit_on_build_failure(Options)
+  ).
+
+
+%! action:maybe_ci_exit_on_build_failure(+Options) is det.
+%
+% In `--ci` mode, propagate any sub-step build failure to the process
+% exit code. Without this, a failed install/merge of a sub-dep is only
+% reflected in the printed summary (`Failed: N`); the pipeline still
+% exits 0 and downstream tooling cannot detect the problem.
+%
+% Exit codes:
+%   - 0 : all actions completed successfully
+%   - 3 : one or more actions failed (build/install/merge step failed
+%         and execute_plan skipped the remainder).
+%
+% We deliberately use exit code 3 (not 1 or 2) to disambiguate from
+% the prover-side codes that `--merge --ci` already produces:
+%   - 0 : clean
+%   - 1 : prover cycle-break assumptions
+%   - 2 : domain assumptions
+%   - 3 : at least one action failed during execution
+%
+% Only halts when both `--ci` is set AND `Failed > 0`.
+
+action:maybe_ci_exit_on_build_failure(Options) :-
+  ( memberchk(ci(true), Options),
+    builder:last_build_status(_Completed, Failed, _Stubs),
+    Failed > 0
+  -> halt(3)
+  ;  true
   ).

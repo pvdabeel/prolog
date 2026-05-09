@@ -143,6 +143,15 @@ planner:plan_loop([[]|RestQueues], C, T, Proof, P, Cur, Fin, FinalCounts, FinalP
     planner:plan_loop(RestQueues, C, T, Proof, P, Cur, Fin, FinalCounts, FinalPlanned).
 planner:plan_loop([ReadyQueue|RestQueues], InCounts, Triggers, ProofAVL, InPlanned, InPlan, FinalPlan, FinalCounts, FinalPlanned) :-
     OutPlan = [ReadyQueue | InPlan],
+    ( getenv('PLANNER_DEBUG', _) ->
+        length(InPlan, WaveIdx), W is WaveIdx + 1,
+        format(user_error, '~n=== planner wave ~w (size ~w) ===~n', [W, length(ReadyQueue)]),
+        forall(member(R, ReadyQueue),
+               ( ( R = rule(H, _) ; R = assumed(rule(H, _)) ; R = rule(assumed(H), _) )
+               -> ( prover:canon_literal(H, CH, _),
+                    format(user_error, '  ~q~n', [CH]) )
+               ;  format(user_error, '  ~q~n', [R]) ))
+    ; true ),
     process_wave(ReadyQueue, InCounts, Triggers, ProofAVL, InPlanned, OutPlanned, OutCounts, NextReadyQueue),
     plan_loop([NextReadyQueue|RestQueues], OutCounts, Triggers, ProofAVL, OutPlanned, OutPlan, FinalPlan, FinalCounts, FinalPlanned).
 
