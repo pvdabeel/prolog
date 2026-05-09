@@ -305,6 +305,16 @@ preference:use_cached_profile :-
 %   1. OS environment (interface:getenv/2)
 %   2. /etc/portage/make.conf (userconfig:env/2, loaded by userconfig:load)
 %   3. fallback:env/2 facts (development defaults)
+%
+% Step 3 is skipped when `config:portage_confdir/1` is configured: an
+% explicit confdir means the user has a real /etc/portage that must be
+% authoritative, even when it leaves a variable unset (e.g. an empty USE=
+% in make.conf is a deliberate "no global USE" signal, not a request to
+% inherit the developer's local hardcoded defaults). Consulting the
+% fallback in that case silently injects flags like `alsa cairo dbus gif
+% gpm harfbuzz jpeg png sqlite tiff` from the dev machine, which causes
+% systematically larger plans than emerge produces and triggers
+% downstream build failures for packages that the user never asked for.
 
 preference:getenv(Name, Value) :-
   ( interface:getenv(Name, Value) ->
@@ -313,7 +323,9 @@ preference:getenv(Name, Value) :-
     userconfig:env(Name, Value),
     Value \== '' ->
       true
-  ; current_predicate(fallback:env/2),
+  ; \+ ( current_predicate(config:portage_confdir/1),
+         config:portage_confdir(_) ),
+    current_predicate(fallback:env/2),
     fallback:env(Name, Value),
     Value \== '' ->
       true
