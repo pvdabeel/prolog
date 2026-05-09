@@ -1,0 +1,37 @@
+[tinderbox-ng] compare: target='dev-vcs/mercurial'  mode=--build  label=dev_vcs_mercurial
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_vcs_mercurial
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_vcs_mercurial
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_vcs_mercurial' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_vcs_mercurial' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_vcs_mercurial-20260509T151655)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-vcs/mercurial                                             │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_vcs_mercurial-20260509T151655│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 15                      │ 1                         │
+│ completed        │ 16                      │ 1                         │
+│ merged into VDB  │ 5                       │ 1                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+VDB delta (after build):
+  only in portage-ng:
+    + dev-python/cffi-2.0.0
+    + dev-python/ply-3.11-r2
+    + dev-python/pycparser-3.0
+    + dev-python/zstandard-0.25.0
+    + dev-vcs/mercurial-7.2.1
+  only in emerge:
+    + dev-vcs/mercurial-7.0.3
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_vcs_mercurial-20260509T151655/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_vcs_mercurial-20260509T151655/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

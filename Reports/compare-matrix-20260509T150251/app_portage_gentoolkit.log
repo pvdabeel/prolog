@@ -1,0 +1,33 @@
+[tinderbox-ng] compare: target='app-portage/gentoolkit'  mode=--build  label=app_portage_gentoolkit
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-app_portage_gentoolkit
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-app_portage_gentoolkit
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-app_portage_gentoolkit' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-app_portage_gentoolkit' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-app_portage_gentoolkit-20260509T152718)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : app-portage/gentoolkit                                        │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-app_portage_gentoolkit-20260509T152718│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 3                       │ 1                         │
+│ completed        │ 4                       │ 1                         │
+│ merged into VDB  │ 1                       │ 1                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+VDB delta (after build):
+  only in portage-ng:
+    + app-portage/gentoolkit-0.7.2
+  only in emerge:
+    + app-portage/gentoolkit-0.7.1
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-app_portage_gentoolkit-20260509T152718/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-app_portage_gentoolkit-20260509T152718/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

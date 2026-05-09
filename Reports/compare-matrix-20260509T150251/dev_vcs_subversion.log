@@ -1,0 +1,36 @@
+[tinderbox-ng] compare: target='dev-vcs/subversion'  mode=--build  label=dev_vcs_subversion
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_vcs_subversion
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_vcs_subversion
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_vcs_subversion' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_vcs_subversion' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_vcs_subversion-20260509T151906)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-vcs/subversion                                            │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_vcs_subversion-20260509T151906│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 24                      │ 9                         │
+│ completed        │ 25                      │ 9                         │
+│ merged into VDB  │ 9                       │ 9                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+VDB delta (after build):
+  only in portage-ng:
+    + dev-libs/libutf8proc-2.11.3
+    + dev-vcs/subversion-1.14.5-r3
+  only in emerge:
+    + dev-libs/libutf8proc-2.10.0
+    + dev-vcs/subversion-1.14.5-r2
+  in both: 7 packages
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_vcs_subversion-20260509T151906/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_vcs_subversion-20260509T151906/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

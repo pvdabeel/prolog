@@ -1,0 +1,31 @@
+[tinderbox-ng] compare: target='sys-process/atop'  mode=--build  label=sys_process_atop
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-sys_process_atop
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-sys_process_atop
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-sys_process_atop' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-sys_process_atop' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-sys_process_atop-20260509T150454)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : sys-process/atop                                              │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-sys_process_atop-20260509T150454│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 6                       │ 0                         │
+│ completed        │ 2                       │ 0                         │
+│ merged into VDB  │ 0                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 2] FAIL (1) install portage://sys-process/acct-6.6.4-r4
+  emerge    : >>> Failed to emerge sys-process/acct-6.6.4-r4, Log file:
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-sys_process_atop-20260509T150454/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-sys_process_atop-20260509T150454/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

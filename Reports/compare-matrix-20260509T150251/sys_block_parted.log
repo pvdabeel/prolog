@@ -1,0 +1,33 @@
+[tinderbox-ng] compare: target='sys-block/parted'  mode=--build  label=sys_block_parted
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-sys_block_parted
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-sys_block_parted
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-sys_block_parted' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-sys_block_parted' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-sys_block_parted-20260509T152529)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : sys-block/parted                                              │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-sys_block_parted-20260509T152529│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 3                       │ 1                         │
+│ completed        │ 4                       │ 1                         │
+│ merged into VDB  │ 1                       │ 1                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+VDB delta (after build):
+  only in portage-ng:
+    + sys-block/parted-3.7
+  only in emerge:
+    + sys-block/parted-3.6-r2
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-sys_block_parted-20260509T152529/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-sys_block_parted-20260509T152529/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

@@ -1,0 +1,33 @@
+[tinderbox-ng] compare: target='sys-process/htop'  mode=--build  label=sys_process_htop
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-sys_process_htop
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-sys_process_htop
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-sys_process_htop' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-sys_process_htop' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-sys_process_htop-20260509T150439)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : sys-process/htop                                              │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-sys_process_htop-20260509T150439│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 3                       │ 1                         │
+│ completed        │ 4                       │ 1                         │
+│ merged into VDB  │ 1                       │ 1                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+VDB delta (after build):
+  only in portage-ng:
+    + sys-process/htop-3.5.1
+  only in emerge:
+    + sys-process/htop-3.4.1-r2
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-sys_process_htop-20260509T150439/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-sys_process_htop-20260509T150439/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

@@ -15,4 +15,5 @@ Source/Knowledge/Sets/**/*.local
 __pycache__/
 *.pyc
 Reports/compare-*.json
+Reports/compare-matrix-*/.tsv.lock
 .DS_Store

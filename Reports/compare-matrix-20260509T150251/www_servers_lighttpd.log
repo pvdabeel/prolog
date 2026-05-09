@@ -1,0 +1,39 @@
+[tinderbox-ng] compare: target='www-servers/lighttpd'  mode=--build  label=www_servers_lighttpd
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-www_servers_lighttpd
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-www_servers_lighttpd
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-www_servers_lighttpd' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-www_servers_lighttpd' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-www_servers_lighttpd-20260509T151233)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : www-servers/lighttpd                                          │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-www_servers_lighttpd-20260509T151233│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ OK                        │
+│ plan actions     │ 10                      │ 6                         │
+│ completed        │ 2                       │ 6                         │
+│ merged into VDB  │ 1                       │ 6                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [jobserver worker error] job=slotted(0,6,1,8,0,rule(portage://'www-servers/lighttpd-1.4.82':download?{[required_use:[],build_with_use:use_state([],[])]},[]),files(1,1,[dist('lighttpd-1.4.82.tar.xz',88
+
+VDB delta (after build):
+  only in emerge:
+    + acct-user/lighttpd-0-r3
+    + app-arch/brotli-1.1.0
+    + app-eselect/eselect-lua-4-r1
+    + dev-lang/lua-5.1.5-r200
+    + www-servers/lighttpd-1.4.82
+  in both: 1 packages
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-www_servers_lighttpd-20260509T151233/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-www_servers_lighttpd-20260509T151233/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)
