@@ -564,6 +564,21 @@ EOF
 bootstrap_install_ccache() {
   log_info "emerge dev-util/ccache (shared host cache: $CCACHE_DIR, max=$TINDERBOX_CCACHE_MAX_SIZE)"
   install -d "$CCACHE_DIR"
+  # Bind-mount target ownership: the in-chroot chown below sets the in-baseline
+  # path, but the *bind source* lives on the host filesystem and overlays the
+  # chroot path at session-mount time. Without this host-side chown, ccache
+  # writes from inside sessions (running as portage uid 250 under userfetch /
+  # usersandbox) hit EPERM on a root-owned host directory and silently produce
+  # zero cache hits across the entire matrix. uid 250 is the canonical portage
+  # uid in stage3; chown numerically so this works on hosts that don't have a
+  # portage user defined.
+  chown 250:250 "$CCACHE_DIR"
+  chmod 2775    "$CCACHE_DIR"
+  # ccache resolves config from $CCACHE_DIR/ccache.conf BEFORE /etc/ccache.conf
+  # (per-cache config wins over system-wide). A stale per-cache file from an
+  # earlier hand-rolled setup will silently cap max_size below what we just
+  # wrote into /etc/ccache.conf. Remove it so /etc/ccache.conf is authoritative.
+  rm -f "$CCACHE_DIR/ccache.conf"
   in_baseline_chroot bash -e <<EOF
 . /etc/profile
 emerge --quiet-build=y --jobs="\$(nproc)" --load-average="\$(nproc)" \
