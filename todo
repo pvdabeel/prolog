@@ -17,21 +17,43 @@ Feature exploration
 Open follow-ups (from latest compare report 2026-05-09)
 =======================================================
 
-- Investigate why emerge plan-fails on www-servers/nginx and
-  media-gfx/graphviz while portage-ng plans both with assumptions.
-  Decide whether portage-ng should also reject (or whether emerge is
-  too strict here). The 2026-05-09 pretend tier added 7 more such
-  cases: dev-util/{strace,ltrace,cmake,ninja,meson}, sys-apps/tree,
-  sys-apps/at, app-text/pandoc-cli, app-doc/doxygen.
-- net-irc/irssi: portage-ng pulls in dev-lang/perl-5.42.2 even though
-  perl is part of stage3. Likely a vartree-vs-VDB lookup difference
-  in build-time-only dep handling. Trace through prover/vdb.
-- net-irc/irssi: portage-ng selects irssi-1.4.5-r2, emerge picks
-  irssi-1.4.5. Check preference predicate / version-selection logic.
-- VDB-delta packages where portage-ng pulls in extra perl/python deps
-  that stage3 already provides: app-misc/mc (+4), net-analyzer/iftop
-  (+3), net-dns/dnsmasq (+3), dev-vcs/mercurial (+4), media-libs/
-  freetype (+9). Same root cause as irssi-perl above.
+- [LIKELY-RESOLVED 2026-05-09; needs clean-data confirm] All four
+  follow-ups below were captured BEFORE the Class B USE-leak fix
+  (162f2fde) and the ACCEPT_KEYWORDS fix (29c1c223). Targeted
+  pretend re-runs after both fixes show plans collapsed by ~6-15x:
+  app-misc/mc 41->6 actions, net-irc/irssi 3 actions (no perl
+  pull-in, no -r2 mismatch), net-dns/dnsmasq 7 actions (was +3),
+  media-libs/freetype 6 actions (was +9), www-servers/nginx
+  OK(assumed) with 9 actions (was failing with assumptions). The
+  perl/python over-pull cluster shared a root cause with the alsa
+  cluster: the hardcoded fallback USE included PYTHON_TARGETS and
+  PERL_FEATURES values that emerge never sees on a clean baseline.
+  The irssi version mismatch (1.4.5-r2 vs 1.4.5) is a Class C
+  symptom resolved by ACCEPT_KEYWORDS.
+  TODO: re-confirm against the clean post-1000-pkg matrix once the
+  in-flight run completes (note: 218 of 233 post-KW entries had
+  contaminated emerge data due to the @NPROC@ deploy mistake; have
+  patched in-place but re-run the contaminated subset for clean
+  comparison numbers).
+  Originals (kept for traceability):
+  - Investigate why emerge plan-fails on www-servers/nginx and
+    media-gfx/graphviz while portage-ng plans both with assumptions.
+    Decide whether portage-ng should also reject (or whether emerge
+    is too strict here). The 2026-05-09 pretend tier added 7 more
+    such cases: dev-util/{strace,ltrace,cmake,ninja,meson},
+    sys-apps/tree, sys-apps/at, app-text/pandoc-cli, app-doc/doxygen.
+  - net-irc/irssi: portage-ng pulls in dev-lang/perl-5.42.2 even
+    though perl is part of stage3. Likely a vartree-vs-VDB lookup
+    difference in build-time-only dep handling. Trace through
+    prover/vdb.
+  - net-irc/irssi: portage-ng selects irssi-1.4.5-r2, emerge picks
+    irssi-1.4.5. Check preference predicate / version-selection
+    logic.
+  - VDB-delta packages where portage-ng pulls in extra perl/python
+    deps that stage3 already provides: app-misc/mc (+4),
+    net-analyzer/iftop (+3), net-dns/dnsmasq (+3), dev-vcs/mercurial
+    (+4), media-libs/freetype (+9). Same root cause as irssi-perl
+    above.
 
 
 Bugs (evidence-based, found via tinderbox-ng compare)
@@ -112,3 +134,18 @@ Bugs (evidence-based, found via tinderbox-ng compare)
 
 Open
 ====
+
+- tinderbox-ng baseline-config deploys are unsafe: scp'ing
+  Source/Application/Wrapper/Linux/tinderbox-ng.d/baseline.make.conf
+  directly to /srv/tinderbox-ng/baseline/etc/portage/make.conf
+  bypasses the @NPROC@ / @GENTOO_PROFILE@ substitution that
+  cp_template does at bootstrap time, leaving the file with literal
+  "@NPROC@" placeholders that crash emerge with
+  `Invalid --jobs parameter: '@NPROC@'`. Hit during the 1000-pkg
+  matrix on 2026-05-09 and contaminated 218 of 233 post-KW entries
+  (now patched in-place with sed). Need a small deploy helper that
+  applies the same substitution as cp_template, e.g.
+  Source/Application/Wrapper/Linux/tinderbox-ng.d/deploy-baseline.sh
+  taking template name + remote host + remote path and doing the
+  sed-then-scp in one step, plus a docs note in tinderbox-ng's
+  README warning against raw template scp.
