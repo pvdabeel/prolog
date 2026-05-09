@@ -90,15 +90,21 @@ This step is **long-running** (hours):
    `locale-gen`, `gcc-config -l`, `binutils-config -l`,
    `ln -sf /proc/self/mounts /etc/mtab`.
 7. `emerge dev-lang/swi-prolog dev-vcs/git net-misc/curl`.
-8. Installs `portage-ng` into `/opt/portage-ng` (rsync from the parent
+8. `emerge dev-util/ccache` and writes `/etc/ccache.conf` with
+   `max_size = $TINDERBOX_CCACHE_MAX_SIZE` (default 100G), then
+   `chown portage:portage /var/cache/ccache && chmod 2775` so the
+   shared cache is writable by Portage's `userfetch`/`usersandbox` user.
+   Stage3 does not include ccache; without this step the
+   `FEATURES="ccache"` bit is silently inert.
+9. Installs `portage-ng` into `/opt/portage-ng` (rsync from the parent
    checkout by default; `PORTAGE_NG_URL` / `PORTAGE_NG_REF` switch to git).
-9. Installs the in-chroot `portage-ng-dev` launcher at
+10. Installs the in-chroot `portage-ng-dev` launcher at
    `/usr/local/bin/portage-ng-dev` and `tinderbox-matrix` runner at
    `/usr/local/bin/tinderbox-matrix`.
-10. Runs `portage-ng-dev --mode standalone --sync` once with the tree
+11. Runs `portage-ng-dev --mode standalone --sync` once with the tree
     bound *rw* (the only time this happens) to generate `kb.qlf` from
     the pinned tree, then re-pins.
-11. Freezes the baseline with `chmod -R a-w`. **Note:** this is a soft
+12. Freezes the baseline with `chmod -R a-w`. **Note:** this is a soft
     freeze - root can still write (DAC bypass). We deliberately do **not**
     use `chattr +i` because the immutable flag on lower-layer files
     propagates `EPERM` through overlayfs's copy-up path, which makes
@@ -131,8 +137,10 @@ inside it disappears with it.
 ### Refreshing the baseline
 
 ```sh
-sudo tinderbox-ng refresh-tree <commit-hash>   # re-pin the tree
-sudo tinderbox-ng refresh-kb                   # regenerate kb.qlf
+sudo tinderbox-ng refresh-tree <commit-hash>          # re-pin the tree
+sudo tinderbox-ng refresh-kb                          # regenerate kb.qlf
+sudo TINDERBOX_CCACHE_MAX_SIZE=200G \
+     tinderbox-ng install-ccache                      # bump cache cap or retrofit
 ```
 
 `refresh-tree` only updates `shared/portage-tree/`. Existing sessions
@@ -141,6 +149,14 @@ do not want a long-running test matrix to suddenly see a different tree
 mid-run). `refresh-kb` temporarily unfreezes the baseline (`chmod -R u+w`,
 plus `chattr -R -i` defensively in case an old freeze used it), runs
 `portage-ng-dev --sync` against the pinned tree, then re-freezes.
+
+`install-ccache` is the same `bootstrap_install_ccache` step run
+standalone: useful to retrofit ccache into a baseline that was
+bootstrapped on an older revision of `tinderbox-ng`, or to bump
+`max_size` in `/etc/ccache.conf` mid-stream by setting
+`TINDERBOX_CCACHE_MAX_SIZE` and re-running. It unfreezes the baseline
+briefly, re-emerges `dev-util/ccache` (a no-op if already current),
+rewrites `/etc/ccache.conf`, and re-freezes.
 
 ## portage-ng integration
 
@@ -256,37 +272,24 @@ ssh vm-linux.local sudo cat \
   three host paths into every session if they exist:
   - `$SHARED_DIR/distfiles` → `/var/cache/distfiles` (always created)
   - `$SHARED_DIR/binpkgs`   → `/var/cache/binpkgs`   (created when `buildpkg` is in FEATURES)
-  - `$SHARED_DIR/ccache`    → `/var/cache/ccache`    (must be created manually; see below)
+  - `$SHARED_DIR/ccache`    → `/var/cache/ccache`    (created by bootstrap, populated by builds)
 
   The ccache wiring requires three things in lockstep — *any one missing
   silently disables it without a warning*:
   1. `/srv/tinderbox-ng/shared/ccache/` exists on the host (bind source).
+     Bootstrap creates it; `_ns_session_mount` only adds the bind if it exists.
   2. `dev-util/ccache` is installed in the baseline (provides the
-     `/usr/lib/ccache/bin` compiler shims). **Stage3 does not include it**.
+     `/usr/lib/ccache/bin` compiler shims). **Stage3 does not include
+     it.** `bootstrap_install_ccache` emerges it as part of the standard
+     bootstrap pipeline; for older baselines, run
+     `sudo tinderbox-ng install-ccache` to retrofit.
   3. `FEATURES` contains `ccache` in `baseline.make.conf`. The shipped
      template enables it; verify with `emerge --info | grep FEATURES`.
 
-  Bootstrap a fresh shared cache with:
-
-  ```sh
-  ssh root@vm-linux.local 'install -d /srv/tinderbox-ng/shared/ccache && \
-    cat >/srv/tinderbox-ng/shared/ccache/ccache.conf <<EOF
-  max_size = 5.0G
-  compression = true
-  compression_level = 1
-  hash_dir = false
-  sloppiness = file_macro,locale,time_macros,include_file_mtime,include_file_ctime,system_headers
-  EOF'
-  ```
-
-  To install ccache into the baseline (one-shot, requires unfreezing):
-
-  ```sh
-  ssh root@vm-linux.local 'chmod -R u+w /srv/tinderbox-ng/baseline; \
-    chroot /srv/tinderbox-ng/baseline /bin/bash -lc \
-      "emerge --quiet-build=y --jobs=$(nproc) dev-util/ccache"; \
-    chmod -R a-w /srv/tinderbox-ng/baseline'
-  ```
+  The cache is sized via `TINDERBOX_CCACHE_MAX_SIZE` (default 100G,
+  written into `/etc/ccache.conf` at install time). Bump it via
+  `sudo TINDERBOX_CCACHE_MAX_SIZE=200G tinderbox-ng install-ccache`,
+  which rewrites the config in place and re-freezes the baseline.
 - **Soft-frozen baseline.** Bootstrap finishes with `chmod -R a-w`.
   This is a speed bump against accidental host-side edits; root can
   still write (DAC bypass). We do not use `chattr +i` because it would
@@ -304,14 +307,13 @@ ssh vm-linux.local sudo cat \
   `tinderbox-ng.d/deploy-baseline.sh <template> <user@host:remote-path>`
   to push a template into a running baseline; it applies the same
   substitution as `cp_template` and refuses to deploy if any `@TOKEN@`
-  is left unresolved.
-  command substitutions, and `make` then sees a literal `-j$(nproc)` and
-  silently falls back to single-threaded. If a baseline was built before
-  this fix landed, repair it in place:
+  is left unresolved. If you discover a baseline whose `make.conf` still
+  contains literal `@NPROC@` (e.g. from a pre-`deploy-baseline.sh` raw
+  `scp`), patch it in place with:
 
   ```sh
   ssh root@vm-linux.local 'NPROC=$(nproc); chmod u+w /srv/tinderbox-ng/baseline/etc/portage/make.conf; \
-    sed -i "s|\\\$(nproc)|${NPROC}|g" /srv/tinderbox-ng/baseline/etc/portage/make.conf; \
+    sed -i "s|@NPROC@|${NPROC}|g" /srv/tinderbox-ng/baseline/etc/portage/make.conf; \
     chmod a-w /srv/tinderbox-ng/baseline/etc/portage/make.conf'
   ```
 - **Test phase opt-in (matches Portage).** `portage-ng-dev --build`
@@ -386,4 +388,6 @@ ships a particular `kb.qlf`, the resolver disagrees with `emerge`.
 | `GENTOO_PROFILE` | `default/linux/amd64/23.0/split-usr/no-multilib` | Must match `config:gentoo_profile/1`. |
 | `GENTOO_LOCALE` | `en_US.UTF-8 UTF-8` | Appended to `/etc/locale.gen`. |
 | `GENTOO_LOCALE_NAME` | `en_US.utf8` | Argument to `eselect locale set`. |
+| `TINDERBOX_SESSIONS_TMPFS_SIZE` | `100G` | tmpfs cap for `$TINDERBOX_ROOT/sessions`. Empty/`0` disables. |
+| `TINDERBOX_CCACHE_MAX_SIZE` | `100G` | `max_size` written into `/etc/ccache.conf` by `bootstrap_install_ccache` and `install-ccache`. |
 | `TINDERBOX_REBOOTSTRAP` | (unset) | If set, `bootstrap` overwrites an existing baseline. |
