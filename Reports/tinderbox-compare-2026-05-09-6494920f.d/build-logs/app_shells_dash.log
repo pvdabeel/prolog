@@ -1,0 +1,33 @@
+[tinderbox-ng] compare: target='app-shells/dash'  mode=--build  label=app_shells_dash
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-app_shells_dash
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-app_shells_dash
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-app_shells_dash' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-app_shells_dash' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-app_shells_dash-20260509T130635)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : app-shells/dash                                               │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-app_shells_dash-20260509T130635│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 3                       │ 1                         │
+│ completed        │ 4                       │ 1                         │
+│ merged into VDB  │ 1                       │ 1                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+VDB delta (after build):
+  only in portage-ng:
+    + app-shells/dash-0.5.13.3
+  only in emerge:
+    + app-shells/dash-0.5.12-r1
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-app_shells_dash-20260509T130635/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-app_shells_dash-20260509T130635/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

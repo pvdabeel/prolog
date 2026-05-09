@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='sys-fs/ntfs3g'  mode=--pretend  label=sys_fs_ntfs3g
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-sys_fs_ntfs3g
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-sys_fs_ntfs3g
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-sys_fs_ntfs3g' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-sys_fs_ntfs3g' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-sys_fs_ntfs3g-20260509T124927)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : sys-fs/ntfs3g                                                 │
+│ mode   : --pretend                                                     │
+│ logs   : /srv/tinderbox-ng/logs/compare-sys_fs_ntfs3g-20260509T124927  │
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 3                       │ 1                         │
+│ completed        │ 0                       │ 0                         │
+│ merged into VDB  │ 0                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-sys_fs_ntfs3g-20260509T124927/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-sys_fs_ntfs3g-20260509T124927/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

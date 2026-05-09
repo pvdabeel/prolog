@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='net-analyzer/iftop'  mode=--pretend  label=net_analyzer_iftop
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-net_analyzer_iftop
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-net_analyzer_iftop
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-net_analyzer_iftop' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-net_analyzer_iftop' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-net_analyzer_iftop-20260509T124443)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : net-analyzer/iftop                                            │
+│ mode   : --pretend                                                     │
+│ logs   : /srv/tinderbox-ng/logs/compare-net_analyzer_iftop-20260509T124443│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 47                      │ 2                         │
+│ completed        │ 0                       │ 0                         │
+│ merged into VDB  │ 0                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-net_analyzer_iftop-20260509T124443/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-net_analyzer_iftop-20260509T124443/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

@@ -1,0 +1,32 @@
+[tinderbox-ng] compare: target='net-misc/aria2'  mode=--build  label=net_misc_aria2
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-net_misc_aria2
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-net_misc_aria2
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-net_misc_aria2' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-net_misc_aria2' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-net_misc_aria2-20260509T132040)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : net-misc/aria2                                                │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-net_misc_aria2-20260509T132040 │
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 6                       │ 1                         │
+│ completed        │ 7                       │ 1                         │
+│ merged into VDB  │ 2                       │ 1                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+VDB delta (after build):
+  only in portage-ng:
+    + net-libs/libssh2-1.11.1
+  in both: 1 packages
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-net_misc_aria2-20260509T132040/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-net_misc_aria2-20260509T132040/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

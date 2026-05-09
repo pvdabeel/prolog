@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='media-gfx/imagemagick'  mode=--pretend  label=media_gfx_imagemagick
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-media_gfx_imagemagick
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-media_gfx_imagemagick
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-media_gfx_imagemagick' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-media_gfx_imagemagick' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-media_gfx_imagemagick-20260509T124949)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : media-gfx/imagemagick                                         │
+│ mode   : --pretend                                                     │
+│ logs   : /srv/tinderbox-ng/logs/compare-media_gfx_imagemagick-20260509T124949│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK(assumed)             │ OK                        │
+│ plan actions     │ 116                     │ 3                         │
+│ completed        │ 0                       │ 0                         │
+│ merged into VDB  │ 0                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-media_gfx_imagemagick-20260509T124949/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-media_gfx_imagemagick-20260509T124949/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

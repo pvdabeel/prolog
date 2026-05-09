@@ -1,0 +1,35 @@
+[tinderbox-ng] compare: target='dev-libs/protobuf'  mode=--build  label=dev_libs_protobuf
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_libs_protobuf
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_libs_protobuf
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_libs_protobuf' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_libs_protobuf' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_libs_protobuf-20260509T135753)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-libs/protobuf                                             │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_libs_protobuf-20260509T135753│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 6                       │ 2                         │
+│ completed        │ 7                       │ 2                         │
+│ merged into VDB  │ 2                       │ 2                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+VDB delta (after build):
+  only in portage-ng:
+    + dev-cpp/abseil-cpp-20250814.1
+    + dev-libs/protobuf-33.1
+  only in emerge:
+    + dev-cpp/abseil-cpp-20250512.1
+    + dev-libs/protobuf-31.1
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_libs_protobuf-20260509T135753/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_libs_protobuf-20260509T135753/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

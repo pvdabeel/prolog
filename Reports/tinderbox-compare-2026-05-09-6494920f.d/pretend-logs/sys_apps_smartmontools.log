@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='sys-apps/smartmontools'  mode=--pretend  label=sys_apps_smartmontools
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-sys_apps_smartmontools
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-sys_apps_smartmontools
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-sys_apps_smartmontools' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-sys_apps_smartmontools' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-sys_apps_smartmontools-20260509T124812)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : sys-apps/smartmontools                                        │
+│ mode   : --pretend                                                     │
+│ logs   : /srv/tinderbox-ng/logs/compare-sys_apps_smartmontools-20260509T124812│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK(assumed)             │ OK                        │
+│ plan actions     │ 25                      │ 10                        │
+│ completed        │ 0                       │ 0                         │
+│ merged into VDB  │ 0                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-sys_apps_smartmontools-20260509T124812/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-sys_apps_smartmontools-20260509T124812/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

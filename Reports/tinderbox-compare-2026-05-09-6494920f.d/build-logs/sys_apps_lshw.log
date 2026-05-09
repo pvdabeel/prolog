@@ -1,0 +1,34 @@
+[tinderbox-ng] compare: target='sys-apps/lshw'  mode=--build  label=sys_apps_lshw
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-sys_apps_lshw
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-sys_apps_lshw
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-sys_apps_lshw' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-sys_apps_lshw' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-sys_apps_lshw-20260509T134658)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : sys-apps/lshw                                                 │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-sys_apps_lshw-20260509T134658  │
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 6                       │ 2                         │
+│ completed        │ 7                       │ 2                         │
+│ merged into VDB  │ 2                       │ 2                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+VDB delta (after build):
+  only in portage-ng:
+    + sys-apps/hwdata-0.401
+  only in emerge:
+    + sys-apps/hwdata-0.400
+  in both: 1 packages
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-sys_apps_lshw-20260509T134658/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-sys_apps_lshw-20260509T134658/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

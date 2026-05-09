@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='net-vpn/openvpn'  mode=--pretend  label=net_vpn_openvpn
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-net_vpn_openvpn
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-net_vpn_openvpn
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-net_vpn_openvpn' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-net_vpn_openvpn' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-net_vpn_openvpn-20260509T125043)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : net-vpn/openvpn                                               │
+│ mode   : --pretend                                                     │
+│ logs   : /srv/tinderbox-ng/logs/compare-net_vpn_openvpn-20260509T125043│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 21                      │ 6                         │
+│ completed        │ 0                       │ 0                         │
+│ merged into VDB  │ 0                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-net_vpn_openvpn-20260509T125043/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-net_vpn_openvpn-20260509T125043/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)
