@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='media-video/ffmpeg'  mode=--pretend  label=media_video_ffmpeg
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-media_video_ffmpeg
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-media_video_ffmpeg
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-media_video_ffmpeg' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-media_video_ffmpeg' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-media_video_ffmpeg-20260509T125035)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : media-video/ffmpeg                                            │
+│ mode   : --pretend                                                     │
+│ logs   : /srv/tinderbox-ng/logs/compare-media_video_ffmpeg-20260509T125035│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK(assumed)             │ OK                        │
+│ plan actions     │ 137                     │ 20                        │
+│ completed        │ 0                       │ 0                         │
+│ merged into VDB  │ 0                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-media_video_ffmpeg-20260509T125035/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-media_video_ffmpeg-20260509T125035/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

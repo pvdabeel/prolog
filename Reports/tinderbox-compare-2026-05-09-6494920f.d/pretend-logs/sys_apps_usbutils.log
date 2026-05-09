@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='sys-apps/usbutils'  mode=--pretend  label=sys_apps_usbutils
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-sys_apps_usbutils
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-sys_apps_usbutils
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-sys_apps_usbutils' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-sys_apps_usbutils' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-sys_apps_usbutils-20260509T124750)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : sys-apps/usbutils                                             │
+│ mode   : --pretend                                                     │
+│ logs   : /srv/tinderbox-ng/logs/compare-sys_apps_usbutils-20260509T124750│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 13                      │ 4                         │
+│ completed        │ 0                       │ 0                         │
+│ merged into VDB  │ 0                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-sys_apps_usbutils-20260509T124750/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-sys_apps_usbutils-20260509T124750/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

@@ -1,0 +1,30 @@
+[tinderbox-ng] compare: target='app-text/pandoc-cli'  mode=--pretend  label=app_text_pandoc_cli
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-app_text_pandoc_cli
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-app_text_pandoc_cli
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-app_text_pandoc_cli' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-app_text_pandoc_cli' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-app_text_pandoc_cli-20260509T125058)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : app-text/pandoc-cli                                           │
+│ mode   : --pretend                                                     │
+│ logs   : /srv/tinderbox-ng/logs/compare-app_text_pandoc_cli-20260509T125058│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK(assumed)             │ FAIL(1)                   │
+│ plan actions     │ 638                     │ ?                         │
+│ completed        │ 0                       │ 0                         │
+│ merged into VDB  │ 0                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng:              │ download  portage://dev-haskell/fail-4.9.0.0
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-app_text_pandoc_cli-20260509T125058/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-app_text_pandoc_cli-20260509T125058/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

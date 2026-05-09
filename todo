@@ -4,26 +4,50 @@ Feature exploration
 - Dark & Light mode colors
 - Split up tinderbox-ng to a separate package
 
+- make tinderbox-ng more aggressive (more parallelism to up load close to available cpu)
+
 - test all ebuilds (currently the matrix is hand-curated;
-  see Reports/tinderbox-compare-2026-05-08-7b2f0fc.md for the latest run)
+  see Reports/tinderbox-compare-2026-05-09-6494920f.md for the latest run:
+  104 packages pretend, 65 packages full build, head-to-head with emerge)
 (- develop a graphical interface to visualise progress) -> not sure about this yet
 
+- make a profile per package, showing parallelism as well as milestones, so we can optimally schedule tinderbox
+- AWS integration (myaws) - add tinderbox-ng commmand besides update, fullupdate
 
-Open follow-ups (from latest compare report)
-============================================
+Open follow-ups (from latest compare report 2026-05-09)
+=======================================================
 
 - Investigate why emerge plan-fails on www-servers/nginx and
   media-gfx/graphviz while portage-ng plans both with assumptions.
   Decide whether portage-ng should also reject (or whether emerge is
-  too strict here).
+  too strict here). The 2026-05-09 pretend tier added 7 more such
+  cases: dev-util/{strace,ltrace,cmake,ninja,meson}, sys-apps/tree,
+  sys-apps/at, app-text/pandoc-cli, app-doc/doxygen.
 - net-irc/irssi: portage-ng pulls in dev-lang/perl-5.42.2 even though
   perl is part of stage3. Likely a vartree-vs-VDB lookup difference
   in build-time-only dep handling. Trace through prover/vdb.
 - net-irc/irssi: portage-ng selects irssi-1.4.5-r2, emerge picks
   irssi-1.4.5. Check preference predicate / version-selection logic.
+- VDB-delta packages where portage-ng pulls in extra perl/python deps
+  that stage3 already provides: app-misc/mc (+4), net-analyzer/iftop
+  (+3), net-dns/dnsmasq (+3), dev-vcs/mercurial (+4), media-libs/
+  freetype (+9). Same root cause as irssi-perl above.
 
 
 Bugs (evidence-based, found via tinderbox-ng compare)
 =====================================================
 
-(none open at this time)
+- pipeline.pl silent-failure: when a sub-step (build or install of a
+  dep) fails, the failure does not always propagate to the top-level
+  pipeline exit code. 12/65 build-tier runs in the 2026-05-09 matrix
+  reported `exit 0` while the target was never merged into VDB.
+  Detection added to render-compare-matrix.py (parses VDB-delta and
+  first-error sections from compare summary log). Fix: pipeline must
+  treat any FAIL line in jobserver:collect/2 results as a fatal
+  error for the overall plan, not just for that job.
+
+- portage-ng-only build losses (target install fails where emerge
+  succeeds): app-misc/mc, net-analyzer/iftop, net-dns/dnsmasq,
+  www-client/w3m, dev-vcs/subversion. Each needs a deep-dive on the
+  install/merge phase (likely USE-flag, eclass, or REQUIRED_USE
+  handling differences).

@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='app-misc/tmux'  mode=--pretend  label=app_misc_tmux
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-app_misc_tmux
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-app_misc_tmux
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-app_misc_tmux' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-app_misc_tmux' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-app_misc_tmux-20260509T124139)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : app-misc/tmux                                                 │
+│ mode   : --pretend                                                     │
+│ logs   : /srv/tinderbox-ng/logs/compare-app_misc_tmux-20260509T124139  │
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK(assumed)             │ OK                        │
+│ plan actions     │ 6                       │ 2                         │
+│ completed        │ 0                       │ 0                         │
+│ merged into VDB  │ 0                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-app_misc_tmux-20260509T124139/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-app_misc_tmux-20260509T124139/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

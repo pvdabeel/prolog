@@ -1,0 +1,35 @@
+[tinderbox-ng] compare: target='net-irc/weechat'  mode=--build  label=net_irc_weechat
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-net_irc_weechat
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-net_irc_weechat
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-net_irc_weechat' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-net_irc_weechat' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-net_irc_weechat-20260509T132919)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : net-irc/weechat                                               │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-net_irc_weechat-20260509T132919│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ FAIL(1)                   │
+│ plan actions     │ 11                      │ 0                         │
+│ completed        │ 5                       │ 0                         │
+│ merged into VDB  │ 1                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 2] FAIL (1) install portage://app-text/aspell-0.60.8.2
+  emerge    : >>> Failed to emerge app-text/aspell-0.60.8.2, Log file:
+
+VDB delta (after build):
+  only in portage-ng:
+    + dev-lang/perl-5.42.2
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-net_irc_weechat-20260509T132919/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-net_irc_weechat-20260509T132919/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

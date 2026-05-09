@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='net-analyzer/iptraf-ng'  mode=--pretend  label=net_analyzer_iptraf_ng
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-net_analyzer_iptraf_ng
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-net_analyzer_iptraf_ng
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-net_analyzer_iptraf_ng' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-net_analyzer_iptraf_ng' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-net_analyzer_iptraf_ng-20260509T124450)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : net-analyzer/iptraf-ng                                        │
+│ mode   : --pretend                                                     │
+│ logs   : /srv/tinderbox-ng/logs/compare-net_analyzer_iptraf_ng-20260509T124450│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 3                       │ 1                         │
+│ completed        │ 0                       │ 0                         │
+│ merged into VDB  │ 0                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-net_analyzer_iptraf_ng-20260509T124450/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-net_analyzer_iptraf_ng-20260509T124450/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

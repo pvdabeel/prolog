@@ -1,0 +1,33 @@
+[tinderbox-ng] compare: target='app-arch/unrar'  mode=--build  label=app_arch_unrar
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-app_arch_unrar
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-app_arch_unrar
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-app_arch_unrar' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-app_arch_unrar' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-app_arch_unrar-20260509T131702)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : app-arch/unrar                                                │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-app_arch_unrar-20260509T131702 │
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 3                       │ 1                         │
+│ completed        │ 4                       │ 1                         │
+│ merged into VDB  │ 1                       │ 1                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+VDB delta (after build):
+  only in portage-ng:
+    + app-arch/unrar-7.2.6
+  only in emerge:
+    + app-arch/unrar-7.2.5
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-app_arch_unrar-20260509T131702/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-app_arch_unrar-20260509T131702/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

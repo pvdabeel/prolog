@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='media-libs/freetype'  mode=--pretend  label=media_libs_freetype
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-media_libs_freetype
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-media_libs_freetype
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-media_libs_freetype' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-media_libs_freetype' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-media_libs_freetype-20260509T125005)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : media-libs/freetype                                           │
+│ mode   : --pretend                                                     │
+│ logs   : /srv/tinderbox-ng/logs/compare-media_libs_freetype-20260509T125005│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 64                      │ 2                         │
+│ completed        │ 0                       │ 0                         │
+│ merged into VDB  │ 0                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-media_libs_freetype-20260509T125005/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-media_libs_freetype-20260509T125005/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

@@ -1,0 +1,149 @@
+# tinderbox-ng comparison matrix: 100-package candidate manifest
+#
+# Curated set of packages NOT in the stage3 baseline VDB, picked to
+# represent a realistic "what a user installs after stage3" workload.
+# Excludes:
+#   * anything already in stage3 (would be a reinstall, not a fresh install)
+#   * monsters: gcc, llvm, rust, firefox, chromium, libreoffice, qemu, kvm,
+#     wine, virtualbox, openjdk, ghc (each pulls hours of build time)
+#   * known-broken-on-emerge picks (nginx, graphviz already in prior reports)
+#
+# Lines starting with `#` are comments; blank lines are ignored.
+
+# ---- editors -----------------------------------------------------------------
+app-editors/vim
+app-editors/joe
+app-editors/mg
+app-editors/jed
+
+# ---- shells & shell tooling --------------------------------------------------
+app-shells/zsh
+app-shells/fish
+app-shells/dash
+app-shells/mksh
+app-shells/bash-completion
+
+# ---- terminal multiplexers / pagers / cli niceties ---------------------------
+app-misc/tmux
+app-misc/screen
+app-misc/jq
+app-misc/yq
+app-misc/mc
+sys-process/htop
+sys-process/iotop
+sys-process/lsof
+sys-process/numactl
+sys-process/atop
+sys-process/parallel
+
+# ---- archivers / compression -------------------------------------------------
+app-arch/p7zip
+app-arch/unrar
+app-arch/zip
+app-arch/lz4
+app-arch/lzip
+app-arch/cabextract
+
+# ---- network utilities -------------------------------------------------------
+net-misc/socat
+net-misc/whois
+net-misc/iperf
+net-misc/aria2
+net-analyzer/nmap
+net-analyzer/tcpdump
+net-analyzer/mtr
+net-analyzer/iftop
+net-analyzer/iptraf-ng
+net-analyzer/traceroute
+net-analyzer/netcat
+net-dns/bind-tools
+net-dns/dnsmasq
+
+# ---- chat / irc / mail -------------------------------------------------------
+net-irc/irssi
+net-irc/weechat
+mail-client/mutt
+mail-client/alpine
+
+# ---- web servers / proxies / clients -----------------------------------------
+www-servers/apache
+www-servers/lighttpd
+www-client/lynx
+www-client/links
+www-client/w3m
+
+# ---- development: VCS & tooling ----------------------------------------------
+dev-vcs/mercurial
+dev-vcs/subversion
+dev-vcs/cvs
+dev-util/strace
+dev-util/ltrace
+dev-util/cmake
+dev-util/ninja
+dev-util/meson
+dev-util/ccache
+
+# ---- system tools ------------------------------------------------------------
+sys-apps/pciutils
+sys-apps/usbutils
+sys-apps/lshw
+sys-apps/dmidecode
+sys-apps/smartmontools
+sys-apps/lm-sensors
+sys-apps/ripgrep
+sys-apps/the_silver_searcher
+sys-apps/fd
+sys-apps/bat
+sys-apps/tree
+sys-apps/lsd
+sys-fs/dosfstools
+sys-fs/exfatprogs
+sys-fs/ntfs3g
+sys-fs/squashfs-tools
+sys-block/parted
+
+# ---- graphics & media (small enough) -----------------------------------------
+media-gfx/imagemagick
+media-libs/libpng
+media-libs/freetype
+media-libs/giflib
+media-libs/tiff
+media-sound/sox
+media-video/ffmpeg
+
+# ---- crypto / security -------------------------------------------------------
+net-vpn/openvpn
+net-vpn/wireguard-tools
+
+# ---- text processing / docs --------------------------------------------------
+app-text/pandoc-cli
+app-text/dos2unix
+app-text/asciidoc
+app-text/wgetpaste
+app-doc/doxygen
+
+# ---- portage / gentoo tooling ------------------------------------------------
+app-portage/gentoolkit
+app-portage/eix
+
+# ---- libraries (commonly pulled, small footprints) ---------------------------
+dev-libs/jansson
+dev-libs/libyaml
+dev-libs/oniguruma
+dev-libs/protobuf
+dev-libs/icu
+
+# ---- misc utilities ----------------------------------------------------------
+sys-process/cronie
+sys-apps/at
+app-admin/sudo
+app-admin/logrotate
+
+# ---- net-fs ------------------------------------------------------------------
+net-fs/sshfs
+net-fs/nfs-utils
+
+# ---- programming languages (interpreters, smaller side) ----------------------
+dev-lang/lua
+dev-lang/tcl
+dev-lang/php
