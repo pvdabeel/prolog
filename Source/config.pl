@@ -576,6 +576,20 @@ config:mirror_url('https://distfiles.gentoo.org/distfiles').
 config:mirror_verify_hashes_default(none).
 
 
+%! config:mirror_layout_cache_ttl(?Seconds)
+%
+% TTL (in seconds) for the on-disk cache of the GLEP 75 layout.conf
+% reply, written under the active distdir (see download:disk_cache_path/1).
+% Mirror layout almost never changes, but clusters of short-lived
+% portage-ng processes (tinderbox-ng compare matrix, server worker
+% pool) would otherwise re-fetch layout.conf for every invocation,
+% which both wastes a curl per session (~1s) and adds a real failure
+% mode if the mirror flaps. Default 24h is conservative; bump it for
+% offline / network-restricted runs.
+
+config:mirror_layout_cache_ttl(86400).
+
+
 %! config:bugzilla_url(?URL)
 %
 % Base URL of the Bugzilla instance for --search-bugs (e.g. bugs.gentoo.org).
