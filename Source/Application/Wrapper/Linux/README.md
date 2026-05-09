@@ -20,6 +20,7 @@ Source/Application/Wrapper/Linux/
     ├── baseline.make.conf             # /etc/portage/make.conf for baseline
     ├── baseline.repos.conf            # /etc/portage/repos.conf/gentoo.conf
     ├── portage-ng-dev.in              # in-chroot launcher (template)
+    ├── deploy-baseline.sh             # safe scp of templates (does @TOKEN@ subs)
     └── run-matrix.sh                  # tinderbox-matrix test runner
 ```
 
@@ -296,6 +297,14 @@ ssh vm-linux.local sudo cat \
   and `EMERGE_DEFAULT_OPTS="--jobs=@NPROC@ ..."`. `cp_template` rewrites
   `@NPROC@` to the host's `nproc` value at bootstrap time. **Do not use
   literal `$(nproc)` in `make.conf`** — Portage's parser does not expand
+  command substitution. **And do not raw-`scp` a template into a live
+  baseline either** — that bypasses the `cp_template` substitution and
+  leaves literal `@NPROC@` placeholders in `make.conf`, crashing emerge
+  with `Invalid --jobs parameter: '@NPROC@'`. Use
+  `tinderbox-ng.d/deploy-baseline.sh <template> <user@host:remote-path>`
+  to push a template into a running baseline; it applies the same
+  substitution as `cp_template` and refuses to deploy if any `@TOKEN@`
+  is left unresolved.
   command substitutions, and `make` then sees a literal `-j$(nproc)` and
   silently falls back to single-threaded. If a baseline was built before
   this fix landed, repair it in place:

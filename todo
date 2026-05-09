@@ -9,9 +9,11 @@ Feature exploration
 - test all ebuilds (currently the matrix is hand-curated;
   see Reports/tinderbox-compare-2026-05-09-6494920f.md for the latest run:
   104 packages pretend, 65 packages full build, head-to-head with emerge)
+
 (- develop a graphical interface to visualise progress) -> not sure about this yet
 
 - make a profile per package, showing parallelism as well as milestones, so we can optimally schedule tinderbox -> portage-ng already has this prediction built-in, its a matter of extending this to parallelism dimension 
+
 - AWS integration (myaws) - add tinderbox-ng commmand besides update, fullupdate
 
 Open follow-ups (from latest compare report 2026-05-09)
@@ -132,20 +134,24 @@ Bugs (evidence-based, found via tinderbox-ng compare)
   fetches are persisted, atomic write via tmp+rename). Verified
   inside chroot: 150ms cold -> 0ms warm-disk-hit on fresh process.
 
-Open
-====
-
-- tinderbox-ng baseline-config deploys are unsafe: scp'ing
+- [FIXED 2026-05-09] tinderbox-ng baseline-config deploys were
+  unsafe: scp'ing
   Source/Application/Wrapper/Linux/tinderbox-ng.d/baseline.make.conf
   directly to /srv/tinderbox-ng/baseline/etc/portage/make.conf
-  bypasses the @NPROC@ / @GENTOO_PROFILE@ substitution that
-  cp_template does at bootstrap time, leaving the file with literal
+  bypassed the @NPROC@ / @GENTOO_PROFILE@ substitution that
+  cp_template() does at bootstrap time, leaving the file with literal
   "@NPROC@" placeholders that crash emerge with
   `Invalid --jobs parameter: '@NPROC@'`. Hit during the 1000-pkg
   matrix on 2026-05-09 and contaminated 218 of 233 post-KW entries
-  (now patched in-place with sed). Need a small deploy helper that
-  applies the same substitution as cp_template, e.g.
-  Source/Application/Wrapper/Linux/tinderbox-ng.d/deploy-baseline.sh
-  taking template name + remote host + remote path and doing the
-  sed-then-scp in one step, plus a docs note in tinderbox-ng's
-  README warning against raw template scp.
+  (patched in-place with sed; new helper used for all subsequent
+  deploys). Fix:
+    * Source/Application/Wrapper/Linux/tinderbox-ng.d/deploy-baseline.sh
+      applies the same substitutions as cp_template (NPROC resolved
+      via ssh-to-remote so it matches the deploy target, GENTOO_PROFILE
+      and PORTAGE_NG_ROOT from env or matching defaults) and refuses
+      to deploy if any @TOKEN@ remains unresolved.
+    * Source/Application/Wrapper/Linux/README.md gained an explicit
+      "do not raw-scp a template" warning pointing at the helper.
+
+Open
+====
