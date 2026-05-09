@@ -1,6 +1,8 @@
 Feature exploration
 ===================
 
+- investigate number of times layout.conf is downloaded on mirror
+
 - Dark & Light mode colors
 - Split up tinderbox-ng to a separate package
 
