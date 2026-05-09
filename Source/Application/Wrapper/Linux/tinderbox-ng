@@ -87,6 +87,25 @@ CHROOT_GRAPH_DIR="/root/Graph"
 # time and inject the IPs into the session's /etc/hosts. Space-separated.
 TINDERBOX_MDNS_HOSTS="${TINDERBOX_MDNS_HOSTS:-mac-pro.local imac-pro.local}"
 
+# tmpfs mount over the whole sessions directory. Backs every session's
+# OverlayFS upper layer with RAM instead of disk, which means *every*
+# write that happens in a chroot (src_unpack, src_compile, src_install,
+# image staging, VDB merge) lands in RAM. Eliminates the ext4 journal
+# (jbd2) serialisation that bottlenecks 16+ concurrent builds and the
+# NVMe submission-queue saturation that follows from sustained burst
+# writes (timeouts of the form "nvme0: I/O tag X QID Y timeout,
+# completion polled" in dmesg).
+#
+# One shared tmpfs (rather than per-session) gives natural workload
+# balancing - a single big build can use up to the whole cap if every
+# other session is small. Set to empty to disable (sessions then live
+# on the regular host filesystem).
+#
+# 100G covers the comparison manifest (which excludes monsters like
+# rust/llvm/firefox/chromium) with 32 concurrent sessions. Tmpfs is
+# sparse: actual RAM use only grows with bytes written.
+TINDERBOX_SESSIONS_TMPFS_SIZE="${TINDERBOX_SESSIONS_TMPFS_SIZE:-100G}"
+
 # =============================================================================
 # Logging helpers
 # =============================================================================
@@ -131,6 +150,41 @@ require_unshare() {
 require_dirs() {
   [[ -d "$TINDERBOX_ROOT" ]] || die "$TINDERBOX_ROOT does not exist; run 'tinderbox-ng bootstrap' first"
   [[ -d "$BASELINE_DIR/usr" ]] || die "$BASELINE_DIR is not a populated baseline; run 'tinderbox-ng bootstrap' first"
+}
+
+# Is the sessions directory currently a tmpfs mount?
+sessions_tmpfs_active() {
+  [[ -d "$SESSIONS_DIR" ]] || return 1
+  local fstype
+  fstype="$(findmnt -no FSTYPE --target "$SESSIONS_DIR" 2>/dev/null)"
+  [[ "$fstype" == "tmpfs" ]] && [[ "$(stat -c %m "$SESSIONS_DIR" 2>/dev/null)" == "$SESSIONS_DIR" ]]
+}
+
+# Mount tmpfs over $SESSIONS_DIR if requested by config and not already
+# mounted. Idempotent and flock-protected so concurrent callers (e.g. 16
+# parallel `tinderbox-ng compare` workers driven by compare-matrix.sh)
+# don't race to mount the same target. No-op when
+# TINDERBOX_SESSIONS_TMPFS_SIZE is empty or '0'.
+_ensure_sessions_tmpfs() {
+  local size="$TINDERBOX_SESSIONS_TMPFS_SIZE"
+  [[ -n "$size" && "$size" != "0" ]] || return 0
+  install -d "$SESSIONS_DIR"
+  local lock="$TINDERBOX_ROOT/.sessions-tmpfs.lock"
+  (
+    flock 9
+    if sessions_tmpfs_active; then
+      return 0
+    fi
+    if [[ -n "$(ls -A "$SESSIONS_DIR" 2>/dev/null)" ]]; then
+      log_warn "$SESSIONS_DIR not empty; tmpfs mount will hide existing sessions"
+      log_warn "  destroy them first or unset TINDERBOX_SESSIONS_TMPFS_SIZE to keep them"
+    fi
+    log_info "mounting tmpfs (size=$size) over $SESSIONS_DIR"
+    if ! mount -t tmpfs -o "size=$size,mode=0755,nosuid,nodev" \
+                tinderbox-sessions "$SESSIONS_DIR"; then
+      die "tmpfs mount on $SESSIONS_DIR failed (size=$size)"
+    fi
+  ) 9>"$lock"
 }
 
 # =============================================================================
@@ -603,6 +657,7 @@ EOF
 cmd_new() {
   require_root
   require_dirs
+  _ensure_sessions_tmpfs
   local name="${1:-}"
   [[ -n "$name" ]] || die "usage: tinderbox-ng new <name>"
   [[ ! -d "$(session_dir "$name")" ]] || die "session '$name' already exists"
@@ -1053,6 +1108,45 @@ cmd_destroy() {
 }
 
 # =============================================================================
+# Subcommands: tmpfs-up / tmpfs-down
+# =============================================================================
+#
+# Manual control over the shared sessions tmpfs (see
+# TINDERBOX_SESSIONS_TMPFS_SIZE in the configuration block). Auto-mount
+# happens lazily on `cmd_new`, so these are only needed when the operator
+# wants to mount/unmount explicitly (e.g. before a long batch run, or to
+# free RAM after one).
+
+cmd_tmpfs_up() {
+  require_root
+  require_dirs
+  if sessions_tmpfs_active; then
+    log_info "sessions tmpfs already mounted at $SESSIONS_DIR"
+    findmnt -no SOURCE,FSTYPE,SIZE,OPTIONS --target "$SESSIONS_DIR"
+    return 0
+  fi
+  _ensure_sessions_tmpfs
+  log_ok "sessions tmpfs mounted (size=$TINDERBOX_SESSIONS_TMPFS_SIZE)"
+  findmnt -no SOURCE,FSTYPE,SIZE,OPTIONS --target "$SESSIONS_DIR"
+}
+
+cmd_tmpfs_down() {
+  require_root
+  if ! sessions_tmpfs_active; then
+    log_info "sessions tmpfs not mounted; nothing to do"
+    return 0
+  fi
+  local active
+  active="$(ls "$SESSIONS_DIR" 2>/dev/null | wc -l)"
+  if [[ "$active" -gt 0 ]]; then
+    die "$active session(s) still under $SESSIONS_DIR; destroy them first"
+  fi
+  log_info "unmounting sessions tmpfs at $SESSIONS_DIR"
+  umount "$SESSIONS_DIR" || die "umount $SESSIONS_DIR failed"
+  log_ok "sessions tmpfs unmounted"
+}
+
+# =============================================================================
 # Subcommand: list
 # =============================================================================
 
@@ -1103,6 +1197,14 @@ cmd_status() {
   printf '  distfiles size       %s\n' "$(du -sh "$DISTFILES_DIR" 2>/dev/null | awk '{print $1}')"
   printf '  ccache size          %s\n' "$(du -sh "$CCACHE_DIR" 2>/dev/null | awk '{print $1}')"
   printf '  sessions             %s\n' "$(find "$SESSIONS_DIR" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | wc -l)"
+  if sessions_tmpfs_active; then
+    local sz used avail
+    read -r sz used avail < <(df -BG --output=size,used,avail "$SESSIONS_DIR" 2>/dev/null \
+                              | tail -n +2 | tr -d 'G')
+    printf '  sessions tmpfs       active: %sG used / %sG avail / %sG cap\n' "${used:-?}" "${avail:-?}" "${sz:-?}"
+  else
+    printf '  sessions tmpfs       inactive (TINDERBOX_SESSIONS_TMPFS_SIZE=%s)\n' "${TINDERBOX_SESSIONS_TMPFS_SIZE:-unset}"
+  fi
 }
 
 # =============================================================================
@@ -1248,14 +1350,22 @@ Subcommands:
   diff <name>              Print files modified in the session's upper layer.
   status                   Show tinderbox-ng global state (paths, pin, sizes).
 
+  tmpfs-up                 Mount the shared sessions tmpfs (idempotent).
+                           Auto-runs on `new`/`compare`; this is for
+                           explicit pre-allocation before a long batch.
+  tmpfs-down               Unmount the shared sessions tmpfs (only if
+                           no sessions remain; destroys their contents).
+
 Environment:
-  TINDERBOX_ROOT           Root for everything (default /srv/tinderbox-ng).
-  STAGE3_VARIANT           e.g. amd64-openrc (default).
-  PORTAGE_TREE_URL         Default https://github.com/gentoo-mirror/gentoo.git
-  PORTAGE_TREE_PIN         Optional commit to pin during bootstrap.
-  PORTAGE_NG_URL           If set: git clone. Otherwise rsync PORTAGE_NG_LOCAL.
-  PORTAGE_NG_LOCAL         Local portage-ng checkout to seed (default: parent of script).
-  TINDERBOX_REBOOTSTRAP=1  Allow `bootstrap` to overwrite an existing baseline.
+  TINDERBOX_ROOT                  Root for everything (default /srv/tinderbox-ng).
+  TINDERBOX_SESSIONS_TMPFS_SIZE   tmpfs size cap for $TINDERBOX_ROOT/sessions
+                                  (default 100G; empty/0 disables).
+  STAGE3_VARIANT                  e.g. amd64-openrc (default).
+  PORTAGE_TREE_URL                Default https://github.com/gentoo-mirror/gentoo.git
+  PORTAGE_TREE_PIN                Optional commit to pin during bootstrap.
+  PORTAGE_NG_URL                  If set: git clone. Otherwise rsync PORTAGE_NG_LOCAL.
+  PORTAGE_NG_LOCAL                Local portage-ng checkout to seed (default: parent of script).
+  TINDERBOX_REBOOTSTRAP=1         Allow `bootstrap` to overwrite an existing baseline.
 
 See Source/Application/Wrapper/Linux/README.md for deployment notes.
 USAGE
@@ -1287,6 +1397,10 @@ main() {
     list)         cmd_list         "$@" ;;
     diff)         cmd_diff         "$@" ;;
     status)       cmd_status       "$@" ;;
+    tmpfs-up)     cmd_tmpfs_up     "$@" ;;
+    tmpfs_up)     cmd_tmpfs_up     "$@" ;;
+    tmpfs-down)   cmd_tmpfs_down   "$@" ;;
+    tmpfs_down)   cmd_tmpfs_down   "$@" ;;
     -h|--help|help) usage; exit 0 ;;
 
     # Internal: re-entered inside `unshare --mount --propagation=private`
