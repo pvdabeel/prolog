@@ -43,15 +43,23 @@ rendering is handled by the builder and build printer.
 
 %! download:mirror_layout(-Layout) is det.
 %
-% Get the GLEP 75 layout of the HTTP mirror. Fetches layout.conf from
-% the mirror URL on first call, then caches the result.
+% Get the GLEP 75 layout of the HTTP mirror. Three-level cache:
+%   1. In-memory cached_mirror_layout/1 (per-process, lock-free fast path).
+%   2. On-disk cache under the active distdir, see disk_cache_path/1
+%      (cross-process, TTL via config:mirror_layout_cache_ttl/1).
+%   3. Network fetch via mirror_layout_from_any/2 (one curl per mirror
+%      until one returns a parseable layout.conf).
 %
-% Concurrency note: the cached-fact check happens lock-free on the fast
-% path; only the (rare) cache-miss branch enters the mutex, so the
-% fast path stays cheap. Without the mutex, when many parallel download
-% jobs race their first call (typical with --jobs 16 and 30+ distfiles
-% in the same wave), every worker enters mirror_layout_from_any and
-% issues its own curl + tmp file. The wasted work was at best harmless,
+% Only successful network fetches populate the disk cache; the legacy
+% `flat` fallback used when every mirror is unreachable is cached
+% in-memory only, so a transient outage does not pin every future
+% session to flat for the full TTL.
+%
+% Concurrency note: the in-memory check happens lock-free on the fast
+% path; only the (rare) cache-miss branch enters the mutex. Without the
+% mutex, when many parallel download jobs race their first call
+% (typical with --jobs 16 and 30+ distfiles in the same wave), every
+% worker would issue its own curl. The wasted work was at best harmless,
 % but combined with concurrent SWI tmp_file_stream/4 calls it surfaced
 % as `existence_error(temporary_file, '')` from `$tmp_file_stream`/4
 % under high load (libX11/libXdmcp/libXt class A failures in the
@@ -66,30 +74,115 @@ download:mirror_layout(Layout) :-
   with_mutex(download_mirror_layout,
     (   download:cached_mirror_layout(Layout)
     ->  true
-    ;   download:mirror_layout_from_any(Layout0),
-        ( var(Layout0) -> Layout = flat ; Layout = Layout0 ),
+    ;   download:read_disk_cache(Layout0)
+    ->  Layout = Layout0,
         assertz(download:cached_mirror_layout(Layout))
+    ;   download:mirror_layout_from_any(Layout1, Status),
+        Layout = Layout1,
+        assertz(download:cached_mirror_layout(Layout)),
+        ( Status == fetched
+        -> download:write_disk_cache(Layout)
+        ;  true
+        )
     )).
 
 
-%! download:mirror_layout_from_any(-Layout) is det.
+%! download:mirror_layout_from_any(-Layout, -Status) is det.
 %
 % Tries every configured mirror_url in order, returning the layout from
 % the first one that serves a parseable layout.conf. Falls through to
-% `flat` if none does (legacy Portage default).
+% Layout=flat (the legacy Portage default) when no mirror responds.
+% Status is `fetched` on a real success and `fallback` when every
+% mirror failed; only `fetched` results are eligible for disk caching.
 
-download:mirror_layout_from_any(Layout) :-
+download:mirror_layout_from_any(Layout, Status) :-
   findall(M, config:mirror_url(M), Mirrors),
-  download:mirror_layout_walk(Mirrors, Layout).
+  download:mirror_layout_walk(Mirrors, Layout, Status).
 
-download:mirror_layout_walk([], flat).
-download:mirror_layout_walk([MirrorUrl|Rest], Layout) :-
+download:mirror_layout_walk([], flat, fallback).
+download:mirror_layout_walk([MirrorUrl|Rest], Layout, Status) :-
   atomic_list_concat([MirrorUrl, '/layout.conf'], LayoutUrl),
   ( download:fetch_layout_conf(LayoutUrl, Contents),
     mirror:parse_layout_conf(Contents, Layout0)
-  -> Layout = Layout0
-  ;  download:mirror_layout_walk(Rest, Layout)
+  -> Layout = Layout0, Status = fetched
+  ;  download:mirror_layout_walk(Rest, Layout, Status)
   ).
+
+
+%! download:disk_cache_path(-Path) is semidet.
+%
+% Path of the on-disk layout cache. Lives next to distfiles so that
+% tinderbox-ng / pengines / matrix workflows share it via the existing
+% distdir bind mount, with no extra config knob to wire up. Fails when
+% the distfiles location is not configured (rare; keeps callers
+% defensive).
+
+download:disk_cache_path(Path) :-
+  catch(distfiles:get_location(Distdir), _, fail),
+  Distdir \== '',
+  atomic_list_concat([Distdir, '/.mirror-layout.cache'], Path).
+
+
+%! download:disk_cache_ttl(-Seconds) is det.
+%
+% TTL for the disk cache, sourced from config:mirror_layout_cache_ttl/1
+% with a 24h hardcoded default if the config knob is absent (older
+% deployments that have not picked up the new fact).
+
+download:disk_cache_ttl(Seconds) :-
+  ( current_predicate(config:mirror_layout_cache_ttl/1),
+    config:mirror_layout_cache_ttl(Seconds)
+  -> true
+  ;  Seconds = 86400
+  ).
+
+
+%! download:read_disk_cache(-Layout) is semidet.
+%
+% Reads a still-fresh layout from the on-disk cache. Fails if the
+% cache file is missing, malformed, expired, or unreadable -- callers
+% must fall through to the network path on failure.
+
+download:read_disk_cache(Layout) :-
+  download:disk_cache_path(Path),
+  exists_file(Path),
+  catch(
+    setup_call_cleanup(
+      open(Path, read, S),
+      read(S, Term),
+      close(S)),
+    _, fail),
+  Term = cached_layout(Layout, FetchEpoch),
+  ground(Layout),
+  integer(FetchEpoch),
+  download:disk_cache_ttl(TTL),
+  get_time(NowF),
+  Now is integer(NowF),
+  Now - FetchEpoch < TTL.
+
+
+%! download:write_disk_cache(+Layout) is det.
+%
+% Writes Layout to the on-disk cache atomically (write to .tmp, then
+% rename). All errors are swallowed: the cache is best-effort and
+% must never break a working download path.
+
+download:write_disk_cache(Layout) :-
+  catch(download:write_disk_cache_(Layout), _, true).
+
+download:write_disk_cache_(Layout) :-
+  download:disk_cache_path(Path),
+  file_directory_name(Path, Dir),
+  ( exists_directory(Dir) -> true ; make_directory_path(Dir) ),
+  atom_concat(Path, '.tmp', TmpPath),
+  get_time(NowF),
+  Now is integer(NowF),
+  setup_call_cleanup(
+    open(TmpPath, write, S),
+    format(S, '% Auto-generated by download:write_disk_cache/1. Safe to delete.~n~q.~n',
+              [cached_layout(Layout, Now)]),
+    close(S)),
+  rename_file(TmpPath, Path).
 
 
 %! download:fetch_layout_conf(+URL, -Contents) is semidet.
