@@ -19,9 +19,12 @@ comparison purposes.
 
 When `config:portage_confdir/1` IS set, `preference:init` loads the real
 /etc/portage files via `userconfig:load` instead and these fallback facts
-are not consulted for package masks or per-package USE.  The `fallback:env/2`
-facts remain available as lowest-priority defaults in the
-`preference:getenv/2` fallback chain (OS env > make.conf > fallback:env).
+are not consulted for package masks, per-package USE, or env vars (an
+explicit confdir means the user has a real /etc/portage that must be
+authoritative, even when it leaves a variable unset). The `fallback:env/2`
+facts therefore only act as defaults in the `preference:getenv/2` chain
+(OS env > make.conf > fallback:env) when no `config:portage_confdir/1`
+is configured, e.g. on dev-Mac setups without a real /etc/portage.
 
 To change the reference system, edit the facts below to match its
 /etc/portage/make.conf, package.mask, and package.use.
@@ -41,7 +44,11 @@ To change the reference system, edit the facts below to match its
 %
 % Default environment variable values.  Consulted by `preference:getenv/2`
 % as the lowest-priority fallback when neither the OS environment nor
-% `userconfig:env/2` (make.conf) provides a value.
+% `userconfig:env/2` (make.conf) provides a value, **and** only when
+% `config:portage_confdir/1` is not set. When a portage_confdir IS set
+% the real /etc/portage is authoritative (an empty USE= means "no global
+% USE", not "inherit dev-machine defaults"), so this fallback chain is
+% bypassed entirely.
 
 fallback:env('USE', 'berkdb harfbuzz lto dnet resolutionkms o-flag-munging pgo graphite optimizations aio npm http split-usr -elogind policykit json -systemd -llvm -lua -berkdb -gdbm -introspection -vala -xen -hcache -ruby python gdbm fbcondecor messages smp qemu sqlite mmxext -svg avahi mmx sse sse2 sse3 ssse3 sse4 sse4_2 gmp cvs git x86emu gpg imap pop sidebar smime smtp dbus truetype X -xvmc xa xkb libkms cairo glitz png jpeg tiff gif mp3 opengl xcb xlib-xcb alsa aac aacplus jpeg2k fontconfig openssl ssh threads x264 x265 xvid dts md5sum a52 aalib zeroconf pkcs11 apng xattr nova account container object proxy directfb pcre16 -mdnsresponder-compat gpm').
 fallback:env('VIDEO_CARDS', 'vmware vesa vga').
