@@ -936,9 +936,26 @@ prover:add_trigger(Head, Dep, InTriggers, OutTriggers) :-
     (   constraint:is_constraint(Dep)
     ->  OutTriggers = InTriggers
     ;
+        % CRITICAL: dedupe dependents by CANONICAL head (no proof context).
+        %
+        % The proof AVL keys rules by their canonical head (no `?{Ctx}`
+        % suffix), and the planner's `decrement_and_enqueue/4` also looks
+        % up depcounts by the canonical literal.  If we store the
+        % full head with context here, the same canonical head can end up
+        % multiple times in a single trigger's dependent list (once per
+        % distinct context the rule was proved/re-proved with).  When the
+        % trigger fires, the planner then decrements the canonical
+        % depcount once per ctx-variant — over-counting the satisfied deps
+        % and prematurely promoting the dependent to an earlier wave.
+        %
+        % Concrete symptom: with `app-misc/mc`, libICE:install (depcount=7)
+        % was being scheduled in the same wave as xorg-proto:install
+        % because non-canonical dedup let elt-patches/pkgconfig/libICE
+        % triggers decrement libICE multiple times in wave 1.
         prover:canon_literal(Dep, DepLit, _),
+        prover:canon_literal(Head, HeadCanon, _),
         (get_assoc(DepLit, InTriggers, Dependents) -> true ; Dependents = []),
-        (memberchk(Head, Dependents) -> NewDependents = Dependents ; NewDependents = [Head | Dependents]),
+        (memberchk(HeadCanon, Dependents) -> NewDependents = Dependents ; NewDependents = [HeadCanon | Dependents]),
         put_assoc(DepLit, InTriggers, NewDependents, OutTriggers)
     ).
 

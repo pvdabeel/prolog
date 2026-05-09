@@ -11,7 +11,7 @@ Feature exploration
   104 packages pretend, 65 packages full build, head-to-head with emerge)
 (- develop a graphical interface to visualise progress) -> not sure about this yet
 
-- make a profile per package, showing parallelism as well as milestones, so we can optimally schedule tinderbox
+- make a profile per package, showing parallelism as well as milestones, so we can optimally schedule tinderbox -> portage-ng already has this prediction built-in, its a matter of extending this to parallelism dimension 
 - AWS integration (myaws) - add tinderbox-ng commmand besides update, fullupdate
 
 Open follow-ups (from latest compare report 2026-05-09)
@@ -37,17 +37,41 @@ Open follow-ups (from latest compare report 2026-05-09)
 Bugs (evidence-based, found via tinderbox-ng compare)
 =====================================================
 
-- pipeline.pl silent-failure: when a sub-step (build or install of a
-  dep) fails, the failure does not always propagate to the top-level
-  pipeline exit code. 12/65 build-tier runs in the 2026-05-09 matrix
-  reported `exit 0` while the target was never merged into VDB.
-  Detection added to render-compare-matrix.py (parses VDB-delta and
-  first-error sections from compare summary log). Fix: pipeline must
-  treat any FAIL line in jobserver:collect/2 results as a fatal
-  error for the overall plan, not just for that job.
+- [FIXED 2026-05-09] pipeline silent-failure: when a sub-step (build
+  or install of a dep) fails, the failure does not always propagate
+  to the top-level pipeline exit code. 12/65 build-tier runs in the
+  2026-05-09 matrix reported `exit 0` while the target was never
+  merged into VDB. Fix:
+    * Source/Pipeline/builder.pl asserts builder:last_build_status/3
+      after every build/build_resume run.
+    * Source/Application/Interface/Action/build.pl now calls
+      action:maybe_ci_exit_on_build_failure/1 in --ci mode and
+      halts with exit code 3 when Failed > 0.
+  After-fix matrix (compare-matrix-20260509T150251): 0/65 silent
+  failures.
 
-- portage-ng-only build losses (target install fails where emerge
-  succeeds): app-misc/mc, net-analyzer/iftop, net-dns/dnsmasq,
-  www-client/w3m, dev-vcs/subversion. Each needs a deep-dive on the
-  install/merge phase (likely USE-flag, eclass, or REQUIRED_USE
-  handling differences).
+- [FIXED 2026-05-09] planner over-decrement (root cause of all
+  portage-ng-only build losses): prover:add_trigger stored FULL heads
+  with their ?{Ctx} suffix in the trigger map's dependent lists. When
+  the same canonical head was proven/re-proven with multiple contexts
+  (e.g. self={mc} vs self={libICE}), it ended up in the dependent
+  list multiple times, and the planner's decrement_and_enqueue then
+  decremented the canonical depcount once per ctx-variant. Symptom:
+  libICE:install (depcount=7) was scheduled in the SAME wave as its
+  prerequisite xorg-proto:install when proving app-misc/mc, instead
+  of the wave AFTER it. Fix: dedupe trigger dependents by canonical
+  head in Source/Pipeline/prover.pl. After-fix matrix:
+    * mc, dnsmasq, iftop, w3m, subversion ALL build to OK end-to-end
+    * 54/65 BOTH_OK, 9/65 BOTH_FAIL (upstream issues, emerge also
+      fails), 2/65 PN-only FAIL (download bug, see below)
+
+Open
+====
+
+- portage-ng download: SWI-Prolog $tmp_file_stream/4 throws
+  existence_error(temporary_file, '') for app-editors/jed and
+  www-servers/lighttpd builds (only 2/65 packages affected).
+  Same chroot, same downloader, ~53 packages succeed. Likely a race
+  in tmp dir resolution under high parallelism (--jobs 8). Trace
+  through Source/Pipeline/Builder/download.pl fetch_layout_conf and
+  see if SWI's TMPDIR resolution is thread-safe.

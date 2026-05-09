@@ -29,6 +29,7 @@ are sequential (the next step starts only after the previous completes).
 :- dynamic builder:slot_outcome/2.
 :- dynamic builder:exec_phase_state/3.
 :- dynamic builder:resume_done/2.
+:- dynamic builder:last_build_status/3.
 
 % =============================================================================
 %  BUILDER declarations
@@ -73,6 +74,8 @@ builder:build(Goals) :-
   ;  true
   ),
   build:summary(Completed, Failed, Stubs),
+  retractall(builder:last_build_status(_, _, _)),
+  assertz(builder:last_build_status(Completed, Failed, Stubs)),
   builder:alert.
 
 
@@ -116,6 +119,8 @@ builder:build_resume :-
      ;  true
      ),
      build:summary(Completed, Failed, Stubs),
+     retractall(builder:last_build_status(_, _, _)),
+     assertz(builder:last_build_status(Completed, Failed, Stubs)),
      builder:alert,
      retractall(ebuild_exec:resuming)
   ).
