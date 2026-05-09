@@ -1,0 +1,31 @@
+[tinderbox-ng] compare: target='net-irc/weechat'  mode=--build  label=net_irc_weechat
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-net_irc_weechat
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-net_irc_weechat
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-net_irc_weechat' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-net_irc_weechat' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-net_irc_weechat-20260509T151021)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : net-irc/weechat                                               │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-net_irc_weechat-20260509T151021│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 11                      │ 0                         │
+│ completed        │ 3                       │ 0                         │
+│ merged into VDB  │ 0                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [jobserver worker error] job=slotted(3,11,1,7,1,rule(portage://'dev-lang/perl-5.42.2':download?{[required_use:[],build_with_use:use_state([perl_features_ithreads],[perl_features_debug,perl_features_qu
+  emerge    : >>> Failed to emerge app-text/aspell-0.60.8.2, Log file:
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-net_irc_weechat-20260509T151021/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-net_irc_weechat-20260509T151021/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

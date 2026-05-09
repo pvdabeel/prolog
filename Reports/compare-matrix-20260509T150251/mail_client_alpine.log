@@ -1,0 +1,31 @@
+[tinderbox-ng] compare: target='mail-client/alpine'  mode=--build  label=mail_client_alpine
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-mail_client_alpine
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-mail_client_alpine
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-mail_client_alpine' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-mail_client_alpine' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-mail_client_alpine-20260509T151104)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : mail-client/alpine                                            │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-mail_client_alpine-20260509T151104│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 3                       │ 1                         │
+│ completed        │ 1                       │ 0                         │
+│ merged into VDB  │ 0                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 2] FAIL (1) install portage://mail-client/alpine-2.29.9
+  emerge    : >>> Failed to emerge mail-client/alpine-2.26-r5, Log file:
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-mail_client_alpine-20260509T151104/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-mail_client_alpine-20260509T151104/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

@@ -1,0 +1,34 @@
+[tinderbox-ng] compare: target='net-misc/iperf'  mode=--build  label=net_misc_iperf
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-net_misc_iperf
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-net_misc_iperf
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-net_misc_iperf' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-net_misc_iperf' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-net_misc_iperf-20260509T150637)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : net-misc/iperf                                                │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-net_misc_iperf-20260509T150637 │
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 6                       │ 2                         │
+│ completed        │ 7                       │ 2                         │
+│ merged into VDB  │ 2                       │ 2                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+VDB delta (after build):
+  only in portage-ng:
+    + net-misc/iperf-3.21
+  only in emerge:
+    + net-misc/iperf-3.20
+  in both: 1 packages
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-net_misc_iperf-20260509T150637/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-net_misc_iperf-20260509T150637/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

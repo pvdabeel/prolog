@@ -1,0 +1,8 @@
+mode	--build
+manifest	/usr/local/share/tinderbox-ng/build-manifest.txt
+package_count	65
+jobs	8
+started_at	2026-05-09T13:02:51Z
+host	vm-linux.local
+kernel	7.0.5-gentoo
+finished_at	2026-05-09T13:33:58Z

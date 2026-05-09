@@ -1,0 +1,30 @@
+[tinderbox-ng] compare: target='sys-apps/lm-sensors'  mode=--build  label=sys_apps_lm_sensors
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-sys_apps_lm_sensors
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-sys_apps_lm_sensors
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-sys_apps_lm_sensors' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-sys_apps_lm_sensors' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-sys_apps_lm_sensors-20260509T152455)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : sys-apps/lm-sensors                                           │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-sys_apps_lm_sensors-20260509T152455│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 3                       │ 1                         │
+│ completed        │ 4                       │ 1                         │
+│ merged into VDB  │ 1                       │ 1                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  emerge    :  * Failure to do so may cause unexpected problems.
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-sys_apps_lm_sensors-20260509T152455/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-sys_apps_lm_sensors-20260509T152455/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

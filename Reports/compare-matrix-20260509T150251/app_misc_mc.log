@@ -1,0 +1,43 @@
+[tinderbox-ng] compare: target='app-misc/mc'  mode=--build  label=app_misc_mc
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-app_misc_mc
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-app_misc_mc
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-app_misc_mc' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-app_misc_mc' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-app_misc_mc-20260509T150425)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : app-misc/mc                                                   │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-app_misc_mc-20260509T150425    │
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 41                      │ 2                         │
+│ completed        │ 41                      │ 2                         │
+│ merged into VDB  │ 14                      │ 2                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+VDB delta (after build):
+  only in portage-ng:
+    + media-libs/libpng-1.6.58
+    + sys-libs/gpm-1.20.7-r6
+    + x11-base/xcb-proto-1.17.0
+    + x11-base/xorg-proto-2025.1
+    + x11-libs/libICE-1.1.2
+    + x11-libs/libSM-1.2.6
+    + x11-libs/libX11-1.8.13
+    + x11-libs/libXau-1.0.12
+    + x11-libs/libXdmcp-1.1.5
+    + x11-libs/libxcb-1.17.0
+    + x11-libs/xtrans-1.6.0
+    + x11-misc/compose-tables-1.8.13
+  in both: 2 packages
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-app_misc_mc-20260509T150425/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-app_misc_mc-20260509T150425/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

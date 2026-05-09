@@ -1,0 +1,34 @@
+[tinderbox-ng] compare: target='net-irc/irssi'  mode=--build  label=net_irc_irssi
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-net_irc_irssi
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-net_irc_irssi
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-net_irc_irssi' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-net_irc_irssi' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-net_irc_irssi-20260509T151015)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : net-irc/irssi                                                 │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-net_irc_irssi-20260509T151015  │
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 5                       │ 1                         │
+│ completed        │ 6                       │ 1                         │
+│ merged into VDB  │ 2                       │ 1                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+VDB delta (after build):
+  only in portage-ng:
+    + dev-lang/perl-5.42.2
+    + net-irc/irssi-1.4.5-r2
+  only in emerge:
+    + net-irc/irssi-1.4.5
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-net_irc_irssi-20260509T151015/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-net_irc_irssi-20260509T151015/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)
