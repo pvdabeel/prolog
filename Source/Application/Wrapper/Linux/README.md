@@ -146,6 +146,7 @@ emerge's death and otherwise pin a CPU at ~90% indefinitely.
 ```sh
 sudo tinderbox-ng refresh-tree <commit-hash>          # re-pin the tree
 sudo tinderbox-ng refresh-kb                          # regenerate kb.qlf
+sudo tinderbox-ng refresh-portage-ng                  # rsync new portage-ng source into baseline
 sudo TINDERBOX_CCACHE_MAX_SIZE=200G \
      tinderbox-ng install-ccache                      # bump cache cap or retrofit
 ```
@@ -156,6 +157,17 @@ do not want a long-running test matrix to suddenly see a different tree
 mid-run). `refresh-kb` temporarily unfreezes the baseline (`chmod -R u+w`,
 plus `chattr -R -i` defensively in case an old freeze used it), runs
 `portage-ng-dev --sync` against the pinned tree, then re-freezes.
+
+`refresh-portage-ng` re-deploys the Prolog source tree itself (mirrors the
+`bootstrap_install_portage_ng` step). Use it after pulling new commits to
+the host-side checkout: every fresh session bind-mounts the baseline copy,
+so without this step new sessions keep running yesterday's resolver. It
+unfreezes, rsyncs (or `git fetch`/`reset --hard` if `PORTAGE_NG_URL` is
+set), refreshes the in-baseline `/usr/local/bin/portage-ng-dev` shim plus
+the `tinderbox-matrix` helper, then re-freezes. It does **not** regenerate
+`kb.qlf` — only run `refresh-kb` for that, and only when the parser or
+grammar actually changed (planner / pipeline / scheduler / printer edits
+do not require it).
 
 `install-ccache` is the same `bootstrap_install_ccache` step run
 standalone: useful to retrofit ccache into a baseline that was

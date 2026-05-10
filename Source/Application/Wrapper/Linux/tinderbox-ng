@@ -786,6 +786,69 @@ EOF
 }
 
 # =============================================================================
+# Subcommand: refresh-portage-ng
+# =============================================================================
+#
+# Re-deploy the portage-ng source tree into the baseline. Mirrors what
+# bootstrap_install_portage_ng does: rsync from $PORTAGE_NG_LOCAL (or
+# git clone $PORTAGE_NG_URL) into $BASELINE_DIR$CHROOT_PORTAGE_NG, then
+# refresh the in-baseline /usr/local/bin/portage-ng-dev shim and the
+# tinderbox-matrix helper.
+#
+# Use this whenever the host-side checkout has commits the baseline
+# doesn't yet ship: every fresh session bind-mounts the baseline copy,
+# so without this step new sessions keep running yesterday's resolver.
+#
+# kb.qlf is NOT regenerated here -- only Source/ is replaced. Run
+# `tinderbox-ng refresh-kb` separately if you also want to re-parse
+# the tree (only needed when the parser or grammar changed, not for
+# pipeline / planner / scheduler edits).
+
+cmd_refresh_portage_ng() {
+  require_root
+  require_dirs
+
+  [[ -d "$BASELINE_DIR$CHROOT_PORTAGE_NG" ]] \
+    || die "no portage-ng in baseline at $BASELINE_DIR$CHROOT_PORTAGE_NG; run bootstrap first"
+
+  log_info "refresh-portage-ng: temporarily unfreezing baseline"
+  if command -v chattr >/dev/null 2>&1; then
+    chattr -R -i "$BASELINE_DIR" 2>/dev/null || true
+  fi
+  chmod -R u+w "$BASELINE_DIR" 2>/dev/null || true
+
+  if [[ -n "$PORTAGE_NG_URL" ]]; then
+    log_info "git pull from $PORTAGE_NG_URL inside baseline"
+    in_baseline_chroot bash -e <<EOF
+. /etc/profile
+cd "$CHROOT_PORTAGE_NG"
+git fetch origin
+git checkout "$PORTAGE_NG_REF"
+git reset --hard "origin/$PORTAGE_NG_REF" || git reset --hard "$PORTAGE_NG_REF"
+EOF
+  else
+    [[ -d "$PORTAGE_NG_LOCAL" ]] || die "PORTAGE_NG_LOCAL=$PORTAGE_NG_LOCAL is not a directory"
+    log_info "rsync from $PORTAGE_NG_LOCAL"
+    rsync -a --delete \
+          --exclude='.git/objects/pack/*.idx.lock' \
+          --exclude='Source/Snapshots/' \
+          "$PORTAGE_NG_LOCAL/" "$BASELINE_DIR$CHROOT_PORTAGE_NG/"
+  fi
+
+  log_info "refreshing in-baseline portage-ng-dev shim and tinderbox-matrix helper"
+  install -m 0755 "$LIB_DIR/portage-ng-dev.in" "$BASELINE_DIR/usr/local/bin/portage-ng-dev"
+  sed -i "s|@PORTAGE_NG_ROOT@|$CHROOT_PORTAGE_NG|g" \
+      "$BASELINE_DIR/usr/local/bin/portage-ng-dev"
+  install -m 0755 "$LIB_DIR/run-matrix.sh" "$BASELINE_DIR/usr/local/bin/tinderbox-matrix"
+
+  bootstrap_freeze
+  log_ok "portage-ng refreshed in baseline; new sessions will pick it up"
+  log_warn "existing sessions still see the OLD portage-ng until reset"
+  log_warn "kb.qlf was NOT regenerated; run 'refresh-kb' separately if needed"
+}
+
+
+# =============================================================================
 # Subcommand: install-ccache
 # =============================================================================
 #
@@ -1504,6 +1567,9 @@ Subcommands:
                            Existing sessions keep the old tree until reset.
   refresh-kb               Regenerate kb.qlf inside baseline against the pinned
                            tree (requires baseline to be unfrozen briefly).
+  refresh-portage-ng       Re-deploy the portage-ng source tree into the
+                           baseline from PORTAGE_NG_LOCAL (or PORTAGE_NG_URL).
+                           Does NOT regenerate kb.qlf.
   install-ccache           Retrofit dev-util/ccache + /etc/ccache.conf into an
                            existing baseline (or bump max_size). Idempotent.
 
@@ -1563,6 +1629,8 @@ main() {
     bootstrap)    cmd_bootstrap    "$@" ;;
     refresh-tree) cmd_refresh_tree "$@" ;;
     refresh-kb)   cmd_refresh_kb   "$@" ;;
+    refresh-portage-ng) cmd_refresh_portage_ng "$@" ;;
+    refresh_portage_ng) cmd_refresh_portage_ng "$@" ;;
     install-ccache) cmd_install_ccache "$@" ;;
     install_ccache) cmd_install_ccache "$@" ;;
     new)          cmd_new          "$@" ;;
