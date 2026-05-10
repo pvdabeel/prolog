@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='app-crypt/mkp224o'  mode=--build  label=app_crypt_mkp224o
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-app_crypt_mkp224o
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-app_crypt_mkp224o
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-app_crypt_mkp224o' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-app_crypt_mkp224o' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-app_crypt_mkp224o-20260510T005643)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : app-crypt/mkp224o                                             │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-app_crypt_mkp224o-20260510T005643│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 6                       │ 2                         │
+│ completed        │ 7                       │ 2                         │
+│ merged into VDB  │ 2                       │ 2                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-app_crypt_mkp224o-20260510T005643/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-app_crypt_mkp224o-20260510T005643/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

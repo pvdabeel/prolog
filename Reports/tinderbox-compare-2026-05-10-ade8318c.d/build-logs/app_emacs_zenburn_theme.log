@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='app-emacs/zenburn-theme'  mode=--build  label=app_emacs_zenburn_theme
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-app_emacs_zenburn_theme
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-app_emacs_zenburn_theme
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-app_emacs_zenburn_theme' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-app_emacs_zenburn_theme' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-app_emacs_zenburn_theme-20260510T011517)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : app-emacs/zenburn-theme                                       │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-app_emacs_zenburn_theme-20260510T011517│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 18                      │ 6                         │
+│ completed        │ 19                      │ 6                         │
+│ merged into VDB  │ 6                       │ 6                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-app_emacs_zenburn_theme-20260510T011517/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-app_emacs_zenburn_theme-20260510T011517/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

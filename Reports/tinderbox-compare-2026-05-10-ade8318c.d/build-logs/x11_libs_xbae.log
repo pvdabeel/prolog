@@ -1,0 +1,31 @@
+[tinderbox-ng] compare: target='x11-libs/xbae'  mode=--build  label=x11_libs_xbae
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-x11_libs_xbae
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-x11_libs_xbae
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-x11_libs_xbae' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-x11_libs_xbae' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-x11_libs_xbae-20260510T100127)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : x11-libs/xbae                                                 │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-x11_libs_xbae-20260510T100127  │
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 66                      │ 0                         │
+│ completed        │ 61                      │ 21                        │
+│ merged into VDB  │ 21                      │ 21                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 17] FAIL (1) install portage://x11-libs/motif-2.5.2
+  emerge    : >>> Failed to emerge x11-libs/motif-2.5.2, Log file:
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-x11_libs_xbae-20260510T100127/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-x11_libs_xbae-20260510T100127/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-vcs/breezy'  mode=--build  label=dev_vcs_breezy
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_vcs_breezy
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_vcs_breezy
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_vcs_breezy' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_vcs_breezy' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_vcs_breezy-20260510T071222)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-vcs/breezy                                                │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_vcs_breezy-20260510T071222 │
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 48                      │ 17                        │
+│ completed        │ 49                      │ 17                        │
+│ merged into VDB  │ 17                      │ 17                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_vcs_breezy-20260510T071222/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_vcs_breezy-20260510T071222/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

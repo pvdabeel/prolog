@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='media-gfx/sam2p'  mode=--build  label=media_gfx_sam2p
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-media_gfx_sam2p
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-media_gfx_sam2p
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-media_gfx_sam2p' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-media_gfx_sam2p' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-media_gfx_sam2p-20260510T075153)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : media-gfx/sam2p                                               │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-media_gfx_sam2p-20260510T075153│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 3                       │ 1                         │
+│ completed        │ 4                       │ 1                         │
+│ merged into VDB  │ 1                       │ 1                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-media_gfx_sam2p-20260510T075153/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-media_gfx_sam2p-20260510T075153/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

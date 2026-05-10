@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-gap/fga'  mode=--build  label=dev_gap_fga
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_gap_fga
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_gap_fga
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_gap_fga' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_gap_fga' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_gap_fga-20260510T014854)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-gap/fga                                                   │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_gap_fga-20260510T014854    │
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 72                      │ 24                        │
+│ completed        │ 73                      │ 24                        │
+│ merged into VDB  │ 24                      │ 24                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_gap_fga-20260510T014854/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_gap_fga-20260510T014854/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

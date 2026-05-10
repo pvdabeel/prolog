@@ -1,0 +1,34 @@
+[tinderbox-ng] compare: target='dev-python/pulsectl-asyncio'  mode=--build  label=dev_python_pulsectl_asyncio
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_python_pulsectl_asyncio
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_python_pulsectl_asyncio
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_python_pulsectl_asyncio' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_python_pulsectl_asyncio' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_python_pulsectl_asyncio-20260510T061325)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-python/pulsectl-asyncio                                   │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_python_pulsectl_asyncio-20260510T061325│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 153                     │ ?                         │
+│ completed        │ 49                      │ 0                         │
+│ merged into VDB  │ 1                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 2] FAIL (1) update portage://dev-python/setuptools-82.0.1
+
+VDB delta (after build):
+  only in portage-ng:
+    + acct-group/pipewire-0-r2
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_python_pulsectl_asyncio-20260510T061325/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_python_pulsectl_asyncio-20260510T061325/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

@@ -1,0 +1,35 @@
+[tinderbox-ng] compare: target='gui-libs/libadwaita'  mode=--build  label=gui_libs_libadwaita
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-gui_libs_libadwaita
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-gui_libs_libadwaita
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-gui_libs_libadwaita' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-gui_libs_libadwaita' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-gui_libs_libadwaita-20260510T073839)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : gui-libs/libadwaita                                           │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-gui_libs_libadwaita-20260510T073839│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 270                     │ ?                         │
+│ completed        │ 92                      │ 0                         │
+│ merged into VDB  │ 2                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 2] FAIL (1) update portage://dev-python/flit-core-3.12.0
+
+VDB delta (after build):
+  only in portage-ng:
+    + acct-group/messagebus-0-r3
+    + dev-python/gpep517-19
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-gui_libs_libadwaita-20260510T073839/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-gui_libs_libadwaita-20260510T073839/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

@@ -1,0 +1,30 @@
+[tinderbox-ng] compare: target='dev-util/source-highlight'  mode=--build  label=dev_util_source_highlight
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_util_source_highlight
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_util_source_highlight
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_util_source_highlight' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_util_source_highlight' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_util_source_highlight-20260510T071208)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-util/source-highlight                                     │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_util_source_highlight-20260510T071208│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 8                       │ 3                         │
+│ completed        │ 9                       │ 3                         │
+│ merged into VDB  │ 3                       │ 3                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  emerge    :  * Boost.Regex is *extremely* ABI sensitive. If you get errors such as
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_util_source_highlight-20260510T071208/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_util_source_highlight-20260510T071208/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

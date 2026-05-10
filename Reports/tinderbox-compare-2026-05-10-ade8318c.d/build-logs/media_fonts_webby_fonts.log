@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='media-fonts/webby-fonts'  mode=--build  label=media_fonts_webby_fonts
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-media_fonts_webby_fonts
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-media_fonts_webby_fonts
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-media_fonts_webby_fonts' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-media_fonts_webby_fonts' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-media_fonts_webby_fonts-20260510T075016)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : media-fonts/webby-fonts                                       │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-media_fonts_webby_fonts-20260510T075016│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 3                       │ 1                         │
+│ completed        │ 4                       │ 1                         │
+│ merged into VDB  │ 1                       │ 1                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-media_fonts_webby_fonts-20260510T075016/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-media_fonts_webby_fonts-20260510T075016/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

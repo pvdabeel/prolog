@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='sys-apps/ripgrep'  mode=--build  label=sys_apps_ripgrep
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-sys_apps_ripgrep
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-sys_apps_ripgrep
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-sys_apps_ripgrep' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-sys_apps_ripgrep' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-sys_apps_ripgrep-20260510T092203)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : sys-apps/ripgrep                                              │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-sys_apps_ripgrep-20260510T092203│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 11                      │ 4                         │
+│ completed        │ 12                      │ 4                         │
+│ merged into VDB  │ 4                       │ 4                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-sys_apps_ripgrep-20260510T092203/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-sys_apps_ripgrep-20260510T092203/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

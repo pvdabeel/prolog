@@ -1,0 +1,31 @@
+[tinderbox-ng] compare: target='media-libs/freetype'  mode=--build  label=media_libs_freetype
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-media_libs_freetype
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-media_libs_freetype
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-media_libs_freetype' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-media_libs_freetype' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-media_libs_freetype-20260510T075433)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : media-libs/freetype                                           │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-media_libs_freetype-20260510T075433│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 6                       │ 2                         │
+│ completed        │ 4                       │ 1                         │
+│ merged into VDB  │ 1                       │ 1                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 4] FAIL (1) install portage://media-libs/freetype-2.14.3
+  emerge    : >>> Failed to emerge media-libs/freetype-2.14.3, Log file:
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-media_libs_freetype-20260510T075433/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-media_libs_freetype-20260510T075433/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

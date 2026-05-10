@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-perl/Statistics-Descriptive-Discrete'  mode=--build  label=dev_perl_Statistics_Descriptive_Discrete
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_perl_Statistics_Descriptive_Discrete
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_perl_Statistics_Descriptive_Discrete
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_perl_Statistics_Descriptive_Discrete' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_perl_Statistics_Descriptive_Discrete' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_perl_Statistics_Descriptive_Discrete-20260510T054937)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-perl/Statistics-Descriptive-Discrete                      │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_perl_Statistics_Descriptive_Discrete-20260510T054937│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 3                       │ 1                         │
+│ completed        │ 4                       │ 1                         │
+│ merged into VDB  │ 1                       │ 1                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_perl_Statistics_Descriptive_Discrete-20260510T054937/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_perl_Statistics_Descriptive_Discrete-20260510T054937/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

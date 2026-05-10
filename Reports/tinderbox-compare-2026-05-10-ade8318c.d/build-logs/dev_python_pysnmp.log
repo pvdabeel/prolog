@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-python/pysnmp'  mode=--build  label=dev_python_pysnmp
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_python_pysnmp
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_python_pysnmp
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_python_pysnmp' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_python_pysnmp' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_python_pysnmp-20260510T062229)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-python/pysnmp                                             │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_python_pysnmp-20260510T062229│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 34                      │ 12                        │
+│ completed        │ 35                      │ 12                        │
+│ merged into VDB  │ 12                      │ 12                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_python_pysnmp-20260510T062229/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_python_pysnmp-20260510T062229/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

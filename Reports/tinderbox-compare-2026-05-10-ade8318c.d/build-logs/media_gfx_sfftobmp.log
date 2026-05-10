@@ -1,0 +1,30 @@
+[tinderbox-ng] compare: target='media-gfx/sfftobmp'  mode=--build  label=media_gfx_sfftobmp
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-media_gfx_sfftobmp
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-media_gfx_sfftobmp
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-media_gfx_sfftobmp' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-media_gfx_sfftobmp' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-media_gfx_sfftobmp-20260510T075215)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : media-gfx/sfftobmp                                            │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-media_gfx_sfftobmp-20260510T075215│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 11                      │ 4                         │
+│ completed        │ 12                      │ 4                         │
+│ merged into VDB  │ 4                       │ 4                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  emerge    :  * Boost.Regex is *extremely* ABI sensitive. If you get errors such as
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-media_gfx_sfftobmp-20260510T075215/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-media_gfx_sfftobmp-20260510T075215/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

@@ -1,0 +1,31 @@
+[tinderbox-ng] compare: target='media-libs/sdl3-mixer'  mode=--build  label=media_libs_sdl3_mixer
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-media_libs_sdl3_mixer
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-media_libs_sdl3_mixer
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-media_libs_sdl3_mixer' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-media_libs_sdl3_mixer' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-media_libs_sdl3_mixer-20260510T080123)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : media-libs/sdl3-mixer                                         │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-media_libs_sdl3_mixer-20260510T080123│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 12                      │ 0                         │
+│ completed        │ 8                       │ 2                         │
+│ merged into VDB  │ 2                       │ 2                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 4] FAIL (1) install portage://media-libs/libvorbis-1.3.7-r2
+  emerge    : >>> Failed to emerge media-libs/libvorbis-1.3.7-r2, Log file:
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-media_libs_sdl3_mixer-20260510T080123/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-media_libs_sdl3_mixer-20260510T080123/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='media-libs/opencolorio'  mode=--build  label=media_libs_opencolorio
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-media_libs_opencolorio
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-media_libs_opencolorio
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-media_libs_opencolorio' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-media_libs_opencolorio' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-media_libs_opencolorio-20260510T075818)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : media-libs/opencolorio                                        │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-media_libs_opencolorio-20260510T075818│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 26                      │ 9                         │
+│ completed        │ 27                      │ 9                         │
+│ merged into VDB  │ 9                       │ 9                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-media_libs_opencolorio-20260510T075818/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-media_libs_opencolorio-20260510T075818/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

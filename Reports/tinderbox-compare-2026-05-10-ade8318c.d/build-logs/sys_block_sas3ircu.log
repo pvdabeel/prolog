@@ -1,0 +1,31 @@
+[tinderbox-ng] compare: target='sys-block/sas3ircu'  mode=--build  label=sys_block_sas3ircu
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-sys_block_sas3ircu
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-sys_block_sas3ircu
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-sys_block_sas3ircu' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-sys_block_sas3ircu' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-sys_block_sas3ircu-20260510T092729)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : sys-block/sas3ircu                                            │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-sys_block_sas3ircu-20260510T092729│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 3                       │ 1                         │
+│ completed        │ 0                       │ 0                         │
+│ merged into VDB  │ 0                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 1] FAIL (manual fetch required) download portage://sys-block/sas3ircu-16-r2
+  emerge    : Fetch Restriction: 1 package (1 unsatisfied)
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-sys_block_sas3ircu-20260510T092729/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-sys_block_sas3ircu-20260510T092729/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

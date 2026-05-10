@@ -1,0 +1,38 @@
+[tinderbox-ng] compare: target='games-roguelike/angband'  mode=--build  label=games_roguelike_angband
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-games_roguelike_angband
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-games_roguelike_angband
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-games_roguelike_angband' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-games_roguelike_angband' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-games_roguelike_angband-20260510T073051)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : games-roguelike/angband                                       │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-games_roguelike_angband-20260510T073051│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 53                      │ 2                         │
+│ completed        │ 33                      │ 12                        │
+│ merged into VDB  │ 9                       │ 12                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 6] FAIL (1) install portage://media-libs/freetype-2.14.3
+  emerge    : >>> Failed to emerge media-libs/freetype-2.14.3, Log file:
+
+VDB delta (after build):
+  only in emerge:
+    + x11-libs/libX11-1.8.13
+    + x11-libs/libxcb-1.17.0
+    + x11-misc/compose-tables-1.8.13
+  in both: 9 packages
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-games_roguelike_angband-20260510T073051/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-games_roguelike_angband-20260510T073051/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

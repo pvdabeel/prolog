@@ -1,0 +1,93 @@
+[tinderbox-ng] compare: target='sys-fs/google-drive-ocamlfuse'  mode=--build  label=sys_fs_google_drive_ocamlfuse
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-sys_fs_google_drive_ocamlfuse
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-sys_fs_google_drive_ocamlfuse
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-sys_fs_google_drive_ocamlfuse' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-sys_fs_google_drive_ocamlfuse' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-sys_fs_google_drive_ocamlfuse-20260510T093620)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : sys-fs/google-drive-ocamlfuse                                 │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-sys_fs_google_drive_ocamlfuse-20260510T093620│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 265                     │ 10                        │
+│ completed        │ 99                      │ 67                        │
+│ merged into VDB  │ 9                       │ 67                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 3] FAIL (1) install portage://dev-libs/libev-4.33
+  emerge    : >>> Failed to emerge dev-libs/libev-4.33, Log file:
+
+VDB delta (after build):
+  only in emerge:
+    + dev-lang/ocaml-5.4.0
+    + dev-ml/base-0.17.3
+    + dev-ml/bigarray-compat-1.1.0
+    + dev-ml/camlidl-1.13
+    + dev-ml/camlp-streams-5.0.1
+    + dev-ml/camlzip-1.14
+    + dev-ml/cmdliner-1.3.0
+    + dev-ml/cppo-1.8.0
+    + dev-ml/cryptokit-1.21.1
+    + dev-ml/csexp-1.5.2-r1
+    + dev-ml/cudf-0.10-r1
+    + dev-ml/dune-3.21.1-r2
+    + dev-ml/dune-configurator-3.21.1
+    + dev-ml/extlib-1.8.0
+    + dev-ml/findlib-1.9.8-r1
+    + dev-ml/integers-0.7.0
+    + dev-ml/iostream-0.3
+    + dev-ml/jsonm-1.0.2
+    + dev-ml/luv-0.5.14-r1
+    + dev-ml/menhir-20250912
+    + dev-ml/mmap-1.2.0-r1
+    + dev-ml/ocaml-base64-3.5.2
+    + dev-ml/ocaml-compiler-libs-0.17.0
+    + dev-ml/ocaml-ctypes-0.24.0
+    + dev-ml/ocaml-expat-1.3.0
+    + dev-ml/ocaml-sha-1.15.4
+    + dev-ml/ocaml-sqlite3-5.0.2
+    + dev-ml/ocaml_intrinsics_kernel-0.17.0
+    + dev-ml/ocamlbuild-0.16.1
+    + dev-ml/ocplib-endian-1.2
+    + dev-ml/opam-file-format-2.2.0-r1
+    + dev-ml/parmap-1.2.5
+    + dev-ml/patch-3.1.0
+    + dev-ml/ppx_derivers-1.2.1
+    + dev-ml/ppx_here-0.17.0-r1
+    + dev-ml/ppx_let-0.17.1
+    + dev-ml/ppxlib-0.37.0-r1
+    + dev-ml/re-1.14.0
+    + dev-ml/result-1.5
+    + dev-ml/sexplib0-0.17.0-r2
+    + dev-ml/spdx_licenses-1.4.0
+    + dev-ml/stdlib-shims-0.3.0
+    + dev-ml/swhid_core-0.1
+    + dev-ml/topkg-1.1.1
+    + dev-ml/uchar-0.0.2-r1
+    + dev-ml/uutf-1.0.4-r1
+    + dev-ml/xml-light-2.5
+    + dev-ml/yojson-3.0.0
+    + dev-ml/zarith-1.14
+    + sys-fs/fuse-common-3.10.4-r3
+    + virtual/ttf-fonts-1-r2
+    + x11-libs/libX11-1.8.13
+    + x11-libs/libXau-1.0.12
+    + x11-libs/libXdmcp-1.1.5
+    + x11-libs/libXext-1.3.7
+    + x11-libs/libXrender-0.9.12
+    + x11-libs/libxcb-1.17.0
+    + x11-misc/compose-tables-1.8.13
+  in both: 9 packages
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-sys_fs_google_drive_ocamlfuse-20260510T093620/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-sys_fs_google_drive_ocamlfuse-20260510T093620/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

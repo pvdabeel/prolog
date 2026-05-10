@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-python/pycurl-requests'  mode=--build  label=dev_python_pycurl_requests
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_python_pycurl_requests
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_python_pycurl_requests
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_python_pycurl_requests' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_python_pycurl_requests' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_python_pycurl_requests-20260510T061941)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-python/pycurl-requests                                    │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_python_pycurl_requests-20260510T061941│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 9                       │ 3                         │
+│ completed        │ 10                      │ 3                         │
+│ merged into VDB  │ 3                       │ 3                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_python_pycurl_requests-20260510T061941/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_python_pycurl_requests-20260510T061941/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

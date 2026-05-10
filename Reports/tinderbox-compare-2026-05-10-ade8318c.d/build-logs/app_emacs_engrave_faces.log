@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='app-emacs/engrave-faces'  mode=--build  label=app_emacs_engrave_faces
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-app_emacs_engrave_faces
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-app_emacs_engrave_faces
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-app_emacs_engrave_faces' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-app_emacs_engrave_faces' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-app_emacs_engrave_faces-20260510T010427)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : app-emacs/engrave-faces                                       │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-app_emacs_engrave_faces-20260510T010427│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 18                      │ 6                         │
+│ completed        │ 19                      │ 6                         │
+│ merged into VDB  │ 6                       │ 6                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-app_emacs_engrave_faces-20260510T010427/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-app_emacs_engrave_faces-20260510T010427/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

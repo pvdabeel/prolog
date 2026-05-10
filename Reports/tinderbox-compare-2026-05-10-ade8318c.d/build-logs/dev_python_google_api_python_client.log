@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-python/google-api-python-client'  mode=--build  label=dev_python_google_api_python_client
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_python_google_api_python_client
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_python_google_api_python_client
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_python_google_api_python_client' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_python_google_api_python_client' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_python_google_api_python_client-20260510T060831)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-python/google-api-python-client                           │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_python_google_api_python_client-20260510T060831│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 71                      │ 25                        │
+│ completed        │ 72                      │ 25                        │
+│ merged into VDB  │ 25                      │ 25                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_python_google_api_python_client-20260510T060831/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_python_google_api_python_client-20260510T060831/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

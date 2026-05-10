@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-libs/libgee'  mode=--build  label=dev_libs_libgee
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_libs_libgee
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_libs_libgee
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_libs_libgee' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_libs_libgee' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_libs_libgee-20260510T045240)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-libs/libgee                                               │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_libs_libgee-20260510T045240│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 14                      │ 5                         │
+│ completed        │ 15                      │ 5                         │
+│ merged into VDB  │ 5                       │ 5                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_libs_libgee-20260510T045240/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_libs_libgee-20260510T045240/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

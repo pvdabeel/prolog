@@ -1,0 +1,31 @@
+[tinderbox-ng] compare: target='dev-embedded/avrdude'  mode=--build  label=dev_embedded_avrdude
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_embedded_avrdude
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_embedded_avrdude
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_embedded_avrdude' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_embedded_avrdude' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_embedded_avrdude-20260510T014749)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-embedded/avrdude                                          │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_embedded_avrdude-20260510T014749│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 18                      │ 0                         │
+│ completed        │ 11                      │ 4                         │
+│ merged into VDB  │ 4                       │ 4                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 6] FAIL (1) install portage://dev-libs/libusb-compat-0.1.8
+  emerge    : >>> Failed to emerge dev-libs/libusb-compat-0.1.8, Log file:
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_embedded_avrdude-20260510T014749/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_embedded_avrdude-20260510T014749/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-embedded/minipro'  mode=--build  label=dev_embedded_minipro
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_embedded_minipro
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_embedded_minipro
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_embedded_minipro' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_embedded_minipro' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_embedded_minipro-20260510T014825)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-embedded/minipro                                          │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_embedded_minipro-20260510T014825│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 8                       │ 3                         │
+│ completed        │ 9                       │ 3                         │
+│ merged into VDB  │ 3                       │ 3                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_embedded_minipro-20260510T014825/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_embedded_minipro-20260510T014825/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

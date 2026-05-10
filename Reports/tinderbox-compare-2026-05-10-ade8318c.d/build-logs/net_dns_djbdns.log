@@ -1,0 +1,31 @@
+[tinderbox-ng] compare: target='net-dns/djbdns'  mode=--build  label=net_dns_djbdns
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-net_dns_djbdns
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-net_dns_djbdns
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-net_dns_djbdns' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-net_dns_djbdns' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-net_dns_djbdns-20260510T083828)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : net-dns/djbdns                                                │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-net_dns_djbdns-20260510T083828 │
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 19                      │ 8                         │
+│ completed        │ 17                      │ 7                         │
+│ merged into VDB  │ 7                       │ 7                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 7] FAIL (1) install portage://net-dns/djbdns-1.05-r42
+  emerge    : >>> Failed to emerge net-dns/djbdns-1.05-r42, Log file:
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-net_dns_djbdns-20260510T083828/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-net_dns_djbdns-20260510T083828/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

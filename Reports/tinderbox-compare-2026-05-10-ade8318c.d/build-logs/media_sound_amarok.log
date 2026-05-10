@@ -1,0 +1,37 @@
+[tinderbox-ng] compare: target='media-sound/amarok'  mode=--build  label=media_sound_amarok
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-media_sound_amarok
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-media_sound_amarok
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-media_sound_amarok' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-media_sound_amarok' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-media_sound_amarok-20260510T081012)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : media-sound/amarok                                            │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-media_sound_amarok-20260510T081012│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 678                     │ ?                         │
+│ completed        │ 224                     │ 0                         │
+│ merged into VDB  │ 4                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng:  └─step  2─┤ verify  dev-qt/qttools (unsatisfied constraints, assumed running)
+
+VDB delta (after build):
+  only in portage-ng:
+    + acct-group/messagebus-0-r3
+    + acct-group/polkitd-0-r3
+    + app-text/xmlto-0.0.28-r11
+    + dev-python/gpep517-19
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-media_sound_amarok-20260510T081012/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-media_sound_amarok-20260510T081012/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

@@ -1,0 +1,31 @@
+[tinderbox-ng] compare: target='net-misc/openntpd'  mode=--build  label=net_misc_openntpd
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-net_misc_openntpd
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-net_misc_openntpd
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-net_misc_openntpd' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-net_misc_openntpd' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-net_misc_openntpd-20260510T085912)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : net-misc/openntpd                                             │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-net_misc_openntpd-20260510T085912│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 7                       │ 3                         │
+│ completed        │ 5                       │ 2                         │
+│ merged into VDB  │ 2                       │ 2                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 5] FAIL (1) install portage://net-misc/openntpd-6.2_p3-r3
+  emerge    : >>> Failed to emerge net-misc/openntpd-6.2_p3-r3, Log file:
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-net_misc_openntpd-20260510T085912/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-net_misc_openntpd-20260510T085912/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

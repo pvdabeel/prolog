@@ -1,0 +1,35 @@
+[tinderbox-ng] compare: target='xfce-extra/xfce4-fsguard-plugin'  mode=--build  label=xfce_extra_xfce4_fsguard_plugin
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-xfce_extra_xfce4_fsguard_plugin
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-xfce_extra_xfce4_fsguard_plugin
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-xfce_extra_xfce4_fsguard_plugin' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-xfce_extra_xfce4_fsguard_plugin' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-xfce_extra_xfce4_fsguard_plugin-20260510T101409)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : xfce-extra/xfce4-fsguard-plugin                               │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-xfce_extra_xfce4_fsguard_plugin-20260510T101409│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 277                     │ ?                         │
+│ completed        │ 90                      │ 0                         │
+│ merged into VDB  │ 1                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng:  └─step  2─┤ verify  xfce-base/libxfce4ui (unsatisfied constraints, assumed running)
+  emerge    : !!! The ebuild selected to satisfy ">=xfce-base/libxfce4ui-4.16.0:=[gtk3(+)]" has unmet requirements.
+
+VDB delta (after build):
+  only in portage-ng:
+    + acct-group/messagebus-0-r3
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-xfce_extra_xfce4_fsguard_plugin-20260510T101409/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-xfce_extra_xfce4_fsguard_plugin-20260510T101409/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

@@ -1,0 +1,34 @@
+[tinderbox-ng] compare: target='dev-haskell/psqueues'  mode=--build  label=dev_haskell_psqueues
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_haskell_psqueues
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_haskell_psqueues
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_haskell_psqueues' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_haskell_psqueues' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_haskell_psqueues-20260510T035344)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-haskell/psqueues                                          │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_haskell_psqueues-20260510T035344│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(124)                 │
+│ plan actions     │ 25                      │ 9                         │
+│ completed        │ 9                       │ 1                         │
+│ merged into VDB  │ 0                       │ 1                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 2] FAIL (1) install portage://dev-lang/ghc-9.2.8
+
+VDB delta (after build):
+  only in emerge:
+    + app-text/dos2unix-7.5.5
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_haskell_psqueues-20260510T035344/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_haskell_psqueues-20260510T035344/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

@@ -1,0 +1,31 @@
+[tinderbox-ng] compare: target='dev-libs/m17n-lib'  mode=--build  label=dev_libs_m17n_lib
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_libs_m17n_lib
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_libs_m17n_lib
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_libs_m17n_lib' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_libs_m17n_lib' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_libs_m17n_lib-20260510T045617)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-libs/m17n-lib                                             │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_libs_m17n_lib-20260510T045617│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 6                       │ 2                         │
+│ completed        │ 4                       │ 1                         │
+│ merged into VDB  │ 1                       │ 1                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 4] FAIL (1) install portage://dev-libs/m17n-lib-1.8.6-r1
+  emerge    : >>> Failed to emerge dev-libs/m17n-lib-1.8.6-r1, Log file:
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_libs_m17n_lib-20260510T045617/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_libs_m17n_lib-20260510T045617/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

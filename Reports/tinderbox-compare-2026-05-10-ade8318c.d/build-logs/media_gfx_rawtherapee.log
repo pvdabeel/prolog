@@ -1,0 +1,35 @@
+[tinderbox-ng] compare: target='media-gfx/rawtherapee'  mode=--build  label=media_gfx_rawtherapee
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-media_gfx_rawtherapee
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-media_gfx_rawtherapee
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-media_gfx_rawtherapee' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-media_gfx_rawtherapee' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-media_gfx_rawtherapee-20260510T075132)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : media-gfx/rawtherapee                                         │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-media_gfx_rawtherapee-20260510T075132│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 310                     │ ?                         │
+│ completed        │ 102                     │ 0                         │
+│ merged into VDB  │ 1                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng:  └─step  2─┤ verify  x11-libs/gtk+ (unsatisfied constraints, assumed running)
+  emerge    : !!! The ebuild selected to satisfy "dev-cpp/gtkmm:3.0" has unmet requirements.
+
+VDB delta (after build):
+  only in portage-ng:
+    + acct-group/messagebus-0-r3
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-media_gfx_rawtherapee-20260510T075132/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-media_gfx_rawtherapee-20260510T075132/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

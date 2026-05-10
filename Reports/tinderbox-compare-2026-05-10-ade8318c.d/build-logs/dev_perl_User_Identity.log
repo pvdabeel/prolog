@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-perl/User-Identity'  mode=--build  label=dev_perl_User_Identity
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_perl_User_Identity
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_perl_User_Identity
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_perl_User_Identity' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_perl_User_Identity' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_perl_User_Identity-20260510T055410)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-perl/User-Identity                                        │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_perl_User_Identity-20260510T055410│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 6                       │ 2                         │
+│ completed        │ 7                       │ 2                         │
+│ merged into VDB  │ 2                       │ 2                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_perl_User_Identity-20260510T055410/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_perl_User_Identity-20260510T055410/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

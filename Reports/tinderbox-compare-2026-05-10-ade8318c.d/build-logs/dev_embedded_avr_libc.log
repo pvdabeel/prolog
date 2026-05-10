@@ -1,0 +1,35 @@
+[tinderbox-ng] compare: target='dev-embedded/avr-libc'  mode=--build  label=dev_embedded_avr_libc
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_embedded_avr_libc
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_embedded_avr_libc
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_embedded_avr_libc' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_embedded_avr_libc' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_embedded_avr_libc-20260510T014640)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-embedded/avr-libc                                         │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_embedded_avr_libc-20260510T014640│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 9                       │ ?                         │
+│ completed        │ 6                       │ 0                         │
+│ merged into VDB  │ 2                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 6] FAIL (1) install portage://dev-embedded/avr-libc-2.1.0
+
+VDB delta (after build):
+  only in portage-ng:
+    + sys-apps/config-site-0
+    + sys-devel/crossdev-20260501
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_embedded_avr_libc-20260510T014640/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_embedded_avr_libc-20260510T014640/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

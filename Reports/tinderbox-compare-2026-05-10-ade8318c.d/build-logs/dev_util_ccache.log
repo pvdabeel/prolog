@@ -1,0 +1,34 @@
+[tinderbox-ng] compare: target='dev-util/ccache'  mode=--build  label=dev_util_ccache
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_util_ccache
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_util_ccache
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_util_ccache' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_util_ccache' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_util_ccache-20260510T070723)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-util/ccache                                               │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_util_ccache-20260510T070723│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 11                      │ 1                         │
+│ completed        │ 12                      │ 1                         │
+│ merged into VDB  │ 4                       │ 1                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+VDB delta (after build):
+  only in portage-ng:
+    + dev-cpp/expected-1.3.1
+    + dev-libs/blake3-1.8.5
+    + dev-util/shadowman-5
+  in both: 1 packages
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_util_ccache-20260510T070723/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_util_ccache-20260510T070723/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='app-text/extract_url'  mode=--build  label=app_text_extract_url
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-app_text_extract_url
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-app_text_extract_url
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-app_text_extract_url' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-app_text_extract_url' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-app_text_extract_url-20260510T013138)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : app-text/extract_url                                          │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-app_text_extract_url-20260510T013138│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 60                      │ 22                        │
+│ completed        │ 61                      │ 22                        │
+│ merged into VDB  │ 22                      │ 22                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-app_text_extract_url-20260510T013138/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-app_text_extract_url-20260510T013138/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

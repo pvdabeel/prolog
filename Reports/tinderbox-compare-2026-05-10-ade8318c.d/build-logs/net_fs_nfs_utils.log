@@ -1,0 +1,31 @@
+[tinderbox-ng] compare: target='net-fs/nfs-utils'  mode=--build  label=net_fs_nfs_utils
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-net_fs_nfs_utils
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-net_fs_nfs_utils
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-net_fs_nfs_utils' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-net_fs_nfs_utils' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-net_fs_nfs_utils-20260510T084214)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : net-fs/nfs-utils                                              │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-net_fs_nfs_utils-20260510T084214│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 19                      │ 7                         │
+│ completed        │ 17                      │ 6                         │
+│ merged into VDB  │ 6                       │ 6                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 7] FAIL (1) install portage://net-fs/nfs-utils-2.8.5
+  emerge    : >>> Failed to emerge net-fs/nfs-utils-2.8.5, Log file:
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-net_fs_nfs_utils-20260510T084214/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-net_fs_nfs_utils-20260510T084214/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

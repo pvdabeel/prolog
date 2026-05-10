@@ -1,0 +1,38 @@
+[tinderbox-ng] compare: target='dev-haskell/hdbc-postgresql'  mode=--build  label=dev_haskell_hdbc_postgresql
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_haskell_hdbc_postgresql
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_haskell_hdbc_postgresql
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_haskell_hdbc_postgresql' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_haskell_hdbc_postgresql' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_haskell_hdbc_postgresql-20260510T021223)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-haskell/hdbc-postgresql                                   │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_haskell_hdbc_postgresql-20260510T021223│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(124)               │ FAIL(1)                   │
+│ plan actions     │ 63                      │ 0                         │
+│ completed        │ 0                       │ 12                        │
+│ merged into VDB  │ 8                       │ 12                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  emerge    : >>> Failed to emerge dev-lang/ghc-9.2.8, Log file:
+
+VDB delta (after build):
+  only in emerge:
+    + acct-user/postgres-0-r3
+    + app-text/docbook-dsssl-stylesheets-1.79-r4
+    + app-text/dos2unix-7.5.5
+    + dev-db/postgresql-18.3
+  in both: 8 packages
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_haskell_hdbc_postgresql-20260510T021223/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_haskell_hdbc_postgresql-20260510T021223/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

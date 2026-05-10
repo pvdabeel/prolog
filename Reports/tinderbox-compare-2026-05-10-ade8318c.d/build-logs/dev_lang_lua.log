@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-lang/lua'  mode=--build  label=dev_lang_lua
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_lang_lua
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_lang_lua
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_lang_lua' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_lang_lua' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_lang_lua-20260510T044424)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-lang/lua                                                  │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_lang_lua-20260510T044424   │
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 6                       │ 2                         │
+│ completed        │ 7                       │ 2                         │
+│ merged into VDB  │ 2                       │ 2                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_lang_lua-20260510T044424/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_lang_lua-20260510T044424/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

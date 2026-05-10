@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='media-radio/ibp'  mode=--build  label=media_radio_ibp
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-media_radio_ibp
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-media_radio_ibp
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-media_radio_ibp' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-media_radio_ibp' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-media_radio_ibp-20260510T080929)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : media-radio/ibp                                               │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-media_radio_ibp-20260510T080929│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 3                       │ 1                         │
+│ completed        │ 4                       │ 1                         │
+│ merged into VDB  │ 1                       │ 1                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-media_radio_ibp-20260510T080929/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-media_radio_ibp-20260510T080929/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

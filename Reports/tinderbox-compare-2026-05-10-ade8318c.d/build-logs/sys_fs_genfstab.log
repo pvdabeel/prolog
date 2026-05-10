@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='sys-fs/genfstab'  mode=--build  label=sys_fs_genfstab
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-sys_fs_genfstab
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-sys_fs_genfstab
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-sys_fs_genfstab' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-sys_fs_genfstab' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-sys_fs_genfstab-20260510T093603)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : sys-fs/genfstab                                               │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-sys_fs_genfstab-20260510T093603│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 5                       │ 2                         │
+│ completed        │ 6                       │ 2                         │
+│ merged into VDB  │ 2                       │ 2                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-sys_fs_genfstab-20260510T093603/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-sys_fs_genfstab-20260510T093603/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

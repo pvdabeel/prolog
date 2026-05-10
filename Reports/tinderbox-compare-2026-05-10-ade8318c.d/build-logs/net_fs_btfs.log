@@ -1,0 +1,36 @@
+[tinderbox-ng] compare: target='net-fs/btfs'  mode=--build  label=net_fs_btfs
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-net_fs_btfs
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-net_fs_btfs
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-net_fs_btfs' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-net_fs_btfs' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-net_fs_btfs-20260510T084210)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : net-fs/btfs                                                   │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-net_fs_btfs-20260510T084210    │
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 19                      │ 1                         │
+│ completed        │ 13                      │ 5                         │
+│ merged into VDB  │ 4                       │ 5                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 7] FAIL (1) install portage://sys-fs/fuse-2.9.9-r2
+  emerge    : >>> Failed to emerge sys-fs/fuse-2.9.9-r2, Log file:
+
+VDB delta (after build):
+  only in emerge:
+    + net-libs/libtorrent-rasterbar-2.0.10
+  in both: 4 packages
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-net_fs_btfs-20260510T084210/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-net_fs_btfs-20260510T084210/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

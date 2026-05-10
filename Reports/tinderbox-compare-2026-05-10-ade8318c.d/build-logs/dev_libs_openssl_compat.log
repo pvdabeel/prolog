@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-libs/openssl-compat'  mode=--build  label=dev_libs_openssl_compat
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_libs_openssl_compat
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_libs_openssl_compat
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_libs_openssl_compat' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_libs_openssl_compat' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_libs_openssl_compat-20260510T045716)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-libs/openssl-compat                                       │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_libs_openssl_compat-20260510T045716│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 3                       │ 1                         │
+│ completed        │ 4                       │ 1                         │
+│ merged into VDB  │ 1                       │ 1                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_libs_openssl_compat-20260510T045716/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_libs_openssl_compat-20260510T045716/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

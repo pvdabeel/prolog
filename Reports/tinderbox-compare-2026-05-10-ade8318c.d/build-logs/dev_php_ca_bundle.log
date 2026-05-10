@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-php/ca-bundle'  mode=--build  label=dev_php_ca_bundle
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_php_ca_bundle
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_php_ca_bundle
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_php_ca_bundle' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_php_ca_bundle' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_php_ca_bundle-20260510T055804)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-php/ca-bundle                                             │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_php_ca_bundle-20260510T055804│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 29                      │ 11                        │
+│ completed        │ 30                      │ 11                        │
+│ merged into VDB  │ 11                      │ 11                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_php_ca_bundle-20260510T055804/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_php_ca_bundle-20260510T055804/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

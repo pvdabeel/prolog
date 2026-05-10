@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-perl/POE-Component-PreforkDispatch'  mode=--build  label=dev_perl_POE_Component_PreforkDispatch
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_perl_POE_Component_PreforkDispatch
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_perl_POE_Component_PreforkDispatch
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_perl_POE_Component_PreforkDispatch' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_perl_POE_Component_PreforkDispatch' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_perl_POE_Component_PreforkDispatch-20260510T054400)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-perl/POE-Component-PreforkDispatch                        │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_perl_POE_Component_PreforkDispatch-20260510T054400│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 37                      │ 13                        │
+│ completed        │ 38                      │ 13                        │
+│ merged into VDB  │ 13                      │ 13                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_perl_POE_Component_PreforkDispatch-20260510T054400/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_perl_POE_Component_PreforkDispatch-20260510T054400/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

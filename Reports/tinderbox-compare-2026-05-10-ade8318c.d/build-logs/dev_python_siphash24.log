@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-python/siphash24'  mode=--build  label=dev_python_siphash24
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_python_siphash24
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_python_siphash24
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_python_siphash24' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_python_siphash24' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_python_siphash24-20260510T063529)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-python/siphash24                                          │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_python_siphash24-20260510T063529│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 11                      │ 5                         │
+│ completed        │ 12                      │ 5                         │
+│ merged into VDB  │ 5                       │ 5                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_python_siphash24-20260510T063529/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_python_siphash24-20260510T063529/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

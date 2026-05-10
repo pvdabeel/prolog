@@ -1,0 +1,37 @@
+[tinderbox-ng] compare: target='gnustep-base/gnustep-updater'  mode=--build  label=gnustep_base_gnustep_updater
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-gnustep_base_gnustep_updater
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-gnustep_base_gnustep_updater
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-gnustep_base_gnustep_updater' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-gnustep_base_gnustep_updater' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-gnustep_base_gnustep_updater-20260510T073614)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : gnustep-base/gnustep-updater                                  │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-gnustep_base_gnustep_updater-20260510T073614│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(124)               │ FAIL(124)                 │
+│ plan actions     │ 10                      │ 18                        │
+│ completed        │ 0                       │ 7                         │
+│ merged into VDB  │ 0                       │ 7                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+VDB delta (after build):
+  only in emerge:
+    + llvm-core/clang-linker-config-22
+    + llvm-core/llvm-common-22.1.5
+    + llvm-runtimes/clang-rtlib-config-22
+    + llvm-runtimes/clang-stdlib-config-22
+    + llvm-runtimes/clang-unwindlib-config-22
+    + llvm-runtimes/openmp-22.1.5
+    + sys-libs/binutils-libs-2.46.0
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-gnustep_base_gnustep_updater-20260510T073614/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-gnustep_base_gnustep_updater-20260510T073614/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

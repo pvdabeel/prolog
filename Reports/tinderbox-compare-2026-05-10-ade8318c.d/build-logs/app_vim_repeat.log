@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='app-vim/repeat'  mode=--build  label=app_vim_repeat
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-app_vim_repeat
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-app_vim_repeat
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-app_vim_repeat' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-app_vim_repeat' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-app_vim_repeat-20260510T013638)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : app-vim/repeat                                                │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-app_vim_repeat-20260510T013638 │
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 21                      │ 7                         │
+│ completed        │ 22                      │ 7                         │
+│ merged into VDB  │ 7                       │ 7                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-app_vim_repeat-20260510T013638/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-app_vim_repeat-20260510T013638/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

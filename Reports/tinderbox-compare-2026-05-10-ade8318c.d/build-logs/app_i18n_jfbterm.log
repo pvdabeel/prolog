@@ -1,0 +1,38 @@
+[tinderbox-ng] compare: target='app-i18n/jfbterm'  mode=--build  label=app_i18n_jfbterm
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-app_i18n_jfbterm
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-app_i18n_jfbterm
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-app_i18n_jfbterm' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-app_i18n_jfbterm' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-app_i18n_jfbterm-20260510T011729)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : app-i18n/jfbterm                                              │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-app_i18n_jfbterm-20260510T011729│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 68                      │ 3                         │
+│ completed        │ 42                      │ 15                        │
+│ merged into VDB  │ 12                      │ 15                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 6] FAIL (1) install portage://media-libs/freetype-2.14.3
+  emerge    : >>> Failed to emerge media-libs/freetype-2.14.3, Log file:
+
+VDB delta (after build):
+  only in emerge:
+    + x11-libs/libX11-1.8.13
+    + x11-libs/libxcb-1.17.0
+    + x11-misc/compose-tables-1.8.13
+  in both: 12 packages
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-app_i18n_jfbterm-20260510T011729/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-app_i18n_jfbterm-20260510T011729/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

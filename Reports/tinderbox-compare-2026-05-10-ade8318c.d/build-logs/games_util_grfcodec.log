@@ -1,0 +1,30 @@
+[tinderbox-ng] compare: target='games-util/grfcodec'  mode=--build  label=games_util_grfcodec
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-games_util_grfcodec
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-games_util_grfcodec
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-games_util_grfcodec' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-games_util_grfcodec' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-games_util_grfcodec-20260510T073455)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : games-util/grfcodec                                           │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-games_util_grfcodec-20260510T073455│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 10                      │ 4                         │
+│ completed        │ 11                      │ 4                         │
+│ merged into VDB  │ 4                       │ 4                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  emerge    :  * Boost.Regex is *extremely* ABI sensitive. If you get errors such as
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-games_util_grfcodec-20260510T073455/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-games_util_grfcodec-20260510T073455/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

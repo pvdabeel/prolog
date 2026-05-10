@@ -1,0 +1,31 @@
+[tinderbox-ng] compare: target='mail-filter/gld'  mode=--build  label=mail_filter_gld
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-mail_filter_gld
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-mail_filter_gld
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-mail_filter_gld' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-mail_filter_gld' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-mail_filter_gld-20260510T074241)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : mail-filter/gld                                               │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-mail_filter_gld-20260510T074241│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 9                       │ 3                         │
+│ completed        │ 7                       │ 2                         │
+│ merged into VDB  │ 2                       │ 2                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 6] FAIL (1) install portage://mail-filter/gld-1.7-r4
+  emerge    : >>> Failed to emerge mail-filter/gld-1.7-r4, Log file:
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-mail_filter_gld-20260510T074241/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-mail_filter_gld-20260510T074241/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

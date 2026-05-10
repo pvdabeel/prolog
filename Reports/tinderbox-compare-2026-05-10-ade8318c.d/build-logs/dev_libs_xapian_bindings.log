@@ -1,0 +1,36 @@
+[tinderbox-ng] compare: target='dev-libs/xapian-bindings'  mode=--build  label=dev_libs_xapian_bindings
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_libs_xapian_bindings
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_libs_xapian_bindings
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_libs_xapian_bindings' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_libs_xapian_bindings' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_libs_xapian_bindings-20260510T045759)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-libs/xapian-bindings                                      │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_libs_xapian_bindings-20260510T045759│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 10                      │ ?                         │
+│ completed        │ 7                       │ 0                         │
+│ merged into VDB  │ 2                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 7] FAIL (1) install portage://dev-libs/xapian-bindings-2.0.0
+  emerge    : !!! The ebuild selected to satisfy "dev-libs/xapian-bindings" has unmet requirements.
+
+VDB delta (after build):
+  only in portage-ng:
+    + dev-libs/icu-78.3
+    + dev-libs/xapian-2.0.0
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_libs_xapian_bindings-20260510T045759/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_libs_xapian_bindings-20260510T045759/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

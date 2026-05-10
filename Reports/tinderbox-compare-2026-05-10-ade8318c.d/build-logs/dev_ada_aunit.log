@@ -1,0 +1,32 @@
+[tinderbox-ng] compare: target='dev-ada/aunit'  mode=--build  label=dev_ada_aunit
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_ada_aunit
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_ada_aunit
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_ada_aunit' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_ada_aunit' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_ada_aunit-20260510T014440)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-ada/aunit                                                 │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_ada_aunit-20260510T014440  │
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(124)               │ FAIL(1)                   │
+│ plan actions     │ 16                      │ ?                         │
+│ completed        │ 0                       │ 0                         │
+│ merged into VDB  │ 2                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+VDB delta (after build):
+  only in portage-ng:
+    + dev-ada/gprconfig_kb-26.0.0
+    + dev-lang/ada-bootstrap-14
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_ada_aunit-20260510T014440/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_ada_aunit-20260510T014440/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

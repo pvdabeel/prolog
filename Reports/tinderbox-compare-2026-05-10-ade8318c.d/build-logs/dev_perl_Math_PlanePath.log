@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-perl/Math-PlanePath'  mode=--build  label=dev_perl_Math_PlanePath
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_perl_Math_PlanePath
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_perl_Math_PlanePath
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_perl_Math_PlanePath' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_perl_Math_PlanePath' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_perl_Math_PlanePath-20260510T053521)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-perl/Math-PlanePath                                       │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_perl_Math_PlanePath-20260510T053521│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 54                      │ 19                        │
+│ completed        │ 55                      │ 19                        │
+│ merged into VDB  │ 19                      │ 19                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_perl_Math_PlanePath-20260510T053521/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_perl_Math_PlanePath-20260510T053521/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

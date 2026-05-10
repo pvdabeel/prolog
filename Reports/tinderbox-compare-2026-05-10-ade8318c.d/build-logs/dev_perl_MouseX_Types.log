@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-perl/MouseX-Types'  mode=--build  label=dev_perl_MouseX_Types
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_perl_MouseX_Types
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_perl_MouseX_Types
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_perl_MouseX_Types' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_perl_MouseX_Types' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_perl_MouseX_Types-20260510T053743)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-perl/MouseX-Types                                         │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_perl_MouseX_Types-20260510T053743│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 116                     │ 41                        │
+│ completed        │ 117                     │ 41                        │
+│ merged into VDB  │ 41                      │ 41                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_perl_MouseX_Types-20260510T053743/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_perl_MouseX_Types-20260510T053743/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

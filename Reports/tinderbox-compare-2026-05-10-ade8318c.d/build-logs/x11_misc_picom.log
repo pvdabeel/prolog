@@ -1,0 +1,45 @@
+[tinderbox-ng] compare: target='x11-misc/picom'  mode=--build  label=x11_misc_picom
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-x11_misc_picom
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-x11_misc_picom
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-x11_misc_picom' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-x11_misc_picom' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-x11_misc_picom-20260510T100514)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : x11-misc/picom                                                │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-x11_misc_picom-20260510T100514 │
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 189                     │ 10                        │
+│ completed        │ 72                      │ 19                        │
+│ merged into VDB  │ 9                       │ 19                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 3] FAIL (1) install portage://dev-libs/libev-4.33
+  emerge    : >>> Failed to emerge dev-libs/libev-4.33, Log file:
+
+VDB delta (after build):
+  only in emerge:
+    + sys-apps/hwdata-0.401
+    + x11-libs/libX11-1.8.13
+    + x11-libs/libXau-1.0.12
+    + x11-libs/libXdmcp-1.1.5
+    + x11-libs/libpciaccess-0.19
+    + x11-libs/libxcb-1.17.0
+    + x11-libs/xcb-util-0.4.1
+    + x11-libs/xcb-util-image-0.4.1
+    + x11-libs/xcb-util-renderutil-0.3.10
+    + x11-misc/compose-tables-1.8.13
+  in both: 9 packages
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-x11_misc_picom-20260510T100514/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-x11_misc_picom-20260510T100514/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

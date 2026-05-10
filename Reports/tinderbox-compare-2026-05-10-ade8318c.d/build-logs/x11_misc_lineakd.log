@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='x11-misc/lineakd'  mode=--build  label=x11_misc_lineakd
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-x11_misc_lineakd
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-x11_misc_lineakd
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-x11_misc_lineakd' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-x11_misc_lineakd' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-x11_misc_lineakd-20260510T100448)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : x11-misc/lineakd                                              │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-x11_misc_lineakd-20260510T100448│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 47                      │ 17                        │
+│ completed        │ 47                      │ 17                        │
+│ merged into VDB  │ 17                      │ 17                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-x11_misc_lineakd-20260510T100448/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-x11_misc_lineakd-20260510T100448/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

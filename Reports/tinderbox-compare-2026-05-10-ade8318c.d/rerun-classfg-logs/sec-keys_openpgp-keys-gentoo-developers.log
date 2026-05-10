@@ -1,0 +1,36 @@
+[tinderbox-ng] compare: target='sec-keys/openpgp-keys-gentoo-developers'  mode=--build  label=sec_keys_openpgp_keys_gentoo_developers
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-sec_keys_openpgp_keys_gentoo_developers
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-sec_keys_openpgp_keys_gentoo_developers
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-sec_keys_openpgp_keys_gentoo_developers' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-sec_keys_openpgp_keys_gentoo_developers' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-sec_keys_openpgp_keys_gentoo_developers-20260510T121039)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : sec-keys/openpgp-keys-gentoo-developers                       │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-sec_keys_openpgp_keys_gentoo_developers-20260510T121039│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ OK                        │
+│ plan actions     │ 2                       │ 3                         │
+│ completed        │ 0                       │ 3                         │
+│ merged into VDB  │ 0                       │ 3                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 1] FAIL (1) reinstall portage://sec-keys/openpgp-keys-gentoo-developers-20260406
+
+VDB delta (after build):
+  only in emerge:
+    + dev-python/python-gnupg-0.5.6
+    + sec-keys/openpgp-keys-gentoo-auth-20260206
+    + sec-keys/openpgp-keys-gentoo-developers-20260406
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-sec_keys_openpgp_keys_gentoo_developers-20260510T121039/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-sec_keys_openpgp_keys_gentoo_developers-20260510T121039/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

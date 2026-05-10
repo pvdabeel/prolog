@@ -1,0 +1,39 @@
+[tinderbox-ng] compare: target='dev-perl/Image-Imlib2'  mode=--build  label=dev_perl_Image_Imlib2
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_perl_Image_Imlib2
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_perl_Image_Imlib2
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_perl_Image_Imlib2' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_perl_Image_Imlib2' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_perl_Image_Imlib2-20260510T053440)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-perl/Image-Imlib2                                         │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_perl_Image_Imlib2-20260510T053440│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 47                      │ 3                         │
+│ completed        │ 30                      │ 12                        │
+│ merged into VDB  │ 8                       │ 12                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 6] FAIL (1) install portage://media-libs/freetype-2.14.3
+  emerge    : >>> Failed to emerge media-libs/freetype-2.14.3, Log file:
+
+VDB delta (after build):
+  only in emerge:
+    + x11-libs/libX11-1.8.13
+    + x11-libs/libXext-1.3.7
+    + x11-libs/libxcb-1.17.0
+    + x11-misc/compose-tables-1.8.13
+  in both: 8 packages
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_perl_Image_Imlib2-20260510T053440/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_perl_Image_Imlib2-20260510T053440/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

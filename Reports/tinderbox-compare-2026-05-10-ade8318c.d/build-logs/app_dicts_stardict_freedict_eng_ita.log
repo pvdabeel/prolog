@@ -1,0 +1,38 @@
+[tinderbox-ng] compare: target='app-dicts/stardict-freedict-eng-ita'  mode=--build  label=app_dicts_stardict_freedict_eng_ita
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-app_dicts_stardict_freedict_eng_ita
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-app_dicts_stardict_freedict_eng_ita
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-app_dicts_stardict_freedict_eng_ita' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-app_dicts_stardict_freedict_eng_ita' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-app_dicts_stardict_freedict_eng_ita-20260510T010046)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : app-dicts/stardict-freedict-eng-ita                           │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-app_dicts_stardict_freedict_eng_ita-20260510T010046│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 22                      │ 4                         │
+│ completed        │ 11                      │ 6                         │
+│ merged into VDB  │ 3                       │ 6                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 2] FAIL (1) install portage://app-text/sdcv-0.5.5
+  emerge    : >>> Failed to emerge app-text/sdcv-0.5.5, Log file:
+
+VDB delta (after build):
+  only in emerge:
+    + acct-user/dictd-0-r2
+    + dev-libs/libmaa-1.4.7
+    + dev-util/mk-configure-0.38.3
+  in both: 3 packages
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-app_dicts_stardict_freedict_eng_ita-20260510T010046/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-app_dicts_stardict_freedict_eng_ita-20260510T010046/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

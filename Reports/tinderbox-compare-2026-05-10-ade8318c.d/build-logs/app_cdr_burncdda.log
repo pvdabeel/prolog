@@ -1,0 +1,53 @@
+[tinderbox-ng] compare: target='app-cdr/burncdda'  mode=--build  label=app_cdr_burncdda
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-app_cdr_burncdda
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-app_cdr_burncdda
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-app_cdr_burncdda' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-app_cdr_burncdda' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-app_cdr_burncdda-20260510T005108)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : app-cdr/burncdda                                              │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-app_cdr_burncdda-20260510T005108│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 159                     │ 17                        │
+│ completed        │ 109                     │ 51                        │
+│ merged into VDB  │ 33                      │ 51                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 5] FAIL (1) install portage://media-libs/freetype-2.14.3
+  emerge    : >>> Failed to emerge media-libs/freetype-2.14.3, Log file:
+
+VDB delta (after build):
+  only in emerge:
+    + app-cdr/cdrdao-1.2.6
+    + dev-libs/gobject-introspection-1.86.0
+    + dev-perl/File-Listing-6.160.0
+    + dev-perl/HTML-Parser-3.830.0
+    + dev-perl/HTTP-Cookies-6.110.0
+    + dev-perl/HTTP-Date-6.60.0
+    + dev-perl/HTTP-Message-7.10.0
+    + dev-perl/HTTP-Negotiate-6.10.0-r2
+    + dev-perl/LWP-Protocol-https-6.140.0
+    + dev-perl/Net-HTTP-6.240.0
+    + dev-perl/WWW-RobotRules-6.20.0-r2
+    + dev-perl/XML-Parser-2.470.0-r1
+    + dev-perl/libwww-perl-6.810.0
+    + dev-util/intltool-0.51.0-r3
+    + media-sound/normalize-0.7.7-r2
+    + sys-apps/hwdata-0.401
+    + virtual/perl-IO-Compress-2.213.0
+    + x11-libs/libpciaccess-0.19
+  in both: 33 packages
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-app_cdr_burncdda-20260510T005108/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-app_cdr_burncdda-20260510T005108/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

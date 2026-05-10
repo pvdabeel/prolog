@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-perl/CPAN-Requirements-Dynamic'  mode=--build  label=dev_perl_CPAN_Requirements_Dynamic
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_perl_CPAN_Requirements_Dynamic
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_perl_CPAN_Requirements_Dynamic
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_perl_CPAN_Requirements_Dynamic' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_perl_CPAN_Requirements_Dynamic' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_perl_CPAN_Requirements_Dynamic-20260510T051950)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-perl/CPAN-Requirements-Dynamic                            │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_perl_CPAN_Requirements_Dynamic-20260510T051950│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 12                      │ 4                         │
+│ completed        │ 13                      │ 4                         │
+│ merged into VDB  │ 4                       │ 4                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_perl_CPAN_Requirements_Dynamic-20260510T051950/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_perl_CPAN_Requirements_Dynamic-20260510T051950/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

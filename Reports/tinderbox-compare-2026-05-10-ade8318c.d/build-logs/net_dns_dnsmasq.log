@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='net-dns/dnsmasq'  mode=--build  label=net_dns_dnsmasq
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-net_dns_dnsmasq
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-net_dns_dnsmasq
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-net_dns_dnsmasq' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-net_dns_dnsmasq' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-net_dns_dnsmasq-20260510T083909)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : net-dns/dnsmasq                                               │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-net_dns_dnsmasq-20260510T083909│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 7                       │ 3                         │
+│ completed        │ 8                       │ 3                         │
+│ merged into VDB  │ 3                       │ 3                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-net_dns_dnsmasq-20260510T083909/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-net_dns_dnsmasq-20260510T083909/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

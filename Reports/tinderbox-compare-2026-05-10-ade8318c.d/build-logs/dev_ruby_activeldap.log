@@ -1,0 +1,31 @@
+[tinderbox-ng] compare: target='dev-ruby/activeldap'  mode=--build  label=dev_ruby_activeldap
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_ruby_activeldap
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_ruby_activeldap
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_ruby_activeldap' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_ruby_activeldap' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_ruby_activeldap-20260510T064838)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-ruby/activeldap                                           │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_ruby_activeldap-20260510T064838│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 209                     │ 0                         │
+│ completed        │ 73                      │ 2                         │
+│ merged into VDB  │ 2                       │ 2                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 3] FAIL (1) install portage://dev-util/colm-0.14.7-r4
+  emerge    : >>> Failed to emerge dev-util/colm-0.14.7-r4, Log file:
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_ruby_activeldap-20260510T064838/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_ruby_activeldap-20260510T064838/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

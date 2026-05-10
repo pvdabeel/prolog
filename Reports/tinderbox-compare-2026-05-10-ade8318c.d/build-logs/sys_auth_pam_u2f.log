@@ -1,0 +1,30 @@
+[tinderbox-ng] compare: target='sys-auth/pam_u2f'  mode=--build  label=sys_auth_pam_u2f
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-sys_auth_pam_u2f
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-sys_auth_pam_u2f
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-sys_auth_pam_u2f' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-sys_auth_pam_u2f' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-sys_auth_pam_u2f-20260510T092536)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : sys-auth/pam_u2f                                              │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-sys_auth_pam_u2f-20260510T092536│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 17                      │ 7                         │
+│ completed        │ 18                      │ 7                         │
+│ merged into VDB  │ 7                       │ 7                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  emerge    :  * Failure to do so may cause unexpected problems.
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-sys_auth_pam_u2f-20260510T092536/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-sys_auth_pam_u2f-20260510T092536/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

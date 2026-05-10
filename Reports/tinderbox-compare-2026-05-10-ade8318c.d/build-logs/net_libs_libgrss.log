@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='net-libs/libgrss'  mode=--build  label=net_libs_libgrss
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-net_libs_libgrss
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-net_libs_libgrss
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-net_libs_libgrss' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-net_libs_libgrss' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-net_libs_libgrss-20260510T084948)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : net-libs/libgrss                                              │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-net_libs_libgrss-20260510T084948│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 28                      │ 10                        │
+│ completed        │ 29                      │ 10                        │
+│ merged into VDB  │ 10                      │ 10                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-net_libs_libgrss-20260510T084948/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-net_libs_libgrss-20260510T084948/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

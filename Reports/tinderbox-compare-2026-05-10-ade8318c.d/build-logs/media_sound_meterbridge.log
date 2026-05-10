@@ -1,0 +1,45 @@
+[tinderbox-ng] compare: target='media-sound/meterbridge'  mode=--build  label=media_sound_meterbridge
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-media_sound_meterbridge
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-media_sound_meterbridge
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-media_sound_meterbridge' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-media_sound_meterbridge' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-media_sound_meterbridge-20260510T081528)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : media-sound/meterbridge                                       │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-media_sound_meterbridge-20260510T081528│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 70                      │ ?                         │
+│ completed        │ 43                      │ 0                         │
+│ merged into VDB  │ 12                      │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 7] FAIL (1) install portage://media-libs/alsa-lib-1.2.15.3
+
+VDB delta (after build):
+  only in portage-ng:
+    + acct-group/realtime-0-r2
+    + media-libs/alsa-topology-conf-1.2.5.1-r1
+    + media-libs/alsa-ucm-conf-1.2.15.3
+    + media-libs/libpng-1.6.58
+    + media-libs/libsdl-1.2.74
+    + media-libs/libsdl2-2.32.10
+    + sys-auth/realtime-base-0.1-r1
+    + x11-base/xcb-proto-1.17.0
+    + x11-base/xorg-proto-2025.1
+    + x11-libs/libXau-1.0.12
+    + x11-libs/libXdmcp-1.1.5
+    + x11-libs/xtrans-1.6.0
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-media_sound_meterbridge-20260510T081528/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-media_sound_meterbridge-20260510T081528/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

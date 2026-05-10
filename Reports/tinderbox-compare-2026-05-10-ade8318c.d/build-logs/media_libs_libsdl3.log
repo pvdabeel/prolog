@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='media-libs/libsdl3'  mode=--build  label=media_libs_libsdl3
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-media_libs_libsdl3
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-media_libs_libsdl3
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-media_libs_libsdl3' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-media_libs_libsdl3' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-media_libs_libsdl3-20260510T075739)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : media-libs/libsdl3                                            │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-media_libs_libsdl3-20260510T075739│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 3                       │ 1                         │
+│ completed        │ 4                       │ 1                         │
+│ merged into VDB  │ 1                       │ 1                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-media_libs_libsdl3-20260510T075739/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-media_libs_libsdl3-20260510T075739/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

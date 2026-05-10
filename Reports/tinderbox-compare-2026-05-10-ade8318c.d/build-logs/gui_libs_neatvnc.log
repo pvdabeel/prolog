@@ -1,0 +1,33 @@
+[tinderbox-ng] compare: target='gui-libs/neatvnc'  mode=--build  label=gui_libs_neatvnc
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-gui_libs_neatvnc
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-gui_libs_neatvnc
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-gui_libs_neatvnc' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-gui_libs_neatvnc' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-gui_libs_neatvnc-20260510T073936)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : gui-libs/neatvnc                                              │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-gui_libs_neatvnc-20260510T073936│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 11                      │ 6                         │
+│ completed        │ 12                      │ 6                         │
+│ merged into VDB  │ 4                       │ 6                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+VDB delta (after build):
+  only in emerge:
+    + sys-apps/hwdata-0.401
+    + x11-libs/libpciaccess-0.19
+  in both: 4 packages
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-gui_libs_neatvnc-20260510T073936/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-gui_libs_neatvnc-20260510T073936/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

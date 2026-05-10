@@ -1,0 +1,31 @@
+[tinderbox-ng] compare: target='app-crypt/coolkey'  mode=--build  label=app_crypt_coolkey
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-app_crypt_coolkey
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-app_crypt_coolkey
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-app_crypt_coolkey' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-app_crypt_coolkey' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-app_crypt_coolkey-20260510T005517)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : app-crypt/coolkey                                             │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-app_crypt_coolkey-20260510T005517│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 27                      │ 11                        │
+│ completed        │ 25                      │ 10                        │
+│ merged into VDB  │ 10                      │ 10                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 10] FAIL (1) install portage://app-crypt/coolkey-1.1.0-r9
+  emerge    : >>> Failed to emerge app-crypt/coolkey-1.1.0-r9, Log file:
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-app_crypt_coolkey-20260510T005517/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-app_crypt_coolkey-20260510T005517/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

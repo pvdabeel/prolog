@@ -1,0 +1,34 @@
+[tinderbox-ng] compare: target='media-libs/waffle'  mode=--build  label=media_libs_waffle
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-media_libs_waffle
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-media_libs_waffle
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-media_libs_waffle' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-media_libs_waffle' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-media_libs_waffle-20260510T080324)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : media-libs/waffle                                             │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-media_libs_waffle-20260510T080324│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 108                     │ ?                         │
+│ completed        │ 35                      │ 0                         │
+│ merged into VDB  │ 1                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 2] FAIL (1) update portage://dev-python/flit-core-3.12.0
+
+VDB delta (after build):
+  only in portage-ng:
+    + dev-python/gpep517-19
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-media_libs_waffle-20260510T080324/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-media_libs_waffle-20260510T080324/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-python/rdflib'  mode=--build  label=dev_python_rdflib
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_python_rdflib
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_python_rdflib
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_python_rdflib' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_python_rdflib' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_python_rdflib-20260510T062933)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-python/rdflib                                             │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_python_rdflib-20260510T062933│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 27                      │ 10                        │
+│ completed        │ 28                      │ 10                        │
+│ merged into VDB  │ 10                      │ 10                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_python_rdflib-20260510T062933/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_python_rdflib-20260510T062933/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

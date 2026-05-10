@@ -1,0 +1,43 @@
+[tinderbox-ng] compare: target='gnustep-apps/zipper'  mode=--build  label=gnustep_apps_zipper
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-gnustep_apps_zipper
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-gnustep_apps_zipper
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-gnustep_apps_zipper' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-gnustep_apps_zipper' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-gnustep_apps_zipper-20260510T073535)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : gnustep-apps/zipper                                           │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-gnustep_apps_zipper-20260510T073535│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(124)               │ FAIL(1)                   │
+│ plan actions     │ 112                     │ ?                         │
+│ completed        │ 0                       │ 0                         │
+│ merged into VDB  │ 10                      │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 3] FAIL (1) install portage://media-libs/audiofile-0.3.6-r6
+
+VDB delta (after build):
+  only in portage-ng:
+    + app-eselect/eselect-fontconfig-20220403
+    + dev-libs/icu-78.3
+    + media-fonts/liberation-fonts-2.1.5
+    + media-libs/giflib-5.2.2
+    + media-libs/libpng-1.6.58
+    + media-libs/tiff-4.7.1
+    + x11-base/xcb-proto-1.17.0
+    + x11-base/xorg-proto-2025.1
+    + x11-libs/pixman-0.46.4
+    + x11-libs/xtrans-1.6.0
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-gnustep_apps_zipper-20260510T073535/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-gnustep_apps_zipper-20260510T073535/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

@@ -1,0 +1,34 @@
+[tinderbox-ng] compare: target='net-analyzer/argus-clients'  mode=--build  label=net_analyzer_argus_clients
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-net_analyzer_argus_clients
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-net_analyzer_argus_clients
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-net_analyzer_argus_clients' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-net_analyzer_argus_clients' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-net_analyzer_argus_clients-20260510T082529)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : net-analyzer/argus-clients                                    │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-net_analyzer_argus_clients-20260510T082529│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 9                       │ ?                         │
+│ completed        │ 4                       │ 0                         │
+│ merged into VDB  │ 1                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng:  └─step  2─┤ verify  net-analyzer/rrdtool (unsatisfied constraints, assumed running)
+
+VDB delta (after build):
+  only in portage-ng:
+    + net-libs/libpcap-1.10.6
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-net_analyzer_argus_clients-20260510T082529/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-net_analyzer_argus_clients-20260510T082529/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

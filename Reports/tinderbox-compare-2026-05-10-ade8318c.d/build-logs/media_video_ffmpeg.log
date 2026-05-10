@@ -1,0 +1,38 @@
+[tinderbox-ng] compare: target='media-video/ffmpeg'  mode=--build  label=media_video_ffmpeg
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-media_video_ffmpeg
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-media_video_ffmpeg
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-media_video_ffmpeg' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-media_video_ffmpeg' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-media_video_ffmpeg-20260510T082155)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : media-video/ffmpeg                                            │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-media_video_ffmpeg-20260510T082155│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 51                      │ 1                         │
+│ completed        │ 36                      │ 14                        │
+│ merged into VDB  │ 11                      │ 14                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 5] FAIL (1) install portage://media-libs/freetype-2.14.3
+  emerge    : >>> Failed to emerge media-libs/freetype-2.14.3, Log file:
+
+VDB delta (after build):
+  only in emerge:
+    + dev-libs/gobject-introspection-1.86.0
+    + sys-apps/hwdata-0.401
+    + x11-libs/libpciaccess-0.19
+  in both: 11 packages
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-media_video_ffmpeg-20260510T082155/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-media_video_ffmpeg-20260510T082155/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='games-misc/fortune-mod-cs'  mode=--build  label=games_misc_fortune_mod_cs
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-games_misc_fortune_mod_cs
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-games_misc_fortune_mod_cs
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-games_misc_fortune_mod_cs' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-games_misc_fortune_mod_cs' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-games_misc_fortune_mod_cs-20260510T072639)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : games-misc/fortune-mod-cs                                     │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-games_misc_fortune_mod_cs-20260510T072639│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 37                      │ 14                        │
+│ completed        │ 38                      │ 14                        │
+│ merged into VDB  │ 14                      │ 14                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-games_misc_fortune_mod_cs-20260510T072639/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-games_misc_fortune_mod_cs-20260510T072639/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

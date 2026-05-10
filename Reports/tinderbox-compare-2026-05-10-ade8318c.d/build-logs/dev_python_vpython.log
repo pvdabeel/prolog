@@ -1,0 +1,114 @@
+[tinderbox-ng] compare: target='dev-python/vpython'  mode=--build  label=dev_python_vpython
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_python_vpython
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_python_vpython
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_python_vpython' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_python_vpython' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_python_vpython-20260510T063904)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-python/vpython                                            │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_python_vpython-20260510T063904│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(124)               │ FAIL(124)                 │
+│ plan actions     │ 480                     │ 166                       │
+│ completed        │ 0                       │ 23                        │
+│ merged into VDB  │ 106                     │ 23                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+VDB delta (after build):
+  only in portage-ng:
+    + dev-python/anyio-4.13.0
+    + dev-python/asttokens-3.0.1
+    + dev-python/async-lru-2.3.0
+    + dev-python/attrs-26.1.0
+    + dev-python/automat-25.4.16
+    + dev-python/babel-2.18.0
+    + dev-python/backports-zstd-1.4.0
+    + dev-python/comm-0.2.3
+    + dev-python/constantly-23.10.4
+    + dev-python/cython-3.2.4
+    + dev-python/decorator-5.2.1
+    + dev-python/defusedxml-0.8.0_rc2
+    + dev-python/deprecation-2.1.0-r1
+    + dev-python/executing-2.2.1
+    + dev-python/expandvars-1.1.2
+    + dev-python/fastjsonschema-2.21.2
+    + dev-python/fqdn-1.5.1-r2
+    + dev-python/frozenlist-1.8.0
+    + dev-python/h11-0.16.0
+    + dev-python/h2-4.3.0
+    + dev-python/hatch-fancy-pypi-readme-25.1.0
+    + dev-python/hatch-jupyter-builder-0.9.1-r1
+    + dev-python/hatch-nodejs-version-0.4.0
+    + dev-python/hpack-4.1.0
+    + dev-python/html5lib-1.2_pre20240221
+    + dev-python/hyperframe-6.1.0
+    + dev-python/hyperlink-21.0.0-r1
+    + dev-python/incremental-24.11.0
+    + dev-python/iniconfig-2.3.0
+    + dev-python/ipython-pygments-lexers-1.1.1
+    + dev-python/jedi-0.20.0
+    + dev-python/json5-0.14.0
+    + dev-python/jsonpointer-3.1.1
+    + dev-python/jupyter-core-5.9.1
+    + dev-python/jupyter-packaging-0.12.3
+    + dev-python/jupyterlab-pygments-0.3.0
+    + dev-python/jupyterlab-widgets-3.0.16
+    + dev-python/lark-1.3.1
+    + dev-python/lxml-6.1.0
+    + dev-python/matplotlib-inline-0.2.1
+    + dev-python/meson-python-0.19.0
+    + dev-python/mistune-3.2.1
+    + dev-python/multidict-6.7.1
+    + dev-python/nest-asyncio-1.6.0-r1
+    + dev-python/pandocfilters-1.5.1
+    + dev-python/parso-0.8.7
+    + dev-python/pdm-backend-2.4.8
+    + dev-python/pexpect-4.9.0
+    + dev-python/pkg-resources-81.0.0
+    + dev-python/ply-3.11-r2
+    + dev-python/poetry-core-2.4.0
+    + dev-python/prompt-toolkit-3.0.52
+    + dev-python/propcache-0.4.1
+    + dev-python/pure-eval-0.2.3
+    + dev-python/pyasn1-0.6.3
+    + dev-python/pyasn1-modules-0.4.2
+    + dev-python/pycparser-3.0
+    + dev-python/pytest-9.0.3
+    + dev-python/python-dateutil-2.9.0_p0
+    + dev-python/python-json-logger-4.1.0
+    + dev-python/pyyaml-6.0.3
+    + dev-python/regex-2026.4.4
+    + dev-python/rfc3339-validator-0.1.4-r1
+    + dev-python/rfc3986-validator-0.1.1-r2
+    + dev-python/rfc3987-1.3.8-r3
+    + dev-python/send2trash-2.1.0
+    + dev-python/simpervisor-1.0.0-r1
+    + dev-python/six-1.17.0
+    + dev-python/sniffio-1.3.1
+    + dev-python/soupsieve-2.8.3
+    + dev-python/stack-data-0.6.3-r1
+    + dev-python/strict-rfc3339-0.7-r2
+    + dev-python/tinycss2-1.5.1
+    + dev-python/tqdm-4.67.3
+    + dev-python/traitlets-5.15.0
+    + dev-python/txaio-25.9.2
+    + dev-python/uri-template-1.3.0
+    + dev-python/versioneer-0.29-r1
+    + dev-python/wcwidth-0.7.0
+    + dev-python/webencodings-0.5.1-r2
+    + dev-python/websocket-client-1.9.0
+    + dev-python/zope-interface-8.4
+    + sci-libs/lapack-3.12.1-r2
+  in both: 23 packages
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_python_vpython-20260510T063904/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_python_vpython-20260510T063904/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

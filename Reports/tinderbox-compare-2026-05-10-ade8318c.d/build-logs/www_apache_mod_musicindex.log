@@ -1,0 +1,39 @@
+[tinderbox-ng] compare: target='www-apache/mod_musicindex'  mode=--build  label=www_apache_mod_musicindex
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-www_apache_mod_musicindex
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-www_apache_mod_musicindex
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-www_apache_mod_musicindex' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-www_apache_mod_musicindex' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-www_apache_mod_musicindex-20260510T094635)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : www-apache/mod_musicindex                                     │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-www_apache_mod_musicindex-20260510T094635│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 37                      │ 4                         │
+│ completed        │ 18                      │ 10                        │
+│ merged into VDB  │ 6                       │ 10                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 2] FAIL (1) install portage://media-libs/libmad-0.15.1b-r10
+  emerge    : >>> Failed to emerge media-libs/libmad-0.15.1b-r10, Log file:
+
+VDB delta (after build):
+  only in emerge:
+    + acct-user/apache-0-r4
+    + app-admin/apache-tools-2.4.67
+    + dev-libs/apr-util-1.6.3
+    + www-servers/apache-2.4.67
+  in both: 6 packages
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-www_apache_mod_musicindex-20260510T094635/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-www_apache_mod_musicindex-20260510T094635/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

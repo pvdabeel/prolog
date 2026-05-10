@@ -1,0 +1,34 @@
+[tinderbox-ng] compare: target='app-containers/lxc'  mode=--build  label=app_containers_lxc
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-app_containers_lxc
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-app_containers_lxc
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-app_containers_lxc' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-app_containers_lxc' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-app_containers_lxc-20260510T005201)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : app-containers/lxc                                            │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-app_containers_lxc-20260510T005201│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ FAIL(1)                   │
+│ plan actions     │ 10                      │ ?                         │
+│ completed        │ 10                      │ 0                         │
+│ merged into VDB  │ 4                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+VDB delta (after build):
+  only in portage-ng:
+    + acct-group/lxc-0-r2
+    + acct-user/lxc-0-r2
+    + app-containers/lxc-7.0.0
+    + sys-libs/libcap-2.78
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-app_containers_lxc-20260510T005201/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-app_containers_lxc-20260510T005201/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

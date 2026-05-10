@@ -1,0 +1,34 @@
+[tinderbox-ng] compare: target='games-board/four-in-a-row'  mode=--build  label=games_board_four_in_a_row
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-games_board_four_in_a_row
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-games_board_four_in_a_row
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-games_board_four_in_a_row' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-games_board_four_in_a_row' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-games_board_four_in_a_row-20260510T072501)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : games-board/four-in-a-row                                     │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-games_board_four_in_a_row-20260510T072501│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 280                     │ ?                         │
+│ completed        │ 93                      │ 0                         │
+│ merged into VDB  │ 1                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 2] FAIL (1) update portage://dev-python/setuptools-82.0.1
+
+VDB delta (after build):
+  only in portage-ng:
+    + acct-group/messagebus-0-r3
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-games_board_four_in_a_row-20260510T072501/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-games_board_four_in_a_row-20260510T072501/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

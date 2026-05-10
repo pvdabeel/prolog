@@ -1,0 +1,30 @@
+[tinderbox-ng] compare: target='net-proxy/sshuttle'  mode=--build  label=net_proxy_sshuttle
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-net_proxy_sshuttle
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-net_proxy_sshuttle
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-net_proxy_sshuttle' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-net_proxy_sshuttle' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-net_proxy_sshuttle-20260510T090054)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : net-proxy/sshuttle                                            │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-net_proxy_sshuttle-20260510T090054│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 3                       │ 1                         │
+│ completed        │ 4                       │ 1                         │
+│ merged into VDB  │ 1                       │ 1                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  emerge    :  * Failure to do so may cause unexpected problems.
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-net_proxy_sshuttle-20260510T090054/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-net_proxy_sshuttle-20260510T090054/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

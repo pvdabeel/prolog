@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-util/abi-compliance-checker'  mode=--build  label=dev_util_abi_compliance_checker
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_util_abi_compliance_checker
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_util_abi_compliance_checker
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_util_abi_compliance_checker' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_util_abi_compliance_checker' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_util_abi_compliance_checker-20260510T070522)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-util/abi-compliance-checker                               │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_util_abi_compliance_checker-20260510T070522│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 14                      │ 5                         │
+│ completed        │ 15                      │ 5                         │
+│ merged into VDB  │ 5                       │ 5                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_util_abi_compliance_checker-20260510T070522/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_util_abi_compliance_checker-20260510T070522/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='www-client/links'  mode=--build  label=www_client_links
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-www_client_links
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-www_client_links
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-www_client_links' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-www_client_links' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-www_client_links-20260510T095300)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : www-client/links                                              │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-www_client_links-20260510T095300│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 6                       │ 2                         │
+│ completed        │ 7                       │ 2                         │
+│ merged into VDB  │ 2                       │ 2                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-www_client_links-20260510T095300/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-www_client_links-20260510T095300/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

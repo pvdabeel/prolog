@@ -1,0 +1,58 @@
+[tinderbox-ng] compare: target='dev-ml/uuidm'  mode=--build  label=dev_ml_uuidm
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_ml_uuidm
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_ml_uuidm
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_ml_uuidm' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_ml_uuidm' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_ml_uuidm-20260510T050709)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-ml/uuidm                                                  │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_ml_uuidm-20260510T050709   │
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 121                     │ 22                        │
+│ completed        │ 58                      │ 34                        │
+│ merged into VDB  │ 11                      │ 34                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 6] FAIL (1) install portage://media-libs/freetype-2.14.3
+  emerge    : >>> Failed to emerge media-libs/freetype-2.14.3, Log file:
+
+VDB delta (after build):
+  only in emerge:
+    + dev-ml/cmdliner-1.3.0
+    + dev-ml/csexp-1.5.2-r1
+    + dev-ml/dune-3.21.1-r2
+    + dev-ml/dune-configurator-3.21.1
+    + dev-ml/findlib-1.9.8-r1
+    + dev-ml/jsonm-1.0.2
+    + dev-ml/menhir-20250912
+    + dev-ml/ocaml-sha-1.15.4
+    + dev-ml/ocamlbuild-0.16.1
+    + dev-ml/opam-file-format-2.2.0-r1
+    + dev-ml/patch-3.1.0
+    + dev-ml/re-1.14.0
+    + dev-ml/result-1.5
+    + dev-ml/stdlib-shims-0.3.0
+    + dev-ml/swhid_core-0.1
+    + dev-ml/topkg-1.1.1
+    + dev-ml/uchar-0.0.2-r1
+    + dev-ml/uutf-1.0.4-r1
+    + x11-libs/libX11-1.8.13
+    + x11-libs/libXext-1.3.7
+    + x11-libs/libXrender-0.9.12
+    + x11-libs/libxcb-1.17.0
+    + x11-misc/compose-tables-1.8.13
+  in both: 11 packages
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_ml_uuidm-20260510T050709/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_ml_uuidm-20260510T050709/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

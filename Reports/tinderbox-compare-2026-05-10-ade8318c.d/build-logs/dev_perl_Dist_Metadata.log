@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-perl/Dist-Metadata'  mode=--build  label=dev_perl_Dist_Metadata
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_perl_Dist_Metadata
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_perl_Dist_Metadata
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_perl_Dist_Metadata' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_perl_Dist_Metadata' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_perl_Dist_Metadata-20260510T052735)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-perl/Dist-Metadata                                        │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_perl_Dist_Metadata-20260510T052735│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 30                      │ 12                        │
+│ completed        │ 31                      │ 12                        │
+│ merged into VDB  │ 12                      │ 12                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_perl_Dist_Metadata-20260510T052735/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_perl_Dist_Metadata-20260510T052735/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

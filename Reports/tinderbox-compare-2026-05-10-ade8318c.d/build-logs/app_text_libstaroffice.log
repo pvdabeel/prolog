@@ -1,0 +1,30 @@
+[tinderbox-ng] compare: target='app-text/libstaroffice'  mode=--build  label=app_text_libstaroffice
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-app_text_libstaroffice
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-app_text_libstaroffice
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-app_text_libstaroffice' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-app_text_libstaroffice' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-app_text_libstaroffice-20260510T013331)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : app-text/libstaroffice                                        │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-app_text_libstaroffice-20260510T013331│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 10                      │ 4                         │
+│ completed        │ 11                      │ 4                         │
+│ merged into VDB  │ 4                       │ 4                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  emerge    :  * Boost.Regex is *extremely* ABI sensitive. If you get errors such as
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-app_text_libstaroffice-20260510T013331/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-app_text_libstaroffice-20260510T013331/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

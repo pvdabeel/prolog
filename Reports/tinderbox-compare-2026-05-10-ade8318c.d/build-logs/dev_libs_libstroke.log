@@ -1,0 +1,31 @@
+[tinderbox-ng] compare: target='dev-libs/libstroke'  mode=--build  label=dev_libs_libstroke
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_libs_libstroke
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_libs_libstroke
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_libs_libstroke' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_libs_libstroke' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_libs_libstroke-20260510T045435)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-libs/libstroke                                            │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_libs_libstroke-20260510T045435│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 26                      │ 9                         │
+│ completed        │ 23                      │ 8                         │
+│ merged into VDB  │ 8                       │ 8                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 13] FAIL (1) install portage://dev-libs/libstroke-0.5.1-r2
+  emerge    : >>> Failed to emerge dev-libs/libstroke-0.5.1-r2, Log file:
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_libs_libstroke-20260510T045435/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_libs_libstroke-20260510T045435/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-ml/cinaps'  mode=--build  label=dev_ml_cinaps
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_ml_cinaps
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_ml_cinaps
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_ml_cinaps' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_ml_cinaps' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_ml_cinaps-20260510T050042)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-ml/cinaps                                                 │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_ml_cinaps-20260510T050042  │
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 15                      │ 5                         │
+│ completed        │ 16                      │ 5                         │
+│ merged into VDB  │ 5                       │ 5                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_ml_cinaps-20260510T050042/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_ml_cinaps-20260510T050042/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

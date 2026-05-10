@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-libs/sentry-native'  mode=--build  label=dev_libs_sentry_native
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_libs_sentry_native
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_libs_sentry_native
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_libs_sentry_native' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_libs_sentry_native' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_libs_sentry_native-20260510T045732)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-libs/sentry-native                                        │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_libs_sentry_native-20260510T045732│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 10                      │ 4                         │
+│ completed        │ 11                      │ 4                         │
+│ merged into VDB  │ 4                       │ 4                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_libs_sentry_native-20260510T045732/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_libs_sentry_native-20260510T045732/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

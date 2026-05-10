@@ -1,0 +1,35 @@
+[tinderbox-ng] compare: target='sys-process/parallel'  mode=--build  label=sys_process_parallel
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-sys_process_parallel
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-sys_process_parallel
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-sys_process_parallel' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-sys_process_parallel' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-sys_process_parallel-20260510T094614)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : sys-process/parallel                                          │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-sys_process_parallel-20260510T094614│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ FAIL(1)                   │
+│ plan actions     │ 15                      │ ?                         │
+│ completed        │ 15                      │ 0                         │
+│ merged into VDB  │ 5                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+VDB delta (after build):
+  only in portage-ng:
+    + dev-lang/perl-5.42.2
+    + dev-perl/Devel-Size-0.860.0
+    + dev-perl/Text-CSV-2.60.0
+    + dev-perl/Text-CSV_XS-1.610.0
+    + sys-process/parallel-20250722-r1
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-sys_process_parallel-20260510T094614/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-sys_process_parallel-20260510T094614/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

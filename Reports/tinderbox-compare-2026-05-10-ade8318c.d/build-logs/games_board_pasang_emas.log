@@ -1,0 +1,34 @@
+[tinderbox-ng] compare: target='games-board/pasang-emas'  mode=--build  label=games_board_pasang_emas
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-games_board_pasang_emas
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-games_board_pasang_emas
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-games_board_pasang_emas' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-games_board_pasang_emas' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-games_board_pasang_emas-20260510T072555)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : games-board/pasang-emas                                       │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-games_board_pasang_emas-20260510T072555│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 172                     │ ?                         │
+│ completed        │ 59                      │ 0                         │
+│ merged into VDB  │ 1                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 2] FAIL (1) update portage://dev-python/setuptools-82.0.1
+
+VDB delta (after build):
+  only in portage-ng:
+    + acct-group/messagebus-0-r3
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-games_board_pasang_emas-20260510T072555/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-games_board_pasang_emas-20260510T072555/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

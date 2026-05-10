@@ -1,0 +1,30 @@
+[tinderbox-ng] compare: target='sys-apps/at'  mode=--build  label=sys_apps_at
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-sys_apps_at
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-sys_apps_at
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-sys_apps_at' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-sys_apps_at' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-sys_apps_at-20260510T091802)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : sys-apps/at                                                   │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-sys_apps_at-20260510T091802    │
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK(cycles)              │ FAIL(1)                   │
+│ plan actions     │ ?                       │ ?                         │
+│ completed        │ 0                       │ 0                         │
+│ merged into VDB  │ 0                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: failure No valid targets found.
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-sys_apps_at-20260510T091802/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-sys_apps_at-20260510T091802/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

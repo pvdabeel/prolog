@@ -1,0 +1,30 @@
+[tinderbox-ng] compare: target='dev-java/log4j'  mode=--build  label=dev_java_log4j
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_java_log4j
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_java_log4j
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_java_log4j' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_java_log4j' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_java_log4j-20260510T043814)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-java/log4j                                                │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_java_log4j-20260510T043814 │
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK(cycles)              │ FAIL(1)                   │
+│ plan actions     │ ?                       │ ?                         │
+│ completed        │ 0                       │ 0                         │
+│ merged into VDB  │ 0                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: failure No valid targets found.
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_java_log4j-20260510T043814/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_java_log4j-20260510T043814/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

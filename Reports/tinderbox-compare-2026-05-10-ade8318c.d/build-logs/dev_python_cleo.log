@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-python/cleo'  mode=--build  label=dev_python_cleo
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_python_cleo
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_python_cleo
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_python_cleo' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_python_cleo' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_python_cleo-20260510T060143)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-python/cleo                                               │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_python_cleo-20260510T060143│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 47                      │ 19                        │
+│ completed        │ 48                      │ 19                        │
+│ merged into VDB  │ 19                      │ 19                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_python_cleo-20260510T060143/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_python_cleo-20260510T060143/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

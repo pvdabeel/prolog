@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='app-misc/screen'  mode=--build  label=app_misc_screen
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-app_misc_screen
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-app_misc_screen
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-app_misc_screen' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-app_misc_screen' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-app_misc_screen-20260510T012522)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : app-misc/screen                                               │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-app_misc_screen-20260510T012522│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 5                       │ 2                         │
+│ completed        │ 6                       │ 2                         │
+│ merged into VDB  │ 2                       │ 2                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-app_misc_screen-20260510T012522/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-app_misc_screen-20260510T012522/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

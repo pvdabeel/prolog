@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-scheme/guile-libyaml'  mode=--build  label=dev_scheme_guile_libyaml
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_scheme_guile_libyaml
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_scheme_guile_libyaml
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_scheme_guile_libyaml' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_scheme_guile_libyaml' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_scheme_guile_libyaml-20260510T065803)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-scheme/guile-libyaml                                      │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_scheme_guile_libyaml-20260510T065803│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(124)               │ FAIL(124)                 │
+│ plan actions     │ 22                      │ 8                         │
+│ completed        │ 0                       │ 4                         │
+│ merged into VDB  │ 4                       │ 4                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_scheme_guile_libyaml-20260510T065803/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_scheme_guile_libyaml-20260510T065803/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='app-emacs/mastodon'  mode=--build  label=app_emacs_mastodon
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-app_emacs_mastodon
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-app_emacs_mastodon
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-app_emacs_mastodon' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-app_emacs_mastodon' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-app_emacs_mastodon-20260510T010809)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : app-emacs/mastodon                                            │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-app_emacs_mastodon-20260510T010809│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 39                      │ 13                        │
+│ completed        │ 40                      │ 13                        │
+│ merged into VDB  │ 13                      │ 13                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-app_emacs_mastodon-20260510T010809/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-app_emacs_mastodon-20260510T010809/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

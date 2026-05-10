@@ -1,0 +1,34 @@
+[tinderbox-ng] compare: target='sys-apps/kcheck'  mode=--build  label=sys_apps_kcheck
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-sys_apps_kcheck
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-sys_apps_kcheck
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-sys_apps_kcheck' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-sys_apps_kcheck' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-sys_apps_kcheck-20260510T092059)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : sys-apps/kcheck                                               │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-sys_apps_kcheck-20260510T092059│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 8                       │ ?                         │
+│ completed        │ 4                       │ 0                         │
+│ merged into VDB  │ 1                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 5] FAIL (1) install portage://sys-apps/kcheck-0.0.2-r3
+
+VDB delta (after build):
+  only in portage-ng:
+    + dev-python/configargparse-1.7.5
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-sys_apps_kcheck-20260510T092059/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-sys_apps_kcheck-20260510T092059/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

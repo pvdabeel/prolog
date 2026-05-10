@@ -1,0 +1,31 @@
+[tinderbox-ng] compare: target='app-admin/fam'  mode=--build  label=app_admin_fam
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-app_admin_fam
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-app_admin_fam
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-app_admin_fam' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-app_admin_fam' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-app_admin_fam-20260510T004918)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : app-admin/fam                                                 │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-app_admin_fam-20260510T004918  │
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 6                       │ 2                         │
+│ completed        │ 4                       │ 1                         │
+│ merged into VDB  │ 1                       │ 1                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 4] FAIL (1) install portage://app-admin/fam-2.7.0_p17_p3
+  emerge    : >>> Failed to emerge app-admin/fam-2.7.0_p17_p3, Log file:
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-app_admin_fam-20260510T004918/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-app_admin_fam-20260510T004918/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

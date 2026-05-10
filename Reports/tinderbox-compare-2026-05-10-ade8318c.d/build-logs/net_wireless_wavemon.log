@@ -1,0 +1,32 @@
+[tinderbox-ng] compare: target='net-wireless/wavemon'  mode=--build  label=net_wireless_wavemon
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-net_wireless_wavemon
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-net_wireless_wavemon
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-net_wireless_wavemon' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-net_wireless_wavemon' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-net_wireless_wavemon-20260510T090217)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : net-wireless/wavemon                                          │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-net_wireless_wavemon-20260510T090217│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ FAIL(1)                   │
+│ plan actions     │ 7                       │ ?                         │
+│ completed        │ 7                       │ 0                         │
+│ merged into VDB  │ 2                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+VDB delta (after build):
+  only in portage-ng:
+    + dev-libs/libnl-3.12.0
+    + net-wireless/wavemon-0.9.6
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-net_wireless_wavemon-20260510T090217/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-net_wireless_wavemon-20260510T090217/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

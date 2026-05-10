@@ -1,0 +1,30 @@
+[tinderbox-ng] compare: target='dev-cpp/benchmark'  mode=--build  label=dev_cpp_benchmark
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_cpp_benchmark
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_cpp_benchmark
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_cpp_benchmark' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_cpp_benchmark' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_cpp_benchmark-20260510T014456)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-cpp/benchmark                                             │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_cpp_benchmark-20260510T014456│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(124)               │ FAIL(124)                 │
+│ plan actions     │ 62                      │ 24                        │
+│ completed        │ 0                       │ 22                        │
+│ merged into VDB  │ 22                      │ 22                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  emerge    :  * Boost.Regex is *extremely* ABI sensitive. If you get errors such as
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_cpp_benchmark-20260510T014456/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_cpp_benchmark-20260510T014456/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-lisp/hyperspec'  mode=--build  label=dev_lisp_hyperspec
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_lisp_hyperspec
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_lisp_hyperspec
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_lisp_hyperspec' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_lisp_hyperspec' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_lisp_hyperspec-20260510T045826)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-lisp/hyperspec                                            │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_lisp_hyperspec-20260510T045826│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 3                       │ 1                         │
+│ completed        │ 4                       │ 1                         │
+│ merged into VDB  │ 1                       │ 1                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_lisp_hyperspec-20260510T045826/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_lisp_hyperspec-20260510T045826/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

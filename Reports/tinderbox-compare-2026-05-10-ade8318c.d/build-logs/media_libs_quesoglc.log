@@ -1,0 +1,43 @@
+[tinderbox-ng] compare: target='media-libs/quesoglc'  mode=--build  label=media_libs_quesoglc
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-media_libs_quesoglc
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-media_libs_quesoglc
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-media_libs_quesoglc' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-media_libs_quesoglc' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-media_libs_quesoglc-20260510T075834)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : media-libs/quesoglc                                           │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-media_libs_quesoglc-20260510T075834│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 59                      │ ?                         │
+│ completed        │ 34                      │ 0                         │
+│ merged into VDB  │ 10                      │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 6] FAIL (1) install portage://media-libs/freetype-2.14.3
+
+VDB delta (after build):
+  only in portage-ng:
+    + app-eselect/eselect-fontconfig-20220403
+    + dev-libs/fribidi-1.0.16
+    + media-fonts/liberation-fonts-2.1.5
+    + media-libs/libpng-1.6.58
+    + virtual/ttf-fonts-1-r2
+    + x11-base/xcb-proto-1.17.0
+    + x11-base/xorg-proto-2025.1
+    + x11-libs/libXau-1.0.12
+    + x11-libs/libXdmcp-1.1.5
+    + x11-libs/xtrans-1.6.0
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-media_libs_quesoglc-20260510T075834/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-media_libs_quesoglc-20260510T075834/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

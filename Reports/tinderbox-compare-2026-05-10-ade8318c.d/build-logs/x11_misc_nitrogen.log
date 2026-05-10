@@ -1,0 +1,34 @@
+[tinderbox-ng] compare: target='x11-misc/nitrogen'  mode=--build  label=x11_misc_nitrogen
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-x11_misc_nitrogen
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-x11_misc_nitrogen
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-x11_misc_nitrogen' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-x11_misc_nitrogen' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-x11_misc_nitrogen-20260510T100506)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : x11-misc/nitrogen                                             │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-x11_misc_nitrogen-20260510T100506│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 278                     │ ?                         │
+│ completed        │ 92                      │ 0                         │
+│ merged into VDB  │ 1                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng:  └─step  2─┤ verify  x11-libs/cairo (unsatisfied constraints, assumed running)
+
+VDB delta (after build):
+  only in portage-ng:
+    + acct-group/messagebus-0-r3
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-x11_misc_nitrogen-20260510T100506/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-x11_misc_nitrogen-20260510T100506/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

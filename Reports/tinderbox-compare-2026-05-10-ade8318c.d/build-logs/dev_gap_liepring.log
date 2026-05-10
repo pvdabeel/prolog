@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-gap/liepring'  mode=--build  label=dev_gap_liepring
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_gap_liepring
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_gap_liepring
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_gap_liepring' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_gap_liepring' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_gap_liepring-20260510T014924)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-gap/liepring                                              │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_gap_liepring-20260510T014924│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 78                      │ 26                        │
+│ completed        │ 79                      │ 26                        │
+│ merged into VDB  │ 26                      │ 26                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_gap_liepring-20260510T014924/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_gap_liepring-20260510T014924/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

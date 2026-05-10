@@ -1,0 +1,34 @@
+[tinderbox-ng] compare: target='media-gfx/mandelbulber'  mode=--build  label=media_gfx_mandelbulber
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-media_gfx_mandelbulber
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-media_gfx_mandelbulber
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-media_gfx_mandelbulber' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-media_gfx_mandelbulber' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-media_gfx_mandelbulber-20260510T075110)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : media-gfx/mandelbulber                                        │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-media_gfx_mandelbulber-20260510T075110│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 179                     │ ?                         │
+│ completed        │ 58                      │ 0                         │
+│ merged into VDB  │ 1                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 2] FAIL (1) update portage://sys-libs/zlib-1.3.2-r1
+
+VDB delta (after build):
+  only in portage-ng:
+    + acct-group/messagebus-0-r3
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-media_gfx_mandelbulber-20260510T075110/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-media_gfx_mandelbulber-20260510T075110/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

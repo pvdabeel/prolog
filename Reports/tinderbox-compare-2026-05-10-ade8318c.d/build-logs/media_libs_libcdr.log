@@ -1,0 +1,30 @@
+[tinderbox-ng] compare: target='media-libs/libcdr'  mode=--build  label=media_libs_libcdr
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-media_libs_libcdr
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-media_libs_libcdr
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-media_libs_libcdr' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-media_libs_libcdr' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-media_libs_libcdr-20260510T075613)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : media-libs/libcdr                                             │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-media_libs_libcdr-20260510T075613│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 16                      │ 6                         │
+│ completed        │ 17                      │ 6                         │
+│ merged into VDB  │ 6                       │ 6                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  emerge    :  * Boost.Regex is *extremely* ABI sensitive. If you get errors such as
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-media_libs_libcdr-20260510T075613/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-media_libs_libcdr-20260510T075613/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

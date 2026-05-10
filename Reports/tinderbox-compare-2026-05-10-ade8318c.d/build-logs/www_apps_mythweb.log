@@ -1,0 +1,62 @@
+[tinderbox-ng] compare: target='www-apps/mythweb'  mode=--build  label=www_apps_mythweb
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-www_apps_mythweb
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-www_apps_mythweb
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-www_apps_mythweb' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-www_apps_mythweb' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-www_apps_mythweb-20260510T095050)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : www-apps/mythweb                                              │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-www_apps_mythweb-20260510T095050│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 81                      │ ?                         │
+│ completed        │ 76                      │ 0                         │
+│ merged into VDB  │ 29                      │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng:  └─step  2─┤ verify  dev-lang/php (unsatisfied constraints, assumed running)
+
+VDB delta (after build):
+  only in portage-ng:
+    + acct-group/apache-0-r3
+    + acct-group/nullmail-0-r2
+    + acct-user/apache-0-r4
+    + acct-user/nullmail-0-r2
+    + app-admin/apache-tools-2.4.67
+    + app-admin/metalog-20260221
+    + app-admin/webapp-config-1.56
+    + app-arch/lz4-1.10.0-r1
+    + app-eselect/eselect-php-0.9.9
+    + dev-db/mysql-connector-c-8.0.41-r1
+    + dev-libs/apr-1.7.6-r1
+    + dev-libs/apr-util-1.6.3
+    + dev-libs/oniguruma-6.9.10
+    + dev-perl/DBD-mysql-5.13.0
+    + dev-perl/DBI-1.647.0
+    + dev-perl/Devel-CheckLib-1.160.0-r1
+    + dev-perl/HTTP-Date-6.60.0
+    + dev-perl/Net-Daemon-0.490.0
+    + dev-perl/Net-UPnP-1.4.6
+    + dev-perl/PlRPC-0.202.0-r4
+    + mail-mta/nullmailer-2.2-r2
+    + virtual/httpd-cgi-0-r6
+    + virtual/httpd-php-8.5
+    + virtual/logger-0-r3
+    + virtual/mta-1-r2
+    + virtual/perl-Storable-3.370.0
+    + virtual/perl-Sys-Syslog-0.360.0-r5
+    + virtual/perl-Time-Local-1.350.0-r1
+    + www-servers/apache-2.4.67
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-www_apps_mythweb-20260510T095050/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-www_apps_mythweb-20260510T095050/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

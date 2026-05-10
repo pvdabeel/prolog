@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='x11-libs/libxcb'  mode=--build  label=x11_libs_libxcb
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-x11_libs_libxcb
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-x11_libs_libxcb
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-x11_libs_libxcb' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-x11_libs_libxcb' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-x11_libs_libxcb-20260510T095945)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : x11-libs/libxcb                                               │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-x11_libs_libxcb-20260510T095945│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 14                      │ 5                         │
+│ completed        │ 14                      │ 5                         │
+│ merged into VDB  │ 5                       │ 5                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-x11_libs_libxcb-20260510T095945/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-x11_libs_libxcb-20260510T095945/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

@@ -1,0 +1,42 @@
+[tinderbox-ng] compare: target='x11-plugins/wmsysmon'  mode=--build  label=x11_plugins_wmsysmon
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-x11_plugins_wmsysmon
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-x11_plugins_wmsysmon
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-x11_plugins_wmsysmon' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-x11_plugins_wmsysmon' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-x11_plugins_wmsysmon-20260510T101014)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : x11-plugins/wmsysmon                                          │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-x11_plugins_wmsysmon-20260510T101014│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 60                      │ 6                         │
+│ completed        │ 37                      │ 16                        │
+│ merged into VDB  │ 9                       │ 16                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 6] FAIL (1) install portage://media-libs/freetype-2.14.3
+  emerge    : >>> Failed to emerge media-libs/freetype-2.14.3, Log file:
+
+VDB delta (after build):
+  only in emerge:
+    + x11-libs/libSM-1.2.6
+    + x11-libs/libX11-1.8.13
+    + x11-libs/libXext-1.3.7
+    + x11-libs/libXpm-3.5.19
+    + x11-libs/libXt-1.3.1-r1
+    + x11-libs/libxcb-1.17.0
+    + x11-misc/compose-tables-1.8.13
+  in both: 9 packages
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-x11_plugins_wmsysmon-20260510T101014/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-x11_plugins_wmsysmon-20260510T101014/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

@@ -1,0 +1,34 @@
+[tinderbox-ng] compare: target='app-crypt/sequoia-chameleon-gnupg'  mode=--build  label=app_crypt_sequoia_chameleon_gnupg
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-app_crypt_sequoia_chameleon_gnupg
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-app_crypt_sequoia_chameleon_gnupg
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-app_crypt_sequoia_chameleon_gnupg' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-app_crypt_sequoia_chameleon_gnupg' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-app_crypt_sequoia_chameleon_gnupg-20260510T005752)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : app-crypt/sequoia-chameleon-gnupg                             │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-app_crypt_sequoia_chameleon_gnupg-20260510T005752│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(124)               │ FAIL(124)                 │
+│ plan actions     │ 91                      │ 31                        │
+│ completed        │ 0                       │ 14                        │
+│ merged into VDB  │ 14                      │ 14                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+VDB delta (after build):
+  only in portage-ng:
+    + llvm-core/clang-common-22.1.5
+  only in emerge:
+    + dev-lang/rust-bin-1.95.0
+  in both: 13 packages
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-app_crypt_sequoia_chameleon_gnupg-20260510T005752/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-app_crypt_sequoia_chameleon_gnupg-20260510T005752/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

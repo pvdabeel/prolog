@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-vcs/mercurial'  mode=--build  label=dev_vcs_mercurial
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_vcs_mercurial
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_vcs_mercurial
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_vcs_mercurial' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_vcs_mercurial' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_vcs_mercurial-20260510T071603)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-vcs/mercurial                                             │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_vcs_mercurial-20260510T071603│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 15                      │ 5                         │
+│ completed        │ 16                      │ 5                         │
+│ merged into VDB  │ 5                       │ 5                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_vcs_mercurial-20260510T071603/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_vcs_mercurial-20260510T071603/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

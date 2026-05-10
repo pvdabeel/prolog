@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-python/apscheduler'  mode=--build  label=dev_python_apscheduler
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_python_apscheduler
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_python_apscheduler
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_python_apscheduler' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_python_apscheduler' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_python_apscheduler-20260510T060032)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-python/apscheduler                                        │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_python_apscheduler-20260510T060032│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 6                       │ 2                         │
+│ completed        │ 7                       │ 2                         │
+│ merged into VDB  │ 2                       │ 2                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_python_apscheduler-20260510T060032/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_python_apscheduler-20260510T060032/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

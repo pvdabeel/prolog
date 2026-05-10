@@ -1,0 +1,34 @@
+[tinderbox-ng] compare: target='media-plugins/kodi-screensaver-stars'  mode=--build  label=media_plugins_kodi_screensaver_stars
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-media_plugins_kodi_screensaver_stars
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-media_plugins_kodi_screensaver_stars
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-media_plugins_kodi_screensaver_stars' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-media_plugins_kodi_screensaver_stars' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-media_plugins_kodi_screensaver_stars-20260510T080656)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : media-plugins/kodi-screensaver-stars                          │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-media_plugins_kodi_screensaver_stars-20260510T080656│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 366                     │ ?                         │
+│ completed        │ 88                      │ 0                         │
+│ merged into VDB  │ 1                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng:   live FAIL
+
+VDB delta (after build):
+  only in portage-ng:
+    + dev-python/gpep517-19
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-media_plugins_kodi_screensaver_stars-20260510T080656/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-media_plugins_kodi_screensaver_stars-20260510T080656/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

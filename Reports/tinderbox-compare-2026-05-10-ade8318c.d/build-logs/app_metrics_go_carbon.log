@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='app-metrics/go-carbon'  mode=--build  label=app_metrics_go_carbon
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-app_metrics_go_carbon
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-app_metrics_go_carbon
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-app_metrics_go_carbon' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-app_metrics_go_carbon' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-app_metrics_go_carbon-20260510T011738)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : app-metrics/go-carbon                                         │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-app_metrics_go_carbon-20260510T011738│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 11                      │ 5                         │
+│ completed        │ 12                      │ 5                         │
+│ merged into VDB  │ 5                       │ 5                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-app_metrics_go_carbon-20260510T011738/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-app_metrics_go_carbon-20260510T011738/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

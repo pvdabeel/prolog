@@ -1,0 +1,42 @@
+[tinderbox-ng] compare: target='media-plugins/vdr-ffnetdev'  mode=--build  label=media_plugins_vdr_ffnetdev
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-media_plugins_vdr_ffnetdev
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-media_plugins_vdr_ffnetdev
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-media_plugins_vdr_ffnetdev' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-media_plugins_vdr_ffnetdev' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-media_plugins_vdr_ffnetdev-20260510T080728)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : media-plugins/vdr-ffnetdev                                    │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-media_plugins_vdr_ffnetdev-20260510T080728│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 57                      │ 5                         │
+│ completed        │ 24                      │ 14                        │
+│ merged into VDB  │ 7                       │ 14                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 2] FAIL (1) install portage://dev-libs/libmspack-1.11
+  emerge    : >>> Failed to emerge dev-libs/libmspack-1.11, Log file:
+
+VDB delta (after build):
+  only in emerge:
+    + acct-user/nullmail-0-r2
+    + acct-user/vdr-0-r3
+    + app-admin/sudo-1.9.17_p2
+    + mail-mta/nullmailer-2.2-r2
+    + media-tv/gentoo-vdr-scripts-3.0_rc2-r1
+    + virtual/logger-0-r3
+    + virtual/mta-1-r2
+  in both: 7 packages
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-media_plugins_vdr_ffnetdev-20260510T080728/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-media_plugins_vdr_ffnetdev-20260510T080728/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

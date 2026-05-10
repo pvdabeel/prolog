@@ -1,0 +1,31 @@
+[tinderbox-ng] compare: target='dev-perl/Lab-Zhinst'  mode=--build  label=dev_perl_Lab_Zhinst
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_perl_Lab_Zhinst
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_perl_Lab_Zhinst
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_perl_Lab_Zhinst' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_perl_Lab_Zhinst' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_perl_Lab_Zhinst-20260510T053508)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-perl/Lab-Zhinst                                           │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_perl_Lab_Zhinst-20260510T053508│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 6                       │ 0                         │
+│ completed        │ 1                       │ 0                         │
+│ merged into VDB  │ 0                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 1] FAIL (download errors) download portage://sci-electronics/labone-23.02.42414
+  emerge    : >>> Failed to emerge sci-electronics/labone-23.02.42414, Log file:
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_perl_Lab_Zhinst-20260510T053508/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_perl_Lab_Zhinst-20260510T053508/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

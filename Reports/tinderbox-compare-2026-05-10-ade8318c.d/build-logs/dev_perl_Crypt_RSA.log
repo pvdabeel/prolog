@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-perl/Crypt-RSA'  mode=--build  label=dev_perl_Crypt_RSA
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_perl_Crypt_RSA
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_perl_Crypt_RSA
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_perl_Crypt_RSA' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_perl_Crypt_RSA' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_perl_Crypt_RSA-20260510T052433)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-perl/Crypt-RSA                                            │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_perl_Crypt_RSA-20260510T052433│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 199                     │ 72                        │
+│ completed        │ 200                     │ 72                        │
+│ merged into VDB  │ 72                      │ 72                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_perl_Crypt_RSA-20260510T052433/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_perl_Crypt_RSA-20260510T052433/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)
