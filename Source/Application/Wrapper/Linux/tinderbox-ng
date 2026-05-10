@@ -351,6 +351,75 @@ _ns_session_mount() {
 unmount_session()    { :; }
 session_is_mounted() { return 1; }
 
+# -----------------------------------------------------------------------------
+# Orphan reaper
+# -----------------------------------------------------------------------------
+#
+# Even with `unshare --mount --propagation=private`, a session's processes can
+# survive past unshare's exit if they detach (PPID gets reparented to init).
+# The most common offender is portage's die_hooks chain:
+#
+#   sandbox /usr/lib/portage/python3.13/misc-functions.sh die_hooks
+#   bash    /usr/lib/portage/python3.13/misc-functions.sh die_hooks
+#   python  /usr/lib/portage/python3.13/ebuild-ipc.py exit 0
+#
+# When the parent emerge gets killed mid-build (timeout, --keep-going abort,
+# panic in our matrix harness), the die_hooks helpers spin trying to write to
+# a FIFO whose reader is gone. ebuild-ipc.py in particular pegs a CPU at
+# ~90% indefinitely.
+#
+# We identify session-owned processes via /proc/<pid>/root, which (when read
+# from the host mount namespace as root) gives the absolute host-side path
+# of the process's chroot directory. Any process whose root resolves under
+# `$SESSIONS_DIR/$name/` is a leftover from this session and gets SIGKILL'd.
+#
+# We also sweep by name as belt-and-suspenders for processes whose /root
+# symlink can't be resolved (e.g. defunct entries during the read race).
+
+sweep_session_orphans() {
+  local name="$1"
+  local sess_path
+  sess_path="$(readlink -f "$(session_dir "$name")" 2>/dev/null \
+                || session_dir "$name")"
+  [[ -d "$sess_path" ]] || return 0
+
+  local self_pid=$$
+  local killed=0 p pid root cmd
+  for p in /proc/[0-9]*; do
+    pid="${p##/proc/}"
+    [[ "$pid" == "$self_pid" ]] && continue
+    root="$(readlink "$p/root" 2>/dev/null)" || continue
+    [[ -n "$root" ]] || continue
+    case "$root" in
+      "$sess_path"|"$sess_path"/*)
+        cmd="$(tr '\0' ' ' <"$p/cmdline" 2>/dev/null | head -c 120)"
+        log_warn "session '$name': reaping orphan PID $pid: ${cmd:-<unknown>}"
+        kill -9 "$pid" 2>/dev/null && killed=$((killed + 1))
+        ;;
+    esac
+  done
+
+  for pat in 'ebuild-ipc.py' 'misc-functions.sh die_hooks'; do
+    while read -r pid; do
+      [[ -n "$pid" ]] || continue
+      [[ "$pid" == "$self_pid" ]] && continue
+      root="$(readlink "/proc/$pid/root" 2>/dev/null)" || continue
+      case "$root" in
+        "$sess_path"|"$sess_path"/*)
+          cmd="$(tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null | head -c 120)"
+          log_warn "session '$name': reaping orphan PID $pid: ${cmd:-<unknown>}"
+          kill -9 "$pid" 2>/dev/null && killed=$((killed + 1))
+          ;;
+      esac
+    done < <(pgrep -f "$pat" 2>/dev/null)
+  done
+
+  if (( killed > 0 )); then
+    log_info "session '$name': reaped $killed orphan process(es)"
+  fi
+  return 0
+}
+
 # =============================================================================
 # Subcommand: bootstrap
 # =============================================================================
@@ -831,6 +900,7 @@ cmd_exec() {
   fi
 
   sed -i "s/^exit=PENDING/exit=$rc/" "$logdir/exec-$stamp.meta"
+  sweep_session_orphans "$name"
   exit "$rc"
 }
 
@@ -1013,6 +1083,9 @@ cmd_compare() {
   wait "$pn_pid" || true
   wait "$em_pid" || true
 
+  sweep_session_orphans "$sess_pn"
+  sweep_session_orphans "$sess_em"
+
   local pn_rc em_rc
   pn_rc="$(cat "$pn_log.exit" 2>/dev/null || echo "?")"
   em_rc="$(cat "$em_log.exit" 2>/dev/null || echo "?")"
@@ -1174,8 +1247,10 @@ _compare_vdb_list() {
 # to tear down.
 
 cmd_exit() {
+  require_root
   require_session "${1:-}"
-  log_info "session '$1' is mount-ns isolated; no teardown required"
+  log_info "session '$1' is mount-ns isolated; checking for orphan processes"
+  sweep_session_orphans "$1"
 }
 
 # =============================================================================
@@ -1186,6 +1261,7 @@ cmd_reset() {
   require_root
   require_session "${1:-}"
   local name="$1"
+  sweep_session_orphans "$name"
   unmount_session "$name"
   log_info "wiping upper and work dirs for session '$name'"
   rm -rf --one-file-system "$(session_upper "$name")" "$(session_work "$name")"
@@ -1201,6 +1277,7 @@ cmd_destroy() {
   require_root
   require_session "${1:-}"
   local name="$1"
+  sweep_session_orphans "$name"
   unmount_session "$name"
   log_info "destroying session '$name' ($(session_dir "$name"))"
   rm -rf --one-file-system "$(session_dir "$name")"
