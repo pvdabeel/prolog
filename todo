@@ -235,5 +235,116 @@ Bugs (evidence-based, found via tinderbox-ng compare)
       and shows the recommended one-shot deploy alongside the manual
       equivalent.
 
+- [INVESTIGATED 2026-05-10; not a planner gap] Initial review of the
+  46 `FAIL/FAIL` rows from compare-matrix-20260510T143057 suggested 19
+  cases (15 EM_NEED_USE_DEP + 3 EM_REQUIRED_USE + 1 EM_MASKED) might
+  expose a USE-dep / REQUIRED_USE learning gap in PN. Spot-checking
+  app-admin/keepass (RDEPEND=dev-dotnet/libgdiplus[cairo], libgdiplus
+  ships cairo IUSE bare = default-disabled, emerge refuses to auto-flip)
+  showed PN actually plans this correctly:
+    Step 1 : useflag dev-dotnet/libgdiplus-6.2 (cairo)
+    Step 23: install dev-dotnet/libgdiplus-6.2 (USE modified)
+             USE = "cairo"
+    >>> USE flag change (2 packages):
+        dev-dotnet/libgdiplus cairo
+        x11-libs/cairo X
+  Verified the wiring end-to-end:
+    * candidate.pl:3104-3129 grouped_dep_tag_suggestions tags the child
+      Ctx with `suggestion(use_change, Repo://Entry, Changes)` whenever
+      `use:build_with_use_changes` finds an IUSE flag that needs flipping.
+    * use.pl:308-329 build_with_use_changes only emits use_change(F,
+      enable|disable) when the flag is in IUSE *and* the candidate's
+      effective state currently differs.
+    * ebuild_exec.pl:291-316 apply_ctx_use_overrides reads
+      `suggestion(use_change, _, Changes)` from Ctx and applies it on top
+      of the KB-derived USE assoc *before* the ebuild runs, so the build
+      sees the corrected USE.
+    * builder.pl:1380-1478 dispatch_suggestions writes the same change
+      to /etc/portage/package.use/00portage-ng-auto under
+      with_mutex(build_auto_config), then refreshes userconfig so the
+      next ebuild in the wave starts from the persisted state.
+  The actual reason these 19 rows show up as FAIL/FAIL is that PN's
+  build dies on UNRELATED earlier deps (Class H env failures - see next
+  entry). Conclusion: NO planner work needed; the planning side is
+  already a PN-only win. Once Class H is fixed, the FAIL/FAIL count
+  should drop sharply and these 19 should reclassify as ok/fail
+  (PN-only wins). No code change in this commit; documented here so
+  the next reviewer doesn't redo the same investigation.
+
+- [FIXED 2026-05-10] Class H autotools / eautoreconf chroot-environment
+  failure was the dominant blocker for the FAIL/FAIL bucket. Root cause
+  was *NOT* the autotools eclass (no upstream patch needed) and *NOT* an
+  overlay/chroot quirk - it was tinderbox-ng's own `bootstrap_freeze`
+  using `chmod -R a-w "$BASELINE_DIR"` which stripped the owner-write bit
+  from every file in the baseline (gnuconfig data files dropped from
+  0755 to 0555). Sessions then copied those 0555 files into the work
+  tree via libtoolize, and the autotools eclass `cp ... .` could not
+  overwrite them. Fixes shipped:
+    1. `bootstrap_freeze` now does `find -type d -exec chmod a-w` only.
+       Directories give the same defense against accidental host writes;
+       file perms remain whatever the package manager set them to. The
+       previous comment about overlay copy-up "creating a fresh file with
+       default permissions" was factually wrong (overlayfs copy-up
+       preserves lower-layer mode bit-for-bit, and bare cp / install -p
+       preserve source mode). Both observations corrected in code
+       comments at bootstrap_freeze.
+    2. New `tinderbox-ng baseline-repair-perms` subcommand re-emerges
+       the canonical victims (currently sys-devel/gnuconfig) through the
+       normal Portage install path so existing baselines can be migrated
+       without a full re-bootstrap. Extensible: pass extra atoms as
+       additional victims surface.
+    3. New doctor check (`baseline gnuconfig perms`): warns when the
+       canary files are not owner-writable and points to
+       `baseline-repair-perms`.
+  Verified end-to-end on vm-linux baseline 2026-05-10:
+    * libev install: was failing with `cp: cannot create regular file
+      './config.guess': Permission denied`; now installs cleanly in ~15s.
+    * libcap-ng install: ~20s, clean.
+    * colm install: ~3min, clean (longest of the autotools-heavy victims).
+  All three were in the top-5 of the previous matrix's FAIL/FAIL count
+  (126 freetype + 85 colm + 43 libcap-ng + ... + 17 libev). The
+  all-packages matrix run was aborted, baseline repaired, and resumed
+  via `tinderbox-ng continue --background` - expectation is the
+  FAIL/FAIL bucket drops sharply and several of the previously-flagged
+  PN-only-on-planning wins (cf. previous todo entry) reclassify as
+  ok/fail.
+  Top failing build targets in compare-matrix-20260510T143057 are all
+  environmental:
+       126 media-libs/freetype-2.14.3
+        85 dev-util/colm-0.14.7-r4
+        43 sys-libs/libcap-ng-0.9.3
+        34 app-text/aspell-0.60.8.2
+        31 media-libs/alsa-lib-1.2.15.3
+        30 dev-lang/ghc-9.2.8
+        22 media-libs/audiofile-0.3.6-r6
+        17 dev-libs/libev-4.33
+        ... + a long tail of dev-perl/* modules
+  Reproducer: `tinderbox-ng new tmp; tinderbox-ng exec tmp -- emerge -1
+  dev-libs/libev` in a fresh chroot fails identically on PN AND emerge:
+       * Running 'libtoolize --install --copy --force --automake' ...  ok
+       * Running 'aclocal --system-acdir=...' ...                      ok
+       cp: cannot create regular file './config.guess': Permission denied
+       cp: cannot create regular file './config.sub':   Permission denied
+       * ERROR: dev-libs/libev-4.33::gentoo failed (prepare phase)
+       *   (no error message)
+       *   environment, line 2151:  Called eautoreconf
+       *   environment, line  970:  Called eautoconf '--force'
+       *   environment, line  882:  Called die
+       *   The specific snippet of code:
+       *       cp "${_gnuconfig}"/config.{guess,sub} . || die;
+  Root cause: `libtoolize --install --copy --force` (run earlier in the
+  same eautoreconf chain) installs config.{guess,sub} into the work tree
+  with mode 0555 (matching its source files in /usr/share/libtool/build-
+  aux/). The subsequent `cp "${_gnuconfig}"/config.{guess,sub} .` from
+  the autotools eclass uses a bare `cp` (no `-f`, no `chmod +w` first),
+  which cannot overwrite the read-only files. Both portage-ng and emerge
+  hit it because both invoke the same eclass under userpriv.
+  Affects both engines equally - this is NOT a portage-ng regression -
+  but it inflates the FAIL/FAIL bucket and obscures legitimate PN-only
+  wins (see previous entry).
+  Fix landed: dirs-only freeze + baseline-repair-perms (see "Fixes
+  shipped" block above). No upstream eclass patch required; the eclass
+  bare `cp` is benign on a correctly-permissioned baseline.
+
 Open
 ====

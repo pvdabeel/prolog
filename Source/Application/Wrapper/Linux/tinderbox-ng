@@ -637,6 +637,39 @@ cmd_doctor() {
     done
   fi
 
+  # Baseline freeze-damage check (only meaningful when a baseline exists).
+  #
+  # Older tinderbox-ng versions did `chmod -R a-w "$BASELINE_DIR"` in
+  # bootstrap_freeze, which stripped owner-write from every file. The
+  # autotools eclass then fails for any package whose eautoreconf chain
+  # invokes `libtoolize --copy --force` (which preserves source mode)
+  # followed by `cp /usr/share/gnuconfig/config.{guess,sub} .` (no -f).
+  # The new dirs-only freeze prevents this for new baselines, but
+  # existing baselines need a one-shot repair. We use the gnuconfig
+  # files as the canonical canary because they're the most-frequent
+  # victim and the easiest to reason about.
+  if [[ -d "$BASELINE_DIR/usr/share/gnuconfig" ]]; then
+    local bad=0 f
+    for f in "$BASELINE_DIR/usr/share/gnuconfig/config.guess" \
+             "$BASELINE_DIR/usr/share/gnuconfig/config.sub"; do
+      [[ -f "$f" ]] || continue
+      [[ -w "$f" ]] || bad=$((bad+1))
+    done
+    if (( bad > 0 )); then
+      log_warn "baseline gnuconfig files are not owner-writable ($bad/2);"
+      log_warn "  legacy bootstrap_freeze stripped owner-write from every file."
+      log_warn "  This breaks autotools/libtool eautoreconf for many packages"
+      log_warn "  (freetype, colm, libcap-ng, libev, alsa-lib, ...)."
+      log_warn "  Repair the running baseline with:"
+      log_warn "    tinderbox-ng baseline-repair-perms"
+      log_warn "  (a fresh bootstrap with this version of tinderbox-ng will"
+      log_warn "   also produce a correctly-permissioned baseline.)"
+      warn=$((warn+1))
+    else
+      log_ok "baseline gnuconfig perms healthy (no legacy freeze damage)"
+    fi
+  fi
+
   if (( fail > 0 )); then
     die "preflight: $fail error(s), $warn warning(s); fix errors before bootstrap"
   fi
@@ -991,15 +1024,46 @@ EOF
 }
 
 bootstrap_freeze() {
-  log_info "freezing baseline (chmod a-w)"
+  log_info "freezing baseline (chmod a-w on directories only)"
   # IMPORTANT: We deliberately do NOT use `chattr +i` here. chattr's immutable
   # attribute on lower-layer files propagates EPERM through overlayfs's
   # copy-up path, which makes the entire session read-only - users cannot
-  # write anywhere inside the chroot. chmod a-w is the right tool: it
-  # prevents accidental host-side writes to baseline (you have to chmod
-  # u+w explicitly) without interfering with overlay copy-up, because
-  # copy-up creates a fresh file in upper with default permissions.
-  chmod -R a-w "$BASELINE_DIR" 2>/dev/null || true
+  # write anywhere inside the chroot.
+  #
+  # Only **directories** get the write bit stripped, NOT files. Reasoning:
+  #
+  #   1. The intent of "freeze" is to defend against accidental host-side
+  #      writes (admin running rm/cp/touch in baseline by mistake). That
+  #      defense lives at the *directory* level: a write-protected dir
+  #      blocks file creation and deletion. Stripping write on the files
+  #      themselves adds no real safety - root bypasses file-mode checks
+  #      anyway, and even an unprivileged admin would have to `chmod u+w`
+  #      the dir before doing damage.
+  #
+  #   2. Stripping write on files breaks autotools-style builds. A previous
+  #      version did `chmod -R a-w`, which silently flipped every system
+  #      data file from its package-installed mode (e.g. 0755 for
+  #      /usr/share/gnuconfig/config.{guess,sub}) to 0555. Inside a
+  #      session, libtoolize's `--copy --force` preserves source mode and
+  #      writes 0555 copies into the work tree; the autotools.eclass then
+  #      tries to `cp /usr/share/gnuconfig/config.{guess,sub} .` (no -f)
+  #      and fails with "Permission denied" on every package that
+  #      eautoreconf's after libtoolize. That single defect cost us 100s
+  #      of false build failures across freetype, colm, libcap-ng, libev,
+  #      alsa-lib, ... - all reported as "both engines fail" in the
+  #      compare matrix even though the planning side was fine.
+  #
+  #   3. The earlier comment said "copy-up creates a fresh file in upper
+  #      with default permissions". That is wrong: overlayfs copy-up
+  #      preserves the lower-layer mode bit-for-bit. Bare cp / install -p
+  #      (the workhorses inside libtoolize and most build tools) also
+  #      preserve source mode. So a file mode of 0555 in the baseline
+  #      really does propagate into the work tree.
+  #
+  # Net effect of dirs-only freeze: identical defense against accidental
+  # host writes; file perms remain whatever the package manager set them
+  # to; overlay copy-up and tool-level cp do the right thing.
+  find "$BASELINE_DIR" -xdev -type d -exec chmod a-w {} + 2>/dev/null || true
   log_ok "baseline frozen"
 }
 
@@ -1182,6 +1246,86 @@ cmd_install_ccache() {
 
   bootstrap_freeze
   log_ok "install-ccache complete; subsequent sessions will hit the shared cache"
+}
+
+# =============================================================================
+# Subcommand: baseline-repair-perms
+# =============================================================================
+#
+# One-shot migration step for baselines bootstrapped before the dirs-only
+# freeze fix. Older bootstrap_freeze did `chmod -R a-w "$BASELINE_DIR"`,
+# which stripped owner-write from every file - breaking autotools/libtool
+# eautoreconf for a long tail of packages (freetype, colm, libcap-ng,
+# libev, alsa-lib, ...). The new bootstrap_freeze only touches dirs, so a
+# fresh bootstrap won't reproduce the bug.
+#
+# This subcommand re-emerges the canonical victims through the normal
+# Portage install path so their files come back with their package-defined
+# perms (no chmod, no eclass override). Currently:
+#
+#   sys-devel/gnuconfig - the dominant culprit. config.{guess,sub} are
+#                         the only files that get cp'd by libtoolize and
+#                         then overwritten by autotools.eclass.
+#
+# Add to this list as new victims surface from compare-matrix runs.
+# Re-running is cheap and idempotent: the emerge is a single small
+# package and the freeze afterwards uses the new dirs-only logic.
+#
+# Usage:
+#   tinderbox-ng baseline-repair-perms          # default victims
+#   tinderbox-ng baseline-repair-perms <atom> [<atom>...]
+#                                               # repair specific atoms
+
+cmd_baseline_repair_perms() {
+  require_root
+  require_kernel_overlay
+  require_unshare
+  require_dirs
+
+  local atoms=( "$@" )
+  if (( ${#atoms[@]} == 0 )); then
+    atoms=( sys-devel/gnuconfig )
+  fi
+
+  log_info "baseline-repair-perms: re-emerging ${#atoms[@]} package(s) to restore correct perms"
+  log_info "  atoms: ${atoms[*]}"
+
+  log_info "temporarily unfreezing baseline"
+  if command -v chattr >/dev/null 2>&1; then
+    chattr -R -i "$BASELINE_DIR" 2>/dev/null || true
+  fi
+  # Dirs-only unfreeze is enough for the emerge to write into /usr/share.
+  # The new freeze only touched dirs, so files don't need chmod u+w.
+  # For migration from the legacy a-w-everything freeze, also restore
+  # write on dirs so emerge can create temp files inside /var/tmp etc.
+  find "$BASELINE_DIR" -xdev -type d -exec chmod u+w {} + 2>/dev/null || true
+
+  local atom
+  for atom in "${atoms[@]}"; do
+    log_info "emerge -1 $atom (in baseline)"
+    in_baseline_chroot bash -e <<EOF
+. /etc/profile
+emerge --quiet-build=y --usepkg=n --color=n --jobs="\$(nproc)" --oneshot $atom
+EOF
+  done
+
+  bootstrap_freeze
+
+  # Sanity check the canonical canary so we fail loud if the repair
+  # didn't take. If gnuconfig was in the atom list, this should now
+  # report owner-writable.
+  local f bad=0
+  for f in "$BASELINE_DIR/usr/share/gnuconfig/config.guess" \
+           "$BASELINE_DIR/usr/share/gnuconfig/config.sub"; do
+    if [[ -f "$f" ]] && [[ ! -w "$f" ]]; then
+      bad=$((bad+1))
+      log_warn "  $f is still NOT owner-writable after repair"
+    fi
+  done
+  if (( bad > 0 )); then
+    die "baseline-repair-perms: $bad file(s) still wrong; investigate before resuming"
+  fi
+  log_ok "baseline-repair-perms complete; rerun 'tinderbox-ng doctor' to confirm"
 }
 
 # =============================================================================
@@ -2635,6 +2779,12 @@ Subcommands:
                            Does NOT regenerate kb.qlf.
   install-ccache           Retrofit dev-util/ccache + /etc/ccache.conf into an
                            existing baseline (or bump max_size). Idempotent.
+  baseline-repair-perms [<atom>...]
+                           One-shot migration for baselines bootstrapped before
+                           the dirs-only freeze fix: re-emerge sys-devel/gnuconfig
+                           (default) so its files come back owner-writable. Pass
+                           extra atoms to repair more victims as they surface.
+                           See also: `tinderbox-ng doctor` flags this when needed.
 
   new <name>               Create an empty session.
   enter <name>             Mount overlay + binds and chroot in (interactive).
@@ -2712,6 +2862,8 @@ main() {
     refresh_portage_ng) cmd_refresh_portage_ng "$@" ;;
     install-ccache) cmd_install_ccache "$@" ;;
     install_ccache) cmd_install_ccache "$@" ;;
+    baseline-repair-perms) cmd_baseline_repair_perms "$@" ;;
+    baseline_repair_perms) cmd_baseline_repair_perms "$@" ;;
     new)          cmd_new          "$@" ;;
     enter)        cmd_enter        "$@" ;;
     exec)         cmd_exec         "$@" ;;
