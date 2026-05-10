@@ -2069,16 +2069,27 @@ _progress_render_frame() {
   printf '\n'
 
   # ---- Recent completions (matrix only) ----
+  # compare-matrix emits literal "OK" / "FAIL(N)" / "?" in the pn_exit/em_exit
+  # columns (never numeric exit codes). Colour: green=ok, red=fail, dim=?.
+  # Pad after the ANSI reset so visible width stays consistent regardless of
+  # the (invisible) escape bytes injected.
   if [[ -n "$run" && -f "$run/results.tsv" ]]; then
     printf '\033[1mRecent completions (last 5)\033[0m\n'
     printf '  %-40s  %-7s  %-7s  %-6s  %s\n' TARGET PN EM VDB SECS
     tail -n 5 "$run/results.tsv" | awk -F'\t' '
+      BEGIN { G="\033[32m"; R="\033[31m"; D="\033[2m"; N="\033[0m"; PAD="          " }
+      function sym(s,    label,col,vis) {
+        if      (s == "OK")            { label="ok";   col=G }
+        else if (s ~ /^FAIL/)          { label="fail"; col=R }
+        else if (s == "" || s == "?")  { label="?";    col=D }
+        else                            { label=s;     col="" }
+        vis = 7 - length(label); if (vis < 1) vis = 1
+        return col label N substr(PAD, 1, vis)
+      }
       {
         target=$1; pn_exit=$3; em_exit=$4
-        pn_vdb=$9; em_vdb=$10; vdb_delta=$11; secs=$12
-        pn_sym = (pn_exit=="0") ? "ok" : (pn_exit=="?" ? "?" : "fail")
-        em_sym = (em_exit=="0") ? "ok" : (em_exit=="?" ? "?" : "fail")
-        printf "  %-40s  %-7s  %-7s  %-6s  %ss\n", target, pn_sym, em_sym, vdb_delta, secs
+        vdb_delta=$11; secs=$12
+        printf "  %-40s  %s  %s  %-6s  %ss\n", target, sym(pn_exit), sym(em_exit), vdb_delta, secs
       }'
   fi
   return 0
