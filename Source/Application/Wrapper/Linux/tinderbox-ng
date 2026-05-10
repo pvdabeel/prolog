@@ -2033,15 +2033,81 @@ _progress_render_frame() {
   printf '\n'
 
   # ---- Active sessions ----
-  local n_sessions=0 n_mounted=0
+  #
+  # State detection: each session mounts its overlay inside a *private*
+  # mount namespace (`unshare --mount --propagation=private` in
+  # mount_overlay_for), so from the host's mount namespace `mountpoint`
+  # always reports "not mounted" — the old check rendered every session
+  # as "idle". Instead, walk /proc once and find every process whose
+  # /proc/<pid>/root resolves under $SESSIONS_DIR/<name>/, then derive a
+  # single "what is this session doing right now" label by picking the
+  # highest-priority task among its anchored processes:
+  #
+  #   compile (cc1/clang/rustc/ghc/gcc/g++)
+  #   > build  (make/ninja/scons)
+  #   > fetch  (curl/wget/aria2c)
+  #   > phase  (ebuild.sh / portage helpers)
+  #   > resolve (swipl)
+  #   > plan    (emerge driver itself)
+  #   > active  (any other anchored process)
+  #   > idle    (no anchored processes — root setup or teardown)
+  #
+  # /proc/<pid>/root is only readable as the owning user (or root). This
+  # tool's typical caller is root (chroot management), so the signal is
+  # trustworthy in normal use.
+  local n_sessions=0
   if [[ -d "$SESSIONS_DIR" ]]; then
     n_sessions=$(find "$SESSIONS_DIR" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | wc -l)
-    n_sessions=$(( n_sessions + 0 ))   # strip wc whitespace padding
+    n_sessions=$(( n_sessions + 0 ))
   fi
+
+  declare -A sess_state sess_pcount sess_prio
+  if (( n_sessions > 0 )); then
+    local _sess_prefix="${SESSIONS_DIR%/}/"
+    local _p _root _rest _sname _cmd _new _np _cp
+    for _p in /proc/[0-9]*; do
+      _root="$(readlink "$_p/root" 2>/dev/null)" || continue
+      case "$_root" in
+        "$_sess_prefix"*) ;;
+        *) continue ;;
+      esac
+      _rest="${_root#$_sess_prefix}"
+      _sname="${_rest%%/*}"
+      sess_pcount[$_sname]=$(( ${sess_pcount[$_sname]:-0} + 1 ))
+      _cmd="$(tr '\0' ' ' <"$_p/cmdline" 2>/dev/null | head -c 200)"
+      [[ -z "$_cmd" ]] && _cmd="$(cat "$_p/comm" 2>/dev/null)"
+      # Patterns must accept both a path-prefixed binary (`/usr/bin/foo …`)
+      # and the bare command name (e.g. swipl is exec'd by argv[0]="swipl"
+      # under the portage-ng-dev wrapper). Trailing `\ *` requires a space
+      # after the binary name so we never false-match substrings.
+      case "$_cmd" in
+        */cc1*|*/cc1plus*|*cc1\ *|*cc1plus\ *|*/rustc*|rustc\ *|*/ghc\ *|ghc\ *|*/gcc\ *|gcc\ *|*/g++\ *|g++\ *|*/clang\ *|clang\ *|*/clang++\ *|clang++\ *)
+          _new="compile"; _np=7 ;;
+        */make\ *|make\ *|*/gmake\ *|gmake\ *|*/ninja\ *|ninja\ *|*/scons\ *|scons\ *)
+          _new="build"; _np=6 ;;
+        */curl\ *|curl\ *|*/wget\ *|wget\ *|*/aria2c\ *|aria2c\ *)
+          _new="fetch"; _np=5 ;;
+        *ebuild.sh*|*ebuild-helpers*|*ebuild-ipc*)
+          _new="phase"; _np=4 ;;
+        */swipl\ *|swipl\ *|*portage-ng-dev*|*portage-ng.pl*)
+          _new="resolve"; _np=3 ;;
+        */emerge\ *|emerge\ *|*/emerge)
+          _new="plan"; _np=2 ;;
+        *)
+          _new="active"; _np=1 ;;
+      esac
+      _cp="${sess_prio[$_sname]:-0}"
+      if (( _np > _cp )); then
+        sess_state[$_sname]="$_new"
+        sess_prio[$_sname]="$_np"
+      fi
+    done
+  fi
+
   printf '\033[1mActive sessions (%d)\033[0m\n' "$n_sessions"
   if (( n_sessions > 0 )); then
-    printf '  %-44s  %-10s  %-7s  %s\n' NAME ENGINE STATE AGE
-    local s name engine state age_s age_str ctime
+    printf '  %-44s  %-10s  %-9s  %4s  %s\n' NAME ENGINE STATE PROC AGE
+    local s name engine state pcount age_s age_str ctime
     while IFS= read -r s; do
       [[ -d "$s" ]] || continue
       name="$(basename "$s")"
@@ -2052,18 +2118,13 @@ _progress_render_frame() {
         selftest-*)           engine="selftest"  ;;
         *)                    engine="user"      ;;
       esac
-      if mountpoint -q "$s/merged" 2>/dev/null; then
-        state="MOUNTED"; n_mounted=$((n_mounted+1))
-      else
-        state="idle"
-      fi
-      # GNU stat first; fall back to BSD stat (macOS dev box) so the dry-run
-      # also shows real ages instead of a row of 0s.
+      state="${sess_state[$name]:-idle}"
+      pcount="${sess_pcount[$name]:-0}"
       ctime="$(stat -c %Y "$s" 2>/dev/null || stat -f %m "$s" 2>/dev/null || echo "$now")"
       age_s=$(( now - ctime ))
       age_str="$(_progress_hms "$age_s")"
-      printf '  %-44s  %-10s  %-7s  %s\n' \
-        "${name:0:44}" "$engine" "$state" "$age_str"
+      printf '  %-44s  %-10s  %-9s  %4d  %s\n' \
+        "${name:0:44}" "$engine" "$state" "$pcount" "$age_str"
     done < <(find "$SESSIONS_DIR" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | sort)
   fi
   printf '\n'
