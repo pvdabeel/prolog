@@ -291,20 +291,51 @@ ebuild_exec:collect_use_string(Repo, Entry, Ctx, UseString) :-
 %! ebuild_exec:apply_ctx_use_overrides(+Ctx, +AssocIn, -AssocOut) is det.
 %
 % Applies USE flag overrides from the proof context on top of the
-% KB-derived base flags. Handles build_with_use, required_use, and
-% suggestion(use_change, ...) terms.
+% KB-derived base flags. Handles three sources, in this order (later
+% wins on conflict):
+%   1. `build_with_use:use_state(Enable, Disable)` -- the per-package
+%      BWU set by the dep walker (e.g. when a parent dep `cairo[X]`
+%      forces cairo's X on for this build).
+%   2. `required_use:R` -- the prover's REQUIRED_USE proof keys, with
+%      their implied flag changes derived via
+%      `use:model_required_use_changes/2` (handles both plain
+%      `assumed(F)` keys and `assumed(conflict(required_use, ...))`).
+%   3. `suggestion(use_change, _, Changes)` -- explicit
+%      `use_change(F, enable|disable)` items added by
+%      `target:run_tag_suggestions/5` (covers self-flips of the
+%      package being installed).
+%
+% Note: previous versions of this predicate looked for
+% `build_with_use(Uses)` and `required_use(Uses)` in *functor* form
+% with `Uses` expected to be a list of `assumed(...)` items. The
+% codebase actually threads these as KV pairs (`build_with_use:_`
+% and `required_use:_`) carrying a `use_state/2` term and a list of
+% proof keys, respectively. As a result the BWU/REQUIRED_USE override
+% paths were silently dead, and the only USE flips that reached the
+% emerge invocation were those tagged via
+% `suggestion(use_change, ...)`. That hid bugs like the
+% app-admin/hardinfo failure: gtk+ pulled `cairo[X]`, cairo's install
+% Context carried `build_with_use:use_state([X],[])`, but cairo
+% emerged with `USE="-X"` because this override never applied. Fixed
+% by reading the actual KV-pair format and the correct Uses shape.
 
 ebuild_exec:apply_ctx_use_overrides(Ctx, AssocIn, AssocOut) :-
   ( is_list(Ctx) -> CtxList = Ctx ; CtxList = [] ),
   findall(Flag-State,
-    ( member(Term, CtxList),
-      ( Term = build_with_use(Uses) ; Term = required_use(Uses) ),
-      member(assumed(Raw), Uses),
-      ( Raw = minus(F) -> Flag = F, State = negative
-      ; Flag = Raw, State = positive
+    ( member(build_with_use:use_state(Enable, Disable), CtxList),
+      ( member(Flag, Enable),  State = positive
+      ; member(Flag, Disable), State = negative
       )
     ),
-    DepOverrides),
+    BWUOverrides),
+  findall(Flag-State,
+    ( member(required_use:R, CtxList),
+      is_list(R),
+      member(A, R),
+      use:model_assumption_to_change(A, use_change(Flag, Dir)),
+      ( Dir == enable -> State = positive ; State = negative )
+    ),
+    RUOverrides),
   findall(Flag-State,
     ( member(suggestion(use_change, _, Changes), CtxList),
       is_list(Changes),
@@ -312,7 +343,7 @@ ebuild_exec:apply_ctx_use_overrides(Ctx, AssocIn, AssocOut) :-
       ( Dir == enable -> State = positive ; State = negative )
     ),
     SuggOverrides),
-  append(DepOverrides, SuggOverrides, AllOverrides),
+  append([BWUOverrides, RUOverrides, SuggOverrides], AllOverrides),
   foldl(ebuild_exec:apply_use_override, AllOverrides, AssocIn, AssocOut).
 
 

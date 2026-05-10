@@ -570,5 +570,59 @@ PN-side latent gaps (not Class H, not regressions; future work)
   point A above) - that path now also benefits from R-derived
   application; verifying after VM matrix completes.
 
+- [PN-EXEC, FIXED 2026-05-10] ebuild_exec:apply_ctx_use_overrides
+  was using the wrong context-term shape: it looked for
+  `build_with_use(Uses)` and `required_use(Uses)` in functor form
+  with `Uses` expected to be a list of `assumed(...)` items, but
+  the codebase actually threads these as KV pairs
+  (`build_with_use:use_state(En, Dis)` and `required_use:R` where
+  R is a list of proof keys). Result: the BWU and REQUIRED_USE
+  override paths were silently dead, and the only flag flips that
+  reached the actual emerge invocation were those tagged via
+  `suggestion(use_change, ...)`.
+
+  Observed in the all-packages matrix (compare-matrix-20260510T194121)
+  on app-admin/hardinfo (and several siblings -- gtkdiskfree, kio-admin,
+  caribou, orca, calamares, ...): emerge bails at planning because it
+  refuses to autounmask `cairo[X]`. PN correctly plans the X flip
+  (step 1: useflag cairo (X), useflag libglvnd (X)), but at step 12
+  cairo's actual install runs with USE=`glib -aqua% (-debug) -X
+  -gtk-doc -lzo -test`. cairo built without X then made gtk+'s
+  install fail at step 25 (cascading 10 sub-package failures).
+
+  Why the suggestion-only path wasn't enough: bracketed-USE
+  constraints from a parent (e.g. gtk+'s `cairo[X]`) thread the
+  flip into the child's install Context as
+  `build_with_use:use_state([X],[])`, NOT as
+  `suggestion(use_change, cairo, [use_change(X, enable)])`. The
+  suggestion form is only added by `target:run_tag_suggestions/5`,
+  which runs in `run_dep_model` and only tags the package-being-run
+  itself (self-flips), never its bracketed-USE-flipped children.
+
+  Fix (Source/Domain/Gentoo/Ebuild/ebuild_exec.pl
+  apply_ctx_use_overrides/3):
+    1. Read `build_with_use:use_state(En, Dis)` (KV pair, real
+       format) and turn En -> positive, Dis -> negative.
+    2. Read `required_use:R` (KV pair) and run each proof key
+       through `use:model_assumption_to_change/2` (handles plain
+       `assumed(F)` and the various `assumed(conflict(...))` shapes).
+    3. Keep the existing `suggestion(use_change, ...)` path.
+
+  Verified:
+    * `prover:test(portage)` over all 31478 entries: 0 failures.
+    * Direct probe on cairo:
+        - empty Ctx           -> USE=`...-aqua... glib...`
+        - BWU=use_state([aqua],[]) -> USE=`...aqua... glib...`  (flipped on)
+        - BWU=use_state([],[glib]) -> USE=`...-glib...`        (flipped off)
+      Before the fix all three produced identical output (BWU dead).
+
+  Cross-impact: this is a separate bug from the dep_walk_context
+  fix earlier today. dep_walk_context closes the *planning* gap
+  (PN sees the flipped flag when walking conditional deps);
+  apply_ctx_use_overrides closes the *execution* gap (the actual
+  emerge invocation respects the flipped flag). Both are needed to
+  resolve the hardinfo/xdg-utils/calamares family of fail/fail
+  cases.
+
 Open
 ====
