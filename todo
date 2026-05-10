@@ -364,12 +364,37 @@ to batch as upstream Gentoo bug reports later.
 
 - [BOTH] sys-block/mtx-1.3.12-r1 - sandbox violation in install phase.
   Failure: `install -c -m 755 -d /usr/share/man <D>/usr/share/man/man1`
-  (Makefile passes a bare `/usr/share/man` without `$(DESTDIR)` prefix
-  alongside the correctly-prefixed manpage dir) -> `ACCESS DENIED:
-  fchmod: /usr/share/man` -> `make: *** [Makefile:114: install]
-  Segmentation fault`. Real upstream Makefile bug; mtx is largely
-  unmaintained (last release 2017). Cascades to: app-backup/bacula
-  and any other tape-library consumer.
+  -> `ACCESS DENIED: fchmod: /usr/share/man` -> `make: *** [Makefile:114:
+  install] Segmentation fault`. Cascades to: app-backup/bacula,
+  app-backup/bareos, and any other tape-library consumer.
+
+  Root cause (verified 2026-05-10 via strace + sandbox config audit
+  in tinderbox session mtx-debug): incomplete Gentoo patch
+  `mtx-1.3.12-fix-buildsystem.patch`. The patch only adds `$(DESTDIR)`
+  to the second arg of the install_dir line; the first arg stays bare:
+      $(INSTALL_DIR) $(mandir) $(DESTDIR)$(mandir)/man1
+  With `mandir=/usr/share/man`, generated Makefile line 114 runs
+  `install -d /usr/share/man <D>/usr/share/man/man1`. coreutils
+  install(1) -d unconditionally calls `fchmod()` on the target dir
+  even when it already exists with the requested mode (verified by
+  strace: mkdir EEXIST x3 then fchmod(3, 0755)=0). libsandbox
+  LD_PRELOAD intercepts every fchmod() and checks the path against
+  SANDBOX_WRITE / SANDBOX_PREDICT; /usr/share/man is on neither, so
+  it DENIES regardless of current dir mode.
+
+  Chroot / overlay / bootstrap_freeze contribute zero to this failure:
+  baseline /usr/share/man has mode 0555 (post-freeze), but a vanilla
+  Gentoo system with mode 0755 hits the exact same sandbox deny because
+  the check is at libc/path level, not at mode level. Reproducible on
+  any stock Gentoo amd64 install with default FEATURES="sandbox" and
+  no binhost.
+
+  Proper one-line fix (revbump opportunity):
+      -    $(INSTALL_DIR) $(mandir) $(DESTDIR)$(mandir)/man1
+      +    $(INSTALL_DIR) $(DESTDIR)$(mandir) $(DESTDIR)$(mandir)/man1
+  Worth filing on bugs.gentoo.org; mtx is unmaintained upstream
+  (last release 2017) so a Gentoo-side patch revbump is the only
+  realistic remediation path.
 
 - [BOTH] app-arch/stuffit-5.2.0.611-r1 - unfetchable + masked.
   Masked by `no-multilib/package.mask` (i386 binary) AND
