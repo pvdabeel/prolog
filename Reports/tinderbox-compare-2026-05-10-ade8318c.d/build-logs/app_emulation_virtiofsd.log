@@ -1,0 +1,36 @@
+[tinderbox-ng] compare: target='app-emulation/virtiofsd'  mode=--build  label=app_emulation_virtiofsd
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-app_emulation_virtiofsd
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-app_emulation_virtiofsd
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-app_emulation_virtiofsd' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-app_emulation_virtiofsd' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-app_emulation_virtiofsd-20260510T011541)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : app-emulation/virtiofsd                                       │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-app_emulation_virtiofsd-20260510T011541│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 14                      │ 3                         │
+│ completed        │ 7                       │ 3                         │
+│ merged into VDB  │ 2                       │ 3                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng:              │                    │ 28.59 Kb  	 error-chain-0.12.4.crate
+  emerge    : >>> Failed to emerge sys-libs/libcap-ng-0.9.3, Log file:
+
+VDB delta (after build):
+  only in emerge:
+    + dev-lang/rust-bin-1.95.0
+  in both: 2 packages
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-app_emulation_virtiofsd-20260510T011541/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-app_emulation_virtiofsd-20260510T011541/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

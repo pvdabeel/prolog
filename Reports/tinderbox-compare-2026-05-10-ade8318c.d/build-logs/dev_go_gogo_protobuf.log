@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-go/gogo-protobuf'  mode=--build  label=dev_go_gogo_protobuf
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_go_gogo_protobuf
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_go_gogo_protobuf
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_go_gogo_protobuf' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_go_gogo_protobuf' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_go_gogo_protobuf-20260510T015052)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-go/gogo-protobuf                                          │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_go_gogo_protobuf-20260510T015052│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 7                       │ 3                         │
+│ completed        │ 8                       │ 3                         │
+│ merged into VDB  │ 3                       │ 3                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_go_gogo_protobuf-20260510T015052/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_go_gogo_protobuf-20260510T015052/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

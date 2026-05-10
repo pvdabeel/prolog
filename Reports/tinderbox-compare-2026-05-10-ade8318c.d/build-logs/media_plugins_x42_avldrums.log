@@ -1,0 +1,30 @@
+[tinderbox-ng] compare: target='media-plugins/x42-avldrums'  mode=--build  label=media_plugins_x42_avldrums
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-media_plugins_x42_avldrums
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-media_plugins_x42_avldrums
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-media_plugins_x42_avldrums' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-media_plugins_x42_avldrums' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-media_plugins_x42_avldrums-20260510T080915)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : media-plugins/x42-avldrums                                    │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-media_plugins_x42_avldrums-20260510T080915│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 117                     │ ?                         │
+│ completed        │ 39                      │ 0                         │
+│ merged into VDB  │ 0                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [jobserver worker error] job=slotted(26,80,2,25,13,rule(portage://'media-plugins/x42-avldrums-0.7.3':download?{[required_use:[],build_with_use:use_state([],[])]},[]),files(27,2,[dist('robtk-0.7.5.tar.
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-media_plugins_x42_avldrums-20260510T080915/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-media_plugins_x42_avldrums-20260510T080915/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

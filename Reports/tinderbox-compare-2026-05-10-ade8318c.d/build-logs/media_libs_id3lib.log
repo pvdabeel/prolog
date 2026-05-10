@@ -1,0 +1,31 @@
+[tinderbox-ng] compare: target='media-libs/id3lib'  mode=--build  label=media_libs_id3lib
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-media_libs_id3lib
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-media_libs_id3lib
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-media_libs_id3lib' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-media_libs_id3lib' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-media_libs_id3lib-20260510T075534)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : media-libs/id3lib                                             │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-media_libs_id3lib-20260510T075534│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 3                       │ 1                         │
+│ completed        │ 1                       │ 0                         │
+│ merged into VDB  │ 0                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 2] FAIL (1) install portage://media-libs/id3lib-3.8.3-r12
+  emerge    : >>> Failed to emerge media-libs/id3lib-3.8.3-r12, Log file:
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-media_libs_id3lib-20260510T075534/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-media_libs_id3lib-20260510T075534/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

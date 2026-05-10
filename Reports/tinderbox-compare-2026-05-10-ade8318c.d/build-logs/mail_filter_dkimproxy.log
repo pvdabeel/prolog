@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='mail-filter/dkimproxy'  mode=--build  label=mail_filter_dkimproxy
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-mail_filter_dkimproxy
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-mail_filter_dkimproxy
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-mail_filter_dkimproxy' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-mail_filter_dkimproxy' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-mail_filter_dkimproxy-20260510T074236)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : mail-filter/dkimproxy                                         │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-mail_filter_dkimproxy-20260510T074236│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 71                      │ 25                        │
+│ completed        │ 72                      │ 25                        │
+│ merged into VDB  │ 25                      │ 25                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-mail_filter_dkimproxy-20260510T074236/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-mail_filter_dkimproxy-20260510T074236/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

@@ -1,0 +1,31 @@
+[tinderbox-ng] compare: target='www-apps/jekyll-sitemap'  mode=--build  label=www_apps_jekyll_sitemap
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-www_apps_jekyll_sitemap
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-www_apps_jekyll_sitemap
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-www_apps_jekyll_sitemap' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-www_apps_jekyll_sitemap' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-www_apps_jekyll_sitemap-20260510T094919)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : www-apps/jekyll-sitemap                                       │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-www_apps_jekyll_sitemap-20260510T094919│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 229                     │ 1                         │
+│ completed        │ 82                      │ 3                         │
+│ merged into VDB  │ 3                       │ 3                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 3] FAIL (1) install portage://dev-util/colm-0.14.7-r4
+  emerge    : >>> Failed to emerge dev-util/colm-0.14.7-r4, Log file:
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-www_apps_jekyll_sitemap-20260510T094919/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-www_apps_jekyll_sitemap-20260510T094919/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

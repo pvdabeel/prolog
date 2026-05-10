@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='games-util/catcodec'  mode=--build  label=games_util_catcodec
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-games_util_catcodec
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-games_util_catcodec
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-games_util_catcodec' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-games_util_catcodec' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-games_util_catcodec-20260510T073407)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : games-util/catcodec                                           │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-games_util_catcodec-20260510T073407│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 3                       │ 1                         │
+│ completed        │ 4                       │ 1                         │
+│ merged into VDB  │ 1                       │ 1                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-games_util_catcodec-20260510T073407/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-games_util_catcodec-20260510T073407/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

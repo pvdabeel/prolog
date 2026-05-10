@@ -1,0 +1,38 @@
+[tinderbox-ng] compare: target='media-fonts/font-misc-cyrillic'  mode=--build  label=media_fonts_font_misc_cyrillic
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-media_fonts_font_misc_cyrillic
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-media_fonts_font_misc_cyrillic
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-media_fonts_font_misc_cyrillic' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-media_fonts_font_misc_cyrillic' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-media_fonts_font_misc_cyrillic-20260510T074751)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : media-fonts/font-misc-cyrillic                                │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-media_fonts_font_misc_cyrillic-20260510T074751│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 50                      │ 3                         │
+│ completed        │ 32                      │ 12                        │
+│ merged into VDB  │ 9                       │ 12                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 6] FAIL (1) install portage://media-libs/freetype-2.14.3
+  emerge    : >>> Failed to emerge media-libs/freetype-2.14.3, Log file:
+
+VDB delta (after build):
+  only in emerge:
+    + x11-libs/libX11-1.8.13
+    + x11-libs/libxcb-1.17.0
+    + x11-misc/compose-tables-1.8.13
+  in both: 9 packages
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-media_fonts_font_misc_cyrillic-20260510T074751/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-media_fonts_font_misc_cyrillic-20260510T074751/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

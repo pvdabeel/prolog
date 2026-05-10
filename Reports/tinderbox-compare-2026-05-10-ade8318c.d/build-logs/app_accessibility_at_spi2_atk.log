@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='app-accessibility/at-spi2-atk'  mode=--build  label=app_accessibility_at_spi2_atk
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-app_accessibility_at_spi2_atk
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-app_accessibility_at_spi2_atk
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-app_accessibility_at_spi2_atk' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-app_accessibility_at_spi2_atk' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-app_accessibility_at_spi2_atk-20260510T004918)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : app-accessibility/at-spi2-atk                                 │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-app_accessibility_at_spi2_atk-20260510T004918│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 23                      │ 9                         │
+│ completed        │ 24                      │ 9                         │
+│ merged into VDB  │ 9                       │ 9                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-app_accessibility_at_spi2_atk-20260510T004918/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-app_accessibility_at_spi2_atk-20260510T004918/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

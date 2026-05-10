@@ -1,0 +1,34 @@
+[tinderbox-ng] compare: target='media-plugins/kodi-screensaver-greynetic'  mode=--build  label=media_plugins_kodi_screensaver_greynetic
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-media_plugins_kodi_screensaver_greynetic
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-media_plugins_kodi_screensaver_greynetic
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-media_plugins_kodi_screensaver_greynetic' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-media_plugins_kodi_screensaver_greynetic' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-media_plugins_kodi_screensaver_greynetic-20260510T080629)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : media-plugins/kodi-screensaver-greynetic                      │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-media_plugins_kodi_screensaver_greynetic-20260510T080629│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 373                     │ ?                         │
+│ completed        │ 89                      │ 0                         │
+│ merged into VDB  │ 1                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng:   live FAIL
+
+VDB delta (after build):
+  only in portage-ng:
+    + dev-python/gpep517-19
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-media_plugins_kodi_screensaver_greynetic-20260510T080629/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-media_plugins_kodi_screensaver_greynetic-20260510T080629/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

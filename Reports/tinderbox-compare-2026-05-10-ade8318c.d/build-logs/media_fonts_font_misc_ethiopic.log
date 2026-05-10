@@ -1,0 +1,31 @@
+[tinderbox-ng] compare: target='media-fonts/font-misc-ethiopic'  mode=--build  label=media_fonts_font_misc_ethiopic
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-media_fonts_font_misc_ethiopic
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-media_fonts_font_misc_ethiopic
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-media_fonts_font_misc_ethiopic' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-media_fonts_font_misc_ethiopic' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-media_fonts_font_misc_ethiopic-20260510T074754)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : media-fonts/font-misc-ethiopic                                │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-media_fonts_font_misc_ethiopic-20260510T074754│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 27                      │ 0                         │
+│ completed        │ 17                      │ 5                         │
+│ merged into VDB  │ 5                       │ 5                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 5] FAIL (1) install portage://media-libs/freetype-2.14.3
+  emerge    : >>> Failed to emerge media-libs/freetype-2.14.3, Log file:
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-media_fonts_font_misc_ethiopic-20260510T074754/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-media_fonts_font_misc_ethiopic-20260510T074754/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

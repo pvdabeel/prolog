@@ -1,0 +1,31 @@
+[tinderbox-ng] compare: target='sci-libs/libnova'  mode=--build  label=sci_libs_libnova
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-sci_libs_libnova
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-sci_libs_libnova
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-sci_libs_libnova' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-sci_libs_libnova' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-sci_libs_libnova-20260510T090717)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : sci-libs/libnova                                              │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-sci_libs_libnova-20260510T090717│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 3                       │ 1                         │
+│ completed        │ 1                       │ 0                         │
+│ merged into VDB  │ 0                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 2] FAIL (1) install portage://sci-libs/libnova-0.16.0
+  emerge    : >>> Failed to emerge sci-libs/libnova-0.16.0, Log file:
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-sci_libs_libnova-20260510T090717/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-sci_libs_libnova-20260510T090717/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

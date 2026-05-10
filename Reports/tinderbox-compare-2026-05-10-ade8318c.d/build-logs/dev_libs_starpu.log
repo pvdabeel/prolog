@@ -1,0 +1,31 @@
+[tinderbox-ng] compare: target='dev-libs/starpu'  mode=--build  label=dev_libs_starpu
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_libs_starpu
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_libs_starpu
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_libs_starpu' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_libs_starpu' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_libs_starpu-20260510T045740)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-libs/starpu                                               │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_libs_starpu-20260510T045740│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 45                      │ 0                         │
+│ completed        │ 41                      │ 14                        │
+│ merged into VDB  │ 14                      │ 14                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 16] FAIL (1) install portage://sci-mathematics/glpk-5.0-r4
+  emerge    : >>> Failed to emerge sci-mathematics/glpk-5.0-r4, Log file:
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_libs_starpu-20260510T045740/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_libs_starpu-20260510T045740/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

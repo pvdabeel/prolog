@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='app-containers/cri-tools'  mode=--build  label=app_containers_cri_tools
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-app_containers_cri_tools
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-app_containers_cri_tools
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-app_containers_cri_tools' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-app_containers_cri_tools' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-app_containers_cri_tools-20260510T005139)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : app-containers/cri-tools                                      │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-app_containers_cri_tools-20260510T005139│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 7                       │ 3                         │
+│ completed        │ 8                       │ 3                         │
+│ merged into VDB  │ 3                       │ 3                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-app_containers_cri_tools-20260510T005139/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-app_containers_cri_tools-20260510T005139/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

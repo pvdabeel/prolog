@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-ml/charinfo_width'  mode=--build  label=dev_ml_charinfo_width
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_ml_charinfo_width
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_ml_charinfo_width
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_ml_charinfo_width' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_ml_charinfo_width' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_ml_charinfo_width-20260510T050027)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-ml/charinfo_width                                         │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_ml_charinfo_width-20260510T050027│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 119                     │ 40                        │
+│ completed        │ 120                     │ 40                        │
+│ merged into VDB  │ 40                      │ 40                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_ml_charinfo_width-20260510T050027/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_ml_charinfo_width-20260510T050027/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

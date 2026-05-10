@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='games-puzzle/pipepanic'  mode=--build  label=games_puzzle_pipepanic
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-games_puzzle_pipepanic
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-games_puzzle_pipepanic
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-games_puzzle_pipepanic' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-games_puzzle_pipepanic' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-games_puzzle_pipepanic-20260510T072930)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : games-puzzle/pipepanic                                        │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-games_puzzle_pipepanic-20260510T072930│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 9                       │ 3                         │
+│ completed        │ 10                      │ 3                         │
+│ merged into VDB  │ 3                       │ 3                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-games_puzzle_pipepanic-20260510T072930/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-games_puzzle_pipepanic-20260510T072930/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

@@ -1,0 +1,32 @@
+[tinderbox-ng] compare: target='dev-util/ROPgadget'  mode=--build  label=dev_util_ROPgadget
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_util_ROPgadget
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_util_ROPgadget
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_util_ROPgadget' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_util_ROPgadget' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_util_ROPgadget-20260510T070318)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-util/ROPgadget                                            │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_util_ROPgadget-20260510T070318│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ FAIL(1)                   │
+│ plan actions     │ 7                       │ ?                         │
+│ completed        │ 7                       │ 0                         │
+│ merged into VDB  │ 2                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+VDB delta (after build):
+  only in portage-ng:
+    + dev-libs/capstone-6.0.0_alpha7
+    + dev-util/ROPgadget-7.7-r1
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_util_ROPgadget-20260510T070318/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_util_ROPgadget-20260510T070318/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

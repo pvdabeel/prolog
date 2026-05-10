@@ -1,0 +1,31 @@
+[tinderbox-ng] compare: target='media-gfx/libredwg'  mode=--build  label=media_gfx_libredwg
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-media_gfx_libredwg
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-media_gfx_libredwg
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-media_gfx_libredwg' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-media_gfx_libredwg' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-media_gfx_libredwg-20260510T075100)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : media-gfx/libredwg                                            │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-media_gfx_libredwg-20260510T075100│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 88                      │ 0                         │
+│ completed        │ 83                      │ 30                        │
+│ merged into VDB  │ 30                      │ 30                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 19] FAIL (1) install portage://dev-libs/pslib-0.4.6
+  emerge    : >>> Failed to emerge dev-libs/pslib-0.4.6, Log file:
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-media_gfx_libredwg-20260510T075100/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-media_gfx_libredwg-20260510T075100/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

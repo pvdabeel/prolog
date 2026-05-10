@@ -1,0 +1,31 @@
+[tinderbox-ng] compare: target='dev-ruby/concurrent-ruby'  mode=--build  label=dev_ruby_concurrent_ruby
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_ruby_concurrent_ruby
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_ruby_concurrent_ruby
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_ruby_concurrent_ruby' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_ruby_concurrent_ruby' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_ruby_concurrent_ruby-20260510T065159)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-ruby/concurrent-ruby                                      │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_ruby_concurrent_ruby-20260510T065159│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 140                     │ 0                         │
+│ completed        │ 50                      │ 2                         │
+│ merged into VDB  │ 2                       │ 2                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 3] FAIL (1) install portage://dev-util/colm-0.14.7-r4
+  emerge    : >>> Failed to emerge dev-util/colm-0.14.7-r4, Log file:
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_ruby_concurrent_ruby-20260510T065159/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_ruby_concurrent_ruby-20260510T065159/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

@@ -1,0 +1,41 @@
+[tinderbox-ng] compare: target='games-arcade/holotz-castle'  mode=--build  label=games_arcade_holotz_castle
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-games_arcade_holotz_castle
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-games_arcade_holotz_castle
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-games_arcade_holotz_castle' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-games_arcade_holotz_castle' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-games_arcade_holotz_castle-20260510T071910)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : games-arcade/holotz-castle                                    │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-games_arcade_holotz_castle-20260510T071910│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 61                      │ ?                         │
+│ completed        │ 32                      │ 0                         │
+│ merged into VDB  │ 8                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 6] FAIL (1) install portage://media-libs/freetype-2.14.3
+
+VDB delta (after build):
+  only in portage-ng:
+    + media-libs/libpng-1.6.58
+    + media-libs/libsdl-1.2.74
+    + media-libs/libsdl2-2.32.10
+    + x11-base/xcb-proto-1.17.0
+    + x11-base/xorg-proto-2025.1
+    + x11-libs/libXau-1.0.12
+    + x11-libs/libXdmcp-1.1.5
+    + x11-libs/xtrans-1.6.0
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-games_arcade_holotz_castle-20260510T071910/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-games_arcade_holotz_castle-20260510T071910/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

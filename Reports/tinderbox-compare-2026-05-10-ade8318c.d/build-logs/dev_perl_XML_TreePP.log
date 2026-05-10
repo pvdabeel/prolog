@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-perl/XML-TreePP'  mode=--build  label=dev_perl_XML_TreePP
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_perl_XML_TreePP
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_perl_XML_TreePP
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_perl_XML_TreePP' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_perl_XML_TreePP' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_perl_XML_TreePP-20260510T055518)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-perl/XML-TreePP                                           │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_perl_XML_TreePP-20260510T055518│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 78                      │ 28                        │
+│ completed        │ 79                      │ 28                        │
+│ merged into VDB  │ 28                      │ 28                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_perl_XML_TreePP-20260510T055518/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_perl_XML_TreePP-20260510T055518/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

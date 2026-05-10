@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-perl/Unicode-String'  mode=--build  label=dev_perl_Unicode_String
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_perl_Unicode_String
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_perl_Unicode_String
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_perl_Unicode_String' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_perl_Unicode_String' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_perl_Unicode_String-20260510T055405)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-perl/Unicode-String                                       │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_perl_Unicode_String-20260510T055405│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 5                       │ 2                         │
+│ completed        │ 6                       │ 2                         │
+│ merged into VDB  │ 2                       │ 2                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_perl_Unicode_String-20260510T055405/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_perl_Unicode_String-20260510T055405/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

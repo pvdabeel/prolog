@@ -1,0 +1,37 @@
+[tinderbox-ng] compare: target='media-sound/pulseeffects'  mode=--build  label=media_sound_pulseeffects
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-media_sound_pulseeffects
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-media_sound_pulseeffects
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-media_sound_pulseeffects' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-media_sound_pulseeffects' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-media_sound_pulseeffects-20260510T081649)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : media-sound/pulseeffects                                      │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-media_sound_pulseeffects-20260510T081649│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 752                     │ ?                         │
+│ completed        │ 250                     │ 0                         │
+│ merged into VDB  │ 3                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng:  └─step  2─┤ verify  x11-libs/gtk+ (unsatisfied constraints, assumed running)
+  emerge    : !!! The ebuild selected to satisfy ">=dev-cpp/gtkmm-3.24:3.0" has unmet requirements.
+
+VDB delta (after build):
+  only in portage-ng:
+    + acct-group/messagebus-0-r3
+    + acct-group/pipewire-0-r2
+    + dev-python/gpep517-19
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-media_sound_pulseeffects-20260510T081649/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-media_sound_pulseeffects-20260510T081649/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

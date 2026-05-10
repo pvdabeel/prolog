@@ -1,0 +1,38 @@
+[tinderbox-ng] compare: target='www-apache/modsecurity-crs'  mode=--build  label=www_apache_modsecurity_crs
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-www_apache_modsecurity_crs
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-www_apache_modsecurity_crs
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-www_apache_modsecurity_crs' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-www_apache_modsecurity_crs' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-www_apache_modsecurity_crs-20260510T094704)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : www-apache/modsecurity-crs                                    │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-www_apache_modsecurity_crs-20260510T094704│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ FAIL(1)                   │
+│ plan actions     │ 23                      │ ?                         │
+│ completed        │ 23                      │ 0                         │
+│ merged into VDB  │ 8                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+VDB delta (after build):
+  only in portage-ng:
+    + acct-group/apache-0-r3
+    + acct-user/apache-0-r4
+    + app-admin/apache-tools-2.4.67
+    + dev-libs/apr-1.7.6-r1
+    + dev-libs/apr-util-1.6.3
+    + www-apache/mod_security-2.9.12
+    + www-apache/modsecurity-crs-4.25.0
+    + www-servers/apache-2.4.67
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-www_apache_modsecurity_crs-20260510T094704/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-www_apache_modsecurity_crs-20260510T094704/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

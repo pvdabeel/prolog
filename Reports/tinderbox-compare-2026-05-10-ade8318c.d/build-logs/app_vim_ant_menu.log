@@ -1,0 +1,48 @@
+[tinderbox-ng] compare: target='app-vim/ant_menu'  mode=--build  label=app_vim_ant_menu
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-app_vim_ant_menu
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-app_vim_ant_menu
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-app_vim_ant_menu' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-app_vim_ant_menu' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-app_vim_ant_menu-20260510T013528)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : app-vim/ant_menu                                              │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-app_vim_ant_menu-20260510T013528│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 117                     │ 12                        │
+│ completed        │ 70                      │ 32                        │
+│ merged into VDB  │ 19                      │ 32                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 6] FAIL (1) install portage://media-libs/freetype-2.14.3
+  emerge    : >>> Failed to emerge media-libs/freetype-2.14.3, Log file:
+
+VDB delta (after build):
+  only in emerge:
+    + app-editors/vim-9.1.1652-r2
+    + app-editors/vim-core-9.1.1652-r3
+    + app-vim/gentoo-syntax-16
+    + dev-java/java-config-2.3.4
+    + dev-libs/gobject-introspection-1.86.0
+    + x11-libs/libX11-1.8.13
+    + x11-libs/libXext-1.3.7
+    + x11-libs/libXfixes-6.0.2
+    + x11-libs/libXi-1.8.2
+    + x11-libs/libXrender-0.9.12
+    + x11-libs/libXtst-1.2.5
+    + x11-libs/libxcb-1.17.0
+    + x11-misc/compose-tables-1.8.13
+  in both: 19 packages
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-app_vim_ant_menu-20260510T013528/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-app_vim_ant_menu-20260510T013528/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

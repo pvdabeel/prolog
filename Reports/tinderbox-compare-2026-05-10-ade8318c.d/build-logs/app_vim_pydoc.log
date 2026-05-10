@@ -1,0 +1,40 @@
+[tinderbox-ng] compare: target='app-vim/pydoc'  mode=--build  label=app_vim_pydoc
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-app_vim_pydoc
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-app_vim_pydoc
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-app_vim_pydoc' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-app_vim_pydoc' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-app_vim_pydoc-20260510T013535)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : app-vim/pydoc                                                 │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-app_vim_pydoc-20260510T013535  │
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ FAIL(1)                   │
+│ plan actions     │ 22                      │ ?                         │
+│ completed        │ 22                      │ 0                         │
+│ merged into VDB  │ 7                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  emerge    : !!! The ebuild selected to satisfy "app-vim/pydoc" has unmet requirements.
+
+VDB delta (after build):
+  only in portage-ng:
+    + app-editors/vim-9.1.1652-r2
+    + app-editors/vim-core-9.1.1652-r3
+    + app-eselect/eselect-vi-20221122
+    + app-vim/gentoo-syntax-16
+    + app-vim/pydoc-2.0-r2
+    + dev-libs/libsodium-1.0.22
+    + dev-util/xxd-2025.08.24-r1
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-app_vim_pydoc-20260510T013535/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-app_vim_pydoc-20260510T013535/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

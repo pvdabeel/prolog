@@ -1,0 +1,43 @@
+[tinderbox-ng] compare: target='x11-misc/xsr'  mode=--build  label=x11_misc_xsr
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-x11_misc_xsr
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-x11_misc_xsr
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-x11_misc_xsr' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-x11_misc_xsr' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-x11_misc_xsr-20260510T100626)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : x11-misc/xsr                                                  │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-x11_misc_xsr-20260510T100626   │
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 62                      │ 7                         │
+│ completed        │ 35                      │ 16                        │
+│ merged into VDB  │ 8                       │ 16                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 6] FAIL (1) install portage://media-libs/freetype-2.14.3
+  emerge    : >>> Failed to emerge media-libs/freetype-2.14.3, Log file:
+
+VDB delta (after build):
+  only in emerge:
+    + x11-libs/libX11-1.8.13
+    + x11-libs/libXcomposite-0.4.7
+    + x11-libs/libXext-1.3.7
+    + x11-libs/libXfixes-6.0.2
+    + x11-libs/libXrandr-1.5.5
+    + x11-libs/libXrender-0.9.12
+    + x11-libs/libxcb-1.17.0
+    + x11-misc/compose-tables-1.8.13
+  in both: 8 packages
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-x11_misc_xsr-20260510T100626/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-x11_misc_xsr-20260510T100626/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='net-p2p/stig'  mode=--build  label=net_p2p_stig
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-net_p2p_stig
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-net_p2p_stig
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-net_p2p_stig' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-net_p2p_stig' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-net_p2p_stig-20260510T090022)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : net-p2p/stig                                                  │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-net_p2p_stig-20260510T090022   │
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 96                      │ 34                        │
+│ completed        │ 97                      │ 34                        │
+│ merged into VDB  │ 34                      │ 34                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-net_p2p_stig-20260510T090022/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-net_p2p_stig-20260510T090022/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

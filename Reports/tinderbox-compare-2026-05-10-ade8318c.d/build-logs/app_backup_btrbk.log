@@ -1,0 +1,54 @@
+[tinderbox-ng] compare: target='app-backup/btrbk'  mode=--build  label=app_backup_btrbk
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-app_backup_btrbk
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-app_backup_btrbk
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-app_backup_btrbk' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-app_backup_btrbk' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-app_backup_btrbk-20260510T005045)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : app-backup/btrbk                                              │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-app_backup_btrbk-20260510T005045│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ OK                        │
+│ plan actions     │ 81                      │ 19                        │
+│ completed        │ 21                      │ 19                        │
+│ merged into VDB  │ 1                       │ 19                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 2] FAIL (1) update portage://dev-python/flit-core-3.12.0
+
+VDB delta (after build):
+  only in portage-ng:
+    + dev-python/gpep517-19
+  only in emerge:
+    + app-backup/btrbk-0.32.6-r2
+    + app-text/asciidoc-10.2.1
+    + dev-libs/lzo-2.10
+    + dev-python/alabaster-1.0.0
+    + dev-python/babel-2.18.0
+    + dev-python/imagesize-2.0.0
+    + dev-python/roman-numerals-4.1.0
+    + dev-python/snowballstemmer-3.0.1
+    + dev-python/sphinx-9.1.0
+    + dev-python/sphinx-rtd-theme-3.1.0
+    + dev-python/sphinxcontrib-applehelp-2.0.0-r1
+    + dev-python/sphinxcontrib-devhelp-2.0.0-r1
+    + dev-python/sphinxcontrib-htmlhelp-2.1.0-r1
+    + dev-python/sphinxcontrib-jquery-4.1
+    + dev-python/sphinxcontrib-jsmath-1.0.1-r4
+    + dev-python/sphinxcontrib-qthelp-2.0.0-r1
+    + dev-python/sphinxcontrib-serializinghtml-2.0.0-r1
+    + sys-block/mbuffer-20260301
+    + sys-fs/btrfs-progs-6.19.1
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-app_backup_btrbk-20260510T005045/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-app_backup_btrbk-20260510T005045/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

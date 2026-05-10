@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='app-misc/mosquitto'  mode=--build  label=app_misc_mosquitto
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-app_misc_mosquitto
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-app_misc_mosquitto
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-app_misc_mosquitto' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-app_misc_mosquitto' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-app_misc_mosquitto-20260510T012321)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : app-misc/mosquitto                                            │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-app_misc_mosquitto-20260510T012321│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 10                      │ 4                         │
+│ completed        │ 11                      │ 4                         │
+│ merged into VDB  │ 4                       │ 4                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-app_misc_mosquitto-20260510T012321/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-app_misc_mosquitto-20260510T012321/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

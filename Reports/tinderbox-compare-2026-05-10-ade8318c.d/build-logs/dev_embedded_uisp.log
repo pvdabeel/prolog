@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-embedded/uisp'  mode=--build  label=dev_embedded_uisp
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_embedded_uisp
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_embedded_uisp
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_embedded_uisp' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_embedded_uisp' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_embedded_uisp-20260510T014833)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-embedded/uisp                                             │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_embedded_uisp-20260510T014833│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 3                       │ 1                         │
+│ completed        │ 4                       │ 1                         │
+│ merged into VDB  │ 1                       │ 1                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_embedded_uisp-20260510T014833/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_embedded_uisp-20260510T014833/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

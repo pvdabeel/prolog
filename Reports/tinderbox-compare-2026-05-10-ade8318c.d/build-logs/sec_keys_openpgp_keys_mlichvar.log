@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='sec-keys/openpgp-keys-mlichvar'  mode=--build  label=sec_keys_openpgp_keys_mlichvar
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-sec_keys_openpgp_keys_mlichvar
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-sec_keys_openpgp_keys_mlichvar
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-sec_keys_openpgp_keys_mlichvar' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-sec_keys_openpgp_keys_mlichvar' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-sec_keys_openpgp_keys_mlichvar-20260510T091235)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : sec-keys/openpgp-keys-mlichvar                                │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-sec_keys_openpgp_keys_mlichvar-20260510T091235│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 3                       │ 1                         │
+│ completed        │ 4                       │ 1                         │
+│ merged into VDB  │ 1                       │ 1                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-sec_keys_openpgp_keys_mlichvar-20260510T091235/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-sec_keys_openpgp_keys_mlichvar-20260510T091235/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='net-libs/libqmi'  mode=--build  label=net_libs_libqmi
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-net_libs_libqmi
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-net_libs_libqmi
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-net_libs_libqmi' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-net_libs_libqmi' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-net_libs_libqmi-20260510T085028)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : net-libs/libqmi                                               │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-net_libs_libqmi-20260510T085028│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 22                      │ 8                         │
+│ completed        │ 23                      │ 8                         │
+│ merged into VDB  │ 8                       │ 8                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-net_libs_libqmi-20260510T085028/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-net_libs_libqmi-20260510T085028/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

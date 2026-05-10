@@ -1,0 +1,31 @@
+[tinderbox-ng] compare: target='media-libs/alsa-oss'  mode=--build  label=media_libs_alsa_oss
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-media_libs_alsa_oss
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-media_libs_alsa_oss
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-media_libs_alsa_oss' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-media_libs_alsa_oss' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-media_libs_alsa_oss-20260510T075255)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : media-libs/alsa-oss                                           │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-media_libs_alsa_oss-20260510T075255│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 12                      │ 0                         │
+│ completed        │ 8                       │ 2                         │
+│ merged into VDB  │ 2                       │ 2                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 4] FAIL (1) install portage://media-libs/alsa-lib-1.2.15.3
+  emerge    : >>> Failed to emerge media-libs/alsa-lib-1.2.15.3, Log file:
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-media_libs_alsa_oss-20260510T075255/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-media_libs_alsa_oss-20260510T075255/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

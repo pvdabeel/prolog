@@ -1,0 +1,60 @@
+[tinderbox-ng] compare: target='net-irc/kvirc'  mode=--build  label=net_irc_kvirc
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-net_irc_kvirc
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-net_irc_kvirc
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-net_irc_kvirc' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-net_irc_kvirc' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-net_irc_kvirc-20260510T084818)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : net-irc/kvirc                                                 │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-net_irc_kvirc-20260510T084818  │
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 158                     │ ?                         │
+│ completed        │ 99                      │ 0                         │
+│ merged into VDB  │ 27                      │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 6] FAIL (1) install portage://media-libs/freetype-2.14.3
+
+VDB delta (after build):
+  only in portage-ng:
+    + acct-group/messagebus-0-r3
+    + acct-user/messagebus-0-r3
+    + app-eselect/eselect-fontconfig-20220403
+    + app-text/docbook-xml-dtd-4.4-r3
+    + dev-libs/double-conversion-3.4.0
+    + dev-libs/fribidi-1.0.16
+    + dev-libs/gobject-introspection-common-1.86.0
+    + dev-libs/libevdev-1.13.6
+    + dev-libs/libinput-1.31.1
+    + dev-libs/md4c-0.5.3
+    + dev-util/glib-utils-2.88.0
+    + media-fonts/liberation-fonts-2.1.5
+    + media-gfx/graphite2-1.3.14_p20210810-r5
+    + media-libs/dav1d-1.5.1
+    + media-libs/libpng-1.6.58
+    + sys-libs/mtdev-1.1.7
+    + virtual/libudev-251-r2
+    + virtual/ttf-fonts-1-r2
+    + x11-base/xcb-proto-1.17.0
+    + x11-base/xorg-proto-2025.1
+    + x11-libs/libICE-1.1.2
+    + x11-libs/libXau-1.0.12
+    + x11-libs/libXdmcp-1.1.5
+    + x11-libs/libdrm-2.4.133
+    + x11-libs/pixman-0.46.4
+    + x11-libs/xtrans-1.6.0
+    + x11-misc/xkeyboard-config-2.47
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-net_irc_kvirc-20260510T084818/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-net_irc_kvirc-20260510T084818/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

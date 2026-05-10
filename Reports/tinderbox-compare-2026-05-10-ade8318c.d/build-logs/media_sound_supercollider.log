@@ -1,0 +1,67 @@
+[tinderbox-ng] compare: target='media-sound/supercollider'  mode=--build  label=media_sound_supercollider
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-media_sound_supercollider
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-media_sound_supercollider
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-media_sound_supercollider' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-media_sound_supercollider' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-media_sound_supercollider-20260510T081753)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : media-sound/supercollider                                     │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-media_sound_supercollider-20260510T081753│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 170                     │ 15                        │
+│ completed        │ 79                      │ 56                        │
+│ merged into VDB  │ 24                      │ 56                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 2] FAIL (1) install portage://media-sound/lame-3.100-r3
+  emerge    : >>> Failed to emerge media-libs/alsa-lib-1.2.15.3, Log file:
+
+VDB delta (after build):
+  only in emerge:
+    + acct-user/avahi-0-r3
+    + acct-user/messagebus-0-r3
+    + app-text/xmltoman-0.6-r1
+    + dev-build/b2-5.4.2
+    + dev-libs/boost-1.90.0-r1
+    + dev-libs/gobject-introspection-1.86.0
+    + dev-libs/gobject-introspection-common-1.86.0
+    + dev-libs/libevent-2.1.12-r1
+    + dev-perl/File-Listing-6.160.0
+    + dev-perl/HTML-Parser-3.830.0
+    + dev-perl/HTTP-Cookies-6.110.0
+    + dev-perl/HTTP-Date-6.60.0
+    + dev-perl/HTTP-Message-7.10.0
+    + dev-perl/HTTP-Negotiate-6.10.0-r2
+    + dev-perl/IO-Socket-INET6-2.730.0
+    + dev-perl/LWP-MediaTypes-6.40.0
+    + dev-perl/LWP-Protocol-https-6.140.0
+    + dev-perl/Net-HTTP-6.240.0
+    + dev-perl/Try-Tiny-0.320.0
+    + dev-perl/URI-5.340.0
+    + dev-perl/WWW-RobotRules-6.20.0-r2
+    + dev-perl/XML-Parser-2.470.0-r1
+    + dev-perl/libwww-perl-6.810.0
+    + media-libs/alsa-topology-conf-1.2.5.1-r1
+    + media-libs/alsa-ucm-conf-1.2.15.3
+    + media-sound/mpg123-base-1.33.4
+    + sys-apps/dbus-1.16.2
+    + virtual/perl-Compress-Raw-Bzip2-2.213.0
+    + virtual/perl-Compress-Raw-Zlib-2.222.0
+    + virtual/perl-IO-Compress-2.213.0
+    + virtual/perl-MIME-Base64-3.160.100_rc-r2
+    + virtual/perl-Time-Local-1.350.0-r1
+  in both: 24 packages
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-media_sound_supercollider-20260510T081753/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-media_sound_supercollider-20260510T081753/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

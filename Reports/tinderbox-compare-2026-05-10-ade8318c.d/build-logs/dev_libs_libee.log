@@ -1,0 +1,31 @@
+[tinderbox-ng] compare: target='dev-libs/libee'  mode=--build  label=dev_libs_libee
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_libs_libee
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_libs_libee
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_libs_libee' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_libs_libee' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_libs_libee-20260510T045238)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-libs/libee                                                │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_libs_libee-20260510T045238 │
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 6                       │ 0                         │
+│ completed        │ 2                       │ 0                         │
+│ merged into VDB  │ 0                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 2] FAIL (1) install portage://dev-libs/libestr-0.1.11-r1
+  emerge    : >>> Failed to emerge dev-libs/libestr-0.1.11-r1, Log file:
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_libs_libee-20260510T045238/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_libs_libee-20260510T045238/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

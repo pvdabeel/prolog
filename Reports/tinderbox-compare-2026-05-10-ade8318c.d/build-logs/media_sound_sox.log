@@ -1,0 +1,38 @@
+[tinderbox-ng] compare: target='media-sound/sox'  mode=--build  label=media_sound_sox
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-media_sound_sox
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-media_sound_sox
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-media_sound_sox' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-media_sound_sox' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-media_sound_sox-20260510T081742)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : media-sound/sox                                               │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-media_sound_sox-20260510T081742│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 60                      │ 1                         │
+│ completed        │ 43                      │ 16                        │
+│ merged into VDB  │ 13                      │ 16                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 5] FAIL (1) install portage://media-libs/freetype-2.14.3
+  emerge    : >>> Failed to emerge media-libs/freetype-2.14.3, Log file:
+
+VDB delta (after build):
+  only in emerge:
+    + dev-libs/gobject-introspection-1.86.0
+    + sys-apps/hwdata-0.401
+    + x11-libs/libpciaccess-0.19
+  in both: 13 packages
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-media_sound_sox-20260510T081742/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-media_sound_sox-20260510T081742/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

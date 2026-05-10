@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-util/gcovr'  mode=--build  label=dev_util_gcovr
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_util_gcovr
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_util_gcovr
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_util_gcovr' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_util_gcovr' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_util_gcovr-20260510T070840)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-util/gcovr                                                │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_util_gcovr-20260510T070840 │
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 13                      │ 5                         │
+│ completed        │ 14                      │ 5                         │
+│ merged into VDB  │ 5                       │ 5                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_util_gcovr-20260510T070840/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_util_gcovr-20260510T070840/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

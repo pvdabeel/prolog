@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-python/txamqp'  mode=--build  label=dev_python_txamqp
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_python_txamqp
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_python_txamqp
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_python_txamqp' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_python_txamqp' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_python_txamqp-20260510T063724)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-python/txamqp                                             │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_python_txamqp-20260510T063724│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 65                      │ 23                        │
+│ completed        │ 66                      │ 23                        │
+│ merged into VDB  │ 23                      │ 23                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_python_txamqp-20260510T063724/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_python_txamqp-20260510T063724/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

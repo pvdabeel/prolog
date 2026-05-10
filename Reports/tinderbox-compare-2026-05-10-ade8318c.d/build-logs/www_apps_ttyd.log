@@ -1,0 +1,32 @@
+[tinderbox-ng] compare: target='www-apps/ttyd'  mode=--build  label=www_apps_ttyd
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-www_apps_ttyd
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-www_apps_ttyd
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-www_apps_ttyd' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-www_apps_ttyd' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-www_apps_ttyd-20260510T095231)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : www-apps/ttyd                                                 │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-www_apps_ttyd-20260510T095231  │
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ FAIL(1)                   │
+│ plan actions     │ 7                       │ ?                         │
+│ completed        │ 7                       │ 0                         │
+│ merged into VDB  │ 2                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+VDB delta (after build):
+  only in portage-ng:
+    + net-libs/libwebsockets-4.5.8
+    + www-apps/ttyd-1.7.7-r1
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-www_apps_ttyd-20260510T095231/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-www_apps_ttyd-20260510T095231/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

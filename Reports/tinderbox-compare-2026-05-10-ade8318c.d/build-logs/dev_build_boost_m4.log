@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-build/boost-m4'  mode=--build  label=dev_build_boost_m4
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_build_boost_m4
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_build_boost_m4
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_build_boost_m4' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_build_boost_m4' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_build_boost_m4-20260510T014441)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-build/boost-m4                                            │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_build_boost_m4-20260510T014441│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 3                       │ 1                         │
+│ completed        │ 4                       │ 1                         │
+│ merged into VDB  │ 1                       │ 1                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_build_boost_m4-20260510T014441/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_build_boost_m4-20260510T014441/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

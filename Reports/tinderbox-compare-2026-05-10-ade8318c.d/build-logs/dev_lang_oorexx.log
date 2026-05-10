@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-lang/oorexx'  mode=--build  label=dev_lang_oorexx
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_lang_oorexx
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_lang_oorexx
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_lang_oorexx' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_lang_oorexx' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_lang_oorexx-20260510T044451)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-lang/oorexx                                               │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_lang_oorexx-20260510T044451│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 3                       │ 1                         │
+│ completed        │ 4                       │ 1                         │
+│ merged into VDB  │ 1                       │ 1                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_lang_oorexx-20260510T044451/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_lang_oorexx-20260510T044451/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

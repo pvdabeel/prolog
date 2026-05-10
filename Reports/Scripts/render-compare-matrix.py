@@ -265,16 +265,18 @@ def render(pretend: Optional[list[dict]],
            build: Optional[list[dict]],
            commit: str,
            build_logs: Optional[Path] = None,
-           pretend_logs: Optional[Path] = None) -> str:
+           pretend_logs: Optional[Path] = None,
+           manifest: str = "Source/Application/Wrapper/Linux/tinderbox-ng.d/manifest-100.txt") -> str:
     if pretend is not None:
         annotate_target_install(pretend, pretend_logs)
     if build is not None:
         annotate_target_install(build, build_logs)
     today = dt.date.today().isoformat()
     parts: list[str] = []
+    n_targets = len(build) if build else (len(pretend) if pretend else 0)
     parts.append(f"# tinderbox-ng compare report — {today} ({commit})\n")
     parts.append("Side-by-side comparison of `portage-ng` and traditional `emerge` over a")
-    parts.append("100+ package matrix, run through the `tinderbox-ng compare` harness on")
+    parts.append(f"{n_targets}-package matrix, run through the `tinderbox-ng compare` harness on")
     parts.append("`vm-linux.local`. Each comparison runs in two fresh OverlayFS sessions")
     parts.append("spawned from the same immutable baseline (stage3 + SWI-Prolog +")
     parts.append("portage-ng + matching `kb.qlf`), in parallel, in private mount")
@@ -283,7 +285,7 @@ def render(pretend: Optional[list[dict]],
     parts.append("`clean → setup → unpack → prepare → configure → compile → install →")
     parts.append("merge` chain on both engines.\n")
     parts.append(f"Driver:   `Source/Application/Wrapper/Linux/tinderbox-ng.d/compare-matrix.sh`")
-    parts.append(f"Manifest: `Source/Application/Wrapper/Linux/tinderbox-ng.d/manifest-100.txt`")
+    parts.append(f"Manifest: `{manifest}`")
     parts.append(f"Commit:   `{commit}`\n")
 
     if build:
@@ -324,13 +326,19 @@ def render(pretend: Optional[list[dict]],
                      "These are real bugs and the most actionable item.")
         parts.append(f"- **{len(b_genuine_emerge_fail)} cases where both engines fail** on "
                      "the same package (or its sub-deps). These are upstream/ebuild issues, "
-                     "not engine bugs — but portage-ng currently masks them as `exit 0`.")
-        parts.append("- **Silent-failure bug in portage-ng**: when a sub-dep install step "
-                     "fails, the failure does not always propagate to the pipeline exit code. "
-                     "12/65 build-tier runs reported `exit 0` while the target was never "
-                     "merged into VDB. Compare-matrix detection relies on parsing the "
-                     "VDB-delta and first-error sections, which is now done by "
-                     "`render-compare-matrix.py`.\n")
+                     "not engine bugs.")
+        b_silent_count = summary_metrics(build)["pn_silent"]
+        if b_silent_count > 0:
+            parts.append(f"- **{b_silent_count} portage-ng silent failures**: pipeline "
+                         "exited 0 but the target was never merged into VDB. Hits a known "
+                         "regression of the action:maybe_ci_exit_on_build_failure/1 guard; "
+                         "see the dedicated section below for the package list.")
+        else:
+            parts.append("- **0 portage-ng silent failures**: every package whose pipeline "
+                         "exited 0 also landed the target in VDB. The earlier "
+                         "`maybe_ci_exit_on_build_failure/1` regression that produced "
+                         "12/65 silent failures in the 2026-05-09 matrix is no longer "
+                         "observable.\n")
 
     if b_pn_only_wins:
         parts.append("### portage-ng-only build wins\n")
@@ -459,6 +467,9 @@ def main() -> None:
     p.add_argument("--build-logs", type=Path,
                    help="dir of per-package build logs (for silent-failure detection)")
     p.add_argument("--commit", required=True, help="git short commit hash")
+    p.add_argument("--manifest",
+                   default="Source/Application/Wrapper/Linux/tinderbox-ng.d/manifest-100.txt",
+                   help="manifest path to cite in the report header")
     p.add_argument("--out", type=Path, required=True, help="output markdown path")
     args = p.parse_args()
 
@@ -467,7 +478,8 @@ def main() -> None:
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(render(pretend, build, args.commit,
                                build_logs=args.build_logs,
-                               pretend_logs=args.pretend_logs))
+                               pretend_logs=args.pretend_logs,
+                               manifest=args.manifest))
     print(f"wrote {args.out}")
 
 

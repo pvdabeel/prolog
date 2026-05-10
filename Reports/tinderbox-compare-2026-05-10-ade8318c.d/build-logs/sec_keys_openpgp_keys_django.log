@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='sec-keys/openpgp-keys-django'  mode=--build  label=sec_keys_openpgp_keys_django
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-sec_keys_openpgp_keys_django
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-sec_keys_openpgp_keys_django
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-sec_keys_openpgp_keys_django' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-sec_keys_openpgp_keys_django' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-sec_keys_openpgp_keys_django-20260510T091204)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : sec-keys/openpgp-keys-django                                  │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-sec_keys_openpgp_keys_django-20260510T091204│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 3                       │ 1                         │
+│ completed        │ 4                       │ 1                         │
+│ merged into VDB  │ 1                       │ 1                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-sec_keys_openpgp_keys_django-20260510T091204/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-sec_keys_openpgp_keys_django-20260510T091204/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

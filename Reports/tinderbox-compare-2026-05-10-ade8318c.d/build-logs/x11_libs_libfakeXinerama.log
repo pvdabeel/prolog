@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='x11-libs/libfakeXinerama'  mode=--build  label=x11_libs_libfakeXinerama
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-x11_libs_libfakeXinerama
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-x11_libs_libfakeXinerama
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-x11_libs_libfakeXinerama' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-x11_libs_libfakeXinerama' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-x11_libs_libfakeXinerama-20260510T095911)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : x11-libs/libfakeXinerama                                      │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-x11_libs_libfakeXinerama-20260510T095911│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 31                      │ 11                        │
+│ completed        │ 31                      │ 11                        │
+│ merged into VDB  │ 11                      │ 11                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-x11_libs_libfakeXinerama-20260510T095911/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-x11_libs_libfakeXinerama-20260510T095911/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

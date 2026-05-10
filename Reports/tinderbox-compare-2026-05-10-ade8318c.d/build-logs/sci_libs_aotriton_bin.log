@@ -1,0 +1,44 @@
+[tinderbox-ng] compare: target='sci-libs/aotriton-bin'  mode=--build  label=sci_libs_aotriton_bin
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-sci_libs_aotriton_bin
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-sci_libs_aotriton_bin
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-sci_libs_aotriton_bin' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-sci_libs_aotriton_bin' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-sci_libs_aotriton_bin-20260510T090500)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : sci-libs/aotriton-bin                                         │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-sci_libs_aotriton_bin-20260510T090500│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ FAIL(1)                   │
+│ plan actions     │ 42                      │ ?                         │
+│ completed        │ 40                      │ 0                         │
+│ merged into VDB  │ 14                      │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+VDB delta (after build):
+  only in portage-ng:
+    + dev-libs/rocm-core-7.2.0
+    + dev-util/hip-7.2.0-r1
+    + media-libs/libglvnd-1.7.0
+    + sci-libs/aotriton-bin-0.11.2b
+    + virtual/opengl-8
+    + x11-base/xcb-proto-1.17.0
+    + x11-base/xorg-proto-2025.1
+    + x11-libs/libX11-1.8.13
+    + x11-libs/libXau-1.0.12
+    + x11-libs/libXdmcp-1.1.5
+    + x11-libs/libXext-1.3.7
+    + x11-libs/libxcb-1.17.0
+    + x11-libs/xtrans-1.6.0
+    + x11-misc/compose-tables-1.8.13
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-sci_libs_aotriton_bin-20260510T090500/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-sci_libs_aotriton_bin-20260510T090500/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

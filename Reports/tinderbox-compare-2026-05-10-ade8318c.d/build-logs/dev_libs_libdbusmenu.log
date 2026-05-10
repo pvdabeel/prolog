@@ -1,0 +1,31 @@
+[tinderbox-ng] compare: target='dev-libs/libdbusmenu'  mode=--build  label=dev_libs_libdbusmenu
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_libs_libdbusmenu
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_libs_libdbusmenu
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_libs_libdbusmenu' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_libs_libdbusmenu' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_libs_libdbusmenu-20260510T045227)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-libs/libdbusmenu                                          │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_libs_libdbusmenu-20260510T045227│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 98                      │ 36                        │
+│ completed        │ 95                      │ 35                        │
+│ merged into VDB  │ 35                      │ 35                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 19] FAIL (1) install portage://dev-libs/libdbusmenu-16.04.0-r4
+  emerge    : >>> Failed to emerge dev-libs/libdbusmenu-16.04.0-r4, Log file:
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_libs_libdbusmenu-20260510T045227/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_libs_libdbusmenu-20260510T045227/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

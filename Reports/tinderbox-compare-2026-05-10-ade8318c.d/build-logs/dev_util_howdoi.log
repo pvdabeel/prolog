@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-util/howdoi'  mode=--build  label=dev_util_howdoi
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_util_howdoi
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_util_howdoi
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_util_howdoi' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_util_howdoi' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_util_howdoi-20260510T070923)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-util/howdoi                                               │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_util_howdoi-20260510T070923│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 91                      │ 32                        │
+│ completed        │ 92                      │ 32                        │
+│ merged into VDB  │ 32                      │ 32                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_util_howdoi-20260510T070923/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_util_howdoi-20260510T070923/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

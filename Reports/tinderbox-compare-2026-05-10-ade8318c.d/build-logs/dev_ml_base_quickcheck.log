@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-ml/base_quickcheck'  mode=--build  label=dev_ml_base_quickcheck
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_ml_base_quickcheck
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_ml_base_quickcheck
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_ml_base_quickcheck' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_ml_base_quickcheck' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_ml_base_quickcheck-20260510T045936)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-ml/base_quickcheck                                        │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_ml_base_quickcheck-20260510T045936│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 125                     │ 42                        │
+│ completed        │ 126                     │ 42                        │
+│ merged into VDB  │ 42                      │ 42                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_ml_base_quickcheck-20260510T045936/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_ml_base_quickcheck-20260510T045936/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

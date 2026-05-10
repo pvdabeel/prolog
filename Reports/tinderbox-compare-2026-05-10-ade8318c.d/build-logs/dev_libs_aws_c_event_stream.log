@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-libs/aws-c-event-stream'  mode=--build  label=dev_libs_aws_c_event_stream
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_libs_aws_c_event_stream
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_libs_aws_c_event_stream
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_libs_aws_c_event_stream' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_libs_aws_c_event_stream' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_libs_aws_c_event_stream-20260510T044724)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-libs/aws-c-event-stream                                   │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_libs_aws_c_event_stream-20260510T044724│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 18                      │ 6                         │
+│ completed        │ 19                      │ 6                         │
+│ merged into VDB  │ 6                       │ 6                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_libs_aws_c_event_stream-20260510T044724/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_libs_aws_c_event_stream-20260510T044724/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

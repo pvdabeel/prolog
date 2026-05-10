@@ -1,0 +1,32 @@
+[tinderbox-ng] compare: target='app-forensics/rkhunter'  mode=--build  label=app_forensics_rkhunter
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-app_forensics_rkhunter
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-app_forensics_rkhunter
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-app_forensics_rkhunter' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-app_forensics_rkhunter' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-app_forensics_rkhunter-20260510T011632)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : app-forensics/rkhunter                                        │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-app_forensics_rkhunter-20260510T011632│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ FAIL(1)                   │
+│ plan actions     │ 7                       │ ?                         │
+│ completed        │ 7                       │ 0                         │
+│ merged into VDB  │ 2                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+VDB delta (after build):
+  only in portage-ng:
+    + app-forensics/rkhunter-1.4.6-r2
+    + sys-process/lsof-4.99.6
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-app_forensics_rkhunter-20260510T011632/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-app_forensics_rkhunter-20260510T011632/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

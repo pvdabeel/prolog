@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='x11-misc/clipnotify'  mode=--build  label=x11_misc_clipnotify
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-x11_misc_clipnotify
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-x11_misc_clipnotify
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-x11_misc_clipnotify' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-x11_misc_clipnotify' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-x11_misc_clipnotify-20260510T100348)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : x11-misc/clipnotify                                           │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-x11_misc_clipnotify-20260510T100348│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 29                      │ 10                        │
+│ completed        │ 29                      │ 10                        │
+│ merged into VDB  │ 10                      │ 10                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-x11_misc_clipnotify-20260510T100348/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-x11_misc_clipnotify-20260510T100348/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

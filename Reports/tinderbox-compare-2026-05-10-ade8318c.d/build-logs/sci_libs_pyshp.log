@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='sci-libs/pyshp'  mode=--build  label=sci_libs_pyshp
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-sci_libs_pyshp
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-sci_libs_pyshp
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-sci_libs_pyshp' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-sci_libs_pyshp' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-sci_libs_pyshp-20260510T090832)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : sci-libs/pyshp                                                │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-sci_libs_pyshp-20260510T090832 │
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 3                       │ 1                         │
+│ completed        │ 4                       │ 1                         │
+│ merged into VDB  │ 1                       │ 1                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-sci_libs_pyshp-20260510T090832/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-sci_libs_pyshp-20260510T090832/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

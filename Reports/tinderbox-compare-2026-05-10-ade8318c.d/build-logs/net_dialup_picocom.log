@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='net-dialup/picocom'  mode=--build  label=net_dialup_picocom
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-net_dialup_picocom
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-net_dialup_picocom
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-net_dialup_picocom' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-net_dialup_picocom' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-net_dialup_picocom-20260510T083747)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : net-dialup/picocom                                            │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-net_dialup_picocom-20260510T083747│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 9                       │ 4                         │
+│ completed        │ 10                      │ 4                         │
+│ merged into VDB  │ 4                       │ 4                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-net_dialup_picocom-20260510T083747/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-net_dialup_picocom-20260510T083747/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

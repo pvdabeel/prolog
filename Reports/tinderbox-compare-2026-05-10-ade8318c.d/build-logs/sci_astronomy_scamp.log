@@ -1,0 +1,35 @@
+[tinderbox-ng] compare: target='sci-astronomy/scamp'  mode=--build  label=sci_astronomy_scamp
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-sci_astronomy_scamp
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-sci_astronomy_scamp
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-sci_astronomy_scamp' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-sci_astronomy_scamp' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-sci_astronomy_scamp-20260510T090322)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : sci-astronomy/scamp                                           │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-sci_astronomy_scamp-20260510T090322│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 16                      │ ?                         │
+│ completed        │ 7                       │ 0                         │
+│ merged into VDB  │ 2                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 3] FAIL (1) install portage://sci-libs/atlas-3.11.41
+
+VDB delta (after build):
+  only in portage-ng:
+    + app-shells/tcsh-6.24.16
+    + sci-libs/fftw-3.3.10-r1
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-sci_astronomy_scamp-20260510T090322/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-sci_astronomy_scamp-20260510T090322/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

@@ -1,0 +1,35 @@
+[tinderbox-ng] compare: target='dev-haskell/hspec-wai'  mode=--build  label=dev_haskell_hspec_wai
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_haskell_hspec_wai
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_haskell_hspec_wai
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_haskell_hspec_wai' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_haskell_hspec_wai' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_haskell_hspec_wai-20260510T023346)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-haskell/hspec-wai                                         │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_haskell_hspec_wai-20260510T023346│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 340                     │ 0                         │
+│ completed        │ 114                     │ 1                         │
+│ merged into VDB  │ 0                       │ 1                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng:              │ download  portage://dev-haskell/fail-4.9.0.0
+  emerge    : [ebuild  N     ] dev-haskell/fail-4.9.0.0:0/4.9.0.0::gentoo  USE="-profile" 0 KiB
+
+VDB delta (after build):
+  only in emerge:
+    + app-text/dos2unix-7.5.5
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_haskell_hspec_wai-20260510T023346/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_haskell_hspec_wai-20260510T023346/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

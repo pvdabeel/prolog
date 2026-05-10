@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='media-sound/toolame'  mode=--build  label=media_sound_toolame
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-media_sound_toolame
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-media_sound_toolame
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-media_sound_toolame' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-media_sound_toolame' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-media_sound_toolame-20260510T081859)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : media-sound/toolame                                           │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-media_sound_toolame-20260510T081859│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 3                       │ 1                         │
+│ completed        │ 4                       │ 1                         │
+│ merged into VDB  │ 1                       │ 1                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-media_sound_toolame-20260510T081859/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-media_sound_toolame-20260510T081859/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

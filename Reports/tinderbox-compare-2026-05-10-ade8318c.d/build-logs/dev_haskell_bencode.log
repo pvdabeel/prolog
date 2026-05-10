@@ -1,0 +1,34 @@
+[tinderbox-ng] compare: target='dev-haskell/bencode'  mode=--build  label=dev_haskell_bencode
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_haskell_bencode
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_haskell_bencode
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_haskell_bencode' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_haskell_bencode' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_haskell_bencode-20260510T015733)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-haskell/bencode                                           │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_haskell_bencode-20260510T015733│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(124)               │ FAIL(1)                   │
+│ plan actions     │ 19                      │ 0                         │
+│ completed        │ 0                       │ 1                         │
+│ merged into VDB  │ 0                       │ 1                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  emerge    : >>> Failed to emerge dev-lang/ghc-9.2.8, Log file:
+
+VDB delta (after build):
+  only in emerge:
+    + app-text/dos2unix-7.5.5
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_haskell_bencode-20260510T015733/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_haskell_bencode-20260510T015733/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

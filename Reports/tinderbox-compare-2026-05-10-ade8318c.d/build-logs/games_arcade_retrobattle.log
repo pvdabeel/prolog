@@ -1,0 +1,48 @@
+[tinderbox-ng] compare: target='games-arcade/retrobattle'  mode=--build  label=games_arcade_retrobattle
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-games_arcade_retrobattle
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-games_arcade_retrobattle
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-games_arcade_retrobattle' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-games_arcade_retrobattle' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-games_arcade_retrobattle-20260510T072115)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : games-arcade/retrobattle                                      │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-games_arcade_retrobattle-20260510T072115│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ FAIL(1)                   │
+│ plan actions     │ 55                      │ ?                         │
+│ completed        │ 53                      │ 0                         │
+│ merged into VDB  │ 18                      │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+VDB delta (after build):
+  only in portage-ng:
+    + games-arcade/retrobattle-1.0.0-r1
+    + media-libs/libsdl-1.2.74
+    + media-libs/libsdl2-2.32.10
+    + media-libs/sdl-mixer-1.2.12_p20240525
+    + x11-base/xcb-proto-1.17.0
+    + x11-base/xorg-proto-2025.1
+    + x11-libs/libX11-1.8.13
+    + x11-libs/libXau-1.0.12
+    + x11-libs/libXcursor-1.2.3
+    + x11-libs/libXdmcp-1.1.5
+    + x11-libs/libXext-1.3.7
+    + x11-libs/libXfixes-6.0.2
+    + x11-libs/libXi-1.8.2
+    + x11-libs/libXrandr-1.5.5
+    + x11-libs/libXrender-0.9.12
+    + x11-libs/libxcb-1.17.0
+    + x11-libs/xtrans-1.6.0
+    + x11-misc/compose-tables-1.8.13
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-games_arcade_retrobattle-20260510T072115/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-games_arcade_retrobattle-20260510T072115/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

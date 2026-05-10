@@ -1,0 +1,34 @@
+[tinderbox-ng] compare: target='x11-misc/xdaliclock'  mode=--build  label=x11_misc_xdaliclock
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-x11_misc_xdaliclock
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-x11_misc_xdaliclock
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-x11_misc_xdaliclock' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-x11_misc_xdaliclock' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-x11_misc_xdaliclock-20260510T100611)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : x11-misc/xdaliclock                                           │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-x11_misc_xdaliclock-20260510T100611│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 167                     │ ?                         │
+│ completed        │ 56                      │ 0                         │
+│ merged into VDB  │ 1                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 2] FAIL (1) update portage://dev-python/setuptools-82.0.1
+
+VDB delta (after build):
+  only in portage-ng:
+    + acct-group/messagebus-0-r3
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-x11_misc_xdaliclock-20260510T100611/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-x11_misc_xdaliclock-20260510T100611/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

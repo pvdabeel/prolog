@@ -1,0 +1,51 @@
+[tinderbox-ng] compare: target='app-shells/fish'  mode=--build  label=app_shells_fish
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-app_shells_fish
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-app_shells_fish
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-app_shells_fish' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-app_shells_fish' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-app_shells_fish-20260510T012906)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : app-shells/fish                                               │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-app_shells_fish-20260510T012906│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ OK                        │
+│ plan actions     │ 71                      │ 16                        │
+│ completed        │ 18                      │ 16                        │
+│ merged into VDB  │ 1                       │ 16                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 2] FAIL (1) update portage://dev-python/docutils-0.22.4
+
+VDB delta (after build):
+  only in portage-ng:
+    + dev-python/gpep517-19
+  only in emerge:
+    + app-eselect/eselect-rust-20210703
+    + app-shells/fish-4.6.0
+    + dev-lang/rust-bin-1.95.0
+    + dev-python/alabaster-1.0.0
+    + dev-python/babel-2.18.0
+    + dev-python/imagesize-2.0.0
+    + dev-python/roman-numerals-4.1.0
+    + dev-python/snowballstemmer-3.0.1
+    + dev-python/sphinx-9.1.0
+    + dev-python/sphinxcontrib-applehelp-2.0.0-r1
+    + dev-python/sphinxcontrib-devhelp-2.0.0-r1
+    + dev-python/sphinxcontrib-htmlhelp-2.1.0-r1
+    + dev-python/sphinxcontrib-jsmath-1.0.1-r4
+    + dev-python/sphinxcontrib-qthelp-2.0.0-r1
+    + dev-python/sphinxcontrib-serializinghtml-2.0.0-r1
+    + sys-apps/lsb-release-3.3
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-app_shells_fish-20260510T012906/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-app_shells_fish-20260510T012906/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

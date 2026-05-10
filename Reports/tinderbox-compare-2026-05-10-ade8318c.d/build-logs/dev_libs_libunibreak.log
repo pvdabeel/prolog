@@ -1,0 +1,38 @@
+[tinderbox-ng] compare: target='dev-libs/libunibreak'  mode=--build  label=dev_libs_libunibreak
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_libs_libunibreak
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_libs_libunibreak
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_libs_libunibreak' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_libs_libunibreak' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_libs_libunibreak-20260510T045453)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-libs/libunibreak                                          │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_libs_libunibreak-20260510T045453│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 54                      │ 0                         │
+│ completed        │ 28                      │ 13                        │
+│ merged into VDB  │ 10                      │ 13                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 2] FAIL (1) install portage://media-libs/jbig2dec-0.20
+  emerge    : >>> Failed to emerge media-libs/jbig2dec-0.20, Log file:
+
+VDB delta (after build):
+  only in emerge:
+    + dev-libs/spdlog-1.17.0
+    + media-libs/openjpeg-2.5.4-r1
+    + virtual/ttf-fonts-1-r2
+  in both: 10 packages
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_libs_libunibreak-20260510T045453/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_libs_libunibreak-20260510T045453/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

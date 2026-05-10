@@ -1,0 +1,36 @@
+[tinderbox-ng] compare: target='media-libs/zmusic'  mode=--build  label=media_libs_zmusic
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-media_libs_zmusic
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-media_libs_zmusic
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-media_libs_zmusic' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-media_libs_zmusic' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-media_libs_zmusic-20260510T080428)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : media-libs/zmusic                                             │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-media_libs_zmusic-20260510T080428│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 29                      │ 1                         │
+│ completed        │ 15                      │ 6                         │
+│ merged into VDB  │ 5                       │ 6                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 2] FAIL (1) install portage://media-sound/lame-3.100-r3
+  emerge    : >>> Failed to emerge media-libs/libvorbis-1.3.7-r2, Log file:
+
+VDB delta (after build):
+  only in emerge:
+    + media-sound/mpg123-base-1.33.4
+  in both: 5 packages
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-media_libs_zmusic-20260510T080428/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-media_libs_zmusic-20260510T080428/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

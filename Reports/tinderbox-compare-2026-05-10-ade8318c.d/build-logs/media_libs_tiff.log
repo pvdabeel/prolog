@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='media-libs/tiff'  mode=--build  label=media_libs_tiff
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-media_libs_tiff
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-media_libs_tiff
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-media_libs_tiff' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-media_libs_tiff' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-media_libs_tiff-20260510T080249)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : media-libs/tiff                                               │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-media_libs_tiff-20260510T080249│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 3                       │ 1                         │
+│ completed        │ 4                       │ 1                         │
+│ merged into VDB  │ 1                       │ 1                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-media_libs_tiff-20260510T080249/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-media_libs_tiff-20260510T080249/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

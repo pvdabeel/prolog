@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-perl/Filesys-Statvfs'  mode=--build  label=dev_perl_Filesys_Statvfs
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_perl_Filesys_Statvfs
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_perl_Filesys_Statvfs
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_perl_Filesys_Statvfs' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_perl_Filesys_Statvfs' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_perl_Filesys_Statvfs-20260510T053234)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-perl/Filesys-Statvfs                                      │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_perl_Filesys_Statvfs-20260510T053234│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 3                       │ 1                         │
+│ completed        │ 4                       │ 1                         │
+│ merged into VDB  │ 1                       │ 1                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_perl_Filesys_Statvfs-20260510T053234/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_perl_Filesys_Statvfs-20260510T053234/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

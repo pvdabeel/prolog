@@ -1,0 +1,31 @@
+[tinderbox-ng] compare: target='net-dialup/sercd'  mode=--build  label=net_dialup_sercd
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-net_dialup_sercd
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-net_dialup_sercd
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-net_dialup_sercd' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-net_dialup_sercd' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-net_dialup_sercd-20260510T083756)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : net-dialup/sercd                                              │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-net_dialup_sercd-20260510T083756│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 3                       │ 1                         │
+│ completed        │ 1                       │ 0                         │
+│ merged into VDB  │ 0                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 2] FAIL (1) install portage://net-dialup/sercd-3.0.0-r3
+  emerge    : >>> Failed to emerge net-dialup/sercd-3.0.0-r3, Log file:
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-net_dialup_sercd-20260510T083756/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-net_dialup_sercd-20260510T083756/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

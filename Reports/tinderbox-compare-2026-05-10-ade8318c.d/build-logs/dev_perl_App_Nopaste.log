@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-perl/App-Nopaste'  mode=--build  label=dev_perl_App_Nopaste
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_perl_App_Nopaste
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_perl_App_Nopaste
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_perl_App_Nopaste' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_perl_App_Nopaste' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_perl_App_Nopaste-20260510T051303)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-perl/App-Nopaste                                          │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_perl_App_Nopaste-20260510T051303│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 180                     │ 64                        │
+│ completed        │ 181                     │ 64                        │
+│ merged into VDB  │ 64                      │ 64                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_perl_App_Nopaste-20260510T051303/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_perl_App_Nopaste-20260510T051303/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

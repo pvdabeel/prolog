@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-cpp/jwt-cpp'  mode=--build  label=dev_cpp_jwt_cpp
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_cpp_jwt_cpp
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_cpp_jwt_cpp
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_cpp_jwt_cpp' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_cpp_jwt_cpp' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_cpp_jwt_cpp-20260510T014501)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-cpp/jwt-cpp                                               │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_cpp_jwt_cpp-20260510T014501│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 9                       │ 3                         │
+│ completed        │ 10                      │ 3                         │
+│ merged into VDB  │ 3                       │ 3                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_cpp_jwt_cpp-20260510T014501/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_cpp_jwt_cpp-20260510T014501/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

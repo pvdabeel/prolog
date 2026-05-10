@@ -1,0 +1,73 @@
+[tinderbox-ng] compare: target='net-voip/murmur'  mode=--build  label=net_voip_murmur
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-net_voip_murmur
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-net_voip_murmur
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-net_voip_murmur' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-net_voip_murmur' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-net_voip_murmur-20260510T090123)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : net-voip/murmur                                               │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-net_voip_murmur-20260510T090123│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 175                     │ ?                         │
+│ completed        │ 124                     │ 0                         │
+│ merged into VDB  │ 40                      │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 6] FAIL (1) install portage://media-libs/freetype-2.14.3
+
+VDB delta (after build):
+  only in portage-ng:
+    + acct-group/messagebus-0-r3
+    + acct-group/murmur-0-r3
+    + acct-user/messagebus-0-r3
+    + acct-user/murmur-0-r3
+    + app-eselect/eselect-fontconfig-20220403
+    + app-text/docbook-xml-dtd-4.4-r3
+    + dev-build/b2-5.4.2
+    + dev-cpp/abseil-cpp-20250814.1
+    + dev-cpp/cli11-2.6.2
+    + dev-cpp/libmcpp-2.7.2_p5-r2
+    + dev-cpp/nlohmann_json-3.12.0-r1
+    + dev-db/lmdb-0.9.35
+    + dev-libs/Ice-3.7.10-r2
+    + dev-libs/boost-1.90.0-r1
+    + dev-libs/double-conversion-3.4.0
+    + dev-libs/gobject-introspection-common-1.86.0
+    + dev-libs/libevdev-1.13.6
+    + dev-libs/libfmt-12.1.0
+    + dev-libs/libinput-1.31.1
+    + dev-libs/md4c-0.5.3
+    + dev-libs/protobuf-33.1
+    + dev-libs/spdlog-1.17.0
+    + dev-libs/utfcpp-4.0.6
+    + dev-util/glib-utils-2.88.0
+    + media-fonts/liberation-fonts-2.1.5
+    + media-gfx/graphite2-1.3.14_p20210810-r5
+    + media-libs/libpng-1.6.58
+    + sys-apps/lsb-release-3.3
+    + sys-libs/mtdev-1.1.7
+    + virtual/libudev-251-r2
+    + virtual/ttf-fonts-1-r2
+    + x11-base/xcb-proto-1.17.0
+    + x11-base/xorg-proto-2025.1
+    + x11-libs/libICE-1.1.2
+    + x11-libs/libXau-1.0.12
+    + x11-libs/libXdmcp-1.1.5
+    + x11-libs/libdrm-2.4.133
+    + x11-libs/pixman-0.46.4
+    + x11-libs/xtrans-1.6.0
+    + x11-misc/xkeyboard-config-2.47
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-net_voip_murmur-20260510T090123/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-net_voip_murmur-20260510T090123/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

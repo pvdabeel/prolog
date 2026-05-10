@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='net-libs/loudmouth'  mode=--build  label=net_libs_loudmouth
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-net_libs_loudmouth
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-net_libs_loudmouth
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-net_libs_loudmouth' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-net_libs_loudmouth' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-net_libs_loudmouth-20260510T085121)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : net-libs/loudmouth                                            │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-net_libs_loudmouth-20260510T085121│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 5                       │ 2                         │
+│ completed        │ 6                       │ 2                         │
+│ merged into VDB  │ 2                       │ 2                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-net_libs_loudmouth-20260510T085121/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-net_libs_loudmouth-20260510T085121/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

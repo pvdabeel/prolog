@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='x11-plugins/astime'  mode=--build  label=x11_plugins_astime
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-x11_plugins_astime
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-x11_plugins_astime
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-x11_plugins_astime' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-x11_plugins_astime' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-x11_plugins_astime-20260510T100638)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : x11-plugins/astime                                            │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-x11_plugins_astime-20260510T100638│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 44                      │ 15                        │
+│ completed        │ 44                      │ 15                        │
+│ merged into VDB  │ 15                      │ 15                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-x11_plugins_astime-20260510T100638/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-x11_plugins_astime-20260510T100638/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='x11-themes/gkrellm-themes'  mode=--build  label=x11_themes_gkrellm_themes
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-x11_themes_gkrellm_themes
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-x11_themes_gkrellm_themes
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-x11_themes_gkrellm_themes' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-x11_themes_gkrellm_themes' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-x11_themes_gkrellm_themes-20260510T101218)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : x11-themes/gkrellm-themes                                     │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-x11_themes_gkrellm_themes-20260510T101218│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 12                      │ 5                         │
+│ completed        │ 13                      │ 5                         │
+│ merged into VDB  │ 5                       │ 5                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-x11_themes_gkrellm_themes-20260510T101218/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-x11_themes_gkrellm_themes-20260510T101218/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

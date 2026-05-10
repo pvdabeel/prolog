@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='app-crypt/ubuntu-keyring'  mode=--build  label=app_crypt_ubuntu_keyring
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-app_crypt_ubuntu_keyring
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-app_crypt_ubuntu_keyring
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-app_crypt_ubuntu_keyring' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-app_crypt_ubuntu_keyring' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-app_crypt_ubuntu_keyring-20260510T005821)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : app-crypt/ubuntu-keyring                                      │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-app_crypt_ubuntu_keyring-20260510T005821│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 3                       │ 1                         │
+│ completed        │ 4                       │ 1                         │
+│ merged into VDB  │ 1                       │ 1                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-app_crypt_ubuntu_keyring-20260510T005821/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-app_crypt_ubuntu_keyring-20260510T005821/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

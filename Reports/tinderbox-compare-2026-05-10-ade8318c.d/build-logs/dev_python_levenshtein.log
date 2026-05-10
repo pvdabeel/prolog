@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-python/levenshtein'  mode=--build  label=dev_python_levenshtein
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_python_levenshtein
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_python_levenshtein
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_python_levenshtein' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_python_levenshtein' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_python_levenshtein-20260510T060911)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-python/levenshtein                                        │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_python_levenshtein-20260510T060911│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 34                      │ 14                        │
+│ completed        │ 35                      │ 14                        │
+│ merged into VDB  │ 14                      │ 14                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_python_levenshtein-20260510T060911/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_python_levenshtein-20260510T060911/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

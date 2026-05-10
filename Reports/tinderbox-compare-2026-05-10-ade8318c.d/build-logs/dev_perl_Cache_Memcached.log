@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-perl/Cache-Memcached'  mode=--build  label=dev_perl_Cache_Memcached
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_perl_Cache_Memcached
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_perl_Cache_Memcached
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_perl_Cache_Memcached' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_perl_Cache_Memcached' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_perl_Cache_Memcached-20260510T052102)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-perl/Cache-Memcached                                      │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_perl_Cache_Memcached-20260510T052102│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 10                      │ 4                         │
+│ completed        │ 11                      │ 4                         │
+│ merged into VDB  │ 4                       │ 4                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_perl_Cache_Memcached-20260510T052102/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_perl_Cache_Memcached-20260510T052102/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

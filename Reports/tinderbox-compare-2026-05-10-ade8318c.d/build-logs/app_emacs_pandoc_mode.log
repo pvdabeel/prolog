@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='app-emacs/pandoc-mode'  mode=--build  label=app_emacs_pandoc_mode
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-app_emacs_pandoc_mode
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-app_emacs_pandoc_mode
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-app_emacs_pandoc_mode' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-app_emacs_pandoc_mode' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-app_emacs_pandoc_mode-20260510T010930)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : app-emacs/pandoc-mode                                         │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-app_emacs_pandoc_mode-20260510T010930│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 32                      │ 11                        │
+│ completed        │ 33                      │ 11                        │
+│ merged into VDB  │ 11                      │ 11                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-app_emacs_pandoc_mode-20260510T010930/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-app_emacs_pandoc_mode-20260510T010930/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

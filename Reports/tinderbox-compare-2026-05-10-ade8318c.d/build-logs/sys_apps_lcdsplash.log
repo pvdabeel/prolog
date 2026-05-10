@@ -1,0 +1,31 @@
+[tinderbox-ng] compare: target='sys-apps/lcdsplash'  mode=--build  label=sys_apps_lcdsplash
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-sys_apps_lcdsplash
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-sys_apps_lcdsplash
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-sys_apps_lcdsplash' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-sys_apps_lcdsplash' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-sys_apps_lcdsplash-20260510T092107)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : sys-apps/lcdsplash                                            │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-sys_apps_lcdsplash-20260510T092107│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ FAIL(1)                   │
+│ plan actions     │ 4                       │ ?                         │
+│ completed        │ 4                       │ 0                         │
+│ merged into VDB  │ 1                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+VDB delta (after build):
+  only in portage-ng:
+    + sys-apps/lcdsplash-0.3-r1
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-sys_apps_lcdsplash-20260510T092107/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-sys_apps_lcdsplash-20260510T092107/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

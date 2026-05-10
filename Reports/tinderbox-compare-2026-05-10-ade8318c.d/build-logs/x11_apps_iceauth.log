@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='x11-apps/iceauth'  mode=--build  label=x11_apps_iceauth
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-x11_apps_iceauth
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-x11_apps_iceauth
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-x11_apps_iceauth' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-x11_apps_iceauth' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-x11_apps_iceauth-20260510T095421)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : x11-apps/iceauth                                              │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-x11_apps_iceauth-20260510T095421│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 10                      │ 4                         │
+│ completed        │ 11                      │ 4                         │
+│ merged into VDB  │ 4                       │ 4                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-x11_apps_iceauth-20260510T095421/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-x11_apps_iceauth-20260510T095421/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

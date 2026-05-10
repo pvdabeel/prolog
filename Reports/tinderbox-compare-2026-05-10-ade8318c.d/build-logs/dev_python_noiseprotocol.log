@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-python/noiseprotocol'  mode=--build  label=dev_python_noiseprotocol
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_python_noiseprotocol
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_python_noiseprotocol
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_python_noiseprotocol' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_python_noiseprotocol' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_python_noiseprotocol-20260510T061134)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-python/noiseprotocol                                      │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_python_noiseprotocol-20260510T061134│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 25                      │ 9                         │
+│ completed        │ 26                      │ 9                         │
+│ merged into VDB  │ 9                       │ 9                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_python_noiseprotocol-20260510T061134/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_python_noiseprotocol-20260510T061134/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

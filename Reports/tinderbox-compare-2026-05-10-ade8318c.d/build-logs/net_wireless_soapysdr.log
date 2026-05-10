@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='net-wireless/soapysdr'  mode=--build  label=net_wireless_soapysdr
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-net_wireless_soapysdr
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-net_wireless_soapysdr
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-net_wireless_soapysdr' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-net_wireless_soapysdr' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-net_wireless_soapysdr-20260510T090205)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : net-wireless/soapysdr                                         │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-net_wireless_soapysdr-20260510T090205│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 3                       │ 1                         │
+│ completed        │ 4                       │ 1                         │
+│ merged into VDB  │ 1                       │ 1                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-net_wireless_soapysdr-20260510T090205/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-net_wireless_soapysdr-20260510T090205/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

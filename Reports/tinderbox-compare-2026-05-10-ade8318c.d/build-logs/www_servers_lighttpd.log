@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='www-servers/lighttpd'  mode=--build  label=www_servers_lighttpd
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-www_servers_lighttpd
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-www_servers_lighttpd
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-www_servers_lighttpd' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-www_servers_lighttpd' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-www_servers_lighttpd-20260510T095359)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : www-servers/lighttpd                                          │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-www_servers_lighttpd-20260510T095359│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 16                      │ 6                         │
+│ completed        │ 17                      │ 6                         │
+│ merged into VDB  │ 6                       │ 6                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-www_servers_lighttpd-20260510T095359/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-www_servers_lighttpd-20260510T095359/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

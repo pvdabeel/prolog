@@ -1,0 +1,53 @@
+[tinderbox-ng] compare: target='www-apps/drupal'  mode=--build  label=www_apps_drupal
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-www_apps_drupal
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-www_apps_drupal
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-www_apps_drupal' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-www_apps_drupal' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-www_apps_drupal-20260510T094724)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : www-apps/drupal                                               │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-www_apps_drupal-20260510T094724│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ FAIL(1)                   │
+│ plan actions     │ 62                      │ ?                         │
+│ completed        │ 61                      │ 0                         │
+│ merged into VDB  │ 23                      │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+VDB delta (after build):
+  only in portage-ng:
+    + acct-group/apache-0-r3
+    + acct-group/nullmail-0-r2
+    + acct-user/apache-0-r4
+    + acct-user/nullmail-0-r2
+    + app-admin/apache-tools-2.4.67
+    + app-admin/metalog-20260221
+    + app-admin/webapp-config-1.56
+    + app-eselect/eselect-php-0.9.9
+    + dev-lang/php-8.3.30-r1
+    + dev-lang/php-8.5.5
+    + dev-libs/apr-1.7.6-r1
+    + dev-libs/apr-util-1.6.3
+    + dev-libs/oniguruma-6.9.10
+    + dev-php/pecl-uploadprogress-2.0.2-r2
+    + mail-mta/nullmailer-2.2-r2
+    + media-libs/gd-2.3.3-r4
+    + media-libs/libpng-1.6.58
+    + virtual/httpd-cgi-0-r6
+    + virtual/httpd-php-8.5
+    + virtual/logger-0-r3
+    + virtual/mta-1-r2
+    + www-apps/drupal-11.1.5
+    + www-servers/apache-2.4.67
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-www_apps_drupal-20260510T094724/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-www_apps_drupal-20260510T094724/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

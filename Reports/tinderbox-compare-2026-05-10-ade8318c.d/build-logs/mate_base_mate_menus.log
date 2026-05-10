@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='mate-base/mate-menus'  mode=--build  label=mate_base_mate_menus
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-mate_base_mate_menus
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-mate_base_mate_menus
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-mate_base_mate_menus' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-mate_base_mate_menus' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-mate_base_mate_menus-20260510T074701)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : mate-base/mate-menus                                          │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-mate_base_mate_menus-20260510T074701│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 11                      │ 4                         │
+│ completed        │ 12                      │ 4                         │
+│ merged into VDB  │ 4                       │ 4                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-mate_base_mate_menus-20260510T074701/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-mate_base_mate_menus-20260510T074701/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

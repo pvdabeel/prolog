@@ -1,0 +1,46 @@
+[tinderbox-ng] compare: target='net-mail/mailgraph'  mode=--build  label=net_mail_mailgraph
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-net_mail_mailgraph
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-net_mail_mailgraph
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-net_mail_mailgraph' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-net_mail_mailgraph' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-net_mail_mailgraph-20260510T085252)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : net-mail/mailgraph                                            │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-net_mail_mailgraph-20260510T085252│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 60                      │ ?                         │
+│ completed        │ 40                      │ 0                         │
+│ merged into VDB  │ 13                      │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 6] FAIL (1) install portage://media-libs/freetype-2.14.3
+
+VDB delta (after build):
+  only in portage-ng:
+    + acct-group/adm-0-r3
+    + acct-group/mgraph-0-r2
+    + acct-user/mgraph-0-r2
+    + app-eselect/eselect-fontconfig-20220403
+    + dev-libs/fribidi-1.0.16
+    + dev-libs/gobject-introspection-common-1.86.0
+    + dev-util/glib-utils-2.88.0
+    + media-fonts/liberation-fonts-2.1.5
+    + media-gfx/graphite2-1.3.14_p20210810-r5
+    + media-libs/libpng-1.6.58
+    + virtual/perl-Time-HiRes-1.977.800
+    + virtual/ttf-fonts-1-r2
+    + x11-libs/pixman-0.46.4
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-net_mail_mailgraph-20260510T085252/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-net_mail_mailgraph-20260510T085252/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

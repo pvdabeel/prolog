@@ -1,0 +1,38 @@
+[tinderbox-ng] compare: target='llvm-runtimes/libgcc'  mode=--build  label=llvm_runtimes_libgcc
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-llvm_runtimes_libgcc
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-llvm_runtimes_libgcc
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-llvm_runtimes_libgcc' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-llvm_runtimes_libgcc' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-llvm_runtimes_libgcc-20260510T074044)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : llvm-runtimes/libgcc                                          │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-llvm_runtimes_libgcc-20260510T074044│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(124)               │ FAIL(1)                   │
+│ plan actions     │ 55                      │ ?                         │
+│ completed        │ 0                       │ 0                         │
+│ merged into VDB  │ 8                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+VDB delta (after build):
+  only in portage-ng:
+    + llvm-core/clang-common-22.1.5
+    + llvm-core/clang-linker-config-22
+    + llvm-core/llvm-common-22.1.5
+    + llvm-runtimes/clang-rtlib-config-22
+    + llvm-runtimes/clang-stdlib-config-22
+    + llvm-runtimes/clang-unwindlib-config-22
+    + llvm-runtimes/openmp-22.1.5
+    + sys-libs/binutils-libs-2.46.0
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-llvm_runtimes_libgcc-20260510T074044/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-llvm_runtimes_libgcc-20260510T074044/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

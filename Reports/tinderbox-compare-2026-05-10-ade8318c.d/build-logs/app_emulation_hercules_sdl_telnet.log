@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='app-emulation/hercules-sdl-telnet'  mode=--build  label=app_emulation_hercules_sdl_telnet
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-app_emulation_hercules_sdl_telnet
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-app_emulation_hercules_sdl_telnet
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-app_emulation_hercules_sdl_telnet' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-app_emulation_hercules_sdl_telnet' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-app_emulation_hercules_sdl_telnet-20260510T011519)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : app-emulation/hercules-sdl-telnet                             │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-app_emulation_hercules_sdl_telnet-20260510T011519│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 3                       │ 1                         │
+│ completed        │ 4                       │ 1                         │
+│ merged into VDB  │ 1                       │ 1                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-app_emulation_hercules_sdl_telnet-20260510T011519/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-app_emulation_hercules_sdl_telnet-20260510T011519/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

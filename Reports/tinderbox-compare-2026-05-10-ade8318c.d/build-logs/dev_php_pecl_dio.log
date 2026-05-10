@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-php/pecl-dio'  mode=--build  label=dev_php_pecl_dio
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_php_pecl_dio
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_php_pecl_dio
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_php_pecl_dio' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_php_pecl_dio' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_php_pecl_dio-20260510T055907)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-php/pecl-dio                                              │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_php_pecl_dio-20260510T055907│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 26                      │ 10                        │
+│ completed        │ 27                      │ 10                        │
+│ merged into VDB  │ 10                      │ 10                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_php_pecl_dio-20260510T055907/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_php_pecl_dio-20260510T055907/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

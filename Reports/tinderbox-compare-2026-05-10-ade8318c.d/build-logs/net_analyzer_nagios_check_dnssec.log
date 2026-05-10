@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='net-analyzer/nagios-check_dnssec'  mode=--build  label=net_analyzer_nagios_check_dnssec
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-net_analyzer_nagios_check_dnssec
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-net_analyzer_nagios_check_dnssec
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-net_analyzer_nagios_check_dnssec' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-net_analyzer_nagios_check_dnssec' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-net_analyzer_nagios_check_dnssec-20260510T082950)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : net-analyzer/nagios-check_dnssec                              │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-net_analyzer_nagios_check_dnssec-20260510T082950│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 9                       │ 3                         │
+│ completed        │ 10                      │ 3                         │
+│ merged into VDB  │ 3                       │ 3                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-net_analyzer_nagios_check_dnssec-20260510T082950/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-net_analyzer_nagios_check_dnssec-20260510T082950/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-perl/Syntax-Keyword-Junction'  mode=--build  label=dev_perl_Syntax_Keyword_Junction
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_perl_Syntax_Keyword_Junction
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_perl_Syntax_Keyword_Junction
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_perl_Syntax_Keyword_Junction' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_perl_Syntax_Keyword_Junction' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_perl_Syntax_Keyword_Junction-20260510T055013)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-perl/Syntax-Keyword-Junction                              │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_perl_Syntax_Keyword_Junction-20260510T055013│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 53                      │ 19                        │
+│ completed        │ 54                      │ 19                        │
+│ merged into VDB  │ 19                      │ 19                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_perl_Syntax_Keyword_Junction-20260510T055013/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_perl_Syntax_Keyword_Junction-20260510T055013/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

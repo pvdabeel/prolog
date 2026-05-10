@@ -1,0 +1,31 @@
+[tinderbox-ng] compare: target='dev-python/pycairo'  mode=--build  label=dev_python_pycairo
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_python_pycairo
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_python_pycairo
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_python_pycairo' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_python_pycairo' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_python_pycairo-20260510T061414)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-python/pycairo                                            │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_python_pycairo-20260510T061414│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 27                      │ 0                         │
+│ completed        │ 18                      │ 6                         │
+│ merged into VDB  │ 6                       │ 6                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 4] FAIL (1) install portage://media-libs/freetype-2.14.3
+  emerge    : >>> Failed to emerge media-libs/freetype-2.14.3, Log file:
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_python_pycairo-20260510T061414/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_python_pycairo-20260510T061414/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

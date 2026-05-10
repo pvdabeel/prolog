@@ -1,0 +1,34 @@
+[tinderbox-ng] compare: target='dev-libs/cusparselt'  mode=--build  label=dev_libs_cusparselt
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_libs_cusparselt
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_libs_cusparselt
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_libs_cusparselt' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_libs_cusparselt' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_libs_cusparselt-20260510T045043)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-libs/cusparselt                                           │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_libs_cusparselt-20260510T045043│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ OK                        │
+│ plan actions     │ 3                       │ 1                         │
+│ completed        │ 0                       │ 1                         │
+│ merged into VDB  │ 0                       │ 1                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 1] FAIL (download errors) download portage://dev-libs/cusparselt-0.7.1.0
+
+VDB delta (after build):
+  only in emerge:
+    + dev-libs/cusparselt-0.7.1.0
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_libs_cusparselt-20260510T045043/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_libs_cusparselt-20260510T045043/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

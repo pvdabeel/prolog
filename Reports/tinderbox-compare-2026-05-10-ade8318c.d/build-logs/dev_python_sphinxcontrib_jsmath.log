@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-python/sphinxcontrib-jsmath'  mode=--build  label=dev_python_sphinxcontrib_jsmath
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_python_sphinxcontrib_jsmath
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_python_sphinxcontrib_jsmath
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_python_sphinxcontrib_jsmath' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_python_sphinxcontrib_jsmath' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_python_sphinxcontrib_jsmath-20260510T063533)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-python/sphinxcontrib-jsmath                               │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_python_sphinxcontrib_jsmath-20260510T063533│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 36                      │ 12                        │
+│ completed        │ 37                      │ 12                        │
+│ merged into VDB  │ 12                      │ 12                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_python_sphinxcontrib_jsmath-20260510T063533/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_python_sphinxcontrib_jsmath-20260510T063533/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

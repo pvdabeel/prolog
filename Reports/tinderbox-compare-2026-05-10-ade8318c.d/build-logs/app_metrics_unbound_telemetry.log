@@ -1,0 +1,30 @@
+[tinderbox-ng] compare: target='app-metrics/unbound-telemetry'  mode=--build  label=app_metrics_unbound_telemetry
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-app_metrics_unbound_telemetry
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-app_metrics_unbound_telemetry
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-app_metrics_unbound_telemetry' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-app_metrics_unbound_telemetry' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-app_metrics_unbound_telemetry-20260510T011819)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : app-metrics/unbound-telemetry                                 │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-app_metrics_unbound_telemetry-20260510T011819│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 17                      │ 7                         │
+│ completed        │ 18                      │ 7                         │
+│ merged into VDB  │ 7                       │ 7                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng:              │                    │ 24.70 Kb  	 proc-macro-error-1.0.4.crate
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-app_metrics_unbound_telemetry-20260510T011819/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-app_metrics_unbound_telemetry-20260510T011819/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

@@ -1,0 +1,45 @@
+[tinderbox-ng] compare: target='dev-java/jdbc-mysql'  mode=--build  label=dev_java_jdbc_mysql
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_java_jdbc_mysql
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_java_jdbc_mysql
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_java_jdbc_mysql' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_java_jdbc_mysql' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_java_jdbc_mysql-20260510T043813)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-java/jdbc-mysql                                           │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_java_jdbc_mysql-20260510T043813│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 332                     │ 10                        │
+│ completed        │ 149                     │ 31                        │
+│ merged into VDB  │ 21                      │ 31                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng:              │ download  portage://dev-java/error-prone-annotations-2.45.0
+  emerge    : [ebuild  N     ] dev-java/error-prone-annotations-2.45.0::gentoo  USE="-doc -source" 0 KiB
+
+VDB delta (after build):
+  only in emerge:
+    + dev-java/java-config-2.3.4
+    + dev-libs/gobject-introspection-1.86.0
+    + x11-libs/libX11-1.8.13
+    + x11-libs/libXext-1.3.7
+    + x11-libs/libXfixes-6.0.2
+    + x11-libs/libXi-1.8.2
+    + x11-libs/libXrender-0.9.12
+    + x11-libs/libXtst-1.2.5
+    + x11-libs/libxcb-1.17.0
+    + x11-misc/compose-tables-1.8.13
+  in both: 21 packages
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_java_jdbc_mysql-20260510T043813/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_java_jdbc_mysql-20260510T043813/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='games-board/xmahjongg'  mode=--build  label=games_board_xmahjongg
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-games_board_xmahjongg
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-games_board_xmahjongg
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-games_board_xmahjongg' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-games_board_xmahjongg' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-games_board_xmahjongg-20260510T072608)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : games-board/xmahjongg                                         │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-games_board_xmahjongg-20260510T072608│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 34                      │ 12                        │
+│ completed        │ 34                      │ 12                        │
+│ merged into VDB  │ 12                      │ 12                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-games_board_xmahjongg-20260510T072608/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-games_board_xmahjongg-20260510T072608/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

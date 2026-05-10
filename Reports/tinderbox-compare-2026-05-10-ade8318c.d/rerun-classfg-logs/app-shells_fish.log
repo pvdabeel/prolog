@@ -1,0 +1,38 @@
+[tinderbox-ng] compare: target='app-shells/fish'  mode=--build  label=app_shells_fish
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-app_shells_fish
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-app_shells_fish
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-app_shells_fish' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-app_shells_fish' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-app_shells_fish-20260510T121152)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : app-shells/fish                                               │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-app_shells_fish-20260510T121152│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ OK                        │
+│ plan actions     │ 39                      │ 16                        │
+│ completed        │ 36                      │ 16                        │
+│ merged into VDB  │ 12                      │ 16                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 6] FAIL (1) install portage://app-shells/fish-4.6.0
+
+VDB delta (after build):
+  only in emerge:
+    + app-eselect/eselect-rust-20210703
+    + app-shells/fish-4.6.0
+    + dev-lang/rust-bin-1.95.0
+    + sys-apps/lsb-release-3.3
+  in both: 12 packages
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-app_shells_fish-20260510T121152/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-app_shells_fish-20260510T121152/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

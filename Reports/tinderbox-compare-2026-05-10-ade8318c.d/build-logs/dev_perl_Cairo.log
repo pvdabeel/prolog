@@ -1,0 +1,31 @@
+[tinderbox-ng] compare: target='dev-perl/Cairo'  mode=--build  label=dev_perl_Cairo
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_perl_Cairo
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_perl_Cairo
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_perl_Cairo' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_perl_Cairo' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_perl_Cairo-20260510T052229)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-perl/Cairo                                                │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_perl_Cairo-20260510T052229 │
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 29                      │ 0                         │
+│ completed        │ 20                      │ 7                         │
+│ merged into VDB  │ 7                       │ 7                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 4] FAIL (1) install portage://media-libs/freetype-2.14.3
+  emerge    : >>> Failed to emerge media-libs/freetype-2.14.3, Log file:
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_perl_Cairo-20260510T052229/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_perl_Cairo-20260510T052229/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

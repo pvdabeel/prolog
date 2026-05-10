@@ -1,0 +1,42 @@
+[tinderbox-ng] compare: target='media-tv/shoutcast2vdr'  mode=--build  label=media_tv_shoutcast2vdr
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-media_tv_shoutcast2vdr
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-media_tv_shoutcast2vdr
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-media_tv_shoutcast2vdr' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-media_tv_shoutcast2vdr' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-media_tv_shoutcast2vdr-20260510T081952)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : media-tv/shoutcast2vdr                                        │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-media_tv_shoutcast2vdr-20260510T081952│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 54                      │ 5                         │
+│ completed        │ 22                      │ 13                        │
+│ merged into VDB  │ 6                       │ 13                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 2] FAIL (1) install portage://dev-libs/libmspack-1.11
+  emerge    : >>> Failed to emerge dev-libs/libmspack-1.11, Log file:
+
+VDB delta (after build):
+  only in emerge:
+    + acct-user/nullmail-0-r2
+    + acct-user/vdr-0-r3
+    + app-admin/sudo-1.9.17_p2
+    + mail-mta/nullmailer-2.2-r2
+    + media-tv/gentoo-vdr-scripts-3.0_rc2-r1
+    + virtual/logger-0-r3
+    + virtual/mta-1-r2
+  in both: 6 packages
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-media_tv_shoutcast2vdr-20260510T081952/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-media_tv_shoutcast2vdr-20260510T081952/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

@@ -1,0 +1,34 @@
+[tinderbox-ng] compare: target='sci-geosciences/gpsbabel'  mode=--build  label=sci_geosciences_gpsbabel
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-sci_geosciences_gpsbabel
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-sci_geosciences_gpsbabel
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-sci_geosciences_gpsbabel' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-sci_geosciences_gpsbabel' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-sci_geosciences_gpsbabel-20260510T090334)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : sci-geosciences/gpsbabel                                      │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-sci_geosciences_gpsbabel-20260510T090334│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 144                     │ ?                         │
+│ completed        │ 46                      │ 0                         │
+│ merged into VDB  │ 1                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 2] FAIL (1) update portage://sys-libs/zlib-1.3.2-r1
+
+VDB delta (after build):
+  only in portage-ng:
+    + acct-group/messagebus-0-r3
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-sci_geosciences_gpsbabel-20260510T090334/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-sci_geosciences_gpsbabel-20260510T090334/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

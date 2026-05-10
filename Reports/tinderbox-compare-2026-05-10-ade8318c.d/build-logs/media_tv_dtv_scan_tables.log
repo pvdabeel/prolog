@@ -1,0 +1,33 @@
+[tinderbox-ng] compare: target='media-tv/dtv-scan-tables'  mode=--build  label=media_tv_dtv_scan_tables
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-media_tv_dtv_scan_tables
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-media_tv_dtv_scan_tables
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-media_tv_dtv_scan_tables' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-media_tv_dtv_scan_tables' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-media_tv_dtv_scan_tables-20260510T081947)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : media-tv/dtv-scan-tables                                      │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-media_tv_dtv_scan_tables-20260510T081947│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ FAIL(1)                   │
+│ plan actions     │ 8                       │ ?                         │
+│ completed        │ 8                       │ 0                         │
+│ merged into VDB  │ 3                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+VDB delta (after build):
+  only in portage-ng:
+    + media-libs/libv4l-1.32.0
+    + media-tv/dtv-scan-tables-0_p20220430
+    + virtual/libudev-251-r2
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-media_tv_dtv_scan_tables-20260510T081947/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-media_tv_dtv_scan_tables-20260510T081947/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

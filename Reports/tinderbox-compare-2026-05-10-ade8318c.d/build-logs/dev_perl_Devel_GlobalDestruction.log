@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-perl/Devel-GlobalDestruction'  mode=--build  label=dev_perl_Devel_GlobalDestruction
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_perl_Devel_GlobalDestruction
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_perl_Devel_GlobalDestruction
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_perl_Devel_GlobalDestruction' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_perl_Devel_GlobalDestruction' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_perl_Devel_GlobalDestruction-20260510T052708)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-perl/Devel-GlobalDestruction                              │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_perl_Devel_GlobalDestruction-20260510T052708│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 15                      │ 5                         │
+│ completed        │ 16                      │ 5                         │
+│ merged into VDB  │ 5                       │ 5                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_perl_Devel_GlobalDestruction-20260510T052708/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_perl_Devel_GlobalDestruction-20260510T052708/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

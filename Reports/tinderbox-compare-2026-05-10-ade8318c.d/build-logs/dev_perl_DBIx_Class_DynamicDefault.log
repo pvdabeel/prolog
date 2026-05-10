@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-perl/DBIx-Class-DynamicDefault'  mode=--build  label=dev_perl_DBIx_Class_DynamicDefault
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_perl_DBIx_Class_DynamicDefault
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_perl_DBIx_Class_DynamicDefault
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_perl_DBIx_Class_DynamicDefault' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_perl_DBIx_Class_DynamicDefault' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_perl_DBIx_Class_DynamicDefault-20260510T052442)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-perl/DBIx-Class-DynamicDefault                            │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_perl_DBIx_Class_DynamicDefault-20260510T052442│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 250                     │ 89                        │
+│ completed        │ 251                     │ 89                        │
+│ merged into VDB  │ 89                      │ 89                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_perl_DBIx_Class_DynamicDefault-20260510T052442/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_perl_DBIx_Class_DynamicDefault-20260510T052442/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

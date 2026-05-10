@@ -1,0 +1,43 @@
+[tinderbox-ng] compare: target='net-irc/ircmap'  mode=--build  label=net_irc_ircmap
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-net_irc_ircmap
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-net_irc_ircmap
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-net_irc_ircmap' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-net_irc_ircmap' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-net_irc_ircmap-20260510T084723)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : net-irc/ircmap                                                │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-net_irc_ircmap-20260510T084723 │
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 55                      │ ?                         │
+│ completed        │ 35                      │ 0                         │
+│ merged into VDB  │ 10                      │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 6] FAIL (1) install portage://media-libs/freetype-2.14.3
+
+VDB delta (after build):
+  only in portage-ng:
+    + app-eselect/eselect-fontconfig-20220403
+    + dev-libs/fribidi-1.0.16
+    + dev-libs/gobject-introspection-common-1.86.0
+    + dev-libs/libltdl-2.5.4
+    + dev-util/glib-utils-2.88.0
+    + media-fonts/liberation-fonts-2.1.5
+    + media-gfx/graphite2-1.3.14_p20210810-r5
+    + media-libs/libpng-1.6.58
+    + virtual/ttf-fonts-1-r2
+    + x11-libs/pixman-0.46.4
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-net_irc_ircmap-20260510T084723/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-net_irc_ircmap-20260510T084723/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

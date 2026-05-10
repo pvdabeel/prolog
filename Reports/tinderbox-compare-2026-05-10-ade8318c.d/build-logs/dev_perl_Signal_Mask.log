@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-perl/Signal-Mask'  mode=--build  label=dev_perl_Signal_Mask
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_perl_Signal_Mask
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_perl_Signal_Mask
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_perl_Signal_Mask' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_perl_Signal_Mask' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_perl_Signal_Mask-20260510T054923)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-perl/Signal-Mask                                          │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_perl_Signal_Mask-20260510T054923│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 9                       │ 3                         │
+│ completed        │ 10                      │ 3                         │
+│ merged into VDB  │ 3                       │ 3                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_perl_Signal_Mask-20260510T054923/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_perl_Signal_Mask-20260510T054923/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

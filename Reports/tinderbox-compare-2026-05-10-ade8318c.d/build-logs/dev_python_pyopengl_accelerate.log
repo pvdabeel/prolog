@@ -1,0 +1,56 @@
+[tinderbox-ng] compare: target='dev-python/pyopengl-accelerate'  mode=--build  label=dev_python_pyopengl_accelerate
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_python_pyopengl_accelerate
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_python_pyopengl_accelerate
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_python_pyopengl_accelerate' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_python_pyopengl_accelerate' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_python_pyopengl_accelerate-20260510T062020)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-python/pyopengl-accelerate                                │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_python_pyopengl_accelerate-20260510T062020│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ FAIL(1)                   │
+│ plan actions     │ 75                      │ ?                         │
+│ completed        │ 74                      │ 0                         │
+│ merged into VDB  │ 26                      │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+VDB delta (after build):
+  only in portage-ng:
+    + dev-python/cython-3.2.4
+    + dev-python/pyopengl-3.1.10
+    + dev-python/pyopengl-accelerate-3.1.10
+    + media-libs/freeglut-3.8.0
+    + media-libs/glu-9.0.3
+    + media-libs/libglvnd-1.7.0
+    + virtual/glu-9.0-r2
+    + virtual/opengl-8
+    + x11-base/xcb-proto-1.17.0
+    + x11-base/xorg-proto-2025.1
+    + x11-libs/libICE-1.1.2
+    + x11-libs/libSM-1.2.6
+    + x11-libs/libX11-1.8.13
+    + x11-libs/libXau-1.0.12
+    + x11-libs/libXdmcp-1.1.5
+    + x11-libs/libXext-1.3.7
+    + x11-libs/libXfixes-6.0.2
+    + x11-libs/libXi-1.8.2
+    + x11-libs/libXmu-1.3.1
+    + x11-libs/libXrandr-1.5.5
+    + x11-libs/libXrender-0.9.12
+    + x11-libs/libXt-1.3.1-r1
+    + x11-libs/libXxf86vm-1.1.7
+    + x11-libs/libxcb-1.17.0
+    + x11-libs/xtrans-1.6.0
+    + x11-misc/compose-tables-1.8.13
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_python_pyopengl_accelerate-20260510T062020/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_python_pyopengl_accelerate-20260510T062020/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

@@ -1,0 +1,60 @@
+[tinderbox-ng] compare: target='dev-tex/foiltex'  mode=--build  label=dev_tex_foiltex
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_tex_foiltex
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_tex_foiltex
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_tex_foiltex' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_tex_foiltex' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_tex_foiltex-20260510T065834)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-tex/foiltex                                               │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_tex_foiltex-20260510T065834│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 231                     │ ?                         │
+│ completed        │ 101                     │ 0                         │
+│ merged into VDB  │ 27                      │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 3] FAIL (1) install portage://media-gfx/potrace-1.16-r1
+
+VDB delta (after build):
+  only in portage-ng:
+    + app-eselect/eselect-fontconfig-20220403
+    + app-text/docbook-xml-dtd-4.3-r2
+    + app-text/libpaper-2.1.3
+    + dev-libs/icu-78.3
+    + dev-libs/kpathsea-6.4.0_p20240311-r1
+    + dev-libs/zziplib-0.13.80
+    + dev-perl/Class-Data-Inheritable-0.100.0
+    + dev-perl/Clone-0.470.0
+    + dev-perl/Devel-StackTrace-2.50.0
+    + dev-perl/ExtUtils-HasCompiler-0.25.0
+    + dev-perl/File-Which-1.270.0-r1
+    + dev-perl/MRO-Compat-0.150.0
+    + dev-perl/Module-Runtime-0.18.0
+    + dev-perl/Package-Stash-XS-0.300.0
+    + dev-perl/PadWalker-2.500.0
+    + dev-perl/Perl-Tidy-20250912.0.0
+    + dev-perl/Ref-Util-XS-0.117.0
+    + dev-perl/Sub-Install-0.929.0
+    + dev-perl/Variable-Magic-0.640.0
+    + dev-perl/XString-0.5.0
+    + dev-util/glib-utils-2.88.0
+    + media-fonts/liberation-fonts-2.1.5
+    + media-gfx/graphite2-1.3.14_p20210810-r5
+    + media-libs/libpng-1.6.58
+    + sci-libs/mpfi-1.5.4_p20220401
+    + sys-apps/ed-1.22.5
+    + x11-libs/pixman-0.46.4
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_tex_foiltex-20260510T065834/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_tex_foiltex-20260510T065834/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

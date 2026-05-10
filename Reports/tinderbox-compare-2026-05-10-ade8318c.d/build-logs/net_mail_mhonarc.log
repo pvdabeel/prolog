@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='net-mail/mhonarc'  mode=--build  label=net_mail_mhonarc
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-net_mail_mhonarc
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-net_mail_mhonarc
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-net_mail_mhonarc' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-net_mail_mhonarc' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-net_mail_mhonarc-20260510T085256)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : net-mail/mhonarc                                              │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-net_mail_mhonarc-20260510T085256│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 3                       │ 1                         │
+│ completed        │ 4                       │ 1                         │
+│ merged into VDB  │ 1                       │ 1                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-net_mail_mhonarc-20260510T085256/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-net_mail_mhonarc-20260510T085256/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

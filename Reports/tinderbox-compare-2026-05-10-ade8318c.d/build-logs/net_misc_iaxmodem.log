@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='net-misc/iaxmodem'  mode=--build  label=net_misc_iaxmodem
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-net_misc_iaxmodem
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-net_misc_iaxmodem
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-net_misc_iaxmodem' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-net_misc_iaxmodem' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-net_misc_iaxmodem-20260510T085822)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : net-misc/iaxmodem                                             │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-net_misc_iaxmodem-20260510T085822│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 6                       │ 2                         │
+│ completed        │ 7                       │ 2                         │
+│ merged into VDB  │ 2                       │ 2                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-net_misc_iaxmodem-20260510T085822/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-net_misc_iaxmodem-20260510T085822/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

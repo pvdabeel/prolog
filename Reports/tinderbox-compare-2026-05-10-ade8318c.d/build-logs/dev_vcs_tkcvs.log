@@ -1,0 +1,42 @@
+[tinderbox-ng] compare: target='dev-vcs/tkcvs'  mode=--build  label=dev_vcs_tkcvs
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_vcs_tkcvs
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_vcs_tkcvs
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_vcs_tkcvs' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_vcs_tkcvs' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_vcs_tkcvs-20260510T071824)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-vcs/tkcvs                                                 │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_vcs_tkcvs-20260510T071824  │
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 87                      │ 6                         │
+│ completed        │ 60                      │ 26                        │
+│ merged into VDB  │ 19                      │ 26                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 6] FAIL (1) install portage://media-libs/freetype-2.14.3
+  emerge    : >>> Failed to emerge media-libs/freetype-2.14.3, Log file:
+
+VDB delta (after build):
+  only in emerge:
+    + dev-vcs/subversion-1.14.5-r3
+    + net-libs/serf-1.3.10
+    + x11-libs/libSM-1.2.6
+    + x11-libs/libX11-1.8.13
+    + x11-libs/libXt-1.3.1-r1
+    + x11-libs/libxcb-1.17.0
+    + x11-misc/compose-tables-1.8.13
+  in both: 19 packages
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_vcs_tkcvs-20260510T071824/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_vcs_tkcvs-20260510T071824/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

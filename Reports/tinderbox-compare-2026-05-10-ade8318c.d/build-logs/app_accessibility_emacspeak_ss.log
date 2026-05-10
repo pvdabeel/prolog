@@ -1,0 +1,41 @@
+[tinderbox-ng] compare: target='app-accessibility/emacspeak-ss'  mode=--build  label=app_accessibility_emacspeak_ss
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-app_accessibility_emacspeak_ss
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-app_accessibility_emacspeak_ss
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-app_accessibility_emacspeak_ss' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-app_accessibility_emacspeak_ss' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-app_accessibility_emacspeak_ss-20260510T004918)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : app-accessibility/emacspeak-ss                                │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-app_accessibility_emacspeak_ss-20260510T004918│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 108                     │ 4                         │
+│ completed        │ 73                      │ 27                        │
+│ merged into VDB  │ 21                      │ 27                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 5] FAIL (1) install portage://media-libs/freetype-2.14.3
+  emerge    : >>> Failed to emerge media-libs/alsa-lib-1.2.15.3, Log file:
+
+VDB delta (after build):
+  only in emerge:
+    + app-editors/emacs-30.2-r3
+    + app-emacs/hydra-0.15.0
+    + app-emacs/lv-0.15.0-r1
+    + dev-libs/gobject-introspection-1.86.0
+    + sys-apps/hwdata-0.401
+    + x11-libs/libpciaccess-0.19
+  in both: 21 packages
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-app_accessibility_emacspeak_ss-20260510T004918/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-app_accessibility_emacspeak_ss-20260510T004918/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

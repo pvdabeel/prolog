@@ -1,0 +1,51 @@
+[tinderbox-ng] compare: target='sys-auth/sssd'  mode=--build  label=sys_auth_sssd
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-sys_auth_sssd
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-sys_auth_sssd
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-sys_auth_sssd' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-sys_auth_sssd' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-sys_auth_sssd-20260510T092550)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : sys-auth/sssd                                                 │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-sys_auth_sssd-20260510T092550  │
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 123                     │ ?                         │
+│ completed        │ 57                      │ 0                         │
+│ merged into VDB  │ 18                      │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 3] FAIL (1) install portage://dev-libs/jansson-2.14.1
+
+VDB delta (after build):
+  only in portage-ng:
+    + acct-group/ldap-0-r2
+    + acct-group/messagebus-0-r3
+    + acct-group/named-0-r3
+    + acct-group/sssd-0
+    + app-crypt/p11-kit-0.26.2
+    + app-text/docbook-xml-dtd-4.4-r3
+    + dev-db/lmdb-0.9.35
+    + dev-libs/ding-libs-0.6.2-r1
+    + dev-libs/icu-78.3
+    + dev-libs/libbsd-0.11.8
+    + dev-libs/libltdl-2.5.4
+    + dev-libs/libnl-3.12.0
+    + dev-libs/userspace-rcu-0.15.6
+    + dev-perl/Canary-Stability-2013.0.0
+    + dev-perl/common-sense-3.750.0
+    + net-libs/ngtcp2-1.22.1
+    + sys-apps/keyutils-1.6.3-r1
+    + sys-libs/liburing-2.14
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-sys_auth_sssd-20260510T092550/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-sys_auth_sssd-20260510T092550/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

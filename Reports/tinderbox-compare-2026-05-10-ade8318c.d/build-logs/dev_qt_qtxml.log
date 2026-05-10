@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='dev-qt/qtxml'  mode=--build  label=dev_qt_qtxml
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_qt_qtxml
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_qt_qtxml
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_qt_qtxml' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_qt_qtxml' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_qt_qtxml-20260510T064534)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-qt/qtxml                                                  │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_qt_qtxml-20260510T064534   │
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 9                       │ 3                         │
+│ completed        │ 10                      │ 3                         │
+│ merged into VDB  │ 3                       │ 3                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_qt_qtxml-20260510T064534/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_qt_qtxml-20260510T064534/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

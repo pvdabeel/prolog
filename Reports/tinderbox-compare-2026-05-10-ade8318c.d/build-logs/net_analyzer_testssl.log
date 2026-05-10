@@ -1,0 +1,27 @@
+[tinderbox-ng] compare: target='net-analyzer/testssl'  mode=--build  label=net_analyzer_testssl
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-net_analyzer_testssl
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-net_analyzer_testssl
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-net_analyzer_testssl' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-net_analyzer_testssl' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-net_analyzer_testssl-20260510T083712)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : net-analyzer/testssl                                          │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-net_analyzer_testssl-20260510T083712│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ OK                      │ OK                        │
+│ plan actions     │ 13                      │ 5                         │
+│ completed        │ 14                      │ 5                         │
+│ merged into VDB  │ 5                       │ 5                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-net_analyzer_testssl-20260510T083712/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-net_analyzer_testssl-20260510T083712/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

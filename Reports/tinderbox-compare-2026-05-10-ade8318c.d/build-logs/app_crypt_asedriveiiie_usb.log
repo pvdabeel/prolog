@@ -1,0 +1,31 @@
+[tinderbox-ng] compare: target='app-crypt/asedriveiiie-usb'  mode=--build  label=app_crypt_asedriveiiie_usb
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-app_crypt_asedriveiiie_usb
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-app_crypt_asedriveiiie_usb
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-app_crypt_asedriveiiie_usb' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-app_crypt_asedriveiiie_usb' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-app_crypt_asedriveiiie_usb-20260510T005219)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : app-crypt/asedriveiiie-usb                                    │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-app_crypt_asedriveiiie_usb-20260510T005219│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 24                      │ 0                         │
+│ completed        │ 18                      │ 7                         │
+│ merged into VDB  │ 7                       │ 7                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 8] FAIL (1) install portage://dev-libs/libusb-compat-0.1.8
+  emerge    : >>> Failed to emerge dev-libs/libusb-compat-0.1.8, Log file:
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-app_crypt_asedriveiiie_usb-20260510T005219/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-app_crypt_asedriveiiie_usb-20260510T005219/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

@@ -1,0 +1,37 @@
+[tinderbox-ng] compare: target='sys-block/thin-provisioning-tools'  mode=--build  label=sys_block_thin_provisioning_tools
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-sys_block_thin_provisioning_tools
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-sys_block_thin_provisioning_tools
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-sys_block_thin_provisioning_tools' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-sys_block_thin_provisioning_tools' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-sys_block_thin_provisioning_tools-20260510T092739)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : sys-block/thin-provisioning-tools                             │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-sys_block_thin_provisioning_tools-20260510T092739│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(124)               │ FAIL(124)                 │
+│ plan actions     │ 96                      │ 33                        │
+│ completed        │ 0                       │ 23                        │
+│ merged into VDB  │ 24                      │ 24                        │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  emerge    : [ERROR] Task was destroyed but it is pending!
+
+VDB delta (after build):
+  only in portage-ng:
+    + llvm-core/clang-21.1.8
+  only in emerge:
+    + llvm-core/clang-toolchain-symlinks-22
+  in both: 23 packages
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-sys_block_thin_provisioning_tools-20260510T092739/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-sys_block_thin_provisioning_tools-20260510T092739/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

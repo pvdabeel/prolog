@@ -1,0 +1,31 @@
+[tinderbox-ng] compare: target='sys-fs/dislocker'  mode=--build  label=sys_fs_dislocker
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-sys_fs_dislocker
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-sys_fs_dislocker
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-sys_fs_dislocker' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-sys_fs_dislocker' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-sys_fs_dislocker-20260510T093404)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : sys-fs/dislocker                                              │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-sys_fs_dislocker-20260510T093404│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 14                      │ 0                         │
+│ completed        │ 10                      │ 3                         │
+│ merged into VDB  │ 3                       │ 3                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 6] FAIL (1) install portage://sys-fs/fuse-2.9.9-r2
+  emerge    : >>> Failed to emerge sys-fs/fuse-2.9.9-r2, Log file:
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-sys_fs_dislocker-20260510T093404/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-sys_fs_dislocker-20260510T093404/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

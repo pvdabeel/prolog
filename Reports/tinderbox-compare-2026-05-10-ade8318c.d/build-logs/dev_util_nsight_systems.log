@@ -1,0 +1,35 @@
+[tinderbox-ng] compare: target='dev-util/nsight-systems'  mode=--build  label=dev_util_nsight_systems
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_util_nsight_systems
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_util_nsight_systems
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_util_nsight_systems' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_util_nsight_systems' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_util_nsight_systems-20260510T071112)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-util/nsight-systems                                       │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_util_nsight_systems-20260510T071112│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 375                     │ ?                         │
+│ completed        │ 125                     │ 0                         │
+│ merged into VDB  │ 2                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng:  └─step  2─┤ verify  dev-qt/qtbase (unsatisfied constraints, assumed running)
+
+VDB delta (after build):
+  only in portage-ng:
+    + acct-group/messagebus-0-r3
+    + dev-python/gpep517-19
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_util_nsight_systems-20260510T071112/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_util_nsight_systems-20260510T071112/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

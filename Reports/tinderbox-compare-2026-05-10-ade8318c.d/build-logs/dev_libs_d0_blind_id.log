@@ -1,0 +1,31 @@
+[tinderbox-ng] compare: target='dev-libs/d0_blind_id'  mode=--build  label=dev_libs_d0_blind_id
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-dev_libs_d0_blind_id
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-dev_libs_d0_blind_id
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-dev_libs_d0_blind_id' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-dev_libs_d0_blind_id' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-dev_libs_d0_blind_id-20260510T045102)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : dev-libs/d0_blind_id                                          │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-dev_libs_d0_blind_id-20260510T045102│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 3                       │ 1                         │
+│ completed        │ 1                       │ 0                         │
+│ merged into VDB  │ 0                       │ 0                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 2] FAIL (1) install portage://dev-libs/d0_blind_id-1.0_p20201124
+  emerge    : >>> Failed to emerge dev-libs/d0_blind_id-1.0_p20201124, Log file:
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-dev_libs_d0_blind_id-20260510T045102/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-dev_libs_d0_blind_id-20260510T045102/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)

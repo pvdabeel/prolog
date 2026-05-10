@@ -1,0 +1,36 @@
+[tinderbox-ng] compare: target='app-xemacs/cc-mode'  mode=--build  label=app_xemacs_cc_mode
+[tinderbox-ng]   portage-ng session: pkg-cmp-portage-ng-app_xemacs_cc_mode
+[tinderbox-ng]   emerge     session: pkg-cmp-emerge-app_xemacs_cc_mode
+[tinderbox-ng ok] session 'pkg-cmp-portage-ng-app_xemacs_cc_mode' created
+[tinderbox-ng ok] session 'pkg-cmp-emerge-app_xemacs_cc_mode' created
+[tinderbox-ng]   running both engines in parallel (logs: /srv/tinderbox-ng/logs/compare-app_xemacs_cc_mode-20260510T014214)
+
+┌────────────────────────────────────────────────────────────────────────┐
+│ tinderbox-ng compare report                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ target : app-xemacs/cc-mode                                            │
+│ mode   : --build                                                       │
+│ logs   : /srv/tinderbox-ng/logs/compare-app_xemacs_cc_mode-20260510T014214│
+├──────────────────┬─────────────────────────┬───────────────────────────┤
+│ (metric)         │ portage-ng              │ emerge                    │
+├──────────────────┼─────────────────────────┼───────────────────────────┤
+│ exit             │ FAIL(3)                 │ FAIL(1)                   │
+│ plan actions     │ 39                      │ 1                         │
+│ completed        │ 14                      │ 2                         │
+│ merged into VDB  │ 1                       │ 2                         │
+└──────────────────┴─────────────────────────┴───────────────────────────┘
+
+First error/warning per engine:
+  portage-ng: [step 2] FAIL (1) install portage://media-libs/audiofile-0.3.6-r6
+  emerge    : >>> Failed to emerge media-libs/audiofile-0.3.6-r6, Log file:
+
+VDB delta (after build):
+  only in emerge:
+    + app-eselect/eselect-emacs-1.19
+  in both: 1 packages
+
+Full logs:
+  portage-ng: /srv/tinderbox-ng/logs/compare-app_xemacs_cc_mode-20260510T014214/portage-ng.log
+  emerge    : /srv/tinderbox-ng/logs/compare-app_xemacs_cc_mode-20260510T014214/emerge.log
+
+[tinderbox-ng]   cleaning up sessions (use --keep to preserve)
