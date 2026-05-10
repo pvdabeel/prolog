@@ -1768,9 +1768,53 @@ cmd_status() {
 
 REPORTS_DIR_DEFAULT="$TINDERBOX_ROOT/reports"
 
-# Find the matrix run to track. Prefers an unfinished run (meta.txt without
-# finished_at line), falls back to the most recent finished one. Empty
-# stdout means no run found at all.
+# Stale-TSV cutoff for the "presumed dead" heuristic. A run with no new
+# results.tsv row in this many seconds AND no live compare-matrix process
+# is treated as aborted, even when meta.txt has no finished_at line (the
+# typical sign of a hard kill: SIGKILL of the driver before its trap can
+# write finished_at).
+TINDERBOX_PROGRESS_STALE_SECS="${TINDERBOX_PROGRESS_STALE_SECS:-1800}"
+
+# Returns 0 if a run looks aborted/dead, 1 if it looks active.
+# Three signals (any one is enough to mark aborted):
+#   1. Directory name has an explicit operator marker
+#      (-aborted / -partial / -killed / -stopped).
+#   2. results.tsv hasn't grown in TINDERBOX_PROGRESS_STALE_SECS AND no
+#      compare-matrix process is currently running on the host.
+#   3. Driver log file in the parent reports/ has the same basename as
+#      the run dir + .driver.log (compare-matrix.sh writes one when run
+#      via the matrix harness; presence after the run dir already exists
+#      and no process is alive == past run, dead now).
+_progress_run_aborted() {
+  local d="$1"
+  local name; name="$(basename "$d")"
+  case "$name" in
+    *-aborted-*|*-partial-*|*-killed-*|*-stopped-*) return 0 ;;
+  esac
+  local tsv="$d/results.tsv"
+  if [[ -f "$tsv" ]]; then
+    local now mtime age
+    now=$(date +%s)
+    mtime=$(stat -c %Y "$tsv" 2>/dev/null || stat -f %m "$tsv" 2>/dev/null || echo "$now")
+    age=$(( now - mtime ))
+    if (( age > TINDERBOX_PROGRESS_STALE_SECS )); then
+      # No live driver matching this run path → presumed dead. We grep for
+      # the basename so a process working on a SIBLING run dir doesn't
+      # falsely keep this one alive.
+      if ! pgrep -af "compare-matrix" 2>/dev/null | grep -qF "$name"; then
+        return 0
+      fi
+    fi
+  fi
+  return 1
+}
+
+# Find the matrix run to track. Selection priority:
+#   1. Newest run that is BOTH unfinished AND not aborted/dead → "live".
+#   2. Newest run with finished_at (the most recent completed run) → useful
+#      for showing the just-completed report after a clean exit.
+#   3. Newest run regardless of state.
+# Returns "" when reports/ is empty.
 #
 # Implementation note: avoids GNU-only `find -printf` so the dev-box dry-run
 # on macOS doesn't silently report "no run found". `ls -dt` is supported by
@@ -1778,7 +1822,7 @@ REPORTS_DIR_DEFAULT="$TINDERBOX_ROOT/reports"
 _progress_pick_run() {
   local reports="${1:-$REPORTS_DIR_DEFAULT}"
   [[ -d "$reports" ]] || return 0
-  local newest_unfinished="" newest_any="" d meta
+  local newest_live="" newest_finished="" newest_any="" d meta
   shopt -s nullglob
   local -a runs=()
   while IFS= read -r d; do
@@ -1789,12 +1833,13 @@ _progress_pick_run() {
     meta="$d/meta.txt"
     [[ -f "$meta" ]] || continue
     [[ -z "$newest_any" ]] && newest_any="$d"
-    if ! grep -q '^finished_at\b' "$meta" 2>/dev/null; then
-      newest_unfinished="$d"
-      break
+    if grep -q '^finished_at\b' "$meta" 2>/dev/null; then
+      [[ -z "$newest_finished" ]] && newest_finished="$d"
+    elif [[ -z "$newest_live" ]] && ! _progress_run_aborted "$d"; then
+      newest_live="$d"
     fi
   done
-  printf '%s' "${newest_unfinished:-$newest_any}"
+  printf '%s' "${newest_live:-${newest_finished:-$newest_any}}"
 }
 
 # Render a unicode progress bar of width $1 filled to fraction $2 (0..1).
@@ -1902,7 +1947,17 @@ _progress_render_frame() {
     (( bar_w < 10 )) && bar_w=10
     (( bar_w > 60 )) && bar_w=60
 
-    printf 'Run:        %s\n' "$(basename "$run")"
+    # Banner status: green for finished, yellow for aborted/dead,
+    # nothing extra for actively-running. Actively-running is implied by
+    # the auto-pick selecting it; we only label the "not live" cases so
+    # the operator never confuses a stale dashboard with a real one.
+    local status_banner=""
+    if [[ -n "$finished" ]]; then
+      status_banner=$' \033[1;32m[FINISHED]\033[0m'
+    elif _progress_run_aborted "$run"; then
+      status_banner=$' \033[1;33m[ABORTED]\033[0m'
+    fi
+    printf 'Run:        %s%s\n' "$(basename "$run")" "$status_banner"
     printf '            mode=%s  jobs=%s  host=%s  kernel=%s\n' \
       "${mode:-?}" "${jobs:-?}" "${host:-?}" "${kernel:-?}"
     printf 'Started:    %s   (%s ago)\n' "${started:-?}" "$(_progress_hms "$elapsed")"
@@ -1912,7 +1967,10 @@ _progress_render_frame() {
     printf 'Progress:   '
     _progress_bar "$bar_w" "$frac"
     printf '  %d / %d  (%s%%)\n' "$done" "$total" "$pct"
-    if [[ -z "$finished" ]]; then
+    # Rate / ETA are only meaningful for an actively-running matrix.
+    # Suppress them for finished and aborted runs so the dashboard doesn't
+    # claim a dead run will "finish in 371h".
+    if [[ -z "$finished" ]] && ! _progress_run_aborted "$run"; then
       printf 'Rate:       %s pkg/h   (avg %ss/pkg)\n' "$rate_per_h" "$avg_s"
       if (( eta > 0 )); then
         printf 'ETA:        %s   →   ~%s\n' "$(_progress_hms "$eta")" "$finishes_at"
