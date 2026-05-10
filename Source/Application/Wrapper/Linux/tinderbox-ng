@@ -159,6 +159,49 @@ require_dirs() {
   [[ -d "$BASELINE_DIR/usr" ]] || die "$BASELINE_DIR is not a populated baseline; run 'tinderbox-ng bootstrap' first"
 }
 
+# -----------------------------------------------------------------------------
+# Preflight aggregation
+# -----------------------------------------------------------------------------
+#
+# Every prerequisite the bootstrap, session-mount, and compare paths depend on.
+# Centralised here so `cmd_doctor` can report all problems at once instead of
+# the historical "die mid-bootstrap" mode where a missing tool would only
+# surface after stage3 was already on disk.
+
+# Required host-side binaries. Bash 5 syntax; tested at startup of cmd_doctor.
+TINDERBOX_REQUIRED_BINS=(
+  bash mount umount findmnt flock unshare modprobe
+  curl git rsync tar gpg gpgconf sha512sum sed awk grep
+  install ln chmod chown stat install rmdir
+)
+
+# Optional bins that we use when present but degrade gracefully without.
+TINDERBOX_OPTIONAL_BINS=(
+  ts          # moreutils; timestamps in cmd_exec output
+  pgrep       # used by sweep_session_orphans belt-and-suspenders pass
+  chattr      # defensive on refresh-kb / install-ccache / refresh-portage-ng
+  getent      # used to resolve mDNS hosts; falls back silently
+)
+
+# Required template files under $LIB_DIR (everything cp_template / install
+# touches at bootstrap time, plus the matrix harness pieces). Missing any of
+# these will silently break a downstream command.
+TINDERBOX_REQUIRED_TEMPLATES=(
+  baseline.make.conf
+  baseline.repos.conf
+  portage-ng-dev.in
+  run-matrix.sh
+  compare-matrix.sh
+  manifest-100.txt
+  manifest-1000.txt
+  deploy-baseline.sh
+)
+
+# Minimum disk-space hints (in MiB) for $TINDERBOX_ROOT before bootstrap.
+# Stage3 + swi-prolog + tree + kb.qlf already need ~10G. Add headroom for
+# distfiles + first runs.
+TINDERBOX_MIN_FREE_MIB="${TINDERBOX_MIN_FREE_MIB:-30000}"
+
 # Is the sessions directory currently a tmpfs mount?
 sessions_tmpfs_active() {
   [[ -d "$SESSIONS_DIR" ]] || return 1
@@ -421,6 +464,195 @@ sweep_session_orphans() {
 }
 
 # =============================================================================
+# Subcommand: doctor (preflight)
+# =============================================================================
+#
+# Aggregate every prerequisite the rest of the script (especially bootstrap)
+# depends on and report all problems in one pass. Without this, a missing
+# tool or kernel feature surfaces only after stage3 has already been downloaded
+# and unpacked - typically 5-15 minutes into bootstrap on a fresh VM.
+
+cmd_doctor() {
+  local fail=0
+  local warn=0
+
+  log_info "host preflight check (bootstrap prerequisites)"
+
+  # Bash version
+  local bash_major="${BASH_VERSINFO[0]:-0}"
+  if (( bash_major < 5 )); then
+    log_error "bash $BASH_VERSION (need >= 5.0; required for ${BASH_REMATCH[*]:+associative arrays} etc.)"
+    fail=$((fail+1))
+  else
+    log_ok "bash $BASH_VERSION"
+  fi
+
+  # Required binaries
+  local missing_req=()
+  local b
+  for b in "${TINDERBOX_REQUIRED_BINS[@]}"; do
+    command -v "$b" >/dev/null 2>&1 || missing_req+=("$b")
+  done
+  if (( ${#missing_req[@]} > 0 )); then
+    log_error "missing required commands: ${missing_req[*]}"
+    log_error "  install via: emerge sys-apps/util-linux app-crypt/gnupg net-misc/curl dev-vcs/git net-misc/rsync app-arch/tar"
+    fail=$((fail+1))
+  else
+    log_ok "all required commands present"
+  fi
+
+  local missing_opt=()
+  for b in "${TINDERBOX_OPTIONAL_BINS[@]}"; do
+    command -v "$b" >/dev/null 2>&1 || missing_opt+=("$b")
+  done
+  if (( ${#missing_opt[@]} > 0 )); then
+    log_warn "optional commands missing (graceful degradation): ${missing_opt[*]}"
+    log_warn "  ts: app-admin/moreutils (matrix log timestamps)"
+    log_warn "  pgrep: sys-process/procps; chattr: sys-apps/e2fsprogs; getent: glibc"
+    warn=$((warn+1))
+  fi
+
+  # Kernel overlay module
+  if grep -qw overlay /proc/filesystems 2>/dev/null; then
+    log_ok "overlay filesystem available in kernel"
+  elif modprobe -n overlay 2>/dev/null; then
+    log_warn "overlay not loaded but modprobe-able; bootstrap will load it"
+    warn=$((warn+1))
+  else
+    log_error "overlay filesystem not available and not modprobe-able"
+    log_error "  rebuild kernel with CONFIG_OVERLAY_FS=m or =y"
+    fail=$((fail+1))
+  fi
+
+  # Mount-namespace support
+  if unshare --mount --propagation=private true >/dev/null 2>&1; then
+    log_ok "kernel supports unshare --mount --propagation=private"
+  else
+    log_error "kernel refused 'unshare --mount --propagation=private'"
+    log_error "  enable CONFIG_NAMESPACES, CONFIG_USER_NS, CONFIG_PID_NS, CONFIG_MOUNT_NS"
+    fail=$((fail+1))
+  fi
+
+  # devtmpfs (used by _ns_session_mount for fresh /dev)
+  if grep -qw devtmpfs /proc/filesystems 2>/dev/null; then
+    log_ok "devtmpfs available"
+  else
+    log_error "devtmpfs not available; sessions need a fresh /dev"
+    fail=$((fail+1))
+  fi
+
+  # Templates present (LIB_DIR resolution)
+  local missing_tpl=()
+  local t
+  for t in "${TINDERBOX_REQUIRED_TEMPLATES[@]}"; do
+    [[ -f "$LIB_DIR/$t" ]] || missing_tpl+=("$t")
+  done
+  if (( ${#missing_tpl[@]} > 0 )); then
+    log_error "missing templates under $LIB_DIR: ${missing_tpl[*]}"
+    log_error "  re-run host install (deploy-host.sh) or rsync the .d directory"
+    fail=$((fail+1))
+  else
+    log_ok "all templates present in $LIB_DIR"
+  fi
+
+  # PORTAGE_NG_LOCAL or PORTAGE_NG_URL must point somewhere
+  if [[ -n "$PORTAGE_NG_URL" ]]; then
+    log_ok "portage-ng source: git $PORTAGE_NG_URL @ $PORTAGE_NG_REF"
+  elif [[ -n "$PORTAGE_NG_LOCAL" && -d "$PORTAGE_NG_LOCAL/Source" ]]; then
+    log_ok "portage-ng source: rsync from $PORTAGE_NG_LOCAL"
+  else
+    log_error "no portage-ng source configured"
+    log_error "  set PORTAGE_NG_LOCAL=/path/to/portage-ng (with Source/ inside) or PORTAGE_NG_URL"
+    fail=$((fail+1))
+  fi
+
+  # Disk space (only meaningful pre-bootstrap; warn if tight)
+  if [[ -d "$(dirname "$TINDERBOX_ROOT")" ]]; then
+    local free_mib
+    free_mib="$(df -BM --output=avail "$(dirname "$TINDERBOX_ROOT")" 2>/dev/null | tail -n1 | tr -dc '0-9')"
+    if [[ -n "$free_mib" ]]; then
+      if (( free_mib < TINDERBOX_MIN_FREE_MIB )); then
+        log_warn "$(dirname "$TINDERBOX_ROOT") has ${free_mib} MiB free; recommended >= ${TINDERBOX_MIN_FREE_MIB} MiB"
+        warn=$((warn+1))
+      else
+        log_ok "$(dirname "$TINDERBOX_ROOT") has ${free_mib} MiB free"
+      fi
+    fi
+  fi
+
+  # tmpfs sizing - if RAM < requested tmpfs cap warn the operator. Skipped
+  # silently on non-Linux (no /proc/meminfo); doctor is meant for Linux hosts
+  # but we want the dev-box dry-run to stay clean.
+  if [[ -n "$TINDERBOX_SESSIONS_TMPFS_SIZE" && "$TINDERBOX_SESSIONS_TMPFS_SIZE" != "0" ]] && [[ -r /proc/meminfo ]]; then
+    local mem_kib mem_gib cap_gib
+    mem_kib="$(awk '/^MemTotal:/ {print $2}' /proc/meminfo 2>/dev/null || echo 0)"
+    mem_gib=$(( mem_kib / 1024 / 1024 ))
+    cap_gib="${TINDERBOX_SESSIONS_TMPFS_SIZE%[Gg]}"
+    if [[ "$cap_gib" =~ ^[0-9]+$ ]] && (( cap_gib > 0 )); then
+      if (( mem_gib > 0 && cap_gib > mem_gib )); then
+        log_warn "tmpfs cap ${TINDERBOX_SESSIONS_TMPFS_SIZE} > host RAM ${mem_gib}G (sparse, but may swap)"
+        warn=$((warn+1))
+      else
+        log_ok "tmpfs cap ${TINDERBOX_SESSIONS_TMPFS_SIZE} (host RAM: ${mem_gib}G)"
+      fi
+    fi
+  fi
+
+  # mDNS resolution (optional but commonly needed for *.local)
+  if [[ -n "${TINDERBOX_MDNS_HOSTS:-}" ]] && command -v getent >/dev/null 2>&1; then
+    local h
+    for h in $TINDERBOX_MDNS_HOSTS; do
+      if getent hosts "$h" >/dev/null 2>&1; then
+        log_ok "mDNS resolves: $h"
+      else
+        log_warn "mDNS does not resolve: $h (host may need nss-mdns; sessions still work for non-mDNS targets)"
+        warn=$((warn+1))
+      fi
+    done
+  fi
+
+  if (( fail > 0 )); then
+    die "preflight: $fail error(s), $warn warning(s); fix errors before bootstrap"
+  fi
+  log_ok "preflight: 0 errors, $warn warning(s)"
+  return 0
+}
+
+
+# =============================================================================
+# Subcommand: selftest
+# =============================================================================
+#
+# Post-bootstrap smoke test. Runs `compare --pretend` on a tiny well-known
+# package in a throwaway session to confirm the baseline is wired correctly:
+# both engines plan it, the overlay mounts, and the chroot can resolve hosts.
+#
+# This catches "bootstrap finished cleanly but kb.qlf is broken" or "the
+# baseline missed a config flag" regressions in seconds, before they bite a
+# multi-hour matrix run.
+
+cmd_selftest() {
+  require_root
+  require_dirs
+
+  local target="${TINDERBOX_SELFTEST_TARGET:-sys-apps/portage}"
+  local label="selftest-$$"
+
+  log_info "selftest: compare --pretend $target (label=$label)"
+
+  # cmd_compare itself runs sessions through unshare and tears them down.
+  if cmd_compare --pretend --label "$label" "$target"; then
+    log_ok "selftest passed: both engines planned $target cleanly"
+    return 0
+  else
+    local rc=$?
+    log_error "selftest failed (compare exit $rc); inspect $LOG_DIR/compare-${label}-*"
+    return "$rc"
+  fi
+}
+
+
+# =============================================================================
 # Subcommand: bootstrap
 # =============================================================================
 
@@ -428,6 +660,13 @@ cmd_bootstrap() {
   require_root
   require_kernel_overlay
   require_unshare
+
+  # Centralised preflight: catches missing tools / kernel features before
+  # we download stage3. Skip with TINDERBOX_SKIP_DOCTOR=1 only for re-bootstraps
+  # on machines you've already qualified.
+  if [[ -z "${TINDERBOX_SKIP_DOCTOR:-}" ]]; then
+    cmd_doctor
+  fi
 
   log_info "bootstrap: building baseline at $BASELINE_DIR"
   log_info "this takes a long time (stage3 download + emerge swi-prolog + portage-ng sync)"
@@ -450,7 +689,13 @@ cmd_bootstrap() {
   bootstrap_freeze
 
   log_ok "bootstrap complete; baseline frozen at $BASELINE_DIR"
-  log_info "next: tinderbox-ng new <name> && tinderbox-ng enter <name>"
+  if [[ -n "${TINDERBOX_BOOTSTRAP_SELFTEST:-}" ]]; then
+    log_info "running post-bootstrap selftest (TINDERBOX_BOOTSTRAP_SELFTEST set)"
+    cmd_selftest || log_warn "selftest reported issues; inspect logs above"
+  else
+    log_info "next: tinderbox-ng selftest    # smoke-test compare on sys-apps/portage"
+    log_info "      tinderbox-ng new <name> && tinderbox-ng enter <name>"
+  fi
 }
 
 bootstrap_fetch_stage3() {
@@ -1447,6 +1692,340 @@ cmd_status() {
   fi
 }
 
+
+# =============================================================================
+# Subcommand: progress (live monitor)
+# =============================================================================
+#
+# Continuously-updated dashboard for in-flight matrix runs (compare-matrix.sh
+# writes to /srv/tinderbox-ng/reports/compare-matrix-<stamp>/results.tsv as it
+# runs). Renders a progress bar with ETA, current rate, host load + RAM,
+# tmpfs occupancy, and the live list of active sessions with their engine
+# and age. Designed to be the "is it still going / how long left / what is
+# it doing right now" command operators reach for first.
+#
+# Auto-detects the most recent matrix run by ctime under
+# $TINDERBOX_ROOT/reports/. Pass --run DIR to pin a specific run. With no
+# matrix run available it still shows host stats + session list (useful
+# during interactive `enter` work).
+
+REPORTS_DIR_DEFAULT="$TINDERBOX_ROOT/reports"
+
+# Find the matrix run to track. Prefers an unfinished run (meta.txt without
+# finished_at line), falls back to the most recent finished one. Empty
+# stdout means no run found at all.
+#
+# Implementation note: avoids GNU-only `find -printf` so the dev-box dry-run
+# on macOS doesn't silently report "no run found". `ls -dt` is supported by
+# both GNU and BSD coreutils and sorts by mtime newest-first.
+_progress_pick_run() {
+  local reports="${1:-$REPORTS_DIR_DEFAULT}"
+  [[ -d "$reports" ]] || return 0
+  local newest_unfinished="" newest_any="" d meta
+  shopt -s nullglob
+  local -a runs=()
+  while IFS= read -r d; do
+    [[ -d "$d" ]] && runs+=("$d")
+  done < <(ls -dt "$reports"/compare-matrix-* 2>/dev/null)
+  shopt -u nullglob
+  for d in "${runs[@]}"; do
+    meta="$d/meta.txt"
+    [[ -f "$meta" ]] || continue
+    [[ -z "$newest_any" ]] && newest_any="$d"
+    if ! grep -q '^finished_at\b' "$meta" 2>/dev/null; then
+      newest_unfinished="$d"
+      break
+    fi
+  done
+  printf '%s' "${newest_unfinished:-$newest_any}"
+}
+
+# Render a unicode progress bar of width $1 filled to fraction $2 (0..1).
+# Falls back to ASCII when LANG is not UTF-8 (or LC_ALL set to C).
+_progress_bar() {
+  local width="$1" frac="$2"
+  awk -v w="$width" -v f="$frac" -v utf="${LANG:-}${LC_ALL:-}" '
+    BEGIN {
+      if (f < 0) f = 0; if (f > 1) f = 1
+      filled = int(w * f + 0.5)
+      empty  = w - filled
+      if (utf ~ /UTF-?8/) { fc = "\xe2\x96\x88"; ec = "\xe2\x96\x91" }
+      else                { fc = "#";            ec = "-" }
+      out = "["
+      for (i = 0; i < filled; i++) out = out fc
+      for (i = 0; i < empty;  i++) out = out ec
+      out = out "]"
+      printf "%s", out
+    }'
+}
+
+# Format $1 seconds as "Hh Mm Ss" (skipping zeros from the left).
+_progress_hms() {
+  local s="${1:-0}"
+  if ! [[ "$s" =~ ^-?[0-9]+$ ]]; then printf '?'; return; fi
+  if (( s < 0 )); then printf '?'; return; fi
+  local h m
+  h=$(( s / 3600 ))
+  m=$(( (s % 3600) / 60 ))
+  s=$(( s % 60 ))
+  if   (( h > 0 )); then printf '%dh %dm %ds' "$h" "$m" "$s"
+  elif (( m > 0 )); then printf '%dm %ds'         "$m" "$s"
+  else                   printf '%ds'                  "$s"
+  fi
+}
+
+# Stream a single rendered frame to stdout. Designed to be fast: avoids
+# `du`, walks the sessions dir once with stat-based age, and reads
+# results.tsv with `wc -l` rather than an awk pipeline.
+_progress_render_frame() {
+  # Render best-effort: a failing subshell (df on a missing dir, findmnt on
+  # a non-Linux dev box, etc.) must never abort the dashboard. The function
+  # always returns 0 so the caller's `set -e` is not tripped.
+  set +e
+  local run="$1" cols="$2"
+  local now
+  now=$(date +%s)
+
+  # ---- Header ----
+  printf '\033[1mtinderbox-ng progress\033[0m  -  refresh %ss   (q or ^C to quit)\n' \
+    "${TINDERBOX_PROGRESS_INTERVAL:-2}"
+  printf -- '─%.0s' $(seq 1 "$cols"); printf '\n'
+
+  # ---- Matrix-run block ----
+  if [[ -n "$run" && -d "$run" ]]; then
+    local meta="$run/meta.txt"
+    local tsv="$run/results.tsv"
+    local total mode jobs started host kernel finished
+    total="$(awk -F'\t' '$1=="package_count"{print $2}'  "$meta" 2>/dev/null)"
+    mode="$(awk  -F'\t' '$1=="mode"{print $2}'           "$meta" 2>/dev/null)"
+    jobs="$(awk  -F'\t' '$1=="jobs"{print $2}'           "$meta" 2>/dev/null)"
+    started="$(awk -F'\t' '$1=="started_at"{print $2}'   "$meta" 2>/dev/null)"
+    finished="$(awk -F'\t' '$1=="finished_at"{print $2}' "$meta" 2>/dev/null)"
+    host="$(awk -F'\t' '$1=="host"{print $2}'            "$meta" 2>/dev/null)"
+    kernel="$(awk -F'\t' '$1=="kernel"{print $2}'        "$meta" 2>/dev/null)"
+
+    local done=0
+    if [[ -f "$tsv" ]]; then
+      done=$(( $(wc -l < "$tsv") - 1 ))
+      (( done < 0 )) && done=0
+    fi
+    [[ -z "$total" || "$total" -le 0 ]] && total=0
+
+    local started_epoch=0
+    if [[ -n "$started" ]]; then
+      # GNU date first; fall back to BSD `date -j -f` (macOS dev box) so the
+      # elapsed/ETA block remains accurate during dry-runs.
+      started_epoch="$(date -d "$started" +%s 2>/dev/null \
+        || date -j -u -f '%Y-%m-%dT%H:%M:%SZ' "$started" +%s 2>/dev/null \
+        || echo 0)"
+    fi
+    local elapsed=0
+    if (( started_epoch > 0 )); then
+      elapsed=$(( now - started_epoch ))
+      (( elapsed < 0 )) && elapsed=0
+    fi
+
+    local frac=0 pct="0.0" rate_per_h=0 avg_s=0 eta=0 finishes_at="-"
+    if (( total > 0 )); then
+      frac=$(awk -v d="$done" -v t="$total" 'BEGIN{ printf "%.4f", (t>0 ? d/t : 0) }')
+      pct=$(awk  -v d="$done" -v t="$total" 'BEGIN{ printf "%.1f",  (t>0 ? 100*d/t : 0) }')
+    fi
+    if (( done > 0 && elapsed > 0 )); then
+      rate_per_h=$(awk -v d="$done" -v e="$elapsed" 'BEGIN{ printf "%.1f", 3600*d/e }')
+      avg_s=$(awk      -v d="$done" -v e="$elapsed" 'BEGIN{ printf "%.1f", e/d }')
+      if (( total > done )); then
+        eta=$(awk -v r="$avg_s" -v rem=$(( total - done )) 'BEGIN{ printf "%d", r*rem }')
+        finishes_at="$(date -d "@$(( now + eta ))" '+%Y-%m-%d %H:%M %Z' 2>/dev/null \
+          || date -r "$(( now + eta ))" '+%Y-%m-%d %H:%M %Z' 2>/dev/null \
+          || echo "?")"
+      fi
+    fi
+
+    local bar_w=$(( cols - 28 ))
+    (( bar_w < 10 )) && bar_w=10
+    (( bar_w > 60 )) && bar_w=60
+
+    printf 'Run:        %s\n' "$(basename "$run")"
+    printf '            mode=%s  jobs=%s  host=%s  kernel=%s\n' \
+      "${mode:-?}" "${jobs:-?}" "${host:-?}" "${kernel:-?}"
+    printf 'Started:    %s   (%s ago)\n' "${started:-?}" "$(_progress_hms "$elapsed")"
+    if [[ -n "$finished" ]]; then
+      printf 'Finished:   \033[32m%s\033[0m\n' "$finished"
+    fi
+    printf 'Progress:   '
+    _progress_bar "$bar_w" "$frac"
+    printf '  %d / %d  (%s%%)\n' "$done" "$total" "$pct"
+    if [[ -z "$finished" ]]; then
+      printf 'Rate:       %s pkg/h   (avg %ss/pkg)\n' "$rate_per_h" "$avg_s"
+      if (( eta > 0 )); then
+        printf 'ETA:        %s   →   ~%s\n' "$(_progress_hms "$eta")" "$finishes_at"
+      else
+        printf 'ETA:        (waiting for first completion)\n'
+      fi
+    fi
+  else
+    printf 'Run:        \033[33m(no compare-matrix run found under %s)\033[0m\n' \
+      "$REPORTS_DIR_DEFAULT"
+  fi
+  printf '\n'
+
+  # ---- Host stats ----
+  # Read /proc/loadavg defensively: on non-Linux dry-runs it doesn't exist
+  # and `read` would leave la5/la15 unbound, tripping `set -u`.
+  local la1="?" la5="?" la15="?" cores=1
+  if [[ -r /proc/loadavg ]]; then
+    read -r la1 la5 la15 _ < /proc/loadavg 2>/dev/null || true
+  fi
+  cores="$(nproc 2>/dev/null || echo 1)"
+  local mem_total_kib mem_avail_kib mem_used_g="?" mem_total_g="?"
+  if [[ -r /proc/meminfo ]]; then
+    mem_total_kib="$(awk '/^MemTotal:/{print $2}'     /proc/meminfo 2>/dev/null || echo 0)"
+    mem_avail_kib="$(awk '/^MemAvailable:/{print $2}' /proc/meminfo 2>/dev/null || echo 0)"
+    mem_total_g=$(awk -v k="$mem_total_kib" 'BEGIN{ printf "%.1f", k/1024/1024 }')
+    mem_used_g=$(awk  -v t="$mem_total_kib" -v a="$mem_avail_kib" \
+      'BEGIN{ printf "%.1f", (t-a)/1024/1024 }')
+  fi
+
+  local load_color="\033[32m"
+  if [[ "$la1" != "?" ]]; then
+    awk -v l="$la1" -v c="$cores" 'BEGIN{ exit !(l > c) }'     && load_color="\033[33m"
+    awk -v l="$la1" -v c="$cores" 'BEGIN{ exit !(l > c*1.5) }' && load_color="\033[31m"
+  fi
+
+  printf 'Load avg:   %b%s %s %s\033[0m   on %s cores\n' \
+    "$load_color" "$la1" "$la5" "$la15" "$cores"
+  printf 'RAM:        %s GB used / %s GB total\n' "$mem_used_g" "$mem_total_g"
+
+  # tmpfs occupancy
+  if sessions_tmpfs_active 2>/dev/null; then
+    local tsz tused tavail
+    read -r tsz tused tavail < <(df -BG --output=size,used,avail "$SESSIONS_DIR" 2>/dev/null \
+                                  | tail -n +2 | tr -d 'G')
+    printf 'Tmpfs:      %sG used / %sG avail / %sG cap (sessions)\n' \
+      "${tused:-?}" "${tavail:-?}" "${tsz:-?}"
+  fi
+
+  local distfiles_sz ccache_sz
+  distfiles_sz="$(df -BG --output=used "$DISTFILES_DIR" 2>/dev/null | tail -n1 | tr -d 'G ')"
+  ccache_sz="$(   df -BG --output=used "$CCACHE_DIR"    2>/dev/null | tail -n1 | tr -d 'G ')"
+  printf 'Distfiles:  %sG    Ccache: %sG\n' "${distfiles_sz:-?}" "${ccache_sz:-?}"
+  printf '\n'
+
+  # ---- Active sessions ----
+  local n_sessions=0 n_mounted=0
+  if [[ -d "$SESSIONS_DIR" ]]; then
+    n_sessions=$(find "$SESSIONS_DIR" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | wc -l)
+    n_sessions=$(( n_sessions + 0 ))   # strip wc whitespace padding
+  fi
+  printf '\033[1mActive sessions (%d)\033[0m\n' "$n_sessions"
+  if (( n_sessions > 0 )); then
+    printf '  %-44s  %-10s  %-7s  %s\n' NAME ENGINE STATE AGE
+    local s name engine state age_s age_str ctime
+    while IFS= read -r s; do
+      [[ -d "$s" ]] || continue
+      name="$(basename "$s")"
+      case "$name" in
+        pkg-cmp-portage-ng-*) engine="portage-ng" ;;
+        pkg-cmp-emerge-*)     engine="emerge"    ;;
+        pkg-cmp-*)            engine="compare"   ;;
+        selftest-*)           engine="selftest"  ;;
+        *)                    engine="user"      ;;
+      esac
+      if mountpoint -q "$s/merged" 2>/dev/null; then
+        state="MOUNTED"; n_mounted=$((n_mounted+1))
+      else
+        state="idle"
+      fi
+      # GNU stat first; fall back to BSD stat (macOS dev box) so the dry-run
+      # also shows real ages instead of a row of 0s.
+      ctime="$(stat -c %Y "$s" 2>/dev/null || stat -f %m "$s" 2>/dev/null || echo "$now")"
+      age_s=$(( now - ctime ))
+      age_str="$(_progress_hms "$age_s")"
+      printf '  %-44s  %-10s  %-7s  %s\n' \
+        "${name:0:44}" "$engine" "$state" "$age_str"
+    done < <(find "$SESSIONS_DIR" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | sort)
+  fi
+  printf '\n'
+
+  # ---- Recent completions (matrix only) ----
+  if [[ -n "$run" && -f "$run/results.tsv" ]]; then
+    printf '\033[1mRecent completions (last 5)\033[0m\n'
+    printf '  %-40s  %-7s  %-7s  %-6s  %s\n' TARGET PN EM VDB SECS
+    tail -n 5 "$run/results.tsv" | awk -F'\t' '
+      {
+        target=$1; pn_exit=$3; em_exit=$4
+        pn_vdb=$9; em_vdb=$10; vdb_delta=$11; secs=$12
+        pn_sym = (pn_exit=="0") ? "ok" : (pn_exit=="?" ? "?" : "fail")
+        em_sym = (em_exit=="0") ? "ok" : (em_exit=="?" ? "?" : "fail")
+        printf "  %-40s  %-7s  %-7s  %-6s  %ss\n", target, pn_sym, em_sym, vdb_delta, secs
+      }'
+  fi
+  return 0
+}
+
+cmd_progress() {
+  local run="" interval="${TINDERBOX_PROGRESS_INTERVAL:-2}" once=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --run)        run="$2"; shift 2 ;;
+      --run=*)      run="${1#--run=}"; shift ;;
+      --interval)   interval="$2"; shift 2 ;;
+      --interval=*) interval="${1#--interval=}"; shift ;;
+      --once|-1)    once=1; shift ;;
+      -h|--help)
+        cat <<'PROGRESS_HELP'
+tinderbox-ng progress [--once] [--interval N] [--run DIR]
+
+Continuously-updated dashboard. Auto-detects the most recent
+compare-matrix run under $TINDERBOX_ROOT/reports/ (prefers unfinished).
+
+Options:
+  --once, -1            Print one frame and exit (for scripts / SSH dumps).
+  --interval N          Refresh every N seconds (default 2; env:
+                        TINDERBOX_PROGRESS_INTERVAL).
+  --run DIR             Track this specific run directory instead of
+                        autodetecting.
+PROGRESS_HELP
+        return 0 ;;
+      *)            die "unknown progress flag: $1" ;;
+    esac
+  done
+
+  [[ "$interval" =~ ^[0-9]+$ ]] || die "--interval must be a positive integer"
+  (( interval >= 1 )) || interval=1
+  export TINDERBOX_PROGRESS_INTERVAL="$interval"
+
+  [[ -z "$run" ]] && run="$(_progress_pick_run "$REPORTS_DIR_DEFAULT")"
+
+  # Single-shot mode: render and return. Used by scripts / non-tty clients.
+  if (( once )) || ! [[ -t 1 ]]; then
+    local cols="${COLUMNS:-$(tput cols 2>/dev/null || echo 100)}"
+    _progress_render_frame "$run" "$cols"
+    return 0
+  fi
+
+  # Interactive loop. We use the alternate screen buffer so the operator's
+  # scrollback survives, and clear+home each frame for a stable viewport.
+  trap 'printf "\033[?25h\033[?1049l\n"; exit 0' INT TERM EXIT
+  printf '\033[?1049h\033[?25l'
+
+  while :; do
+    local cols
+    cols="$(tput cols 2>/dev/null || echo 100)"
+    # Re-pick the run each tick so we follow new compare-matrix runs that
+    # start mid-monitor.
+    [[ -z "$run" || ! -d "$run" ]] && run="$(_progress_pick_run "$REPORTS_DIR_DEFAULT")"
+    printf '\033[H\033[2J'
+    _progress_render_frame "$run" "$cols"
+    # Read with a timeout so the loop refreshes even when no key is pressed.
+    # 'q' / 'Q' / Enter quit. Anything else triggers an immediate refresh.
+    local key=""
+    if read -r -t "$interval" -n 1 key; then
+      case "$key" in q|Q|'') break ;; esac
+    fi
+  done
+}
+
 # =============================================================================
 # Internal: chroot the baseline directly (bootstrap-time only)
 # =============================================================================
@@ -1561,8 +2140,18 @@ usage() {
 tinderbox-ng - Gentoo build-testing rig with overlayfs sessions
 
 Subcommands:
+  doctor                   Preflight: check host has every required tool +
+                           kernel feature + template + disk space before
+                           bootstrap. Reports all problems in one pass.
+                           Run by `bootstrap` automatically (skip with
+                           TINDERBOX_SKIP_DOCTOR=1).
   bootstrap                Build the immutable baseline (stage3 + swi-prolog
-                           + portage-ng + kb.qlf). Long-running.
+                           + ccache + portage-ng + kb.qlf). Long-running.
+                           Set TINDERBOX_BOOTSTRAP_SELFTEST=1 to also run
+                           `selftest` on completion.
+  selftest                 Smoke-test a freshly-bootstrapped baseline:
+                           `compare --pretend sys-apps/portage` in a fresh
+                           session. Override target via TINDERBOX_SELFTEST_TARGET.
   refresh-tree [<commit>]  Re-pin shared/portage-tree to <commit> (default: master).
                            Existing sessions keep the old tree until reset.
   refresh-kb               Regenerate kb.qlf inside baseline against the pinned
@@ -1594,6 +2183,11 @@ Subcommands:
   list                     Show sessions, mount status, upper size, age.
   diff <name>              Print files modified in the session's upper layer.
   status                   Show tinderbox-ng global state (paths, pin, sizes).
+  progress [--once]        Live dashboard: progress bar + ETA + load avg
+           [--interval N]  + RAM + tmpfs + active sessions, refreshed every
+           [--run DIR]     N seconds (default 2). Auto-detects the latest
+                           compare-matrix run; --once for a one-shot dump
+                           (also the default when stdout is not a tty).
 
   tmpfs-up                 Mount the shared sessions tmpfs (idempotent).
                            Auto-runs on `new`/`compare`; this is for
@@ -1626,6 +2220,8 @@ main() {
 
   case "$sub" in
     # User-facing subcommands
+    doctor)       cmd_doctor       "$@" ;;
+    selftest)     cmd_selftest     "$@" ;;
     bootstrap)    cmd_bootstrap    "$@" ;;
     refresh-tree) cmd_refresh_tree "$@" ;;
     refresh-kb)   cmd_refresh_kb   "$@" ;;
@@ -1649,6 +2245,8 @@ main() {
     list)         cmd_list         "$@" ;;
     diff)         cmd_diff         "$@" ;;
     status)       cmd_status       "$@" ;;
+    progress)     cmd_progress     "$@" ;;
+    monitor)      cmd_progress     "$@" ;;
     tmpfs-up)     cmd_tmpfs_up     "$@" ;;
     tmpfs_up)     cmd_tmpfs_up     "$@" ;;
     tmpfs-down)   cmd_tmpfs_down   "$@" ;;

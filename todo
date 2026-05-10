@@ -207,5 +207,33 @@ Bugs (evidence-based, found via tinderbox-ng compare)
   gpep517, glibc, openssl, git, openssh, glib, geneweb, chess,
   portage) all unchanged.
 
+- [FIXED 2026-05-10] tinderbox-ng deploy automation gap.
+  Concern: many improvements (NPROC substitution, ccache install + chown,
+  /etc/ccache.conf max_size, sessions tmpfs, ACCEPT_KEYWORDS, orphan
+  reaper, refresh-portage-ng) accumulated incrementally; risk of a fresh
+  VM deploy missing one of them silently.
+  Fix: bootstrap path now fully scripted end-to-end and audited.
+    - new `cmd_doctor`: aggregates every host-side prerequisite (bash 5+,
+      required + optional bins, kernel overlay + namespace + devtmpfs,
+      template files, portage-ng source pointer, disk space floor, tmpfs
+      vs RAM, mDNS resolution) and reports all issues in one pass. Run
+      automatically by `cmd_bootstrap` (skip with TINDERBOX_SKIP_DOCTOR=1).
+    - new `cmd_selftest`: runs `compare --pretend $TINDERBOX_SELFTEST_TARGET`
+      (default sys-apps/portage) in a throwaway session to confirm the
+      baseline is wired correctly. Auto-runs at end of bootstrap when
+      TINDERBOX_BOOTSTRAP_SELFTEST=1.
+    - new `Source/Application/Wrapper/Linux/deploy-host.sh`: one-shot
+      host install (rsync of script + templates -> symlink -> doctor ->
+      optional bootstrap -> optional selftest). Forwards the relevant
+      env (CCACHE_MAX_SIZE, SESSIONS_TMPFS_SIZE, STAGE3_*, GENTOO_PROFILE,
+      etc.) so a fresh VM goes from clean to ready with one command:
+        TINDERBOX_BOOTSTRAP_SELFTEST=1 \
+          ./Source/Application/Wrapper/Linux/deploy-host.sh \
+              --bootstrap root@vm-linux.local
+    - README.md updated: lists deploy-host.sh, documents doctor +
+      selftest subcommands, adds the new env vars to the reference table,
+      and shows the recommended one-shot deploy alongside the manual
+      equivalent.
+
 Open
 ====

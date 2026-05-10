@@ -16,12 +16,16 @@ in read-only, and host-side caches like `/var/db/pkg` are not mounted in.
 Source/Application/Wrapper/Linux/
 ├── README.md                          # this file
 ├── tinderbox-ng                       # main script
+├── deploy-host.sh                     # one-shot host install (rsync + symlink + doctor)
 └── tinderbox-ng.d/
     ├── baseline.make.conf             # /etc/portage/make.conf for baseline
     ├── baseline.repos.conf            # /etc/portage/repos.conf/gentoo.conf
     ├── portage-ng-dev.in              # in-chroot launcher (template)
-    ├── deploy-baseline.sh             # safe scp of templates (does @TOKEN@ subs)
-    └── run-matrix.sh                  # tinderbox-matrix test runner
+    ├── deploy-baseline.sh             # safe scp of templates into a live baseline
+    ├── run-matrix.sh                  # tinderbox-matrix test runner
+    ├── compare-matrix.sh              # parallel `compare` driver over a manifest
+    ├── manifest-100.txt               # smoke manifest (100 atoms)
+    └── manifest-1000.txt              # full matrix manifest (1000 atoms)
 ```
 
 After `bootstrap`, the rig populates the VM as:
@@ -49,6 +53,43 @@ The script depends only on Bash 5+, `mount(8)`, `umount(8)`, `findmnt(8)`,
 in-kernel `overlay` module, and (for the test matrix) `app-admin/moreutils`
 for `ts(1)` (optional — falls back to plain `tee`).
 
+`tinderbox-ng doctor` aggregates every prerequisite and reports all problems
+in one pass; `bootstrap` runs it implicitly so a missing tool surfaces *before*
+stage3 download.
+
+### Recommended: `deploy-host.sh` (one-shot)
+
+```sh
+# From your dev machine - first-time install on a fresh VM (long: ~hours):
+TINDERBOX_BOOTSTRAP_SELFTEST=1 \
+  Source/Application/Wrapper/Linux/deploy-host.sh --bootstrap root@vm-linux.local
+
+# After `git pull` on the dev machine - refresh script + templates only:
+Source/Application/Wrapper/Linux/deploy-host.sh root@vm-linux.local
+
+# Refresh script + templates AND push your latest portage-ng src into the
+# already-bootstrapped baseline (does NOT regenerate kb.qlf):
+Source/Application/Wrapper/Linux/deploy-host.sh --refresh-portage-ng root@vm-linux.local
+```
+
+`deploy-host.sh` performs, in order:
+
+1. `rsync` of the script + `tinderbox-ng.d/` to `/usr/local/share/tinderbox-ng/`
+   on the remote.
+2. Symlink `/usr/local/sbin/tinderbox-ng` -> the installed script.
+3. `tinderbox-ng doctor` on the remote (preflight checks; fails fast on
+   missing prerequisites before any heavy work starts).
+4. Optional: `tinderbox-ng bootstrap` (with `--bootstrap`).
+5. Optional: `tinderbox-ng selftest` (with `--selftest` or
+   `TINDERBOX_BOOTSTRAP_SELFTEST=1` during a `--bootstrap` run).
+
+Forwarded environment: `TINDERBOX_CCACHE_MAX_SIZE`,
+`TINDERBOX_SESSIONS_TMPFS_SIZE`, `TINDERBOX_REBOOTSTRAP`, `STAGE3_VARIANT`,
+`STAGE3_ARCH`, `PORTAGE_TREE_PIN`, `GENTOO_PROFILE`, etc. — see
+`deploy-host.sh --help` for the full list.
+
+### Manual install (equivalent steps)
+
 ```sh
 # From your dev machine, push the rig to the VM:
 rsync -av --delete Source/Application/Wrapper/Linux/ \
@@ -58,8 +99,8 @@ rsync -av --delete Source/Application/Wrapper/Linux/ \
 ssh vm-linux.local sudo ln -sf /usr/local/share/tinderbox-ng/tinderbox-ng \
   /usr/local/sbin/tinderbox-ng
 
-# Verify:
-ssh vm-linux.local sudo tinderbox-ng --help
+# Confirm prerequisites:
+ssh vm-linux.local sudo tinderbox-ng doctor
 ```
 
 The script auto-detects `LIB_DIR`: it prefers a `tinderbox-ng.d` directory
@@ -73,9 +114,14 @@ next to itself (the development checkout), then falls back to
 ```sh
 # On the VM:
 sudo tinderbox-ng bootstrap
+
+# Or, with a post-bootstrap smoke test:
+sudo TINDERBOX_BOOTSTRAP_SELFTEST=1 tinderbox-ng bootstrap
 ```
 
-This step is **long-running** (hours):
+This step is **long-running** (hours). It begins with `tinderbox-ng doctor`
+(skip with `TINDERBOX_SKIP_DOCTOR=1` only on machines you've already
+qualified) so any missing host-side tool is reported up front:
 
 1. Resolves the latest stage3 from `latest-stage3-amd64-openrc.txt`.
 2. Verifies `.DIGESTS` against the Gentoo release-engineering GPG key
@@ -110,6 +156,11 @@ This step is **long-running** (hours):
     propagates `EPERM` through overlayfs's copy-up path, which makes
     sessions read-only. The chmod is a speed bump against accidental
     `cp ... /srv/tinderbox-ng/baseline/...`, not a hard barrier.
+13. Optionally runs `tinderbox-ng selftest` (when
+    `TINDERBOX_BOOTSTRAP_SELFTEST=1`): a `compare --pretend` of
+    `sys-apps/portage` (overrideable via `TINDERBOX_SELFTEST_TARGET`) in a
+    throwaway session. Catches "bootstrap finished cleanly but kb.qlf is
+    broken" or "the baseline missed a config flag" regressions in seconds.
 
 ### Per-session work
 
@@ -278,6 +329,41 @@ ssh vm-linux.local sudo cat \
 
 (Or grab the whole log dir at session-end via `tinderbox-ng exec ... -- tar -C /var/log -czf - tinderbox-matrix`.)
 
+### Live monitoring: `tinderbox-ng progress`
+
+```sh
+sudo tinderbox-ng progress              # interactive dashboard, refresh 2s
+sudo tinderbox-ng progress --interval 5 # slower refresh
+sudo tinderbox-ng progress --once       # one-shot dump (good for ssh/cron)
+sudo tinderbox-ng progress --run /srv/tinderbox-ng/reports/compare-matrix-...
+                                         # pin to a specific run instead of
+                                         # autodetecting the latest one
+```
+
+The dashboard auto-detects the most recent `compare-matrix-*` run under
+`$TINDERBOX_ROOT/reports/` (preferring an unfinished one) and continuously
+refreshes:
+
+- **Progress bar + ETA**: bar filled to `done / total`, packages-per-hour
+  rate, average seconds per package, projected wall-clock finish time.
+- **Host load**: 1m/5m/15m loadavg coloured against `nproc` (green if
+  `< nproc`, yellow if over, red if `> 1.5 × nproc`); RAM used/total;
+  sessions-tmpfs occupancy; distfiles + ccache disk usage.
+- **Active sessions**: each session in `$TINDERBOX_ROOT/sessions/` with
+  its inferred engine (`portage-ng` / `emerge` / `compare` / `selftest`
+  / `user`), mount state (MOUNTED / idle), and age since creation.
+- **Recent completions**: tail of `results.tsv` showing the last five
+  packages with PN/EM exit status, VDB delta, and seconds.
+
+Uses bash's alternate-screen buffer so your terminal scrollback survives;
+press `q` (or `^C`) to exit. When stdout is not a tty (e.g. piped through
+ssh), automatically falls back to single-frame `--once` mode so you can
+script ad-hoc snapshots:
+
+```sh
+ssh root@vm-linux.local tinderbox-ng progress --once
+```
+
 ## Safety guarantees
 
 - **Read-only Portage tree in sessions.** `mount_session` does the
@@ -410,3 +496,8 @@ ships a particular `kb.qlf`, the resolver disagrees with `emerge`.
 | `TINDERBOX_SESSIONS_TMPFS_SIZE` | `100G` | tmpfs cap for `$TINDERBOX_ROOT/sessions`. Empty/`0` disables. |
 | `TINDERBOX_CCACHE_MAX_SIZE` | `100G` | `max_size` written into `/etc/ccache.conf` by `bootstrap_install_ccache` and `install-ccache`. |
 | `TINDERBOX_REBOOTSTRAP` | (unset) | If set, `bootstrap` overwrites an existing baseline. |
+| `TINDERBOX_SKIP_DOCTOR` | (unset) | If set, `bootstrap` skips its preflight doctor pass. |
+| `TINDERBOX_BOOTSTRAP_SELFTEST` | (unset) | If set, `bootstrap` runs `selftest` on completion. |
+| `TINDERBOX_SELFTEST_TARGET` | `sys-apps/portage` | Atom used by `selftest`'s `compare --pretend`. |
+| `TINDERBOX_MIN_FREE_MIB` | `30000` | Disk-space floor (MiB) `doctor` checks under `dirname $TINDERBOX_ROOT`. |
+| `TINDERBOX_MDNS_HOSTS` | `mac-pro.local imac-pro.local` | mDNS hostnames `doctor` resolves and `_inject_mdns_hosts` writes into each session's `/etc/hosts`. |
