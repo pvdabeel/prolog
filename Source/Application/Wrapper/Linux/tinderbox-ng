@@ -1101,18 +1101,26 @@ EOF
     [[ -d "$PORTAGE_NG_LOCAL" ]] || die "PORTAGE_NG_LOCAL=$PORTAGE_NG_LOCAL is not a directory"
     log_info "rsync from $PORTAGE_NG_LOCAL"
     # --delete on the source tree must NOT wipe in-baseline build artefacts
-    # that the host checkout never has (kb.qlf, profile.qlf are gitignored
-    # build products; Certificates/ and Private/ are VM-specific). Without
-    # these excludes, refresh-portage-ng silently destroys kb.qlf and the
-    # next session takes minutes to re-parse the whole tree from md5-cache.
+    # that the host checkout never has (Knowledge/kb.qlf etc. are gitignored;
+    # vm-linux.local world file is created by bootstrap; Certificates/ and
+    # Private/ are VM-specific). Without these excludes, refresh-portage-ng
+    # silently destroys kb.qlf and the next session takes 10+ minutes to
+    # re-parse the whole tree from md5-cache. The exclude paths mirror the
+    # repository's .gitignore exactly: Knowledge/ and Source/Certificates/ +
+    # Source/Private/ live at repository roots, NOT under Source/Knowledge/.
     rsync -a --delete \
           --exclude='.git/objects/pack/*.idx.lock' \
           --exclude='Source/Snapshots/' \
           --exclude='Source/Certificates/' \
           --exclude='Source/Private/' \
-          --exclude='Source/Knowledge/kb.qlf' \
-          --exclude='Source/Knowledge/profile.qlf' \
-          --exclude='Source/Knowledge/Sets/world/' \
+          --exclude='Knowledge/kb.qlf' \
+          --exclude='Knowledge/kb.raw' \
+          --exclude='Knowledge/profile.qlf' \
+          --exclude='Knowledge/profile.raw' \
+          --exclude='Knowledge/embeddings.pl' \
+          --exclude='Knowledge/phase_stats.pl' \
+          --exclude='Knowledge/resume.pl' \
+          --exclude='Source/Knowledge/Sets/**/*.local' \
           "$PORTAGE_NG_LOCAL/" "$BASELINE_DIR$CHROOT_PORTAGE_NG/"
   fi
 
@@ -1122,10 +1130,19 @@ EOF
       "$BASELINE_DIR/usr/local/bin/portage-ng-dev"
   install -m 0755 "$LIB_DIR/run-matrix.sh" "$BASELINE_DIR/usr/local/bin/tinderbox-matrix"
 
+  # Re-touch the empty per-host world file so first --pretend doesn't crash
+  # on missing-file. This mirrors the equivalent step in
+  # bootstrap_install_portage_ng. The exclude pattern above keeps any
+  # *.local file already populated by previous sessions.
+  install -d "$BASELINE_DIR$CHROOT_PORTAGE_NG/Source/Knowledge/Sets/world"
+  if [[ ! -f "$BASELINE_DIR$CHROOT_PORTAGE_NG/Source/Knowledge/Sets/world/vm-linux.local" ]]; then
+    : >"$BASELINE_DIR$CHROOT_PORTAGE_NG/Source/Knowledge/Sets/world/vm-linux.local"
+  fi
+
   bootstrap_freeze
   log_ok "portage-ng refreshed in baseline; new sessions will pick it up"
   log_warn "existing sessions still see the OLD portage-ng until reset"
-  if [[ ! -f "$BASELINE_DIR$CHROOT_PORTAGE_NG/Source/Knowledge/kb.qlf" ]]; then
+  if [[ ! -f "$BASELINE_DIR$CHROOT_PORTAGE_NG/Knowledge/kb.qlf" ]]; then
     log_warn "kb.qlf MISSING from baseline; run 'tinderbox-ng refresh-kb' to (re)generate it"
   else
     log_info "kb.qlf preserved (was not in source rsync); run 'refresh-kb' if parser/grammar changed"
