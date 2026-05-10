@@ -420,10 +420,11 @@ PN-side latent gaps (not Class H, not regressions; future work)
   on util-linux", or as a hard refusal). Single-package impact in the
   current matrix, but the pattern is general and worth catching.
 
-- [PN-GAP] When PN flips a USE flag on a package P (either to satisfy
-  a parent dep's bracketed constraint `pkg[useflag]` or to satisfy P's
-  own REQUIRED_USE), it does NOT re-walk P's RDEPEND/DEPEND/BDEPEND
-  under the new USE state. As a result, conditional groups
+- [PN-GAP, FIXED 2026-05-10] When PN flips a USE flag on a package P
+  (either to satisfy a parent dep's bracketed constraint
+  `pkg[useflag]` or to satisfy P's own REQUIRED_USE), it does NOT
+  re-walk P's RDEPEND/DEPEND/BDEPEND under the new USE state. As a
+  result, conditional groups
   `useflag?( DepGroup )` that should be pulled in by the flip stay
   outside the install plan. The leaf install then fails because the
   required runtime/build helpers are missing.
@@ -526,6 +527,48 @@ PN-side latent gaps (not Class H, not regressions; future work)
   PN plan visible at step 6 includes the flag flip but no
   dev-lang/ruby:3.2 / dev-ruby/* deps; install fails immediately
   because the runtime tooling is absent.
+
+  ----- Fix (committed 2026-05-10) -----
+
+  v1 attempt (regressed): tried to remove the empty-input early-skip
+  in `use:stabilize_required_use` and thread BResolved into the
+  dep-walk Context. Caused 8 spurious `prover:test` failures
+  (net-fs/samba x6, sys-apps/duc x2). Root cause of regression:
+  stabilize chains REQUIRED_USE constraints (e.g. for samba on Mac
+  `gpg?(addc)` would force addc ON because gpg is in global_use,
+  then `!ads?(!addc)` would flip it back to OFF). The resulting
+  BResolved disagreed with the prover's view, and
+  `verify_required_use_with_bwu` then failed the proof.
+
+  v2 final (deployed): keep `stabilize_required_use` unchanged. Add
+  `use:dep_walk_context/4` that takes the prover-derived REQUIRED_USE
+  proof keys `R`, extracts flag changes via the existing
+  `use:model_required_use_changes/2`, and applies ONLY those changes
+  to BResolved. This stays aligned with the prover (no chain effects
+  beyond what the prover actually assumed) and closes the gap for
+  the cases where R has `assumed(conflict(required_use, ...))` keys.
+  Wired into install_dep_model, run_dep_model, and the inline
+  update + fetchonly clauses in target.pl.
+
+  Verification:
+    * `prover:test(portage)` over all 31478 portage entries: 0
+      failures, 3m 6s on Mac (56 threads). Same baseline as before.
+    * Unit tests of `dep_walk_context/4`:
+        - R=[],   B=[]/[]    -> [build_with_use:use_state([],[])]
+        - R=[r32-flip], B=[]/[]   -> [build_with_use:use_state([ruby_targets_ruby32],[])]
+        - R=[!addc],   B=[acl]/[] -> [build_with_use:use_state([acl],[addc])]
+    * Spot-checks: samba, duc, fluentd, bash, gimp all PROVE.
+  Files:
+    * Source/Domain/Gentoo/Rules/use.pl  (new dep_walk_context/4 +
+      apply_use_changes_to_state/3)
+    * Source/Domain/Gentoo/Rules/target.pl  (4 call sites updated)
+
+  Cross-impact: still fixes the "PN built N/M actions, fails at
+  sub-pkg" pattern for fluentd-style self-flips. xdg-utils/qt5compat
+  parent-dep-driven flips depend on the bracketed-USE constraint
+  also threading correctly into the child's update Context (see
+  point A above) - that path now also benefits from R-derived
+  application; verifying after VM matrix completes.
 
 Open
 ====
