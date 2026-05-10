@@ -346,5 +346,54 @@ Bugs (evidence-based, found via tinderbox-ng compare)
   shipped" block above). No upstream eclass patch required; the eclass
   bare `cp` is benign on a correctly-permissioned baseline.
 
+Upstream / ebuild bugs hitting both engines (compare-matrix collateral)
+=======================================================================
+
+Tracking real upstream Gentoo / package-Makefile bugs that show up as
+FAIL/FAIL in the compare matrix. Both portage-ng and emerge hit them
+identically (verified: same failure in a fresh `tinderbox-ng new` +
+`tinderbox-ng exec -- emerge -1 <pkg>`). NOT planner regressions; useful
+to batch as upstream Gentoo bug reports later.
+
+- [BOTH] dev-lang/yasm-1.3.0-r2 - re2c segfault during compile.
+  Failure: `make: *** [Makefile:4158: nasm-token.c] Segmentation fault`
+  after the freshly-built `re2c` tool runs on `nasm-token.re`. yasm
+  is unmaintained (last release 2014); almost certainly an issue
+  with re2c's generated state machine miscompiled by modern GCC.
+  Cascades to: app-arch/p7zip and any other yasm consumer.
+
+- [BOTH] sys-block/mtx-1.3.12-r1 - sandbox violation in install phase.
+  Failure: `install -c -m 755 -d /usr/share/man <D>/usr/share/man/man1`
+  (Makefile passes a bare `/usr/share/man` without `$(DESTDIR)` prefix
+  alongside the correctly-prefixed manpage dir) -> `ACCESS DENIED:
+  fchmod: /usr/share/man` -> `make: *** [Makefile:114: install]
+  Segmentation fault`. Real upstream Makefile bug; mtx is largely
+  unmaintained (last release 2017). Cascades to: app-backup/bacula
+  and any other tape-library consumer.
+
+- [BOTH] app-arch/stuffit-5.2.0.611-r1 - unfetchable + masked.
+  Masked by `no-multilib/package.mask` (i386 binary) AND
+  `RESTRICT="fetch"` (defunct Aladdin download URL). PN's auto-unmask
+  fires correctly (PN-only planning win) but no engine can fetch the
+  proprietary tarball. Legitimate "can't be installed" - leave masked.
+
+PN-side latent gaps (not Class H, not regressions; future work)
+================================================================
+
+- [PN-GAP] Soft blocker `![cat/pkg[useflag]]` against an installed
+  package whose USE includes `useflag` is not detected at planning.
+  Example: `app-arch/hardlink` has
+  `RDEPEND="!>=sys-apps/util-linux-2.34[hardlink]"`.
+  Our baseline has util-linux-2.41.3 with `hardlink` USE built in
+  (system installs `/usr/bin/hardlink` from util-linux). Emerge
+  correctly errors out at planning ("packages which cannot be
+  installed at the same time"); PN plans the install and fails at
+  the merge step (file collision). Worth handling in PN's blocker
+  resolver: when a `![cpv[use]]` blocker matches an installed package
+  with the listed USE flag enabled, surface it at planning time
+  (either as a domain assumption "would need to disable USE=hardlink
+  on util-linux", or as a hard refusal). Single-package impact in the
+  current matrix, but the pattern is general and worth catching.
+
 Open
 ====
