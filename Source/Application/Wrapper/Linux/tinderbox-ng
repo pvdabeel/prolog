@@ -2072,14 +2072,26 @@ PROGRESS_HELP
   trap 'printf "\033[?25h\033[?1049l\n"; exit 0' INT TERM EXIT
   printf '\033[?1049h\033[?25l'
 
+  # Flicker-free redraw strategy:
+  #   1. Build the entire frame in memory (subshell capture).
+  #   2. Move cursor home (\033[H), do NOT use \033[2J: a full clear blanks
+  #      the whole screen between frames, which is the visible flicker.
+  #   3. Insert \033[K (clear-to-end-of-line) before every newline so any
+  #      leftover characters from a previous longer line are wiped on the
+  #      same line they appear, atomically.
+  #   4. Trail with \033[J (clear from cursor to end of screen) so old lines
+  #      that no longer fit in the new frame disappear.
+  # Result: the terminal sees one contiguous write per frame; the operator
+  # sees content updating in place rather than the screen blanking + redrawing.
   while :; do
     local cols
     cols="$(tput cols 2>/dev/null || echo 100)"
     # Re-pick the run each tick so we follow new compare-matrix runs that
     # start mid-monitor.
     [[ -z "$run" || ! -d "$run" ]] && run="$(_progress_pick_run "$REPORTS_DIR_DEFAULT")"
-    printf '\033[H\033[2J'
-    _progress_render_frame "$run" "$cols"
+    local frame
+    frame="$(_progress_render_frame "$run" "$cols")"
+    printf '\033[H%s\033[K\n\033[J' "${frame//$'\n'/$'\033[K\n'}"
     # Read with a timeout so the loop refreshes even when no key is pressed.
     # 'q' / 'Q' / Enter quit. Anything else triggers an immediate refresh.
     local key=""
