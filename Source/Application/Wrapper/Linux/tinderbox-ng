@@ -1962,9 +1962,15 @@ _progress_render_frame() {
       "${tused:-?}" "${tavail:-?}" "${tsz:-?}"
   fi
 
+  # du -sBG (NOT df) so each metric reports the actual directory size
+  # rather than the filesystem's total used bytes (which would show the
+  # same number for distfiles + ccache when both share /srv). du is
+  # warm-cache fast (<50 ms once the dentries are in the kernel cache);
+  # cold path is ~0.5 s on a 25 GB distfiles tree which is acceptable for
+  # a 2 s refresh loop.
   local distfiles_sz ccache_sz
-  distfiles_sz="$(df -BG --output=used "$DISTFILES_DIR" 2>/dev/null | tail -n1 | tr -d 'G ')"
-  ccache_sz="$(   df -BG --output=used "$CCACHE_DIR"    2>/dev/null | tail -n1 | tr -d 'G ')"
+  distfiles_sz="$(du -sBG "$DISTFILES_DIR" 2>/dev/null | awk '{print $1}' | tr -d 'G')"
+  ccache_sz="$(   du -sBG "$CCACHE_DIR"    2>/dev/null | awk '{print $1}' | tr -d 'G')"
   printf 'Distfiles:  %sG    Ccache: %sG\n' "${distfiles_sz:-?}" "${ccache_sz:-?}"
   printf '\n'
 
