@@ -2032,6 +2032,68 @@ _progress_render_frame() {
   printf 'Distfiles:  %sG    Ccache: %sG\n' "${distfiles_sz:-?}" "${ccache_sz:-?}"
   printf '\n'
 
+  # ---- Realtime success / failure breakdown (matrix only) ----
+  #
+  # Single awk scan over results.tsv buckets every completed row by the
+  # (pn_exit, em_exit) pair, plus a separate vdb-mismatch counter for
+  # rows where both sides exited cleanly but installed a different number
+  # of packages (typically a planner divergence we want flagged).
+  #
+  # Buckets:
+  #   ok / ok       both engines built the target successfully
+  #   ok / fail     PN-only win (PN succeeded where emerge failed)
+  #   fail / ok     PN-only loss / regression (PN failed where emerge succeeded)
+  #   fail / fail   both engines failed (usually environmental: no network,
+  #                 missing system service, package legitimately broken)
+  #   vdb mismatch  both ok but vdb_delta != "=" (planner picked a different
+  #                 set of packages even though both runs completed)
+  #
+  # awk tolerates partial TSVs (header-only after start, growing rows under
+  # mutex from the parallel matrix). Empty file is a no-op.
+  if [[ -n "$run" && -f "$run/results.tsv" ]]; then
+    printf '\033[1mResults so far\033[0m\n'
+    awk -F'\t' '
+      BEGIN {
+        G="\033[32m"; R="\033[31m"; C="\033[36m"; Y="\033[33m"; D="\033[2m"; N="\033[0m"
+      }
+      NR == 1 { next }   # header
+      {
+        total++
+        pn=$3; em=$4; vdb=$11
+        is_ok_pn = (pn == "OK")
+        is_ok_em = (em == "OK")
+        if      (is_ok_pn && is_ok_em)  { okok++;     if (vdb != "=") vdb_mismatch++ }
+        else if (is_ok_pn && !is_ok_em) { okfail++ }
+        else if (!is_ok_pn && is_ok_em) { failok++ }
+        else                            { failfail++ }
+      }
+      END {
+        if (total == 0) {
+          printf "  (no completions yet)\n"
+          exit
+        }
+        # Rate denominators: OK/OK rate is over total; PN-only-win rate is
+        # over (ok/ok + ok/fail) which is "everywhere PN succeeded";
+        # regression rate is over (fail/ok + ok/ok) which is "everywhere
+        # emerge succeeded". Match-rate is the headline.
+        okok_pct      = (total > 0)               ? 100.0 * okok      / total : 0
+        okfail_pct    = (total > 0)               ? 100.0 * okfail    / total : 0
+        failok_pct    = (total > 0)               ? 100.0 * failok    / total : 0
+        failfail_pct  = (total > 0)               ? 100.0 * failfail  / total : 0
+        vdb_mm_pct    = (okok > 0)                ? 100.0 * vdb_mismatch / okok : 0
+        printf "  Total:         %6d  packages compared\n", total
+        printf "  %sok / ok%s        %6d  (%5.1f%%)   matched success\n",        G, N, okok,         okok_pct
+        printf "  %sok / fail%s      %6d  (%5.1f%%)   PN-only wins (PN ok, emerge fail)\n", C, N, okfail,       okfail_pct
+        printf "  %sfail / ok%s      %6d  (%5.1f%%)   regressions (PN fail, emerge ok)\n", R, N, failok,       failok_pct
+        printf "  %sfail / fail%s    %6d  (%5.1f%%)   both failed (environmental)\n",      Y, N, failfail,     failfail_pct
+        if (vdb_mismatch > 0) {
+          printf "  %svdb mismatch%s   %6d  (%5.1f%% of ok/ok)   planner divergence\n", C, N, vdb_mismatch, vdb_mm_pct
+        }
+      }
+    ' "$run/results.tsv"
+    printf '\n'
+  fi
+
   # ---- Active sessions ----
   #
   # State detection: each session mounts its overlay inside a *private*
