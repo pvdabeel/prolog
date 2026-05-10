@@ -1604,6 +1604,200 @@ _compare_vdb_list() {
 }
 
 # =============================================================================
+# Subcommand: continue (resume an interrupted compare-matrix run)
+# =============================================================================
+#
+# Auto-detects the most recent compare-matrix-* run, recovers its mode /
+# manifest / jobs from meta.txt, computes the set of targets not yet in
+# results.tsv, and dispatches compare-matrix on the remaining targets.
+#
+# A NEW run directory is created (compare-matrix-<stamp>) so the previous
+# TSV is never modified; the report generator should union both.
+#
+# Always re-mounts the sessions tmpfs first if it isn't active. The tmpfs
+# is intentionally not auto-mounted by the host (no fstab entry, no init
+# unit) — that's tinderbox-ng's job, not the OS's. After a crash + reboot
+# this is the first thing that needs to happen, otherwise new sessions
+# silently fall back to the underlying disk and saturate I/O.
+#
+# Foreground by default (so Ctrl-C still works); pass --background to
+# detach via nohup setsid nice and write a pidfile + driver log.
+
+cmd_continue() {
+  require_root
+  require_dirs
+
+  local pinned_run="" jobs_override="" detach=0 force=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --run)        pinned_run="$2"; shift 2 ;;
+      --run=*)      pinned_run="${1#--run=}"; shift ;;
+      --jobs|-j)    jobs_override="$2"; shift 2 ;;
+      --jobs=*)     jobs_override="${1#--jobs=}"; shift ;;
+      --background|--bg) detach=1; shift ;;
+      --force)      force=1; shift ;;
+      -h|--help)
+        cat <<'CONT_HELP'
+tinderbox-ng continue [--run DIR] [--jobs N] [--background] [--force]
+
+Resume a compare-matrix run that was interrupted (host crash, reboot,
+SIGINT, etc.).
+
+Behaviour:
+  * Auto-mounts the sessions tmpfs if not already mounted.
+  * Refuses to launch if a compare-matrix driver is already running
+    (use --force to override; not recommended — two parallel matrices
+    will oversubscribe the host).
+  * Auto-detects the most recent compare-matrix-<stamp>/ run dir.
+  * Reads its meta.txt to recover the original --pretend/--build mode,
+    manifest path, and --jobs setting.
+  * Computes "remaining targets" = original manifest minus every target
+    already present in the run's results.tsv.
+  * Launches a new compare-matrix run on the remaining manifest, in a
+    new compare-matrix-<stamp>/ dir (the previous TSV stays untouched).
+
+Options:
+  --run DIR       Pin a specific previous run directory (otherwise auto).
+  --jobs N        Override the --jobs setting recovered from meta.txt.
+  --background    Detach with nohup setsid nice; write driver pid + log
+                  paths and exit immediately. Useful for unattended use.
+  --force         Bypass the "already running" guard. Only safe if you
+                  really want two concurrent matrices on the box.
+
+When generating the final report, both run directories should be unioned:
+  cat OLD/results.tsv <(tail -n +2 NEW/results.tsv) > combined.tsv
+CONT_HELP
+        return 0 ;;
+      --) shift; break ;;
+      -*) die "continue: unknown flag $1" ;;
+      *)  die "continue: unexpected positional arg '$1'" ;;
+    esac
+  done
+
+  _ensure_sessions_tmpfs
+
+  local reports_dir="${REPORTS_DIR_DEFAULT:-$TINDERBOX_ROOT/reports}"
+
+  # Safeguard: refuse to launch a second matrix in parallel with one that's
+  # already running. pgrep matches both the absolute install path and the
+  # in-tree template path. Override via --force.
+  local active_drivers
+  active_drivers="$(pgrep -af '(/usr/local/sbin/compare-matrix|compare-matrix\.sh)' 2>/dev/null \
+                    | grep -v $$ || true)"
+  if [[ -n "$active_drivers" ]]; then
+    if (( force )); then
+      log_warn "a compare-matrix driver is already running (--force given, proceeding):"
+      while IFS= read -r line; do
+        [[ -n "$line" ]] && log_warn "  $line"
+      done <<<"$active_drivers"
+    else
+      log_error "a compare-matrix driver is already running:"
+      while IFS= read -r line; do
+        [[ -n "$line" ]] && log_error "  $line"
+      done <<<"$active_drivers"
+      log_error "abort the in-flight driver first (kill -TERM <pid>),"
+      log_error "or pass --force if you really want a second concurrent matrix."
+      die "refusing to start a second matrix"
+    fi
+  fi
+
+  local run="$pinned_run"
+  if [[ -z "$run" ]]; then
+    run="$(ls -1dt "$reports_dir"/compare-matrix-* 2>/dev/null | head -n1)"
+    [[ -n "$run" ]] || die "no compare-matrix-* run found under $reports_dir"
+    log_info "auto-detected previous run: $(basename "$run")"
+  fi
+  [[ -d "$run" ]] || die "run directory not found: $run"
+
+  local meta="$run/meta.txt"
+  local tsv="$run/results.tsv"
+  [[ -f "$meta" ]] || die "missing meta.txt in $run"
+  [[ -f "$tsv" ]]  || die "missing results.tsv in $run"
+
+  local prev_mode prev_manifest prev_jobs
+  prev_mode="$(awk -F'\t' '$1=="mode"     {print $2; exit}' "$meta")"
+  prev_manifest="$(awk -F'\t' '$1=="manifest" {print $2; exit}' "$meta")"
+  prev_jobs="$(awk -F'\t' '$1=="jobs"     {print $2; exit}' "$meta")"
+
+  [[ -n "$prev_mode" ]]     || die "could not recover mode from $meta"
+  [[ -n "$prev_manifest" ]] || die "could not recover manifest path from $meta"
+  [[ -f "$prev_manifest" ]] || die "previous manifest not found: $prev_manifest"
+  case "$prev_mode" in
+    --pretend|--build) ;;
+    *) die "unrecognised mode '$prev_mode' in $meta" ;;
+  esac
+
+  local jobs="${jobs_override:-${prev_jobs:-1}}"
+  [[ "$jobs" =~ ^[0-9]+$ && "$jobs" -ge 1 ]] \
+    || die "--jobs must be a positive integer, got: $jobs"
+
+  log_info "previous run summary:"
+  log_info "  dir      : $(basename "$run")"
+  log_info "  mode     : $prev_mode"
+  log_info "  manifest : $prev_manifest"
+  log_info "  jobs     : ${prev_jobs:-1} (using: $jobs)"
+
+  local stamp done_file remain_dir remain_file
+  stamp="$(date +%Y%m%dT%H%M%S)"
+  done_file="$(mktemp)"
+  remain_dir="$TINDERBOX_ROOT/manifests"
+  remain_file="$remain_dir/resume-$stamp.txt"
+  install -d "$remain_dir"
+
+  awk -F'\t' 'NR>1 && $1!="" {print $1}' "$tsv" | sort -u > "$done_file"
+  comm -23 <(sort -u "$prev_manifest") "$done_file" > "$remain_file"
+  rm -f "$done_file"
+
+  local total done_count remaining
+  total="$(wc -l < "$prev_manifest" | tr -d ' ')"
+  done_count="$(awk -F'\t' 'NR>1 && $1!=""' "$tsv" | wc -l | tr -d ' ')"
+  remaining="$(wc -l < "$remain_file" | tr -d ' ')"
+
+  log_info "progress recovered: $done_count done, $remaining remaining (of $total)"
+  log_info "resume manifest   : $remain_file"
+
+  if (( remaining == 0 )); then
+    rm -f "$remain_file"
+    log_ok "previous run appears complete; nothing to resume"
+    return 0
+  fi
+
+  local cm="$LIB_DIR/compare-matrix.sh"
+  if [[ ! -x "$cm" ]]; then
+    if [[ -x /usr/local/sbin/compare-matrix ]]; then
+      cm="/usr/local/sbin/compare-matrix"
+    else
+      die "compare-matrix script not found (looked at $LIB_DIR/compare-matrix.sh and /usr/local/sbin/compare-matrix)"
+    fi
+  fi
+
+  if (( detach )); then
+    install -d "$reports_dir"
+    local logfile pidfile
+    logfile="$reports_dir/all-packages-driver-resume-$stamp.log"
+    pidfile="$reports_dir/all-packages-driver.pid"
+    log_info "launching detached resume: nohup setsid nice -n 19 $cm $prev_mode --jobs $jobs --manifest $remain_file"
+    nohup setsid nice -n 19 \
+      "$cm" "$prev_mode" --jobs "$jobs" --manifest "$remain_file" \
+      </dev/null >"$logfile" 2>&1 &
+    echo $! >"$pidfile"
+    sleep 2
+    if kill -0 "$(cat "$pidfile")" 2>/dev/null; then
+      log_ok "background resume launched"
+      log_info "  pid : $(cat "$pidfile")"
+      log_info "  log : $logfile"
+      log_info "  watch: tinderbox-ng progress"
+    else
+      die "background resume failed to start; see $logfile"
+    fi
+  else
+    log_info "running in foreground (Ctrl-C to abort, or use --background)"
+    exec "$cm" "$prev_mode" --jobs "$jobs" --manifest "$remain_file"
+  fi
+}
+
+
+# =============================================================================
 # Subcommand: exit (legacy no-op)
 # =============================================================================
 #
@@ -2446,6 +2640,14 @@ Subcommands:
                            on the same target in parallel, print a side-by-side
                            summary (exit codes, plan size, completed steps,
                            VDB delta, first error). Default: --pretend.
+  continue [--run DIR] [--jobs N] [--background]
+                           Resume a compare-matrix run that was interrupted
+                           (host crash, reboot, SIGINT). Auto-mounts tmpfs,
+                           auto-detects the most recent run, recovers
+                           mode/manifest/jobs from meta.txt, and dispatches
+                           compare-matrix on every target not yet in
+                           results.tsv. Creates a NEW run dir; report tools
+                           should union both. Alias: `resume`.
 
   list                     Show sessions, mount status, upper size, age.
   diff <name>              Print files modified in the session's upper layer.
@@ -2457,8 +2659,9 @@ Subcommands:
                            (also the default when stdout is not a tty).
 
   tmpfs-up                 Mount the shared sessions tmpfs (idempotent).
-                           Auto-runs on `new`/`compare`; this is for
-                           explicit pre-allocation before a long batch.
+                           Auto-runs on `new`/`compare`/`continue`; this
+                           is for explicit pre-allocation before a long
+                           batch (or to remount after a host reboot).
   tmpfs-down               Unmount the shared sessions tmpfs (only if
                            no sessions remain; destroys their contents).
 
@@ -2509,6 +2712,8 @@ main() {
     em)           cmd_emerge       "$@" ;;
     compare)      cmd_compare      "$@" ;;
     cmp)          cmd_compare      "$@" ;;
+    continue)     cmd_continue     "$@" ;;
+    resume)       cmd_continue     "$@" ;;
     list)         cmd_list         "$@" ;;
     diff)         cmd_diff         "$@" ;;
     status)       cmd_status       "$@" ;;
