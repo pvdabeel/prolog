@@ -107,7 +107,7 @@ collect_env() {
            STAGE3_VARIANT STAGE3_ARCH STAGE3_BASE_URL \
            GENTOO_PROFILE GENTOO_LOCALE GENTOO_LOCALE_NAME \
            PORTAGE_TREE_URL PORTAGE_TREE_PIN \
-           PORTAGE_NG_URL PORTAGE_NG_REF; do
+           PORTAGE_NG_URL PORTAGE_NG_REF PORTAGE_NG_LOCAL; do
     if [[ -n "${!v:-}" ]]; then
       printf -v esc '%q' "${!v}"
       out+="$v=$esc "
