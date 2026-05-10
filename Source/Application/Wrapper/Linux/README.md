@@ -134,6 +134,13 @@ the internal `__ns-helper` re-exec). There is no explicit teardown - when
 the chroot's shell exits, the namespace is destroyed and every mount
 inside it disappears with it.
 
+The `exec`, `compare`, `reset`, `destroy` and `exit` subcommands
+additionally call an orphan-reaper that scans `/proc/*/root` for any
+processes still anchored under `$SESSIONS_DIR/$name/` and SIGKILLs them.
+This catches portage `die_hooks` chains (`sandbox` → `misc-functions.sh
+die_hooks` → `ebuild-ipc.py exit 0`) that survive past the parent
+emerge's death and otherwise pin a CPU at ~90% indefinitely.
+
 ### Refreshing the baseline
 
 ```sh
