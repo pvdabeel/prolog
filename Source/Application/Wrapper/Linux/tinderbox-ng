@@ -1686,8 +1686,10 @@ _compare_vdb_list() {
 # manifest / jobs from meta.txt, computes the set of targets not yet in
 # results.tsv, and dispatches compare-matrix on the remaining targets.
 #
-# A NEW run directory is created (compare-matrix-<stamp>) so the previous
-# TSV is never modified; the report generator should union both.
+# Appends to the original run's results.tsv (via compare-matrix.sh
+# --resume-dir) so resumed work shows up in the same dashboard counters
+# and the same canonical TSV as the original run. meta.txt records every
+# resume event as an auditable "# ----- resumed at ... -----" block.
 #
 # Always re-mounts the sessions tmpfs first if it isn't active. The tmpfs
 # is intentionally not auto-mounted by the host (no fstab entry, no init
@@ -1739,8 +1741,8 @@ Options:
   --force         Bypass the "already running" guard. Only safe if you
                   really want two concurrent matrices on the box.
 
-When generating the final report, both run directories should be unioned:
-  cat OLD/results.tsv <(tail -n +2 NEW/results.tsv) > combined.tsv
+Resumed work appends to the original run's results.tsv; meta.txt logs
+each resume event. No manual TSV merging needed.
 CONT_HELP
         return 0 ;;
       --) shift; break ;;
@@ -1778,8 +1780,17 @@ CONT_HELP
 
   local run="$pinned_run"
   if [[ -z "$run" ]]; then
-    run="$(ls -1dt "$reports_dir"/compare-matrix-* 2>/dev/null | head -n1)"
-    [[ -n "$run" ]] || die "no compare-matrix-* run found under $reports_dir"
+    # Strict canonical-name match: only `compare-matrix-<14-digit-stamp>`
+    # qualifies as a resumable run. Anything with a suffix
+    # (`.merged-into-*`, `.aborted`, `.partial-*`, `archive-*`, etc.) is
+    # an operator-archived sibling that must NOT be auto-detected, even
+    # if its mtime happens to be newer than the canonical original.
+    # Use --run DIR to override.
+    run="$(find "$reports_dir" -maxdepth 1 -mindepth 1 -type d \
+                -regex ".*/compare-matrix-[0-9]\{8\}T[0-9]\{6\}" \
+                -printf '%T@\t%p\n' 2>/dev/null \
+            | sort -rn | head -n1 | cut -f2-)"
+    [[ -n "$run" ]] || die "no canonical compare-matrix-<stamp> run found under $reports_dir"
     log_info "auto-detected previous run: $(basename "$run")"
   fi
   [[ -d "$run" ]] || die "run directory not found: $run"
@@ -1846,14 +1857,20 @@ CONT_HELP
     fi
   fi
 
+  # We pass --resume-dir so compare-matrix.sh appends to the original
+  # run's results.tsv (and meta.txt as a "resumed at" block) instead of
+  # creating a sibling stamp dir. The dashboard then naturally aggregates
+  # everything under one logical run; no manual TSV unioning needed.
   if (( detach )); then
     install -d "$reports_dir"
     local logfile pidfile
     logfile="$reports_dir/all-packages-driver-resume-$stamp.log"
     pidfile="$reports_dir/all-packages-driver.pid"
-    log_info "launching detached resume: nohup setsid nice -n 19 $cm $prev_mode --jobs $jobs --manifest $remain_file"
+    log_info "launching detached resume into $(basename "$run"): nohup setsid nice -n 19 $cm $prev_mode --jobs $jobs --manifest $remain_file"
     nohup setsid nice -n 19 \
-      "$cm" "$prev_mode" --jobs "$jobs" --manifest "$remain_file" \
+      "$cm" "$prev_mode" --jobs "$jobs" \
+            --manifest "$remain_file" \
+            --resume-dir "$run" \
       </dev/null >"$logfile" 2>&1 &
     echo $! >"$pidfile"
     sleep 2
@@ -1867,7 +1884,9 @@ CONT_HELP
     fi
   else
     log_info "running in foreground (Ctrl-C to abort, or use --background)"
-    exec "$cm" "$prev_mode" --jobs "$jobs" --manifest "$remain_file"
+    exec "$cm" "$prev_mode" --jobs "$jobs" \
+                            --manifest "$remain_file" \
+                            --resume-dir "$run"
   fi
 }
 
@@ -2092,11 +2111,17 @@ _progress_pick_run() {
   local reports="${1:-$REPORTS_DIR_DEFAULT}"
   [[ -d "$reports" ]] || return 0
   local newest_live="" newest_finished="" newest_any="" d meta
+  # Strict canonical-name match: only `compare-matrix-<14-digit-stamp>`.
+  # Anything with a suffix (`.merged-into-*`, `.aborted`, `.partial-*`,
+  # operator-archived siblings, etc.) MUST be excluded so the dashboard
+  # doesn't follow an inert/dead dir whose mtime got bumped by an admin
+  # rename or merge. Use --run DIR to override.
   shopt -s nullglob
   local -a runs=()
   while IFS= read -r d; do
     [[ -d "$d" ]] && runs+=("$d")
-  done < <(ls -dt "$reports"/compare-matrix-* 2>/dev/null)
+  done < <(ls -dt "$reports"/compare-matrix-* 2>/dev/null \
+             | grep -E '/compare-matrix-[0-9]{8}T[0-9]{6}$')
   shopt -u nullglob
   for d in "${runs[@]}"; do
     meta="$d/meta.txt"
@@ -2740,8 +2765,8 @@ Subcommands:
                            auto-detects the most recent run, recovers
                            mode/manifest/jobs from meta.txt, and dispatches
                            compare-matrix on every target not yet in
-                           results.tsv. Creates a NEW run dir; report tools
-                           should union both. Alias: `resume`.
+                           results.tsv. Appends to the original run's TSV +
+                           meta.txt (no sibling stamp dir). Alias: `resume`.
 
   list                     Show sessions, mount status, upper size, age.
   diff <name>              Print files modified in the session's upper layer.
