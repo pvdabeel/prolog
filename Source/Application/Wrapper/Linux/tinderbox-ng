@@ -2413,11 +2413,11 @@ _progress_render_frame() {
 }
 
 cmd_progress() {
-  local run="" interval="${TINDERBOX_PROGRESS_INTERVAL:-2}" once=0
+  local run="" pinned_run="" interval="${TINDERBOX_PROGRESS_INTERVAL:-2}" once=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --run)        run="$2"; shift 2 ;;
-      --run=*)      run="${1#--run=}"; shift ;;
+      --run)        pinned_run="$2"; shift 2 ;;
+      --run=*)      pinned_run="${1#--run=}"; shift ;;
       --interval)   interval="$2"; shift 2 ;;
       --interval=*) interval="${1#--interval=}"; shift ;;
       --once|-1)    once=1; shift ;;
@@ -2444,7 +2444,11 @@ PROGRESS_HELP
   (( interval >= 1 )) || interval=1
   export TINDERBOX_PROGRESS_INTERVAL="$interval"
 
-  [[ -z "$run" ]] && run="$(_progress_pick_run "$REPORTS_DIR_DEFAULT")"
+  if [[ -n "$pinned_run" ]]; then
+    run="$pinned_run"
+  else
+    run="$(_progress_pick_run "$REPORTS_DIR_DEFAULT")"
+  fi
 
   # Single-shot mode: render and return. Used by scripts / non-tty clients.
   if (( once )) || ! [[ -t 1 ]]; then
@@ -2473,8 +2477,17 @@ PROGRESS_HELP
     local cols
     cols="$(tput cols 2>/dev/null || echo 100)"
     # Re-pick the run each tick so we follow new compare-matrix runs that
-    # start mid-monitor.
-    [[ -z "$run" || ! -d "$run" ]] && run="$(_progress_pick_run "$REPORTS_DIR_DEFAULT")"
+    # start mid-monitor (e.g. after `tinderbox-ng continue`). Skip the
+    # re-pick if the user explicitly pinned a run with --run, otherwise
+    # we'd stomp their choice.
+    if [[ -z "$pinned_run" ]]; then
+      local newpick
+      newpick="$(_progress_pick_run "$REPORTS_DIR_DEFAULT")"
+      if [[ -n "$newpick" && "$newpick" != "$run" ]]; then
+        run="$newpick"
+      fi
+    fi
+    [[ -n "$run" && ! -d "$run" ]] && run=""
     local frame
     frame="$(_progress_render_frame "$run" "$cols")"
     printf '\033[H%s\033[K\n\033[J' "${frame//$'\n'/$'\033[K\n'}"
