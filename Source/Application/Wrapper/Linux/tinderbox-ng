@@ -49,14 +49,37 @@ GENTOO_RELENG_KEY="${GENTOO_RELENG_KEY:-0xBB572E0E2D182910}"
 PORTAGE_TREE_URL="${PORTAGE_TREE_URL:-https://github.com/gentoo-mirror/gentoo.git}"
 PORTAGE_TREE_PIN="${PORTAGE_TREE_PIN:-}"
 
-# portage-ng repo - default to the parent checkout this script lives in.
-# Resolve symlinks so /usr/local/sbin/tinderbox-ng -> /usr/local/share/...
-# still finds its template directory.
+# portage-ng repo. PORTAGE_NG_URL (git clone) takes precedence; otherwise
+# the script rsyncs from PORTAGE_NG_LOCAL into the baseline. Auto-detection
+# walks several candidates and picks the first that looks like a portage-ng
+# checkout (i.e. has Source/portage-ng.pl):
+#
+#   1. Parent of the resolved script (development checkout: works when the
+#      script lives at <repo>/Source/Application/Wrapper/Linux/tinderbox-ng)
+#   2. Common deploy paths: /root/prolog, /opt/portage-ng
+#   3. Fall back to "" (operator must set PORTAGE_NG_LOCAL explicitly;
+#      doctor surfaces this as an error before bootstrap touches anything)
 SCRIPT_PATH="$(readlink -f -- "$0" 2>/dev/null || printf '%s' "$0")"
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$SCRIPT_PATH")" && pwd)"
-PORTAGE_NG_DEFAULT_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/../../../.." 2>/dev/null && pwd || echo "")"
-PORTAGE_NG_URL="${PORTAGE_NG_URL:-}"      # If set: git clone. If empty: rsync from PORTAGE_NG_LOCAL.
-PORTAGE_NG_LOCAL="${PORTAGE_NG_LOCAL:-$PORTAGE_NG_DEFAULT_ROOT}"
+
+_pn_is_repo() {
+  # portage-ng.pl is the project entry point at the repo root.
+  # Source/loader.pl is the module loader. Either marker is sufficient.
+  [[ -f "$1/portage-ng.pl" ]] || [[ -f "$1/Source/loader.pl" ]]
+}
+
+_pn_autodetect() {
+  local cand
+  cand="$(CDPATH= cd -- "$SCRIPT_DIR/../../../.." 2>/dev/null && pwd || echo "")"
+  if [[ -n "$cand" ]] && _pn_is_repo "$cand"; then printf '%s' "$cand"; return; fi
+  for cand in /root/prolog /opt/portage-ng /opt/prolog; do
+    if _pn_is_repo "$cand"; then printf '%s' "$cand"; return; fi
+  done
+  printf ''
+}
+
+PORTAGE_NG_URL="${PORTAGE_NG_URL:-}"
+PORTAGE_NG_LOCAL="${PORTAGE_NG_LOCAL:-$(_pn_autodetect)}"
 PORTAGE_NG_REF="${PORTAGE_NG_REF:-HEAD}"
 
 # Library / template directory. In a development checkout this is the .d
@@ -558,11 +581,14 @@ cmd_doctor() {
   # PORTAGE_NG_LOCAL or PORTAGE_NG_URL must point somewhere
   if [[ -n "$PORTAGE_NG_URL" ]]; then
     log_ok "portage-ng source: git $PORTAGE_NG_URL @ $PORTAGE_NG_REF"
-  elif [[ -n "$PORTAGE_NG_LOCAL" && -d "$PORTAGE_NG_LOCAL/Source" ]]; then
+  elif [[ -n "$PORTAGE_NG_LOCAL" ]] && _pn_is_repo "$PORTAGE_NG_LOCAL"; then
     log_ok "portage-ng source: rsync from $PORTAGE_NG_LOCAL"
   else
-    log_error "no portage-ng source configured"
-    log_error "  set PORTAGE_NG_LOCAL=/path/to/portage-ng (with Source/ inside) or PORTAGE_NG_URL"
+    log_error "no portage-ng source found"
+    log_error "  tried: \$PORTAGE_NG_LOCAL=${PORTAGE_NG_LOCAL:-(unset)}, plus auto-detect of"
+    log_error "  /root/prolog, /opt/portage-ng, /opt/prolog and the script's parent tree."
+    log_error "  Set PORTAGE_NG_LOCAL=/path/to/portage-ng (must contain portage-ng.pl"
+    log_error "  at the root or Source/loader.pl) or PORTAGE_NG_URL=https://... PORTAGE_NG_REF=<ref>."
     fail=$((fail+1))
   fi
 
@@ -1074,9 +1100,19 @@ EOF
   else
     [[ -d "$PORTAGE_NG_LOCAL" ]] || die "PORTAGE_NG_LOCAL=$PORTAGE_NG_LOCAL is not a directory"
     log_info "rsync from $PORTAGE_NG_LOCAL"
+    # --delete on the source tree must NOT wipe in-baseline build artefacts
+    # that the host checkout never has (kb.qlf, profile.qlf are gitignored
+    # build products; Certificates/ and Private/ are VM-specific). Without
+    # these excludes, refresh-portage-ng silently destroys kb.qlf and the
+    # next session takes minutes to re-parse the whole tree from md5-cache.
     rsync -a --delete \
           --exclude='.git/objects/pack/*.idx.lock' \
           --exclude='Source/Snapshots/' \
+          --exclude='Source/Certificates/' \
+          --exclude='Source/Private/' \
+          --exclude='Source/Knowledge/kb.qlf' \
+          --exclude='Source/Knowledge/profile.qlf' \
+          --exclude='Source/Knowledge/Sets/world/' \
           "$PORTAGE_NG_LOCAL/" "$BASELINE_DIR$CHROOT_PORTAGE_NG/"
   fi
 
@@ -1089,7 +1125,11 @@ EOF
   bootstrap_freeze
   log_ok "portage-ng refreshed in baseline; new sessions will pick it up"
   log_warn "existing sessions still see the OLD portage-ng until reset"
-  log_warn "kb.qlf was NOT regenerated; run 'refresh-kb' separately if needed"
+  if [[ ! -f "$BASELINE_DIR$CHROOT_PORTAGE_NG/Source/Knowledge/kb.qlf" ]]; then
+    log_warn "kb.qlf MISSING from baseline; run 'tinderbox-ng refresh-kb' to (re)generate it"
+  else
+    log_info "kb.qlf preserved (was not in source rsync); run 'refresh-kb' if parser/grammar changed"
+  fi
 }
 
 
