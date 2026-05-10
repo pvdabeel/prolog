@@ -420,5 +420,112 @@ PN-side latent gaps (not Class H, not regressions; future work)
   on util-linux", or as a hard refusal). Single-package impact in the
   current matrix, but the pattern is general and worth catching.
 
+- [PN-GAP] When PN flips a USE flag on a package P (either to satisfy
+  a parent dep's bracketed constraint `pkg[useflag]` or to satisfy P's
+  own REQUIRED_USE), it does NOT re-walk P's RDEPEND/DEPEND/BDEPEND
+  under the new USE state. As a result, conditional groups
+  `useflag?( DepGroup )` that should be pulled in by the flip stay
+  outside the install plan. The leaf install then fails because the
+  required runtime/build helpers are missing.
+
+  Three confirmed instances from the all-packages matrix
+  (compare-matrix-20260510T194121, 2026-05-10):
+
+  (1) **xdg-utils → xmlto[+text]** (parent-dep-driven flip):
+      `x11-misc/xdg-utils-1.2.1-r10` BDEPEND has
+      `>=app-text/xmlto-0.0.28-r3[text(+)]`. Baseline xmlto-0.0.28-r11
+      had `text=OFF`. PN correctly flipped xmlto's `text` USE and
+      rebuilt xmlto (visible in plan: "USE = -latex text"). But
+      xmlto's RDEPEND has
+      `text?( || ( virtual/w3m www-client/elinks www-client/links
+      www-client/lynx ) )` and PN added none of these to the plan.
+      xdg-utils's `emake` then runs
+      `xmlto --skip-validation txt desc/xdg-settings.xml`, which fails
+      with `No way to convert HTML to text found. Try either installing
+      text web browser(lynx/w3m/links) or use option --with-fop`.
+      Same failure cascades into kontrast, calamares, accerciser, and
+      every package transitively requiring xmlto[text].
+
+  (2) **fluentd self-flip** (REQUIRED_USE-driven flip):
+      `app-admin/fluentd-1.16.3-r1` has
+      `REQUIRED_USE="|| ( ruby_targets_ruby32 )"` and the active
+      conditional dep group
+      `ruby_targets_ruby32?( dev-lang/ruby:3.2 dev-ruby/bundler[...]
+      dev-ruby/coolio[...] dev-ruby/msgpack[...] virtual/rubygems[...]
+      ... )`. Baseline has no ruby installed and `RUBY_TARGETS=` empty.
+      Emerge bails at planning with the standard REQUIRED_USE
+      diagnostic. PN flips `ruby_targets_ruby32` ON (right call), but
+      the plan only has 8 actions: useflag, download fluentd, install
+      acct-group/fluentd, run, install acct-user/fluentd, run, install
+      fluentd, run, register. Zero ruby-related deps. fluentd's install
+      then fails because `dev-lang/ruby:3.2` isn't on the system.
+
+  (3) **qt5compat → libxkbcommon[+X]** (parent-dep-driven flip via
+      qtbase REQUIRED_USE chain): `dev-qt/qt5compat-6.10.3` pulls in
+      qtbase[gui], whose own REQUIRED_USE chain ends up requiring
+      `x11-libs/libxkbcommon[X?]` to match. Same shape as (1); PN
+      flips libxkbcommon's `X` USE, but doesn't re-walk libxkbcommon's
+      `X?( ... )` group, so X11 deps stay missing in the plan.
+
+  Code path (verified 2026-05-10):
+    * `target.pl` `candidate:resolve(_:update?{Context})` (around
+      L500-525) extracts `B` from Context via
+      `use:context_build_with_use_state/2`, proves REQUIRED_USE via
+      `query:search(model(Model, required_use(R), build_with_use(B)),
+      ...)` and then walks deps via
+      `query:search(model(dependency(MergedDeps0, install)):config?{Model},
+      ...)`.
+    * `query.pl` rewrite of `model(FullModel, required_use(Model),
+      build_with_use(Input))` (L808-843) returns `FullModel =
+      [build_with_use:Input]`. `Model` (the second arg) is the list of
+      REQUIRED_USE proof keys and includes terms like
+      `assumed(conflict(required_use, any_of_group(
+      [required(ruby_targets_ruby32)] )))`.
+    * In target.pl's `update` clause the variable bound to `FullModel`
+      is named `Model`; that `Model` is then passed as the
+      `config?{Model}` Context to the dep walker.
+    * Inside the dep walker (`compile_query_compound(model(dependency(
+      Merged, install)):config?{Context}, ...)` in query.pl L899+)
+      the Context becomes `CtxSelf = [self(Repo://Id) | Context]` and
+      is threaded into every `Dep:config?{CtxSelf}`. So `CtxSelf`
+      DOES carry `build_with_use:Input` and CAN match
+      `use:assumed/2`'s `build_with_use:use_state(En, _Dis)` clause
+      (use.pl L406-410).
+
+  So for case (1) the dep walker SHOULD see `build_with_use(Input)` if
+  the parent dep correctly set Input=use_state([text],[]) for xmlto.
+  Two suspect points:
+    A. Whether xdg-utils's `xmlto[text(+)]` correctly threads
+       `build_with_use:use_state([text],[])` into xmlto's update
+       Context. (i.e. does the bracketed-USE constraint propagation
+       reach context_build_with_use_state?)
+    B. Whether the REQUIRED_USE proof keys are integrated back into
+       Input before the dep walk. For case (2) (fluentd self-flip)
+       this is the only path: REQUIRED_USE proof concludes
+       "ruby_targets_ruby32 must be enabled", but Input remains
+       use_state([],[]), and the conditional dep walk sees
+       ruby_targets_ruby32=OFF.
+
+  Proposed fix direction (sketch, not implemented):
+    1. After `query:search(model(_, required_use(R), build_with_use(B)),
+       ...)` in target.pl's update/install clauses, derive an extended
+       build_with_use B' that incorporates all required_use-driven
+       flag flips: for each `assumed(conflict(required_use, ...))` in R,
+       move the implied flag enable/disable into B'.
+    2. Pass B' (or the full annotated Model) as the dep-walk Context so
+       `use:assumed(Ctx, F)` returns true for REQUIRED_USE-forced flags.
+    3. Re-prove the dep model under the extended Context.
+
+  Cross-impact: also fixes the "PN built N/M actions, fails at sub-pkg"
+  pattern observed in kontrast, calamares, accerciser (all transitive
+  consumers of xmlto[text]). Likely accounts for the bulk of remaining
+  fail/fail rows beyond the GCC-14 / unmaintained-upstream cases.
+
+  Reproducer (small, fast):
+    tinderbox-ng compare --build --keep app-admin/fluentd
+  PN plan visible at step 6 includes the flag flip but no
+  dev-lang/ruby:3.2 / dev-ruby/* deps; install fails immediately
+  because the runtime tooling is absent.
+
 Open
 ====
