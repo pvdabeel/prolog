@@ -31,6 +31,7 @@ LABEL_PREFIX=""
 KEEP=0
 MANIFEST=""
 JOBS=1
+RESUME_DIR=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --pretend|-p)   MODE="--pretend"; shift ;;
@@ -42,6 +43,8 @@ while [[ $# -gt 0 ]]; do
     --jobs)         JOBS="$2";         shift 2 ;;
     --jobs=*)       JOBS="${1#--jobs=}"; shift ;;
     -j)             JOBS="$2";         shift 2 ;;
+    --resume-dir)   RESUME_DIR="$2";   shift 2 ;;
+    --resume-dir=*) RESUME_DIR="${1#--resume-dir=}"; shift ;;
     --) shift; break ;;
     -*) echo "unknown flag $1" >&2; exit 2 ;;
     *)  break ;;
@@ -86,8 +89,18 @@ done
   exit 2
 }
 
-STAMP="$(date +%Y%m%dT%H%M%S)"
-OUTDIR="/srv/tinderbox-ng/reports/compare-matrix-$STAMP"
+# Output dir: either a fresh stamp dir (default) or an existing run dir
+# we are appending to (--resume-dir, used by `tinderbox-ng continue` so
+# resumed work shows up in the same TSV / dashboard / aggregate counters
+# as the original run instead of in a sibling directory the user has to
+# union by hand).
+if [[ -n "$RESUME_DIR" ]]; then
+  [[ -d "$RESUME_DIR" ]] || { echo "resume-dir not found: $RESUME_DIR" >&2; exit 2; }
+  OUTDIR="$RESUME_DIR"
+else
+  STAMP="$(date +%Y%m%dT%H%M%S)"
+  OUTDIR="/srv/tinderbox-ng/reports/compare-matrix-$STAMP"
+fi
 TSV="$OUTDIR/results.tsv"
 META="$OUTDIR/meta.txt"
 TSV_LOCK="$OUTDIR/.tsv.lock"
@@ -95,21 +108,38 @@ mkdir -p "$OUTDIR"
 : > "$TSV_LOCK"
 
 # Persist run metadata so the report generator has provenance.
-{
-  printf 'mode\t%s\n' "$MODE"
-  printf 'manifest\t%s\n' "${MANIFEST:-(stdin)}"
-  printf 'package_count\t%d\n' "${#PACKAGES[@]}"
-  printf 'jobs\t%d\n' "$JOBS"
-  printf 'started_at\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  printf 'host\t%s\n' "$(hostname)"
-  printf 'kernel\t%s\n' "$(uname -r)"
-} > "$META"
+# On resume we APPEND a marker block instead of overwriting; the original
+# `started_at` / `package_count` / `manifest` stay authoritative for the
+# logical run, and each resume event is auditable in meta.txt.
+if [[ -n "$RESUME_DIR" ]]; then
+  {
+    printf '\n# ----- resumed at %s -----\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    printf 'resumed_at\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    printf 'resume_manifest\t%s\n' "${MANIFEST:-(stdin)}"
+    printf 'resume_package_count\t%d\n' "${#PACKAGES[@]}"
+    printf 'resume_jobs\t%d\n' "$JOBS"
+  } >> "$META"
+else
+  {
+    printf 'mode\t%s\n' "$MODE"
+    printf 'manifest\t%s\n' "${MANIFEST:-(stdin)}"
+    printf 'package_count\t%d\n' "${#PACKAGES[@]}"
+    printf 'jobs\t%d\n' "$JOBS"
+    printf 'started_at\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    printf 'host\t%s\n' "$(hostname)"
+    printf 'kernel\t%s\n' "$(uname -r)"
+  } > "$META"
+fi
 
 # Header. TSV is written line-by-line; a partial file is still a valid
-# TSV with one header row.
-printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-  target mode pn_exit em_exit pn_actions em_actions pn_completed em_completed pn_vdb em_vdb vdb_delta seconds \
-  > "$TSV"
+# TSV with one header row. On resume we keep the existing TSV (header +
+# completed rows) and just append; if for some reason the TSV is missing
+# or empty we re-emit the header so the file stays self-describing.
+if [[ ! -s "$TSV" ]]; then
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    target mode pn_exit em_exit pn_actions em_actions pn_completed em_completed pn_vdb em_vdb vdb_delta seconds \
+    > "$TSV"
+fi
 
 # Per-package worker: runs one tinderbox-ng compare and writes a TSV row.
 # Designed to be safe under parallel execution: each invocation gets its
