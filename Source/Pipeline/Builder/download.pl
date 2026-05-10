@@ -306,6 +306,84 @@ download:join_mirror_url(MirrorBase, RelPath, URL) :-
 
 
 % -----------------------------------------------------------------------------
+%  Race-safe distfile staging
+% -----------------------------------------------------------------------------
+%
+% The distdir is bind-mounted into every tinderbox-ng session (and into
+% the host emerge sessions running in parallel during compare matrices),
+% so multiple writers can race for the same `Distdir/Filename`. Two
+% concrete failure modes were observed in the 1000-package matrix:
+%
+%   1. Two processes curl into the same DestPath simultaneously and
+%      truncate / interleave each other's writes (verify_size/hashes
+%      then fail for both).
+%   2. Worker A's curl fails fast (e.g. a 404 from the Gentoo mirror
+%      for a RESTRICT=mirror distfile such as dev-libs/cusparselt),
+%      A calls delete_file(DestPath), and that delete blows away a
+%      perfectly good file that worker B just finished writing.
+%
+% The helpers below stage every download into a process-private
+% `<DestPath>.<Pid>.<Tid>.partial` temp path, atomic-rename on success,
+% and -- on failure -- check whether some other writer happened to
+% land a valid copy at DestPath in the meantime. We only ever delete
+% the temp path; the shared DestPath is treated as immutable from
+% outside our own successful rename.
+
+%! download:tmp_dest_path(+DestPath, -TmpPath) is det.
+%
+% Per-process, per-thread staging path for a distfile download.
+% Including both PID and TID makes it safe even when multiple
+% threads inside one portage-ng-dev process race for the same
+% distfile (e.g. parallel `--jobs N` with the same distfile shared
+% between two packages in the same wave).
+
+download:tmp_dest_path(DestPath, TmpPath) :-
+  current_prolog_flag(pid, Pid),
+  ( catch(thread_self(TidRaw), _, fail) -> Tid = TidRaw ; Tid = main ),
+  format(atom(TmpPath), '~w.~w.~w.partial', [DestPath, Pid, Tid]).
+
+
+%! download:finalize_temp_download(+TmpPath, +DestPath, +ExpectedSize, +Pairs, -OK) is det.
+%
+% Verify TmpPath against expected size + Manifest hashes, then atomic-
+% rename to DestPath on success. On failure, delete only TmpPath and
+% then try a race-recovery: if another writer landed a valid file at
+% DestPath while we were busy, treat the download as successful (no
+% need to retry, no wasted bandwidth on the next URL in the chain).
+%
+% OK is unified with `true` on success and `false` on failure. We never
+% delete DestPath here -- shared distfiles are treated as immutable
+% from outside our own successful rename.
+
+download:finalize_temp_download(TmpPath, DestPath, ExpectedSize, Pairs, OK) :-
+  ( exists_file(TmpPath),
+    download:verify_size(TmpPath, ExpectedSize),
+    download:verify_hashes(TmpPath, Pairs)
+  -> catch(rename_file(TmpPath, DestPath), _, true),
+     OK = true
+  ;  catch(delete_file(TmpPath), _, true),
+     ( download:race_recover(DestPath, ExpectedSize, Pairs)
+     -> OK = true
+     ;  OK = false
+     )
+  ).
+
+
+%! download:race_recover(+DestPath, +ExpectedSize, +Pairs) is semidet.
+%
+% Succeeds when DestPath already exists, has the expected size, and
+% verifies against the supplied Manifest hash pairs. Used to short-
+% circuit a failed/redundant download when another writer (parallel
+% emerge, sibling tinderbox session, prior portage-ng job in the same
+% wave) has already produced a valid copy.
+
+download:race_recover(DestPath, ExpectedSize, Pairs) :-
+  exists_file(DestPath),
+  download:verify_size(DestPath, ExpectedSize),
+  download:verify_hashes(DestPath, Pairs).
+
+
+% -----------------------------------------------------------------------------
 %  Distfile fetching
 % -----------------------------------------------------------------------------
 
@@ -372,6 +450,13 @@ download:fetch_all(MirrorUrl, Layout, Distdir, [dist(Filename, Size, Pairs)|Rest
 %
 % Fetch a single distfile if not already present in distdir.
 % Verifies size and checksums after download. Fails if any check fails.
+%
+% Race-safety: stages curl into a per-process temp path, atomic-renames
+% on success, and falls through to a race-recovery check if our curl
+% (or verification) failed but another writer landed a valid copy at
+% DestPath in the meantime. Never deletes DestPath -- shared distfiles
+% are treated as immutable from outside our own atomic rename. See
+% the "Race-safe distfile staging" section above for context.
 
 download:fetch_one(_MirrorUrl, _Layout, Distdir, Filename, _ExpectedSize, _Pairs) :-
   mirror:flat_present(Distdir, Filename), !.
@@ -383,14 +468,17 @@ download:fetch_one(MirrorUrl, Layout, Distdir, Filename, ExpectedSize, Pairs) :-
   ),
   download:mirror_download_url(MirrorUrl, Layout, Filename, URL),
   atomic_list_concat([Distdir, '/', Filename], DestPath),
-  download:curl_download(URL, DestPath, ExitCode),
-  ExitCode =:= 0,
-  download:verify_size(DestPath, ExpectedSize),
-  ( download:verify_hashes(DestPath, Pairs)
-  -> true
-  ;  catch(delete_file(DestPath), _, true),
-     fail
-  ).
+  download:tmp_dest_path(DestPath, TmpPath),
+  download:curl_download(URL, TmpPath, ExitCode),
+  ( ExitCode =:= 0
+  -> download:finalize_temp_download(TmpPath, DestPath, ExpectedSize, Pairs, OK)
+  ;  catch(delete_file(TmpPath), _, true),
+     ( download:race_recover(DestPath, ExpectedSize, Pairs)
+     -> OK = true
+     ;  OK = false
+     )
+  ),
+  OK == true.
 
 
 %! download:mirror_download_url(+MirrorUrl, +Layout, +Filename, -URL) is det.
@@ -559,13 +647,28 @@ download:verify_hashes(Path, Pairs) :-
 % every candidate URL via findall/3 or a backtracking retry loop --
 % Gentoo's distfiles mirror prunes old files, but the original
 % upstream and its thirdpartymirror peers usually still serve them.
+%
+% USE/ARCH conditional handling: SRC_URI entries are stored wrapped
+% in `use_conditional_group(Sign, UseFlag, Self, Inner)` terms when
+% the ebuild gates them on a USE flag (or a USE_EXPAND such as
+% `amd64?` for ARCH-conditional binary distfiles, e.g. NVIDIA
+% cusparselt). Going through `kb:query(src_uri(uri(...)))` only
+% binds against the wrapper, so we must traverse the SRC_URI model
+% with `query:deep_member(preference, ...)` -- the same helper used
+% by the manifest path -- to honour the active global USE flags and
+% reach the inner uri/3 terms. Without this, packages like
+% dev-libs/cusparselt yielded zero upstream URLs and fell straight
+% to "FAIL (download errors)" the moment the Gentoo mirror returned
+% 404 (which it always does for RESTRICT=mirror distfiles).
 
 download:upstream_url(Repo, Entry, Filename, URL) :-
-  kb:query(src_uri(uri(mirror, Base, Filename)), Repo://Entry),
+  kb:query(all(src_uri(Model)), Repo://Entry),
+  query:deep_member(preference, uri(mirror, Base, Filename), Model),
   download:resolve_mirror_uri(Base, Filename, URL).
 
 download:upstream_url(Repo, Entry, Filename, URL) :-
-  kb:query(src_uri(uri(Proto, Base, Filename)), Repo://Entry),
+  kb:query(all(src_uri(Model)), Repo://Entry),
+  query:deep_member(preference, uri(Proto, Base, Filename), Model),
   Proto \= '',
   Proto \= mirror,
   atomic_list_concat([Proto, '://', Base], URL).

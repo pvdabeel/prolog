@@ -860,6 +860,15 @@ builder:safe_mirror_layout(Layout) :-
 % every configured mirror_url in declaration order, exiting at the first
 % successful download. Upstream SRC_URI fallback is handled later by
 % builder:try_upstream_fallback/11 when the file still fails verification.
+%
+% Race-safety: curl is told to write into a per-process temp path
+% (`download:tmp_dest_path/2`), never directly into the shared DestPath.
+% builder:finalize_download/12 verifies the temp path and atomic-renames
+% to DestPath only after a successful checksum match, then falls
+% through to a race-recovery check on DestPath when our own download
+% failed (so a concurrent writer that produced a valid file is honoured
+% instead of triggering a redundant retry). See `download.pl` --
+% "Race-safe distfile staging" for the full rationale.
 
 builder:prepare_download_jobs(_, _, [], _, _, _, []).
 
@@ -869,7 +878,9 @@ builder:prepare_download_jobs(Layout, Distdir, [dist(Filename, Size, Pairs)|Rest
   -> builder:prepare_download_jobs(Layout, Distdir, Rest, Idx1, Repo, Entry, Jobs)
   ;  builder:mirror_urls_for_file(Layout, Filename, URLs),
      atomic_list_concat([Distdir, '/', Filename], DestPath),
-     download:start_curl_async(URLs, DestPath, Pid),
+     download:tmp_dest_path(DestPath, TmpPath),
+     catch(delete_file(TmpPath), _, true),
+     download:start_curl_async(URLs, TmpPath, Pid),
      Jobs = [dl_job(Pid, Idx, Filename, Size, Pairs, DestPath, Repo, Entry)|MoreJobs],
      builder:prepare_download_jobs(Layout, Distdir, Rest, Idx1, Repo, Entry, MoreJobs)
   ).
@@ -972,20 +983,32 @@ builder:poll_all_jobs([Job|Rest], TotalLines, FileStartLine, Distdir, StillActiv
 
 %! builder:finalize_download(+ExitCode, +FileIdx, +Filename, +ExpSize, +Pairs, +DestPath, +Repo, +Entry, +TotalLines, +FileStartLine, +Distdir, -OK) is det.
 %
-% Called when a curl process exits. Verifies size and hashes,
-% updates the file sub-slot to done or failed. On mirror failure,
-% attempts an upstream SRC_URI fallback before giving up.
+% Called when a curl process exits. Verifies the per-process temp
+% download (see prepare_download_jobs) and atomic-renames it onto
+% DestPath when verification succeeds. On any failure the temp path
+% is deleted but DestPath is left intact -- a parallel writer (sibling
+% tinderbox session, host emerge in compare matrices, etc.) may have
+% landed a valid copy there in the meantime, in which case
+% race_recover/3 short-circuits success without retrying. If neither
+% our temp nor a peer-supplied DestPath verifies, falls through to
+% the upstream SRC_URI fallback chain.
 
 builder:finalize_download(ExitCode, FileIdx, Filename, ExpSize, Pairs, DestPath, Repo, Entry,
                            TotalLines, FileStartLine, Distdir, OK) :-
-  ( ExitCode =:= 0,
-    download:verify_size(DestPath, ExpSize),
-    download:verify_hashes(DestPath, Pairs)
+  download:tmp_dest_path(DestPath, TmpPath),
+  ( ExitCode =:= 0
+  -> download:finalize_temp_download(TmpPath, DestPath, ExpSize, Pairs, MirrorOK)
+  ;  catch(delete_file(TmpPath), _, true),
+     ( download:race_recover(DestPath, ExpSize, Pairs)
+     -> MirrorOK = true
+     ;  MirrorOK = false
+     )
+  ),
+  ( MirrorOK == true
   -> OK = true,
      with_mutex(build_display,
        build:update_file_subslot(FileIdx, FileStartLine, TotalLines, done, Filename, ExpSize, Distdir))
-  ;  catch(delete_file(DestPath), _, true),
-     builder:try_upstream_fallback(FileIdx, Filename, ExpSize, Pairs, DestPath, Repo, Entry,
+  ;  builder:try_upstream_fallback(FileIdx, Filename, ExpSize, Pairs, DestPath, Repo, Entry,
                                     TotalLines, FileStartLine, Distdir, OK)
   ).
 
@@ -1017,10 +1040,14 @@ builder:try_upstream_fallback(FileIdx, Filename, ExpSize, Pairs, DestPath, Repo,
 
 %! builder:try_url_chain(+URLs, +FileIdx, +Filename, +ExpSize, +Pairs, +DestPath, +TotalLines, +FileStartLine, +Distdir, -OK) is det.
 %
-% Walk a list of candidate download URLs in order. Stops at the first
-% URL whose curl exits 0 AND whose downloaded file passes size +
-% checksum verification; on success marks the file as done. If every
-% URL fails, the file is marked as failed.
+% Walk a list of candidate download URLs in order. Each curl writes
+% into the same per-process temp path used by the mirror download
+% (see download:tmp_dest_path/2); on success the temp is atomic-
+% renamed onto DestPath. Stops at the first URL whose curl exits 0
+% AND whose temp passes size + checksum verification, OR at the
+% first race_recover/3 success (peer writer landed a valid file at
+% DestPath while we were trying). If every URL fails, the file is
+% marked as failed -- DestPath itself is never deleted.
 
 builder:try_url_chain([], FileIdx, Filename, ExpSize, _Pairs, _DestPath,
                       TotalLines, FileStartLine, Distdir, false) :-
@@ -1029,15 +1056,22 @@ builder:try_url_chain([], FileIdx, Filename, ExpSize, _Pairs, _DestPath,
 
 builder:try_url_chain([URL|Rest], FileIdx, Filename, ExpSize, Pairs, DestPath,
                       TotalLines, FileStartLine, Distdir, OK) :-
-  download:curl_download(URL, DestPath, ExitCode),
-  ( ExitCode =:= 0,
-    download:verify_size(DestPath, ExpSize),
-    download:verify_hashes(DestPath, Pairs)
+  download:tmp_dest_path(DestPath, TmpPath),
+  catch(delete_file(TmpPath), _, true),
+  download:curl_download(URL, TmpPath, ExitCode),
+  ( ExitCode =:= 0
+  -> download:finalize_temp_download(TmpPath, DestPath, ExpSize, Pairs, AttemptOK)
+  ;  catch(delete_file(TmpPath), _, true),
+     ( download:race_recover(DestPath, ExpSize, Pairs)
+     -> AttemptOK = true
+     ;  AttemptOK = false
+     )
+  ),
+  ( AttemptOK == true
   -> OK = true,
      with_mutex(build_display,
        build:update_file_subslot(FileIdx, FileStartLine, TotalLines, done, Filename, ExpSize, Distdir))
-  ;  catch(delete_file(DestPath), _, true),
-     builder:try_url_chain(Rest, FileIdx, Filename, ExpSize, Pairs, DestPath,
+  ;  builder:try_url_chain(Rest, FileIdx, Filename, ExpSize, Pairs, DestPath,
                            TotalLines, FileStartLine, Distdir, OK)
   ).
 
@@ -1069,12 +1103,21 @@ builder:handle_restricted_files([dist(Filename, Size, _)|Rest], Idx, TotalLines,
 %! builder:update_download_progress(+FileIdx, +Filename, +ExpSize, +DestPath, +TotalLines, +FileStartLine, +Distdir) is det.
 %
 % Update a file sub-slot with current download progress (percentage + speed).
+%
+% Curl writes to the per-process temp path (see prepare_download_jobs);
+% if the temp file exists we use its size for live progress and fall
+% back to the final DestPath only after a successful atomic rename.
 
 builder:update_download_progress(FileIdx, Filename, ExpSize, DestPath,
                                   TotalLines, FileStartLine, Distdir) :-
   SpeedKey is FileStartLine + FileIdx,
-  ( exists_file(DestPath)
-  -> size_file(DestPath, CurrentSize),
+  download:tmp_dest_path(DestPath, TmpPath),
+  ( exists_file(TmpPath) -> SizeSrc = TmpPath
+  ; exists_file(DestPath) -> SizeSrc = DestPath
+  ; SizeSrc = none
+  ),
+  ( SizeSrc \== none
+  -> size_file(SizeSrc, CurrentSize),
      ( atom(ExpSize) -> atom_number(ExpSize, ES) ; ES = ExpSize ),
      ( ES > 0 -> Pct is min(99, (CurrentSize * 100) // ES) ; Pct = 0 ),
      builder:compute_speed(SpeedKey, CurrentSize, Speed)
