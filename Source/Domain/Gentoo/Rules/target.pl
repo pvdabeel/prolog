@@ -502,8 +502,12 @@ candidate:resolve(Repository://Ebuild:update?{Context}, Conditions) :-
   use:context_build_with_use_state(Context, B),
   (memberchk(required_use:R,Context) -> true ; true),
   query:search(model(Model,required_use(R),build_with_use(B)),Repository://Ebuild),
+  % Thread REQUIRED_USE-derived flag changes (R) into the dep-walk
+  % context so conditional dep groups gated by a flipped flag expand.
+  % See use:dep_walk_context/4 for the rationale.
+  use:dep_walk_context(R, B, Model, ModelExt),
 
-  query:search(model(dependency(MergedDeps0,install)):config?{Model},Repository://Ebuild),
+  query:search(model(dependency(MergedDeps0,install)):config?{ModelExt},Repository://Ebuild),
   dependency:add_self_to_dep_contexts(Repository://Ebuild, MergedDeps0, MergedDeps),
 
   ( preference:flag(deep)
@@ -635,7 +639,10 @@ candidate:resolve(Repository://Ebuild:fetchonly?{Context}, Conditions) :-
   use:context_build_with_use_state(Context, B),
   ( memberchk(required_use:R, Context) -> true ; true ),
   query:search(model(Model, required_use(R), build_with_use(B)), Repository://Ebuild),
-  ( query:search(model(dependency(MergedDeps0, fetchonly)):config?{Model}, Repository://Ebuild) ->
+  % Thread R into the fetchonly dep walk so conditional `flag?(uri)`
+  % SRC_URI groups follow the prover's REQUIRED_USE assumptions.
+  use:dep_walk_context(R, B, Model, ModelExt),
+  ( query:search(model(dependency(MergedDeps0, fetchonly)):config?{ModelExt}, Repository://Ebuild) ->
       dependency:add_self_to_dep_contexts(Repository://Ebuild, MergedDeps0, MergedDeps),
       ( memberchk(C, ['virtual','acct-group','acct-user']) ->
           Conditions = [constraint(use(Repository://Ebuild):{R}),
@@ -707,7 +714,8 @@ candidate:resolve(Repository://Ebuild:run?{Context}, Conditions) :-
 
 candidate:install_dep_model(Repository://Ebuild, Model, AfterForDeps, install,
                          Selected, C, N, S, R, BResolved, After, Conditions) :-
-  query:search(model(dependency(MergedDeps0,install)):config?{Model}, Repository://Ebuild),
+  use:dep_walk_context(R, BResolved, Model, ModelExt),
+  query:search(model(dependency(MergedDeps0,install)):config?{ModelExt}, Repository://Ebuild),
   dependency:add_self_to_dep_contexts(Repository://Ebuild, MergedDeps0, MergedDeps),
   featureterm:add_after_to_dep_contexts(AfterForDeps, MergedDeps, MergedDepsAfter),
   candidate:order_deps_for_proof(install, MergedDepsAfter, MergedDepsOrdered),
@@ -742,7 +750,8 @@ candidate:install_dep_model(Repository://Ebuild, Model, AfterForDeps, install,
 
 candidate:run_dep_model(Repository://Ebuild, Model, AfterForDeps, run,
                      Selected, C, N, S, R, BResolved, After, _Context1, Conditions) :-
-  query:search(model(dependency(MergedDeps0,run)):config?{Model}, Repository://Ebuild),
+  use:dep_walk_context(R, BResolved, Model, ModelExt),
+  query:search(model(dependency(MergedDeps0,run)):config?{ModelExt}, Repository://Ebuild),
   dependency:add_self_to_dep_contexts(Repository://Ebuild, MergedDeps0, MergedDeps),
   featureterm:add_after_to_dep_contexts(AfterForDeps, MergedDeps, MergedDepsAfter),
   candidate:order_deps_for_proof(run, MergedDepsAfter, MergedDepsOrdered),

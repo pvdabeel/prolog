@@ -281,6 +281,64 @@ use:context_build_with_use_state(Context, State) :-
   ),
   !.
 
+
+%! use:dep_walk_context(+R, +BResolved, +Model0, -Model)
+%
+% Build a dep-walk Context whose `build_with_use` reflects BResolved
+% PLUS the REQUIRED_USE-driven flag changes derived from R (the
+% prover's REQUIRED_USE proof keys). This closes the REQUIRED_USE →
+% conditional-dep gap: when REQUIRED_USE forces a flag ON for a
+% package, conditional dep groups gated by that flag must expand
+% under the new state. Without this, the downstream
+% `model(dependency(_,_)):config?{Model0}` walks the conditionals
+% under the *original* BWU and silently drops the activated branches,
+% producing a plan that builds the package but misses its now-required
+% runtime/build dependencies.
+%
+% Why drive off R (not the rules-side stabiliser)?
+% R encodes only the assumptions the prover actually had to make to
+% satisfy REQUIRED_USE. Reusing the rules-side stabilisation loop
+% (`stabilize_required_use`) on an empty input introduces unwanted
+% chain effects: e.g. for net-fs/samba, `gpg?(addc)` would force addc
+% on (because gpg is in global_use) even though gpg is never enabled
+% on the actual VM, and then `!ads?(!addc)` would flip it back.
+% Trusting R keeps us aligned with the prover's view of what flags
+% will actually change for this package, with no extra speculation.
+%
+% Examples (observed in the all-packages matrix):
+%   - app-admin/fluentd: REQUIRED_USE=||(ruby_targets_ruby32) →
+%     ruby_targets_ruby32 must be enabled, but global_use does not
+%     set it (RUBY_TARGETS empty in make.conf). Without this fix,
+%     dev-lang/ruby:3.2 + dev-ruby/* are dropped from the plan.
+%   - x11-misc/xdg-utils: parent xdg-utils gates xmlto[text(+)],
+%     which flips xmlto's text USE; xmlto's RDEPEND has
+%     `text? ( || (virtual/w3m ...) )` that needs the flipped state
+%     to pull a text-mode browser.
+
+use:dep_walk_context(R, BResolved, Model0, Model) :-
+  use:model_required_use_changes(R, Changes),
+  use:apply_use_changes_to_state(Changes, BResolved, BWUEff),
+  ( select(build_with_use:_, Model0, Rest) -> true ; Rest = Model0 ),
+  Model = [build_with_use:BWUEff | Rest].
+
+
+%! use:apply_use_changes_to_state(+Changes, +BWU_In, -BWU_Out)
+%
+% Fold a list of `use_change(Flag, enable|disable)` into a BWU state.
+% enable/disable are mutually exclusive: enabling a flag also removes
+% it from Disable, and vice versa.
+
+use:apply_use_changes_to_state([], BWU, BWU) :- !.
+use:apply_use_changes_to_state([use_change(F, enable)|T], use_state(En0, Dis0), Out) :-
+  ( memberchk(F, En0) -> En1 = En0 ; sort([F|En0], En1) ),
+  ( select(F, Dis0, Dis1) -> true ; Dis1 = Dis0 ),
+  use:apply_use_changes_to_state(T, use_state(En1, Dis1), Out).
+use:apply_use_changes_to_state([use_change(F, disable)|T], use_state(En0, Dis0), Out) :-
+  ( memberchk(F, Dis0) -> Dis1 = Dis0 ; sort([F|Dis0], Dis1) ),
+  ( select(F, En0, En1) -> true ; En1 = En0 ),
+  use:apply_use_changes_to_state(T, use_state(En1, Dis1), Out).
+
+
 %! use:process_bwu_directive(+ParentCtx, +Directive, +State0, -State)
 %
 % Fold helper for building up build-with-use state. Resolves a single
