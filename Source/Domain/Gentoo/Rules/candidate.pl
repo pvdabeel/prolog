@@ -1652,21 +1652,23 @@ candidate:prioritize_deps(Deps, Context, SortedDeps) :-
 % intrinsic rank, overlap count, snapshot status) to break ties.
 
 candidate:prioritize_deps_keep_all(Deps, Context, SortedDeps) :-
-  findall(NegLicOk-NegRank-NegOverlap-NegSnap-I-Dep,
+  findall(NegLicOk-NegRank-NegOverlap-NegSnap-NegUEScore-I-Dep,
           ( nth1(I, Deps, Dep),
             dep_rank(Context, Dep, Rank),
             dep_overlap_group_count(Context, Dep, OvRaw),
             ( OvRaw > 1 -> Overlap = OvRaw ; Overlap = 0 ),
             ( dep_snapshot_selected(Dep) -> Snap = 1 ; Snap = 0 ),
             ( dep_license_ok(Dep) -> LicOk = 1 ; LicOk = 0 ),
+            dep_use_expand_profile_score(Dep, UEScore),
             NegLicOk is -LicOk,
             NegRank is -Rank,
             NegOverlap is -Overlap,
-            NegSnap is -Snap
+            NegSnap is -Snap,
+            NegUEScore is -UEScore
           ),
           Ranked),
   keysort(Ranked, RankedSorted),
-  findall(Dep, member(_-_-_-_-_-Dep, RankedSorted), SortedDeps0),
+  findall(Dep, member(_-_-_-_-_-_-Dep, RankedSorted), SortedDeps0),
   candidate:boost_variant_preferred(SortedDeps0, SortedDeps),
   !.
 
@@ -1835,6 +1837,100 @@ candidate:is_preferred_dep(Context, all_of_group(Deps)) :-
 candidate:is_preferred_dep(_Context, package_dependency(_Phase,_Strength,C,N,O,V,_S,_U)) :-
   query:search([name(N),category(C),installed(true)], pkg://Installed),
   ( O == none ; query:search(select(version, O, V), pkg://Installed) ),
+  !.
+
+
+% =============================================================================
+%  USE_EXPAND profile-match scoring for any_of_group ranking
+% =============================================================================
+
+%! candidate:dep_use_expand_profile_score(+Dep, -Score) is det.
+%
+% Scores how well a dep's USE_EXPAND USE-deps (e.g.
+% [python_targets_python3_13(-)]) align with the active profile's
+% USE_EXPAND selection (e.g. PYTHON_TARGETS="python3_13").
+%
+% Used as a tiebreaker in any_of_group / choice_group ranking so that
+% portage-ng mirrors emerge's behaviour: prefer the alternative whose
+% USE_EXPAND requirements are already satisfied by the profile defaults.
+% Without this signal, branches with equal LicOk/Rank/Overlap/Snap fall
+% back to left-to-right order and often pick a non-default Python (or
+% Ruby/PHP/etc.) target slot, forcing rebuilds of build-helpers like
+% python-gnupg, setuptools, gpep517 with the wrong PYTHON_TARGETS.
+%
+% Each matching USE_EXPAND USE-dep contributes +1; each mismatching
+% one contributes -1; non-USE_EXPAND USE-deps contribute 0. The score
+% recurses into all_of_group and use_conditional_group members; nested
+% any_of_group takes the maximum branch score.
+
+candidate:dep_use_expand_profile_score(Dep, Score) :-
+  catch(candidate:use_expand_score(Dep, Score), _, Score = 0).
+
+
+candidate:use_expand_score(package_dependency(_,_,_,_,_,_,_,U), Score) :-
+  is_list(U),
+  !,
+  candidate:use_expand_score_list(U, 0, Score).
+candidate:use_expand_score(all_of_group(Deps), Score) :-
+  is_list(Deps),
+  !,
+  foldl(candidate:use_expand_score_acc, Deps, 0, Score).
+candidate:use_expand_score(any_of_group(Deps), Score) :-
+  is_list(Deps), Deps \== [],
+  !,
+  findall(S, ( member(D, Deps), candidate:use_expand_score(D, S) ), Scores),
+  ( Scores == [] -> Score = 0 ; max_list(Scores, Score) ).
+candidate:use_expand_score(use_conditional_group(_,_,_,Deps), Score) :-
+  is_list(Deps),
+  !,
+  foldl(candidate:use_expand_score_acc, Deps, 0, Score).
+candidate:use_expand_score(_, 0).
+
+
+candidate:use_expand_score_acc(D, Acc0, Acc) :-
+  candidate:use_expand_score(D, S),
+  Acc is Acc0 + S.
+
+
+candidate:use_expand_score_list([], Acc, Acc).
+candidate:use_expand_score_list([U|Rest], Acc0, Acc) :-
+  ( candidate:use_dep_use_expand_signal(U, Sig)
+  -> Acc1 is Acc0 + Sig
+  ;  Acc1 = Acc0
+  ),
+  candidate:use_expand_score_list(Rest, Acc1, Acc).
+
+
+%! candidate:use_dep_use_expand_signal(+UseDep, -Signal) is semidet.
+%
+% Returns +1 when the USE-dep is satisfied by the profile's USE_EXPAND
+% selection, -1 when it conflicts. Fails for non-USE_EXPAND or
+% inconclusive directives (treated as 0 by use_expand_score_list).
+
+candidate:use_dep_use_expand_signal(use(enable(Flag), _), Sig) :-
+  candidate:flag_is_use_expand(Flag),
+  ( preference:global_use(Flag) -> Sig = 1 ; Sig = -1 ).
+candidate:use_dep_use_expand_signal(use(optenable(Flag), _), Sig) :-
+  candidate:flag_is_use_expand(Flag),
+  ( preference:global_use(Flag) -> Sig = 1 ; Sig = -1 ).
+candidate:use_dep_use_expand_signal(use(disable(Flag), _), Sig) :-
+  candidate:flag_is_use_expand(Flag),
+  ( preference:global_use(Flag) -> Sig = -1 ; Sig = 1 ).
+candidate:use_dep_use_expand_signal(use(optdisable(Flag), _), Sig) :-
+  candidate:flag_is_use_expand(Flag),
+  ( preference:global_use(Flag) -> Sig = -1 ; Sig = 1 ).
+
+
+%! candidate:flag_is_use_expand(+Flag) is semidet.
+%
+% True if Flag (e.g. python_targets_python3_13) starts with a known
+% USE_EXPAND prefix from eapi:use_expand/1.
+
+candidate:flag_is_use_expand(Flag) :-
+  atom(Flag),
+  preference:use_expand_env(_EnvVar, Prefix),
+  atom_concat(Prefix, '_', PrefixUnderscore),
+  atom_concat(PrefixUnderscore, _, Flag),
   !.
 
 

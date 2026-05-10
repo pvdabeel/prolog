@@ -1,20 +1,21 @@
 Feature exploration
 ===================
 
+- enable ccache
+
+- enable tbz2
+
 - Dark & Light mode colors
+
 - Split up tinderbox-ng to a separate package
 
-- make tinderbox-ng more aggressive (more parallelism to up load close to available cpu)
-
-- test all ebuilds (currently the matrix is hand-curated;
-  see Reports/tinderbox-compare-2026-05-09-6494920f.md for the latest run:
-  104 packages pretend, 65 packages full build, head-to-head with emerge)
-
-(- develop a graphical interface to visualise progress) -> not sure about this yet
+- test all ebuilds )
 
 - make a profile per package, showing parallelism as well as milestones, so we can optimally schedule tinderbox -> portage-ng already has this prediction built-in, its a matter of extending this to parallelism dimension 
 
 - AWS integration (myaws) - add tinderbox-ng commmand besides update, fullupdate
+
+(- develop a graphical interface to visualise progress) -> not sure about this yet
 
 Open follow-ups (from latest compare report 2026-05-09)
 =======================================================
@@ -152,6 +153,59 @@ Bugs (evidence-based, found via tinderbox-ng compare)
       to deploy if any @TOKEN@ remains unresolved.
     * Source/Application/Wrapper/Linux/README.md gained an explicit
       "do not raw-scp a template" warning pointing at the helper.
+
+- [FIXED 2026-05-09 commit ade8318c] Class G: race-condition in the
+  shared distfiles bind mount. portage-ng and emerge running side by
+  side in tinderbox-ng compare both wrote directly to DestPath and,
+  on verification failure, deleted DestPath -- which could nuke the
+  other process's still-incomplete (or freshly-finished) download.
+  Symptom: dev-libs/cusparselt portage-ng-only failure even though
+  the file was already on disk. A second cusparselt-specific symptom
+  uncovered during the fix: download:upstream_url/4 used
+  kb:query(src_uri(uri(...))) which only matched bare uri/3 terms
+  and silently skipped USE-conditional SRC_URI, so packages whose
+  download is gated by `amd64?` (cusparselt's NVIDIA tarball) had no
+  upstream fallback when the Gentoo mirror returned 404. Fix:
+    * Source/Pipeline/Builder/download.pl + Source/Pipeline/builder.pl:
+      stage every download into DestPath.<pid>.<tid>.partial, verify
+      size+hash on the temp, then atomic-rename to DestPath. On
+      failure, only the temp is deleted; race_recover/3 checks
+      whether another process landed a valid DestPath while we were
+      curling, before failing the job.
+    * download:upstream_url/4 now pulls all(src_uri(Model)) and
+      query:deep_member(preference, uri(Proto, Base, File), Model)
+      to traverse use_conditional_group / any_of_group structures so
+      USE-gated upstream URIs resolve correctly under the active
+      profile USE.
+  Verified: cusparselt rebuild from scratch -> mirror 404 -> NVIDIA
+  upstream URL via deep_member traversal -> install OK in both pn
+  and emerge sessions.
+
+- [FIXED 2026-05-10] Class F: any_of_group ranking ignored profile
+  USE_EXPAND selection. For sec-keys/openpgp-keys-gentoo-developers
+  the BDEPEND has a 4-branch ||(...) over python:3.14, python:3.13,
+  python:3.12, python:3.11 (each branch also requires
+  python-gnupg[python_targets_python3_X(-)?]). The profile sets
+  PYTHON_TARGETS="python3_13", but candidate:dep_rank scored every
+  branch the same (Pref=0 because python-gnupg isn't installed in
+  any branch), so candidate:prioritize_deps_keep_all fell back to
+  left-to-right order and picked python:3.14. That cascaded into a
+  python-gnupg rebuild with python_targets_python3_14, which in
+  turn pulled rebuilds of setuptools, gpep517 and friends with the
+  same wrong target -- 12 actions vs emerge's 3.
+  Fix: Source/Domain/Gentoo/Rules/candidate.pl
+    * dep_use_expand_profile_score/2 sums +1 / -1 per USE_EXPAND
+      USE-dep depending on whether preference:global_use/1 agrees
+      with the profile (recurses into all_of_group / any_of_group
+      / use_conditional_group; non-USE_EXPAND USE-deps contribute 0).
+    * prioritize_deps_keep_all keysort key extended:
+      NegLicOk-NegRank-NegOverlap-NegSnap-NegUEScore-I-Dep
+      (UE_EXPAND match wins over left-to-right order, loses to all
+      existing stronger signals).
+  Verified: sec-keys/openpgp-keys-gentoo-developers plan 12 -> 3
+  actions matching emerge; smoke set (python-gnupg, setuptools,
+  gpep517, glibc, openssl, git, openssh, glib, geneweb, chess,
+  portage) all unchanged.
 
 Open
 ====
