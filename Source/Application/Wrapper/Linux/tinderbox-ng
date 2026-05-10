@@ -1413,6 +1413,51 @@ cmd_emerge() {
   cmd_exec "$name" -- "$cmd"
 }
 
+# -----------------------------------------------------------------------------
+# Salvage Portage per-package build.log files from a session before destroy
+# -----------------------------------------------------------------------------
+#
+# Walks `<session_merged>/var/tmp/portage/<cat>/<pf>/temp/` for every
+# leftover build.log and copies it (plus the small companion files
+# emerge keeps next to it: build.log.gz if compressed, environment is
+# intentionally NOT salvaged because it's huge and rarely needed for
+# triage) to <dest>/<cat>/<pf>.build.log .
+#
+# Why "leftover": at default Portage settings (FEATURES=clean,
+# !keepwork) a successful merge wipes its workdir, so any surviving
+# build.log under /var/tmp/portage marks a package whose build phase
+# failed. That makes this a zero-config "salvage just the failures"
+# strategy without needing to parse each engine's log first.
+#
+# Best-effort: never aborts, always returns 0. Logs the count when >0.
+
+_compare_salvage_buildlogs() {
+  local session="$1" dest="$2"
+  local merged pkgroot
+  merged="$(session_merged "$session")"
+  pkgroot="$merged/var/tmp/portage"
+  [[ -d "$pkgroot" ]] || return 0
+  local n=0 log rel cat pf
+  while IFS= read -r -d '' log; do
+    rel="${log#$pkgroot/}"          # cat/pf/temp/build.log
+    cat="${rel%%/*}"
+    pf="${rel#*/}"; pf="${pf%%/*}"
+    install -d "$dest/$cat" 2>/dev/null || continue
+    if cp -p "$log" "$dest/$cat/$pf.build.log" 2>/dev/null; then
+      n=$((n+1))
+      # Compress on the fly: build.logs from a failed make can be MB
+      # of -Wall noise plus the actual error. gzip-9 is fast and shrinks
+      # them ~10x; tools (less, zgrep) handle .gz transparently.
+      gzip -f -9 "$dest/$cat/$pf.build.log" 2>/dev/null || true
+    fi
+  done < <(find "$pkgroot" -mindepth 4 -maxdepth 4 -name build.log -type f -print0 2>/dev/null)
+  if (( n > 0 )); then
+    log_info "  salvaged $n failed build.log(s) → $dest"
+  fi
+  return 0
+}
+
+
 # =============================================================================
 # Subcommand: compare (run portage-ng + emerge side by side)
 # =============================================================================
@@ -1433,7 +1478,10 @@ cmd_emerge() {
 #
 # Sessions are named pkg-cmp-{portage-ng,emerge}-<label>. <label> defaults
 # to the sanitized package atom. Both sessions are destroyed at the end
-# unless --keep is passed.
+# unless --keep is passed. Per-package portage build.log files are always
+# salvaged out of /var/tmp/portage/<cat>/<pf>/temp/ before destroy and
+# stored under <logdir>/build-logs/{portage-ng,emerge}/<cat>/<pf>.build.log.gz
+# so failures retain their root-cause evidence after cleanup.
 
 cmd_compare() {
   require_root
@@ -1531,6 +1579,20 @@ cmd_compare() {
   em_rc="$(cat "$em_log.exit" 2>/dev/null || echo "?")"
 
   _compare_summarize "$target" "$mode" "$sess_pn" "$sess_em" "$pn_log" "$em_log" "$pn_rc" "$em_rc" "$logdir"
+
+  # Salvage Portage per-package build.log files BEFORE destroying the
+  # sessions. Successful builds clean their workdir (FEATURES=clean,
+  # default), so a leftover `<cat>/<pf>/temp/build.log` always signals a
+  # failed package. Without this, the only post-mortem evidence is the
+  # per-engine log we already have, which records the step-level FAIL but
+  # not the underlying compile/configure/install error. We need the latter
+  # to triage shared sub-package failures (e.g. xdg-utils / qt5compat
+  # cascading into multiple top-level fail/fail rows in compare-matrix).
+  #
+  # Always run, even with --keep, since copies are cheap and this gives
+  # the same post-mortem path regardless of cleanup mode.
+  _compare_salvage_buildlogs "$sess_pn" "$logdir/build-logs/portage-ng"
+  _compare_salvage_buildlogs "$sess_em" "$logdir/build-logs/emerge"
 
   if [[ $keep -eq 0 ]]; then
     log_info "  cleaning up sessions (use --keep to preserve)"
@@ -1644,6 +1706,17 @@ _compare_summarize() {
     printf '\nFirst error/warning per engine:\n'
     [[ -n "$pn_first_err" ]] && printf '  portage-ng: %s\n' "$pn_first_err"
     [[ -n "$em_first_err" ]] && printf '  emerge    : %s\n' "$em_first_err"
+  fi
+
+  # Surface any salvaged per-package build.log files so the operator can
+  # zgrep / less directly without re-running the failure.
+  local bl_pn bl_em
+  bl_pn="$(find "$logdir/build-logs/portage-ng" -type f -name '*.build.log.gz' 2>/dev/null | wc -l | tr -d ' ')"
+  bl_em="$(find "$logdir/build-logs/emerge"     -type f -name '*.build.log.gz' 2>/dev/null | wc -l | tr -d ' ')"
+  if [[ "${bl_pn:-0}" -gt 0 || "${bl_em:-0}" -gt 0 ]]; then
+    printf '\nSalvaged failed-package build.logs (gzipped):\n'
+    [[ "${bl_pn:-0}" -gt 0 ]] && printf '  portage-ng: %s file(s) under %s/build-logs/portage-ng/\n' "$bl_pn" "$logdir"
+    [[ "${bl_em:-0}" -gt 0 ]] && printf '  emerge    : %s file(s) under %s/build-logs/emerge/\n'     "$bl_em" "$logdir"
   fi
 
   if [[ -n "$only_pn$only_em" ]]; then
