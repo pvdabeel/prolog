@@ -2206,7 +2206,22 @@ _progress_pick_run() {
     meta="$d/meta.txt"
     [[ -f "$meta" ]] || continue
     [[ -z "$newest_any" ]] && newest_any="$d"
-    if grep -q '^finished_at\b' "$meta" 2>/dev/null; then
+    # A run is "truly finished" only if its LAST `finished_at` marker
+    # comes AFTER its LAST `resumed_at` marker. A `resumed_at` written
+    # later means the run was reactivated and the prior `finished_at`
+    # is stale -- treat the dir as live again. Without this guard,
+    # `tinderbox-ng continue` correctly reactivates an existing run dir
+    # but the dashboard keeps falling back to an older run that lacks
+    # `finished_at` (because the picker still classifies the live one
+    # as "finished").
+    local lf lr
+    lf="$(awk '$1=="finished_at"{print NR}' "$meta" 2>/dev/null | tail -n1)"
+    lr="$(awk '$1=="resumed_at" {print NR}' "$meta" 2>/dev/null | tail -n1)"
+    local truly_finished=0
+    if [[ -n "$lf" && ( -z "$lr" || "$lf" -gt "$lr" ) ]]; then
+      truly_finished=1
+    fi
+    if (( truly_finished )); then
       [[ -z "$newest_finished" ]] && newest_finished="$d"
     elif [[ -z "$newest_live" ]] && ! _progress_run_aborted "$d"; then
       newest_live="$d"

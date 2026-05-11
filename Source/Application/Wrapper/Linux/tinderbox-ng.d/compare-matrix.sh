@@ -112,6 +112,17 @@ mkdir -p "$OUTDIR"
 # `started_at` / `package_count` / `manifest` stay authoritative for the
 # logical run, and each resume event is auditable in meta.txt.
 if [[ -n "$RESUME_DIR" ]]; then
+  # If the previous run wrote a `finished_at` line (because its driver
+  # exited cleanly OR died and the line happened to land), invalidate
+  # it before recording the new resume. The progress picker uses the
+  # presence of `finished_at` AFTER the last `resumed_at` as the "this
+  # run is done" signal; leaving a stale one in place would make the
+  # dashboard fall back to an older run instead of following this live
+  # resume. Comment out (don't delete) so the audit trail stays.
+  if grep -qE '^finished_at\b' "$META" 2>/dev/null; then
+    sed -i.bak -E "s|^(finished_at\\b.*)$|# \\1 (superseded by resume at $(date -u +%Y-%m-%dT%H:%M:%SZ))|" "$META"
+    rm -f "$META.bak"
+  fi
   {
     printf '\n# ----- resumed at %s -----\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     printf 'resumed_at\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
