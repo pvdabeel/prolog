@@ -1859,8 +1859,14 @@ CONT_HELP
     # an operator-archived sibling that must NOT be auto-detected, even
     # if its mtime happens to be newer than the canonical original.
     # Use --run DIR to override.
+    # Use POSIX-extended regex explicitly. The default emacs/findutils
+    # regex syntax in GNU find 4.10 silently fails to honour `\{N\}`
+    # repetition (returns no matches), which would make `cmd_continue`
+    # always die with "no canonical compare-matrix-<stamp> run found"
+    # even when one exists. Verified on findutils 4.10.0.
     run="$(find "$reports_dir" -maxdepth 1 -mindepth 1 -type d \
-                -regex ".*/compare-matrix-[0-9]\{8\}T[0-9]\{6\}" \
+                -regextype posix-extended \
+                -regex ".*/compare-matrix-[0-9]{8}T[0-9]{6}" \
                 -printf '%T@\t%p\n' 2>/dev/null \
             | sort -rn | head -n1 | cut -f2-)"
     [[ -n "$run" ]] || die "no canonical compare-matrix-<stamp> run found under $reports_dir"
