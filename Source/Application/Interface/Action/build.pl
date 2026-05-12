@@ -32,9 +32,10 @@ action:assert_resume_skip_args([A|Rest]) :-
 % Handles the --build CLI flag. Resolves targets, proves a plan, then
 % builds with live progress output.
 
-action:process_build([], _Options) :-
+action:process_build([], Options) :-
   !,
-  message:failure('No targets specified for --build.').
+  ignore(message:failure('No targets specified for --build.')),
+  action:exit_on_invalid_targets(Options).
 
 action:process_build(ArgsSets, Options) :-
   eapi:substitute_sets(ArgsSets, Args),
@@ -48,7 +49,8 @@ action:process_build(ArgsSets, Options) :-
           Proposal),
   !,
   ( Proposal == []
-  -> message:failure('No valid targets found.')
+  -> ignore(message:failure('No valid targets found.')),
+     action:exit_on_invalid_targets(Options)
   ;  builder:build(Proposal),
      action:maybe_ci_exit_on_build_failure(Options)
   ).
@@ -81,4 +83,21 @@ action:maybe_ci_exit_on_build_failure(Options) :-
     Failed > 0
   -> halt(3)
   ;  true
+  ).
+
+
+%! action:exit_on_invalid_targets(+Options) is det.
+%
+% Surface "no valid targets resolved" as a hard failure exit code in CI
+% mode. Without this, an unresolvable target falls back through predicate
+% failure to the catch-all halt(1) in interface:process_requests/1, which
+% downstream tooling (notably tinderbox-ng compare) misinterprets as
+% "OK(cycles)" since exit 1 normally means "build succeeded with prover
+% cycle-break assumptions". Outside --ci the predicate fails so the caller
+% preserves its existing behaviour.
+
+action:exit_on_invalid_targets(Options) :-
+  ( memberchk(ci(true), Options)
+  -> halt(3)
+  ;  fail
   ).
