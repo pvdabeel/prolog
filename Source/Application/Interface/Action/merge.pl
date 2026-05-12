@@ -17,9 +17,10 @@
 % These clauses MUST appear after the specific info/search/depclean
 % clauses (ensured by include order in action.pl).
 
-action:process_action(_Action,[],_) :-
+action:process_action(_Action,[],Options) :-
   !,
-  message:failure('No targets specified.').
+  ignore(message:failure('No targets specified.')),
+  action:exit_on_invalid_targets(Options).
 
 action:process_action(Action,ArgsSets,Options) :-
   interface:process_mode(Mode),
@@ -39,11 +40,12 @@ action:process_action(Action,ArgsSets,Options) :-
           Proposal),!,
   message:log(['Proposal:  ',Proposal]),
   (Proposal == []
-   -> ( config:llm_support(Prompt),
-        atomic_list_concat([Prompt|Args],Message),
-        config:llm_default(Service),
-        explainer:call_llm(Service, Message, _),
-        fail )
+   -> ( ignore((config:llm_support(Prompt),
+                atomic_list_concat([Prompt|Args],Message),
+                config:llm_default(Service),
+                explainer:call_llm(Service, Message, _))),
+        ignore(message:failure('No valid targets found.')),
+        action:exit_on_invalid_targets(Options) )
    ;  true),
   (Mode == 'client' ->
     (client:rpc_execute(Host,Port,
