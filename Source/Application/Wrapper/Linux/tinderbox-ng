@@ -2524,7 +2524,10 @@ _progress_render_frame() {
       _rest="${_root#$_sess_prefix}"
       _sname="${_rest%%/*}"
       sess_pcount[$_sname]=$(( ${sess_pcount[$_sname]:-0} + 1 ))
-      _cmd="$(tr '\0' ' ' <"$_p/cmdline" 2>/dev/null | head -c 200)"
+      # Suppress bash's own redirection-failure message (race: PID may exit
+      # between the /proc/[0-9]* glob and this read). Wrap in a brace group
+      # so `2>/dev/null` covers bash's stderr too, not just `tr`'s.
+      _cmd="$({ tr '\0' ' ' <"$_p/cmdline" | head -c 200; } 2>/dev/null)"
       [[ -z "$_cmd" ]] && _cmd="$(cat "$_p/comm" 2>/dev/null)"
       # Patterns must accept both a path-prefixed binary (`/usr/bin/foo …`)
       # and the bare command name (e.g. swipl is exec'd by argv[0]="swipl"
