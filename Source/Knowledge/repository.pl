@@ -215,6 +215,89 @@ sync(metadata) ::-
 %
 % Regenerates prolog facts from the local repository cache
 
+% Binpkg sync(metadata): no-op. Portage's $PKGDIR/Packages file IS the
+% metadata for a binpkg repository -- there is no per-entry metadata
+% directory to regenerate. The on-disk Packages index is maintained
+% incrementally by `emerge` (or whatever produced the binpkgs) via
+% bintree.inject().
+sync(metadata) ::-
+  ::type('binpkg'),!.
+
+
+% Binpkg sync(kb): build cache facts directly from a $PKGDIR/Packages
+% RFC822 index. One cache:ordered_entry per BUILD_ID variant; metadata
+% fields stored verbatim as cache:entry_metadata. Multiple variants of the
+% same CPV share the same Version key but get unique EntryIds (`cat/pn-pv-N`)
+% so they coexist in ordered_entry without dedup. The binpkg matcher
+% (binpkg_exec) sorts candidates by `build_id` at query time -- we don't
+% rely on ordered_entry's natural Version ordering for retrieval.
+%
+% The repository's `cache` slot points at the `Packages` file itself, not
+% a directory (this is type-specific; for eapi it's the md5-cache dir).
+sync(kb) ::-
+  ::type('binpkg'),!,
+  :this(Repository),
+  ::cache(IndexFile),
+  message:hc,
+
+  % Step 1: clean prolog cache for this repository
+  retractall(cache:repository(Repository)),
+  retractall(cache:category(Repository,_)),
+  retractall(cache:entry(Repository,_,_,_,_)),
+  retractall(cache:package(Repository,_,_)),
+  retractall(cache:ordered_entry(Repository,_,_,_,_)),
+  retractall(cache:entry_metadata(Repository,_,_,_)),
+  retractall(cache:manifest(Repository,_,_,_,_)),
+  retractall(cache:manifest_metadata(Repository,_,_,_,_,_)),
+
+  % Step 2: parse the Packages index
+  ( exists_file(IndexFile)
+  -> binpkg_index:parse_file(IndexFile, _Header, Records),
+     length(Records, NRec)
+  ;  message:scroll(['No Packages index at ', IndexFile, ' -- registering empty binpkg repository.']),
+     Records = [], NRec = 0
+  ),
+
+  % Step 3: assert one ordered_entry + per-record metadata for each variant.
+  % Records that fail to yield an entry id (header rows, malformed cpv,
+  % missing build_id) are skipped silently.
+  forall(
+    member(R, Records),
+    ( ( binpkg_index:record_entry_id(R, EntryId),
+        binpkg_index:record_split_cpv(R, Cat, Name, Version),
+        binpkg_index:record_build_id(R, Bid)
+      -> with_mutex(mutex, message:scroll(['Binpkg: ', EntryId])),
+         assertz(cache:ordered_entry(Repository, EntryId, Cat, Name, Version)),
+         assertz(cache:entry_metadata(Repository, EntryId, build_id, Bid)),
+         forall(
+           member(Key-Value, R),
+           ( Key == build_id
+           -> true
+           ;  assertz(cache:entry_metadata(Repository, EntryId, Key, Value))
+           ))
+      ;  true
+      )
+    )
+  ),
+
+  % Step 4: derive cache:category and cache:package facts from the asserted
+  % ordered_entries. No predsort -- we want duplicate Version rows preserved.
+  findall(Ca, cache:ordered_entry(Repository,_,Ca,_,_), Cu),
+  sort(Cu, Cs),
+  forall(member(Ca, Cs), assertz(cache:category(Repository, Ca))),
+
+  findall([Ca,Pa], cache:ordered_entry(Repository,_,Ca,Pa,_), Pu),
+  sort(Pu, Ps),
+  forall(member([Ca,Pa], Ps), assertz(cache:package(Repository, Ca, Pa))),
+
+  assertz(cache:repository(Repository)),
+
+  message:sc,
+  message:scroll(['Updated prolog knowledgebase. Binpkg variants: ', NRec]), nl,
+  message:clean,
+  !.
+
+
 % VDB sync: build cache facts directly from a /var/db/pkg-style directory tree.
 sync(kb) ::-
   ::type('vdb'),!,
