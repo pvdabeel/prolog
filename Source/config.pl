@@ -81,6 +81,64 @@ config:trust_metadata(true).
 
 config:write_metadata(true).
 
+
+% -----------------------------------------------------------------------------
+%  Binary package consumption ($PKGDIR/Packages, gpkg multi-instance)
+% -----------------------------------------------------------------------------
+%
+% These knobs control whether the builder consumes matching binpkgs from a
+% locally-registered binpkg repository (instead of building from source).
+% The check is gated on `cache:repository(binpkg)` being present, so all
+% knobs are effectively no-ops on hosts that haven't registered a binpkg
+% repository in their Source/Config/<host>.local.pl.
+
+%! config:use_binpkg(?Bool)
+%
+% Master switch for binpkg consumption. When `true`, the builder asks
+% `binpkg_exec:available_for/4` for a USE-matching variant before falling
+% back to the source-build phase sequence in `ebuild_exec`. Default: true.
+
+config:use_binpkg(true).
+
+
+%! config:binpkg_respect_use(?Mode)
+%
+% Mirrors emerge's `--binpkg-respect-use=y|n`. When `strict`, only binpkgs
+% whose stored `USE:` exactly matches the planner's resolved USE (after
+% IUSE_EFFECTIVE projection) are eligible. When `relaxed`, USE-mismatched
+% binpkgs may still be selected (a warning is logged). Default: strict.
+
+config:binpkg_respect_use(strict).
+
+
+%! config:binpkg_changed_deps(?Mode)
+%
+% Mirrors emerge's `--binpkg-changed-deps=y|n`. When `skip`, binpkgs whose
+% recorded RDEPEND differs from the current ebuild's RDEPEND are excluded
+% from the candidate set. When `warn`, they are still eligible (a warning
+% is logged). Default: warn (less restrictive; binpkg-multi-instance
+% already isolates USE drift).
+
+config:binpkg_changed_deps(warn).
+
+
+%! config:binpkg_refresh(?Policy)
+%
+% Controls when the in-memory binpkg index is refreshed against the
+% on-disk `Packages` file:
+%
+%   manual : never auto-refresh; the index reflects the last `kb:sync(binpkg)`
+%            run. Cheapest, fully predictable.
+%   mtime  : on each `binpkg_exec:available_for/4` call, stat the index
+%            file and re-run sync(kb) if its mtime is newer than the last
+%            load. Useful when other producers (e.g. tinderbox-ng) are
+%            adding binpkgs concurrently with portage-ng builds.
+%
+% Default: manual. Set to `mtime` for live tinderbox/matrix scenarios.
+
+config:binpkg_refresh(manual).
+
+
 % -----------------------------------------------------------------------------
 %  Gentoo profile (for Portage parity)
 % -----------------------------------------------------------------------------
