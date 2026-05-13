@@ -1,0 +1,24 @@
+# /etc/portage/package.use/00-tinderbox-ng-defaults -- shipped by
+# tinderbox-ng bootstrap.
+#
+# Per-package USE flag overrides applied to every session inheriting from
+# the baseline. Sessions can layer additional overrides on top via their
+# overlayfs upper layer.
+#
+# Conventions:
+#   * keep this file restricted to flags needed for the matrix to make
+#     forward progress (avoid stalls, broken bootstraps, multi-hour
+#     compiles that always fail);
+#   * per-USE comment must explain WHY the override exists so the next
+#     person reading this knows whether it can be removed.
+
+# dev-lang/ghc bootstrap from source takes 4-6h on a 32-core box and
+# regularly fails (segv during stage1 unregisterised pass on amd64
+# stage3-musl-derived toolchains, occasional ghcmakebinary missteps).
+# The `binary` USE flag instructs the ebuild to fetch and unpack
+# upstream's pre-built ghc tarball instead of bootstrapping. Every
+# downstream dev-haskell/* package then compiles against this binary
+# ghc just fine. Without this, ~all dev-haskell/* matrix packages
+# fail (no ghc -> no haskell builds), polluting both portage-ng and
+# emerge sides of the comparison report.
+dev-lang/ghc binary
