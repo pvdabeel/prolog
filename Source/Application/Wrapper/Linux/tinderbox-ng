@@ -2567,7 +2567,36 @@ _progress_render_frame() {
     done
   fi
 
-  printf '\033[1mActive sessions (%d)\033[0m\n' "$n_sessions"
+  # Split the count into "live" (has at least one anchored process) and
+  # "done" (session dir exists but no anchored process). A done session
+  # has three legitimate causes:
+  #   - paired in compare-matrix: the faster engine finished and is
+  #     waiting for its sibling (compare destroys both in lockstep)
+  #   - kept by `compare --keep` for post-mortem investigation
+  #   - mid-teardown: cleanup helpers are running but processes have
+  #     already exited
+  # In all three cases the chroot is no longer doing work, so it should
+  # NOT count as "active". Without this split, a forgotten `--keep`
+  # session zombies in the "Active" headline indefinitely (e.g. the
+  # ghc-inv investigation sessions sat for 7+ hours after the build
+  # failed, looking misleadingly like the matrix had stuck workers).
+  local n_live=0 n_done=0
+  if (( n_sessions > 0 )); then
+    local _s _n
+    while IFS= read -r _s; do
+      _n="$(basename "$_s")"
+      if (( ${sess_pcount[$_n]:-0} > 0 )); then
+        n_live=$(( n_live + 1 ))
+      else
+        n_done=$(( n_done + 1 ))
+      fi
+    done < <(find "$SESSIONS_DIR" -maxdepth 1 -mindepth 1 -type d 2>/dev/null)
+  fi
+  if (( n_done > 0 )); then
+    printf '\033[1mActive sessions (%d live, %d done)\033[0m\n' "$n_live" "$n_done"
+  else
+    printf '\033[1mActive sessions (%d)\033[0m\n' "$n_live"
+  fi
   if (( n_sessions > 0 )); then
     printf '  %-44s  %-10s  %-9s  %4s  %s\n' NAME ENGINE STATE PROC AGE
     local s name engine state pcount age_s age_str ctime
@@ -2581,8 +2610,17 @@ _progress_render_frame() {
         selftest-*)           engine="selftest"  ;;
         *)                    engine="user"      ;;
       esac
-      state="${sess_state[$name]:-idle}"
       pcount="${sess_pcount[$name]:-0}"
+      # 0-proc sessions are reported as `done` regardless of whether the
+      # cause is paired-wait, --keep, or mid-teardown — the operator
+      # only needs to know "this chroot is no longer doing work" and
+      # the session column count already separates live vs done. Live
+      # sessions get their work-class label from sess_state above.
+      if (( pcount > 0 )); then
+        state="${sess_state[$name]:-active}"
+      else
+        state="done"
+      fi
       ctime="$(stat -c %Y "$s" 2>/dev/null || stat -f %m "$s" 2>/dev/null || echo "$now")"
       age_s=$(( now - ctime ))
       age_str="$(_progress_hms "$age_s")"
