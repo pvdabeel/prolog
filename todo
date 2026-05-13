@@ -362,6 +362,16 @@ to batch as upstream Gentoo bug reports later.
   with re2c's generated state machine miscompiled by modern GCC.
   Cascades to: app-arch/p7zip and any other yasm consumer.
 
+  Cross-referenced via `--search-bugs` 2026-05-10:
+    #677456 CONFIRMED   "dev-util/re2c segfaults with bad permissions
+                         on /tmp (was: dev-lang/yasm-1.3.0 fails to
+                         compile)" -- direct hit on our failure mode
+    #968923 UNCONFIRMED "dev-lang/yasm: last rites?" -- removal
+                         proposal; dev-lang/nasm is the modern
+                         replacement
+    #862112 CONFIRMED   "dev-lang/yasm: multiple vulnerabilities"
+    #941433 CONFIRMED   "invalid dependency on dev-lang/python"
+
 - [BOTH] sys-block/mtx-1.3.12-r1 - sandbox violation in install phase.
   Failure: `install -c -m 755 -d /usr/share/man <D>/usr/share/man/man1`
   -> `ACCESS DENIED: fchmod: /usr/share/man` -> `make: *** [Makefile:114:
@@ -396,11 +406,22 @@ to batch as upstream Gentoo bug reports later.
   (last release 2017) so a Gentoo-side patch revbump is the only
   realistic remediation path.
 
+  Cross-referenced via `--search-bugs` 2026-05-10: only one open
+  bug (#647194 CONFIRMED "mtx fails when autochanger has many slots")
+  which is unrelated. **No bug filed for the install-phase sandbox
+  violation we found** -- worth filing with the one-line patch above.
+
 - [BOTH] app-arch/stuffit-5.2.0.611-r1 - unfetchable + masked.
   Masked by `no-multilib/package.mask` (i386 binary) AND
   `RESTRICT="fetch"` (defunct Aladdin download URL). PN's auto-unmask
   fires correctly (PN-only planning win) but no engine can fetch the
   proprietary tarball. Legitimate "can't be installed" - leave masked.
+
+  Cross-referenced via `--search-bugs` 2026-05-10:
+    #916077 CONFIRMED  "http://my.smithmicro.com/downloads/files/
+                        stuffit520.611linux-i386.tar.gz No longer
+                        exists" -- direct hit; just confirms our
+                        diagnosis. Already on Gentoo's radar.
 
 PN-side latent gaps (not Class H, not regressions; future work)
 ================================================================
@@ -623,6 +644,158 @@ PN-side latent gaps (not Class H, not regressions; future work)
   emerge invocation respects the flipped flag). Both are needed to
   resolve the hardinfo/xdg-utils/calamares family of fail/fail
   cases.
+
+- [TRIAGE 2026-05-10] fail/fail breakdown from the in-flight all-pkgs
+  matrix run (compare-matrix-20260510T194121, snapshot at 1056/17467):
+
+  Group A -- PN-EXEC (apply_ctx_use_overrides, FIXED by 9f83b143)
+    Pre-fix matrix evidence: PN's plan emits `useflag <pkg> (X)`
+    suggestion + a `useflag` step, but the install of <pkg> still
+    runs with `-X`. Downstream consumer (gtk+ / xdg-utils) blows up.
+      - app-admin/hardinfo            (already verified by direct probe)
+      - app-admin/gtkdiskfree         (cairo X assumed, cairo built -X)
+      - app-admin/bitwarden-desktop-bin (cairo X assumed, cairo built -X)
+      - app-accessibility/kontrast    (xmlto text assumed, xmlto rebuilt -text)
+      - app-admin/kio-admin           (xmlto text assumed, xmlto rebuilt -text)
+    NEXT: rerun these 5 against the new baseline (post-9f83b143)
+    after the matrix completes. Expected: all OK (or only ebuild
+    bugs remain).
+
+  Group B -- PN-PLANNER gap: parent USE-dep `cairo[X]` not propagated
+    to cairo's plan. NEW BUG.
+    Symptom: gtk+ depends on `cairo[X]` (via X? branch). PN's
+    assumption block does NOT mention `x11-libs/cairo X` (only
+    `media-libs/libglvnd X`). cairo install line in plan literally
+    shows `-X`. cairo builds -X, then gtk+ install fails.
+    Cases:
+      - app-accessibility/accerciser
+      - app-accessibility/caribou
+      - app-accessibility/orca
+    Hypothesis: cairo's `selected_cn` is locked in early (probably
+    via librsvg or pycairo, which DON'T require cairo[X]) before the
+    prover walks gtk+. The bracketed-USE-dep refinement either
+    doesn't fire or doesn't trigger a re-prove on cairo. Compare
+    against gtkdiskfree / bitwarden / hardinfo where the assumption
+    IS recorded -- find the structural difference (likely the
+    self-context branching for gtk+ conditional X expansion).
+    NEXT: probe with --pretend on accerciser to see whether the
+    new dep_walk_context fix (938120f0) already closes this on
+    fresh code; if not, design a learned-domain refinement for the
+    cairo cn that re-proves cairo when a later dep adds `[X]`.
+
+  Group C -- PN-EXEC USE_EXPAND (lua_single_target). NEW BUG.
+    app-admin/lsyncd plan emits `useflag lsyncd (lua_single_target_lua5-4)`
+    + `install lsyncd (USE modified)` showing
+    `LUA_SINGLE_TARGET = -lua5-3 lua5-4` correctly, BUT install fails
+    at step 4. emerge ALSO fails (REQUIRED_USE: exactly-one-of
+    lua5-3 lua5-4) -- emerge has no way to autoflip USE_EXPAND
+    targets, so PN should have an edge here.
+    Without the salvaged build.log we cannot tell whether the
+    `useflag` step failed to write the package.use file, or the
+    write succeeded but the subprocess still doesn't see it, or
+    apply_ctx_use_overrides has a USE_EXPAND-specific blind spot.
+    NEXT: rerun with `--keep` to preserve the chroot session, then
+    inspect /etc/portage/package.use/lsyncd inside the session and
+    /var/tmp/portage/.../temp/build.log to confirm the failure mode.
+
+  Group D -- Upstream / ebuild bugs (NOT PN's problem; both engines
+    fail at the same step). Cross-referenced against bugs.gentoo.org
+    via `portage-ng-dev --search-bugs` on 2026-05-10 -- no new bug
+    reports needed; all four are already CONFIRMED upstream:
+
+      - app-accessibility/julius-4.2.2-r1 (configure: alsa econf)
+        Matching upstream bug:
+          #875680 CONFIRMED  configure: error: installation or
+                             configuration problem: C compiler
+                             cannot create executables.
+        Other open bugs:
+          #905923 CONFIRMED  implicit function declarations (musl)
+          #907231 UNCONFIRMED version bump to 4.6 requested
+          #907602 CONFIRMED  installs more files with FEATURES=test
+
+      - app-accessibility/yasr-0.6.9-r1 (compile: emake fails)
+        Matching upstream bugs (modern-toolchain breakage):
+          #881865 CONFIRMED  ui.c:684:27: passing arguments to a
+                             function without a prototype
+                             (CLANG-STRICTER-SYSTEM)
+          #943766 CONFIRMED  config.c:25:4: initialization of void
+                             (*)(void) from incompatible pointer
+                             type void (*)(int) (GCC-14 stricter-C)
+
+      - app-admin/clsync-0.4.5 (compile: emake fails)
+        The "Unable to find kernel sources at /usr/src/linux" line
+        is just a warning -- the actual fail is the same modern
+        toolchain breakage:
+        Matching upstream bugs:
+          #943773 CONFIRMED  main.c:443:23: assignment to
+                             __sighandler_t from incompatible
+                             pointer type (GCC-14 stricter-C)
+          #928944 CONFIRMED  configure: error
+          #892900 CONFIRMED  redefines _FORTIFY_SOURCE
+
+      - app-admin/multilog-watch-1.12-r1 (cascade)
+        multilog-watch itself: no bugs filed.
+        Root cause is mail-mta/netqmail-1.06-r16 emake failure;
+        matching upstream bugs:
+          #944901 CONFIRMED  myctime.c:16:1: number of arguments
+                             doesn't match prototype (GCC-14)
+          #953829 CONFIRMED  implicit declaration of function
+          #885061 CONFIRMED  sig_term.c: implicit function
+                             declaration lseek (CLANG-STRICTER)
+          #950885 IN_PROGRESS netqmail-1.06-r16: stablereq
+
+    Verdict: all four are upstream/ebuild GCC-14-or-later
+    stricter-C breakage with active CONFIRMED tickets. No PN bug,
+    no new bug to file. Compare-matrix collateral confirmed.
+
+  Group E -- NEW PN-PLANNER policy gap: auto-unmask too aggressive
+    when the package.mask reason is profile-incompatible.
+      - app-admin/mkosi-25.3
+        emerge: refuses ("masked: Requires systemd"; we are on
+        OpenRC).
+        PN: unmasks mkosi-25.3 + sys-apps/systemd-260.1 +
+        sys-apps/systemd-initctl-4 + sys-apps/gentoo-systemd-
+        integration-9-r2, then fails at step 9 trying to build
+        systemd on an OpenRC profile.
+      Right behaviour: PN should treat package.mask comments like
+      "Requires systemd" as profile-pinned (refuse to unmask under
+      OpenRC), the way it already treats `make.profile` selection
+      itself. Single-package impact today but the pattern is
+      general (any cross-init-system mask).
+      Bugzilla cross-check (`--search-bugs`): only #925191
+      UNCONFIRMED (stabilise for amd64) and #971603 UNCONFIRMED
+      (update to v26) -- nothing about the systemd-only mask, so
+      no upstream report needed.
+      NEXT: extend the auto-unmask gate to inspect the mask comment
+      for known profile keywords (systemd / openrc / split-usr /
+      no-multilib / merged-usr). Cheap heuristic; matches what
+      `tinderbox-ng exec -- emerge -pv` reports anyway.
+
+  Group F -- More upstream / ebuild bugs (NOT PN's problem):
+      - app-admin/ryzen_smu-0.1.5 (linux-mod-r1: kernel sources
+        required at /usr/src/linux). Both engines fail at setup
+        phase. We don't ship kernel sources in the baseline; same
+        environment limitation that already exists for clsync. Not
+        worth carrying separate bug refs -- this is "build host
+        lacks kernel sources", not an upstream defect.
+        Bugzilla cross-check (`--search-bugs`): No bugs found for
+        ryzen_smu -- confirms environment-specific.
+      - app-admin/ryzen_monitor-1.0.6_pre20220901 (cascade): drops
+        because ryzen_smu drops.
+      Action: provide kernel sources in the baseline (file a
+      follow-up under `Open`) so that linux-mod-r1 ebuilds can be
+      exercised; until then, accept these as expected fails.
+
+  Group A (extension) -- one more PN-EXEC apply_ctx_use_overrides
+    case captured in the same matrix:
+      - app-admin/passwordsafe (cairo X assumed via wxGTK[X] ->
+        gtk+ -> cairo[X]; cairo built -X; gtk+ install fails at
+        step 25). Same fix (9f83b143) closes it.
+        Bugzilla cross-check (`--search-bugs`): #924382 CONFIRMED
+        ("does not respect make opts" on 1.17.0) -- unrelated.
+        #974442 UNCONFIRMED stabilise request -- unrelated.
+        Our PN-EXEC fix should resolve passwordsafe locally; no
+        upstream bug to file.
 
 Open
 ====
