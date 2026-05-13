@@ -97,13 +97,15 @@ resolvers.
 
 ### Zeller & Snelting: Feature Logic (ESEC 1995, TOSEM 1997)
 
-"Unified Versioning Through Feature Logic" — version sets are identified by
-feature terms and configured by incrementally narrowing the set until each
-component resolves to a single version. portage-ng's `version_domain` with
-`domain_meet` (intersection) is essentially Zeller's feature term narrowing.
-The learned constraint store implements Zeller's feature implication
-propagation: constraints discovered in one proof attempt propagate to narrow
-version sets in the next attempt.
+"Handling Version Sets through Feature Logic" (ESEC 1995, LNCS 989) and its
+expanded journal version "Unified Versioning Through Feature Logic" (TOSEM
+1997, Vol. 6 No. 4) — version sets are identified by feature terms and
+configured by incrementally narrowing the set until each component resolves
+to a single version. portage-ng's `version_domain` with `domain_meet`
+(intersection) is essentially Zeller's feature term narrowing. The learned
+constraint store implements Zeller's feature implication propagation:
+constraints discovered in one proof attempt propagate to narrow version
+sets in the next attempt.
 
 ### Vermeir & Van Nieuwenborgh: Ordered Logic Programs (JELIA 2002)
 
