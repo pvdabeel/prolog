@@ -1433,9 +1433,19 @@ cmd_emerge() {
 
 _compare_salvage_buildlogs() {
   local session="$1" dest="$2"
-  local merged pkgroot
-  merged="$(session_merged "$session")"
-  pkgroot="$merged/var/tmp/portage"
+  local upper pkgroot
+  # IMPORTANT: walk the overlay's `upper` layer, not `merged`. The merged
+  # view is only populated INSIDE the per-session mount namespace (where
+  # the overlay+binds live); from the host's main namespace `merged/` is
+  # empty after the session command returns -- so a `find` against it
+  # returns nothing and salvage silently produces zero files. The upper
+  # layer always contains every file written during the session and
+  # persists outside the namespace until cmd_destroy removes session_dir.
+  # Verified empirically: dev-haskell/* (and all other build-phase
+  # failures whose chroots include /var/tmp/portage/<cat>/<pf>/temp/
+  # build.log) silently failed to salvage before this fix.
+  upper="$(session_upper "$session")"
+  pkgroot="$upper/var/tmp/portage"
   [[ -d "$pkgroot" ]] || return 0
   local n=0 log rel cat pf
   while IFS= read -r -d '' log; do
