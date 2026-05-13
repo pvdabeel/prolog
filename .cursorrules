@@ -110,7 +110,7 @@ Dep priority ordering (`dep_priority/2`):
 
 Inspired by Zeller's feature logic (incremental domain narrowing) and
 Vermeir/Van Nieuwenborgh's ordered logic programs (priority-based conflict
-resolution). See `Documentation/Handbook/doc-resolver-comparison.md`.
+resolution). See `Documentation/Handbook/21-doc-resolver-comparison.md`.
 
 ### Testing learned constraints
 When testing changes to the learned constraint mechanism, ALWAYS verify:
