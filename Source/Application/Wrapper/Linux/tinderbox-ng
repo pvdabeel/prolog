@@ -211,6 +211,7 @@ TINDERBOX_OPTIONAL_BINS=(
 # these will silently break a downstream command.
 TINDERBOX_REQUIRED_TEMPLATES=(
   baseline.make.conf
+  baseline.package.use
   baseline.repos.conf
   portage-ng-dev.in
   run-matrix.sh
@@ -876,8 +877,10 @@ bootstrap_post_stage3() {
   log_info "post-stage3 setup (profile, locale, env, mtab, /etc/portage)"
 
   install -d "$BASELINE_DIR/etc/portage/repos.conf"
+  install -d "$BASELINE_DIR/etc/portage/package.use"
   cp_template baseline.repos.conf "$BASELINE_DIR/etc/portage/repos.conf/gentoo.conf"
   cp_template baseline.make.conf  "$BASELINE_DIR/etc/portage/make.conf"
+  cp_template baseline.package.use "$BASELINE_DIR/etc/portage/package.use/00-tinderbox-ng-defaults"
 
   install -d "$BASELINE_DIR/var/cache/distfiles" \
              "$BASELINE_DIR/var/cache/binpkgs" \
