@@ -987,8 +987,8 @@ builder:poll_all_jobs([Job|Rest], TotalLines, FileStartLine, Distdir, StillActiv
 % download (see prepare_download_jobs) and atomic-renames it onto
 % DestPath when verification succeeds. On any failure the temp path
 % is deleted but DestPath is left intact -- a parallel writer (sibling
-% tinderbox session, host emerge in compare matrices, etc.) may have
-% landed a valid copy there in the meantime, in which case
+% external build harness session, host emerge in compare matrices,
+% etc.) may have landed a valid copy there in the meantime, in which case
 % race_recover/3 short-circuits success without retrying. If neither
 % our temp nor a peer-supplied DestPath verifies, falls through to
 % the upstream SRC_URI fallback chain.

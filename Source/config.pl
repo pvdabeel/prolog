@@ -131,10 +131,10 @@ config:binpkg_changed_deps(warn).
 %            run. Cheapest, fully predictable.
 %   mtime  : on each `binpkg_exec:available_for/4` call, stat the index
 %            file and re-run sync(kb) if its mtime is newer than the last
-%            load. Useful when other producers (e.g. tinderbox-ng) are
-%            adding binpkgs concurrently with portage-ng builds.
+%            load. Useful when external producers are adding binpkgs
+%            concurrently with portage-ng builds.
 %
-% Default: manual. Set to `mtime` for live tinderbox/matrix scenarios.
+% Default: manual. Set to `mtime` for live external-producer scenarios.
 
 config:binpkg_refresh(manual).
 
@@ -639,7 +639,7 @@ config:mirror_verify_hashes_default(none).
 % TTL (in seconds) for the on-disk cache of the GLEP 75 layout.conf
 % reply, written under the active distdir (see download:disk_cache_path/1).
 % Mirror layout almost never changes, but clusters of short-lived
-% portage-ng processes (tinderbox-ng compare matrix, server worker
+% portage-ng processes (external compare matrices, server worker
 % pool) would otherwise re-fetch layout.conf for every invocation,
 % which both wastes a curl per session (~1s) and adds a real failure
 % mode if the mirror flaps. Default 24h is conservative; bump it for

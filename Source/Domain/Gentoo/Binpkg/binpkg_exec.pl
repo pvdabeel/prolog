@@ -56,7 +56,7 @@ acceptable in lieu of a source build.
     fields. (qmerge does its own MD5 verification anyway.)
   - Mutate the binpkg repository. Production of binpkgs is owned by
     `ebuild_exec` (when `--buildpkg` is active) or external producers
-    such as tinderbox-ng matrix sessions.
+    such as concurrent build-harness matrix sessions.
 
 The end-to-end recipe was validated empirically against
 `app-misc/jq-1.8.1` BUILD_IDs 8 (oniguruma=on) and 10 (oniguruma=off);

@@ -91,10 +91,10 @@ action:maybe_ci_exit_on_build_failure(Options) :-
 % Surface "no valid targets resolved" as a hard failure exit code in CI
 % mode. Without this, an unresolvable target falls back through predicate
 % failure to the catch-all halt(1) in interface:process_requests/1, which
-% downstream tooling (notably tinderbox-ng compare) misinterprets as
-% "OK(cycles)" since exit 1 normally means "build succeeded with prover
-% cycle-break assumptions". Outside --ci the predicate fails so the caller
-% preserves its existing behaviour.
+% downstream comparison tooling that triages by exit code misinterprets
+% as "OK(cycles)" (exit 1 normally means "build succeeded with prover
+% cycle-break assumptions"). Outside --ci the predicate fails so the
+% caller preserves its existing behaviour.
 
 action:exit_on_invalid_targets(Options) :-
   ( memberchk(ci(true), Options)
