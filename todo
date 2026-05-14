@@ -7,7 +7,9 @@ Feature exploration
 
 - Dark & Light mode colors
 
-- Split up tinderbox-ng to a separate package
+- [DONE 2026-05-14] Split up tinderbox-ng to a separate package
+  → https://github.com/pvdabeel/tinderbox-ng (extracted via git filter-repo
+  with full history; portage-ng now contains only comment back-references).
 
 - test all ebuilds )
 

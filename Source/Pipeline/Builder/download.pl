@@ -62,9 +62,9 @@ rendering is handled by the builder and build printer.
 % worker would issue its own curl. The wasted work was at best harmless,
 % but combined with concurrent SWI tmp_file_stream/4 calls it surfaced
 % as `existence_error(temporary_file, '')` from `$tmp_file_stream`/4
-% under high load (libX11/libXdmcp/libXt class A failures in the
-% tinderbox-ng 1000-package matrix). Single-shot mutex eliminates the
-% pile-up; the layout fetch itself no longer uses tmp_file_stream
+% under high load (libX11/libXdmcp/libXt class A failures observed in
+% an external 1000-package compare matrix). Single-shot mutex eliminates
+% the pile-up; the layout fetch itself no longer uses tmp_file_stream
 % (see fetch_layout_conf below).
 
 download:mirror_layout(Layout) :-
@@ -112,8 +112,8 @@ download:mirror_layout_walk([MirrorUrl|Rest], Layout, Status) :-
 %! download:disk_cache_path(-Path) is semidet.
 %
 % Path of the on-disk layout cache. Lives next to distfiles so that
-% tinderbox-ng / pengines / matrix workflows share it via the existing
-% distdir bind mount, with no extra config knob to wire up. Fails when
+% external matrix harnesses / pengines workflows share it via the
+% existing distdir bind mount, with no extra config knob to wire up. Fails when
 % the distfiles location is not configured (rare; keeps callers
 % defensive).
 
@@ -196,7 +196,7 @@ download:write_disk_cache_(Layout) :-
 % SWI's `$tmp_file_stream`/4 was observed to throw
 % `existence_error(temporary_file, '')` with context "Not a directory"
 % on the call to canonicaliseDir for the tmp_dir. This surfaced as
-% the class-A "download cascade SKIP" failures in tinderbox-ng's
+% the class-A "download cascade SKIP" failures in an external
 % 1000-package comparison matrix (12 of 22 portage-ng-only failures).
 % Piping curl directly to a Prolog string sidesteps the bug entirely
 % and is also a touch faster (no tmp file lifecycle, no extra read).
@@ -309,9 +309,10 @@ download:join_mirror_url(MirrorBase, RelPath, URL) :-
 %  Race-safe distfile staging
 % -----------------------------------------------------------------------------
 %
-% The distdir is bind-mounted into every tinderbox-ng session (and into
-% the host emerge sessions running in parallel during compare matrices),
-% so multiple writers can race for the same `Distdir/Filename`. Two
+% The distdir is bind-mounted into every external build-harness
+% session (and into the host emerge sessions running in parallel during
+% compare matrices), so multiple writers can race for the same
+% `Distdir/Filename`. Two
 % concrete failure modes were observed in the 1000-package matrix:
 %
 %   1. Two processes curl into the same DestPath simultaneously and
@@ -374,8 +375,8 @@ download:finalize_temp_download(TmpPath, DestPath, ExpectedSize, Pairs, OK) :-
 % Succeeds when DestPath already exists, has the expected size, and
 % verifies against the supplied Manifest hash pairs. Used to short-
 % circuit a failed/redundant download when another writer (parallel
-% emerge, sibling tinderbox session, prior portage-ng job in the same
-% wave) has already produced a valid copy.
+% emerge, sibling external build-harness session, prior portage-ng job
+% in the same wave) has already produced a valid copy.
 
 download:race_recover(DestPath, ExpectedSize, Pairs) :-
   exists_file(DestPath),
