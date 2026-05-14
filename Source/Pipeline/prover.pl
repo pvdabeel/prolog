@@ -332,10 +332,6 @@ prover:prove_recursive(Full, Proof, NewProof, Model, NewModel, Constraints, NewC
 
       constraint:is_constraint(Lit) ->
       !,
-      %message:color(orange),
-      %writeln('PROVER: is constraint'),
-      %message:color(normal),
-
       Proof       = NewProof,
       Model       = NewModel,
       Triggers    = NewTriggers,
@@ -361,33 +357,71 @@ prover:prove_recursive(Full, Proof, NewProof, Model, NewModel, Constraints, NewC
       Constraints = NewConstraints
 
 
-  ;   % Case: Lit already proven, but context has changed
+  ;   % Case: Lit already proven, but the requested context differs.
+      %
+      % The prover offers two ways of resolving such a re-request:
+      %
+      %   (a) `should_union_ctx/1` succeeds for Lit
+      %       => union the stored Ctx with the incoming Ctx and
+      %          re-derive the rule body under the unioned Ctx.
+      %          Subsequent obligations are computed from the diff
+      %          (NewBody \ OldBody).
+      %
+      %   (b) `should_union_ctx/1` fails (default for any literal)
+      %       => fall through to the `regular proof` branch below,
+      %          which overwrites the stored Ctx with the incoming
+      %          Ctx and re-walks the body.
+      %
+      % (a) is needed when the rule body depends on Ctx in a way that
+      % requires merging across multiple call sites (e.g. accumulating
+      % per-package constraints from siblings). (b) is the classical
+      % proof behaviour and is correct for literals whose Ctx is
+      % per-edge plumbing rather than per-package state.
+      %
+      % The decision between (a) and (b) is domain-specific. The
+      % prover stays domain-agnostic: it asks `should_union_ctx/1`
+      % (which delegates to `heuristic:should_union_ctx/1` when the
+      % domain installs that hook) and acts accordingly.
+      %
+      % `prove_model/6` (the lighter-weight model-only path) has the
+      % same shape and the same domain hook below.
 
-      prover:proven(Lit, Model, ModelCtx) ->
+      prover:should_union_ctx(Lit),
+      get_assoc(Lit, Model, ModelCtx) ->
       !,
-      ( get_assoc(rule(Lit),Proof,dep(_OldCount,OldBody)?ModelCtx) ->
-          true
-      ; get_assoc(rule(Lit),Proof,dep(_OldCount,OldBody)?_OldProofCtx)
-      ),
-
       sampler:ctx_union(ModelCtx, Ctx, NewCtx),
-      prover:canon_literal(NewFull, Lit, NewCtx),
+      ( prover:ctx_equivalent(NewCtx, ModelCtx) ->
+          % The union introduced nothing semantically new (only
+          % non-equivalence-relevant Ctx items differ); the body
+          % would re-derive identically, so keep the existing
+          % Proof/Model/Triggers entries.
+          Proof       = NewProof,
+          Model       = NewModel,
+          Triggers    = NewTriggers,
+          Constraints = NewConstraints
+      ; ( get_assoc(rule(Lit),Proof,dep(_OldCount,OldBody)?ModelCtx) ->
+            true
+        ; get_assoc(rule(Lit),Proof,dep(_OldCount,OldBody)?_OldProofCtx)
+        ),
 
-      sampler:rule_call,
-      sampler:maybe_timeout_trace(Lit),
-      rule(NewFull,NewBody),
+        prover:canon_literal(NewFull, Lit, NewCtx),
 
-      subtract(NewBody,OldBody,DiffBody),
-      length(NewBody,NewCount),
-      put_assoc(rule(Lit), Proof, dep(NewCount, NewBody)?NewCtx,Proof1),
-      prover:add_triggers(NewFull, NewBody, Triggers, Triggers1),
+        sampler:rule_call,
+        sampler:maybe_timeout_trace(Lit),
+        rule(NewFull,NewBody),
 
-      setup_call_cleanup(prover:cycle_stack_push(Lit),
-                         prover:prove_recursive(DiffBody, Proof1, NewProof, Model, BodyModel, Constraints, BodyConstraints, Triggers1, NewTriggers),
-                         prover:cycle_stack_pop(Lit)),
+        subtract(NewBody,OldBody,DiffBody),
+        length(NewBody,NewCount),
+        put_assoc(rule(Lit), Proof, dep(NewCount, NewBody)?NewCtx,Proof1),
+        prover:add_triggers(NewFull, NewBody, Triggers, Triggers1),
 
-      put_assoc(Lit, BodyModel, NewCtx, NewModel),
-      NewConstraints = BodyConstraints
+        setup_call_cleanup(prover:cycle_stack_push(Lit),
+                           prover:prove_recursive(DiffBody, Proof1, NewProof, Model, BodyModel, Constraints, BodyConstraints, Triggers1, NewTriggers),
+                           prover:cycle_stack_pop(Lit)),
+
+        put_assoc(Lit, BodyModel, NewCtx, NewModel),
+        NewConstraints = BodyConstraints
+      )
 
 
   ;   % Case: Lit is assumed proven
@@ -527,11 +561,16 @@ prover:prove_model(Full, Model0, Model, Constraints0, Constraints, InProg0) :-
       Model = Model0,
       Constraints = Constraints0
 
-  ;   % Case: Lit already proven, but context has changed
-      prover:proven(Lit, Model0, OldCtx) ->
+  ;   % Case: Lit already proven, but the requested context differs.
+      % Same domain-agnostic dispatch as prove_recursive/9: ask the
+      % domain whether to union and re-derive (a) or to fall through
+      % to the regular_proof branch (b). See the comment block in
+      % prove_recursive/9 for the rationale.
+      prover:should_union_ctx(Lit),
+      get_assoc(Lit, Model0, OldCtx) ->
       !,
       sampler:ctx_union(OldCtx, Ctx, NewCtx),
-      ( NewCtx == OldCtx ->
+      ( prover:ctx_equivalent(NewCtx, OldCtx) ->
           Model = Model0,
           Constraints = Constraints0
       ; prover:canon_literal(NewFull, Lit, NewCtx),
@@ -982,17 +1021,14 @@ prover:assumed_proving(Lit, Proof) :- get_assoc(assumed(rule(Lit)),Proof,dep(_Co
 
 %! prover:proven(+Lit, +Model, +Ctx) is semidet
 %
-% Succeeds when Lit is in Model under a semantically equivalent context
-% (prevents needless re-proving when only provenance differs).
+% Succeeds when Lit is in Model under a context that the domain
+% considers equivalent to Ctx. Equivalence is delegated to
+% `prover:ctx_equivalent/2`, which falls back to structural
+% identity when no domain hook is installed.
 
 prover:proven(Lit, Model, Ctx) :-
   get_assoc(Lit, Model, StoredCtx),
-  ( StoredCtx == Ctx ->
-      true
-  ; prover:ctx_sem_key(StoredCtx, K1),
-    prover:ctx_sem_key(Ctx,       K2),
-    K1 == K2
-  ).
+  prover:ctx_equivalent(StoredCtx, Ctx).
 
 
 %! prover:assumed_proven(+Lit, +Model) is semidet
@@ -1002,20 +1038,55 @@ prover:proven(Lit, Model, Ctx) :-
 prover:assumed_proven(Lit, Model) :- get_assoc(assumed(Lit), Model, _).
 
 
-%! prover:ctx_sem_key(+Ctx, -Key) is det
+% -----------------------------------------------------------------------------
+% Domain hooks consumed by prove_recursive/9 and prove_model/6
+% -----------------------------------------------------------------------------
 %
-% Extract a semantic key from a context for equivalence comparison.
-% Two contexts with the same semantic key are considered equivalent
-% by proven/3 (ignoring provenance like `self/1`).
+% The prover engine is intentionally domain-agnostic: it knows only
+% how to dispatch on `Lit ∈ Model` / `Lit ∉ Model`, on cycles, on
+% conflicts, and on rule expansion. Anything that needs to know
+% what a literal *means* — including how two literal contexts
+% compare for equivalence and whether two requests for the same
+% literal under different contexts should be merged — is delegated
+% to the domain via the `heuristic:` hook namespace.
+%
+% Both hooks default to safe behaviour when the domain does not
+% install them:
+%
+%  * `ctx_equivalent/2` defaults to structural identity (`==`).
+%  * `should_union_ctx/1` defaults to false (the prover then falls
+%     through to the regular_proof branch, i.e. the classical
+%     "overwrite stored Ctx" behaviour).
 
-prover:ctx_sem_key({}, key([], none)) :- !.
-prover:ctx_sem_key(Ctx, key(RU, BWU)) :-
-  is_list(Ctx),
-  !,
-  ( memberchk(required_use:RU0, Ctx) -> RU = RU0 ; RU = [] ),
-  ( memberchk(build_with_use:BWU0, Ctx) -> BWU = BWU0 ; BWU = none ).
-prover:ctx_sem_key(_Other, key([], none)) :-
-  !.
+
+%! prover:ctx_equivalent(+Ctx1, +Ctx2) is semidet.
+%
+% Two literal contexts are equivalent iff they are structurally
+% identical OR the domain (`heuristic:ctx_equivalent/2`) declares
+% them equivalent. Used by `proven/3` and by the post-union
+% short-circuit in the context-changed branch.
+
+prover:ctx_equivalent(C, C) :- !.
+prover:ctx_equivalent(C1, C2) :-
+  current_predicate(heuristic:ctx_equivalent/2),
+  heuristic:ctx_equivalent(C1, C2).
+
+
+%! prover:should_union_ctx(+Lit) is semidet.
+%
+% Domain hook: succeeds when the prover should *merge* multiple
+% per-call-site Ctx values for Lit (rather than overwriting the
+% stored one). Only literals whose rule body genuinely depends on
+% an accumulated Ctx need this — for the rest, the classical
+% regular_proof branch is both correct and cheaper.
+%
+% Falls back to false when the domain does not install
+% `heuristic:should_union_ctx/1`, in which case the prover behaves
+% like a plain SLD resolver with last-write-wins on stored Ctx.
+
+prover:should_union_ctx(Lit) :-
+  current_predicate(heuristic:should_union_ctx/1),
+  heuristic:should_union_ctx(Lit).
 
 
 %! prover:conflicts(+Lit, +Model) is semidet

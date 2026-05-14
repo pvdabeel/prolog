@@ -42,6 +42,15 @@ and obligation filtering.
   * heuristic:constraint_guard/2
     Consistency guard called after each constraint merge.
 
+  * heuristic:ctx_equivalent/2
+    Decides when two literal contexts are equivalent
+    (used by prover:proven/3 and the union early-out).
+
+  * heuristic:should_union_ctx/1
+    Decides which literals participate in cross-sibling
+    Ctx union when re-requested with a different context
+    (used by the context-changed branch of prove_recursive).
+
   * heuristic:cycle_benign/2
     Classifies dependency cycles as benign or structural.
 
@@ -240,6 +249,77 @@ heuristic:filter_selected_by_slot(Slot, Selected, Filtered) :-
 
 heuristic:selected_on_slot_(Slot, selected(_Repo, _Entry, _Act, _Ver, SlotMeta)) :-
   candidate:selected_cn_slot_key_(SlotMeta, Slot).
+
+
+% =============================================================================
+%  Context equivalence and union-eligibility (domain hooks called by prover)
+% =============================================================================
+%
+% The prover engine calls these hooks to decide:
+%
+%  * `heuristic:ctx_equivalent/2` — when may two literal contexts be
+%    treated as the same? Used by `prover:proven/3` and by the
+%    post-union short-circuit in the context-changed branch of
+%    `prove_recursive/9` and `prove_model/6`.
+%
+%  * `heuristic:should_union_ctx/1` — for which literals should the
+%    prover *merge* (rather than overwrite) per-call-site contexts
+%    when the same literal is re-requested under a different Ctx?
+%    Used by the context-changed branch.
+%
+% Both are pure predicates on Gentoo-specific literal/context shape.
+% The prover stays domain-agnostic and falls back to safe defaults
+% when these hooks are absent.
+
+%! heuristic:ctx_equivalent(+Ctx1, +Ctx2) is semidet.
+%
+% Two literal contexts are equivalent iff they have the same
+% semantic key, where the semantic key is the pair of
+% required_use (RU) and build_with_use (BWU) values carried in
+% the context list. Other context items (provenance such as
+% `self/1`, suggestion tags, domain reasons, etc.) are
+% intentionally ignored: they describe how the literal was
+% reached, not what is being proven.
+
+heuristic:ctx_equivalent(C1, C2) :-
+  heuristic:ctx_sem_key(C1, K),
+  heuristic:ctx_sem_key(C2, K).
+
+heuristic:ctx_sem_key({}, key([], none)) :- !.
+heuristic:ctx_sem_key(Ctx, key(RU, BWU)) :-
+  is_list(Ctx),
+  !,
+  ( memberchk(required_use:RU0, Ctx) -> RU = RU0 ; RU = [] ),
+  ( memberchk(build_with_use:BWU0, Ctx) -> BWU = BWU0 ; BWU = none ).
+heuristic:ctx_sem_key(_Other, key([], none)).
+
+
+%! heuristic:should_union_ctx(+Lit) is semidet.
+%
+% Succeeds only for ebuild action literals — terms shaped as
+% `Repo://Entry:Action` (and their `assumed/1` variant). The body
+% of an ebuild action rule depends on the per-package
+% build_with_use state, which must be the *union* of the demands
+% from every parent that pulled this ebuild in (e.g. cairo's
+% `freetype[png]` and pango's `freetype[harfbuzz]` together
+% produce `freetype[png,harfbuzz]`).
+%
+% Intermediate literals (`grouped_package_dependency/4`,
+% `use_conditional_group/4`, `package_dependency/8`, …) carry
+% per-edge plumbing context that is meaningful only relative to
+% one immediate parent. Unioning across siblings would
+% accumulate unrelated grandparent flags into nodes that have no
+% IUSE for them and explode the regular_proof count across the
+% whole subtree (e.g. `pkgconfig:install` ending up with
+% `[deprecated,flexiblas,lapacke]` from grandparents).
+%
+% For those literals we want the prover's classical
+% "overwrite stored Ctx" behaviour, so this hook simply does not
+% match them and the prover falls through to the regular_proof
+% branch.
+
+heuristic:should_union_ctx(_Repo://_Entry:_Action) :- !.
+heuristic:should_union_ctx(assumed(_Repo://_Entry:_Action)) :- !.
 
 
 % =============================================================================
