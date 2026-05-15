@@ -1,6 +1,5 @@
 Source/Config/Private/api_key.pl
 Source/Config/Private/passwords.pl
-Source/Tests
 Certificates/*-key.pem
 Certificates/cakey.pem
 Certificates/cacert.srl
@@ -14,6 +13,4 @@ Knowledge/resume.pl
 Source/Knowledge/Sets/**/*.local
 __pycache__/
 *.pyc
-Reports/compare-*.json
-Reports/compare-matrix-*/.tsv.lock
 .DS_Store

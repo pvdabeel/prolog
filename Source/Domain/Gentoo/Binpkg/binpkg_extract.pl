@@ -40,8 +40,8 @@ After `prepare_builddir/3` succeeds, callers (i.e. `binpkg_exec`) can
 spawn `ebuild --skip-manifest <SOURCE_EBUILD> qmerge` with environment
 `MERGE_TYPE=binary`, `PORTAGE_BINPKG_FILE=<gpkg>`, `PORTAGE_BUILDDIR=...`.
 
-This whole flow was validated end-to-end in `Reports/Scripts/binmerge-prototype.sh`
-against `app-misc/jq-1.8.1` BUILD_IDs 8 (oniguruma=on) and 10 (oniguruma=off).
+This whole flow was validated end-to-end against `app-misc/jq-1.8.1`
+BUILD_IDs 8 (oniguruma=on) and 10 (oniguruma=off) during initial bring-up.
 */
 
 :- module(binpkg_extract, []).

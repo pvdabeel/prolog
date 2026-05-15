@@ -350,8 +350,8 @@ The canonical load graph for standalone is in `portage-ng.pl`:
   test on `vm-linux.local` (see "Resolver regression testing via
   tinderbox-ng" below). The resulting `analysis.json` / `analysis.txt`
   diff is the authoritative regression check; it replaces the legacy
-  `--graph` + `Reports/Scripts/compare-merge-emerge.py` loop, which has
-  been removed from this repo and migrated to the
+  `--graph` + plan-comparison loop, which has been removed from this
+  repo and migrated to the
   [tinderbox-ng](https://github.com/pvdabeel/tinderbox-ng) repository.
 - Ask user for permission to commit.
 
@@ -397,8 +397,8 @@ scp root@vm-linux.local:'/srv/tinderbox-ng/reports/compare-matrix-*/analysis.{js
 ```
 
 `tinderbox-ng analyze` writes `analysis.json` + `analysis.txt` into the
-matrix run directory; both replace the old
-`Reports/compare-<YYYY-MM-DD>-<short-commit-hash>.json.gz` snapshots.
+matrix run directory; both replace the old per-commit comparison
+snapshots that previously lived in the now-removed `Reports/` directory.
 
 ### When to run what
 
@@ -482,7 +482,7 @@ this section as the source of truth.
 
 ## Compare tooling (authoritative paths + usage)
 
-Comparison tooling is split across two repositories:
+Regression tooling is hosted in two places:
 
 - **Merge-vs-emerge plan comparison** lives in the
   [tinderbox-ng](https://github.com/pvdabeel/tinderbox-ng) repository
@@ -491,14 +491,30 @@ Comparison tooling is split across two repositories:
   per-target runs via `tinderbox-ng compare`. Do NOT vendor this
   script back into portage-ng; the source of truth is the tinderbox-ng
   repo.
-- **Prover fail-set regression detection** lives in this repo:
-  `Reports/Scripts/compare-prover-failset.py` (diff two
-  `prover:test(portage)` logs).
+- **md5-cache extractor regression** lives in this repo:
+  `md5cache_validate/0,1` in `Source/Test/unittest.pl`. It re-extracts
+  metadata for every md5-cache entry through
+  `Source/Domain/Gentoo/Ebuild/ebuild-depend.sh --batch` and diffs the
+  result key by key against the on-disk cache.
 - Do not create ad-hoc compare scripts outside these two locations.
 
-### Compare prover fail-sets
-- Compare two `prover:test(portage)` logs:
-  - `python3 Reports/Scripts/compare-prover-failset.py --baseline <baseline.log> --candidate <candidate.log> --out Reports/prover_failset_compare.json`
+### Validate ebuild-depend.sh against md5-cache
+- Spot check (20 ebuilds, ~1 second):
+  ```sh
+  ./Source/Application/Wrapper/portage-ng-dev --mode standalone --shell <<'PL'
+  load_files(portage('Source/Test/unittest'), [if(true)]).
+  md5cache_validate([limit(20)]).
+  halt.
+  PL
+  ```
+- Full tree with persisted report:
+  ```sh
+  ./Source/Application/Wrapper/portage-ng-dev --mode standalone --shell <<'PL'
+  load_files(portage('Source/Test/unittest'), [if(true)]).
+  md5cache_validate([out('/tmp/md5cache_report.pl')]).
+  halt.
+  PL
+  ```
 
 ## Running emerge -vp on macOS (comparison tool)
 

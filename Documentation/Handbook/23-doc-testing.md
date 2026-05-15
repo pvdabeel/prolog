@@ -138,16 +138,24 @@ tinderbox-ng compare sys-apps/portage
 ```
 
 
-## Prover fail-set comparison
+## md5-cache extractor regression
 
-Compare two `prover:test(portage)` logs to detect regressions:
+`md5cache_validate/0,1` (in `Source/Test/unittest.pl`) runs the
+standalone bash extractor at
+`Source/Domain/Gentoo/Ebuild/ebuild-depend.sh --batch` over every
+md5-cache entry in the configured Portage tree and diffs the produced
+metadata against the on-disk cache, key by key.
 
-```bash
-python3 Reports/Scripts/compare-prover-failset.py \
-  --baseline baseline.log \
-  --candidate candidate.log \
-  --out Reports/prover_failset_compare.json
+```sh
+./Source/Application/Wrapper/portage-ng-dev --mode standalone --shell <<'PL'
+load_files(portage('Source/Test/unittest'), [if(true)]).
+md5cache_validate([limit(50), verbose(true)]).
+halt.
+PL
 ```
+
+Options: `repo(Atom)` (default `portage`), `limit(N)` (0 = all),
+`verbose(Bool)`, `out(Path)` (writes a Prolog-term report).
 
 
 ## Further reading
