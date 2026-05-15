@@ -1247,9 +1247,15 @@ test_setup_pick(pkg://Ebuild, Flag) :-
     atom(N), atom(Flag), !
   ).
 
+% NOTE: these tests require a populated VDB (installed packages with IUSE
+% metadata) and so are gated on `condition(test_setup_pick/2 succeeds)`.
+% In CI (no portage tree, no VDB) they are reported as `[blocked]` rather
+% than failed. Locally with a real VDB they run end-to-end.
+
 % Pre-fix probe: confirms `installed_entry_satisfies_build_with_use` returns
 % false for the chosen mismatched flag (i.e. the test scenario is valid).
-test(probe_setup) :-
+test(probe_setup,
+     [condition(test_setup_pick(_, _))]) :-
   test_setup_pick(pkg://Ebuild, Flag),
   Ctx = [build_with_use:use_state([Flag],[])],
   \+ use:installed_entry_satisfies_build_with_use(pkg://Ebuild, Ctx).
@@ -1257,7 +1263,8 @@ test(probe_setup) :-
 % rule(:install?{Ctx with mismatched bracketed-USE}) on an installed entry
 % must NOT short-circuit to []. It must emit a :update?{[...,replaces,...]}
 % literal so the dep walker runs.
-test(install_rule_emits_update_on_bwu_mismatch) :-
+test(install_rule_emits_update_on_bwu_mismatch,
+     [condition(test_setup_pick(_, _))]) :-
   test_setup_pick(pkg://Ebuild, Flag),
   Ctx = [build_with_use:use_state([Flag],[])],
   rules:rule(portage://Ebuild:install?{Ctx}, Conds),
@@ -1268,7 +1275,8 @@ test(install_rule_emits_update_on_bwu_mismatch) :-
 % rule(:run?{Ctx with mismatched bracketed-USE}) on an installed entry must
 % emit the same :update literal (instead of degrading to :reinstall with an
 % empty body).
-test(run_rule_emits_update_on_bwu_mismatch) :-
+test(run_rule_emits_update_on_bwu_mismatch,
+     [condition(test_setup_pick(_, _))]) :-
   test_setup_pick(pkg://Ebuild, Flag),
   Ctx = [build_with_use:use_state([Flag],[])],
   rules:rule(portage://Ebuild:run?{Ctx}, Conds),
@@ -1278,7 +1286,8 @@ test(run_rule_emits_update_on_bwu_mismatch) :-
 
 % Empty Ctx (no bracketed-USE annotation) on an installed entry preserves
 % the existing fast-path: no rebuild emitted.
-test(install_rule_empty_ctx_keeps_short_circuit) :-
+test(install_rule_empty_ctx_keeps_short_circuit,
+     [condition(test_setup_pick(_, _))]) :-
   test_setup_pick(pkg://Ebuild, _),
   rules:rule(portage://Ebuild:install?{[]}, Conds),
   Conds == [].
