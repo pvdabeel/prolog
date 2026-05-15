@@ -24,7 +24,10 @@ acceptable in lieu of a source build.
     KEYWORDS are compatible with what the planner asked for. Fails (no
     side-effects) if no candidate fits or if the binpkg repo is not
     registered. When multiple candidates pass the filters, the highest
-    BUILD_ID wins (mirrors emerge's "newer wins" tie-breaker).
+    BUILD_ID wins (mirrors emerge's "newer wins" tie-breaker). The
+    probe also honors `config:binpkg_refresh/1` to optionally re-read
+    the on-disk `Packages` index when an external producer has updated
+    it since the last load.
 
   - `binpkg_exec:execute(+Action, +SrcRepo, +SrcEntry, +BinpkgEntryId, +Ctx, -Outcome)`
     performs the binary merge:
@@ -92,6 +95,7 @@ linkages.
 binpkg_exec:available_for(SrcRepo, SrcEntry, Ctx, BinpkgEntryId) :-
   config:use_binpkg(true),
   cache:repository(binpkg),
+  binpkg_exec:maybe_refresh_index,
   binpkg_exec:src_entry_cnv(SrcRepo, SrcEntry, Cat, Name, Version),
   findall(Bid-Eid,
           ( cache:ordered_entry(binpkg, Eid, Cat, Name, Version),
@@ -101,6 +105,95 @@ binpkg_exec:available_for(SrcRepo, SrcEntry, Ctx, BinpkgEntryId) :-
           Candidates),
   Candidates \== [],
   binpkg_exec:pick_best_candidate(Candidates, BinpkgEntryId).
+
+
+% -----------------------------------------------------------------------------
+%  Index refresh policy (config:binpkg_refresh/1)
+% -----------------------------------------------------------------------------
+
+%! binpkg_exec:last_index_mtime(?Repository, ?Mtime) is nondet.
+%
+% Per-repository baseline: the on-disk mtime of the `Packages` index as
+% it was when we last loaded it into the in-memory cache. Used by the
+% `mtime` refresh policy to detect external changes (new binpkgs dropped
+% by a concurrent producer) without paying for a full re-parse on every
+% probe. Mtime is a SWI-Prolog float (seconds since the epoch, as
+% returned by `time_file/2`).
+
+:- dynamic binpkg_exec:last_index_mtime/2.
+
+
+%! binpkg_exec:maybe_refresh_index is det.
+%
+% Honors `config:binpkg_refresh/1` at the start of `available_for/4`:
+%
+%   - manual : never auto-refresh (default; cheapest, fully predictable).
+%   - mtime  : stat the index file and, if its mtime is newer than the
+%              recorded baseline, re-run `binpkg:sync(kb)` before answering.
+%
+% Always succeeds. Missing config or unknown policy degrades to `manual`
+% so an operator typo never silently disables binpkg dispatch.
+
+binpkg_exec:maybe_refresh_index :-
+  ( config:binpkg_refresh(Policy) -> true ; Policy = manual ),
+  binpkg_exec:apply_refresh_policy(Policy).
+
+
+%! binpkg_exec:apply_refresh_policy(+Policy) is det.
+%
+% Dispatch on the policy atom. The `mtime` branch is serialized via a
+% dedicated mutex so two concurrent probes don't race on the global
+% binpkg cache assertions that `sync(kb)` retract-and-reasserts.
+
+binpkg_exec:apply_refresh_policy(manual) :- !.
+
+binpkg_exec:apply_refresh_policy(mtime) :- !,
+  with_mutex(binpkg_exec_refresh,
+             binpkg_exec:refresh_if_stale(binpkg)).
+
+binpkg_exec:apply_refresh_policy(_).
+
+
+%! binpkg_exec:refresh_if_stale(+Repository) is det.
+%
+% Compare the index file's current mtime against the recorded baseline:
+%
+%   - First observation: record the baseline and do NOT re-sync. The
+%     initial load was already performed by `kb:register(Repository)` at
+%     startup, so the in-memory cache is already current.
+%   - Newer mtime than baseline: update the baseline and call
+%     `Repository:sync(kb)` to re-load the in-memory cache from disk.
+%   - Same or older mtime: no-op.
+%
+% Exceptions during stat or sync are caught so a transient failure
+% (e.g. the index file disappearing mid-probe) degrades to "use the
+% cache we have" rather than breaking dispatch. Always succeeds.
+
+binpkg_exec:refresh_if_stale(Repository) :-
+  catch(binpkg_exec:probe_index_mtime(Repository, Disk), _, fail), !,
+  ( binpkg_exec:last_index_mtime(Repository, Prev)
+  -> ( Disk > Prev
+     -> retractall(binpkg_exec:last_index_mtime(Repository, _)),
+        assertz(binpkg_exec:last_index_mtime(Repository, Disk)),
+        catch(Repository:sync(kb), _, true)
+     ;  true
+     )
+  ;  assertz(binpkg_exec:last_index_mtime(Repository, Disk))
+  ).
+
+binpkg_exec:refresh_if_stale(_).
+
+
+%! binpkg_exec:probe_index_mtime(+Repository, -Mtime) is semidet.
+%
+% Resolve the repository's `Packages` index path via its OO `get_cache/1`
+% accessor, confirm the file exists, and return its current mtime.
+% Fails if the binpkg instance is uninitialized or the index is missing.
+
+binpkg_exec:probe_index_mtime(Repository, Mtime) :-
+  Repository:get_cache(IndexFile),
+  exists_file(IndexFile),
+  time_file(IndexFile, Mtime).
 
 
 %! binpkg_exec:src_entry_cnv(+SrcRepo, +SrcEntry, -Cat, -Name, -Version) is semidet.
