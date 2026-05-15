@@ -25,14 +25,22 @@ testing practices for contributing to portage-ng.
 4. **Regenerate `.merge` files** by asking the maintainer to run `--graph`
    to produce updated `.merge` output for the graph directory.
 
-5. **Run compare analysis** to detect regressions:
+5. **Run compare analysis** to detect regressions. The compare harness
+   lives in the [tinderbox-ng](https://github.com/pvdabeel/tinderbox-ng)
+   repository:
 
-   ```bash
-   python3 -u Reports/Scripts/compare-merge-emerge.py \
-     --root /Volumes/Storage/Graph/portage \
-     --full-lists \
-     --out Reports/compare-$(date +%Y-%m-%d)-$(git rev-parse --short HEAD).json
+   ```sh
+   # Whole-tree matrix run (on the tinderbox host):
+   sudo tinderbox-ng compare-matrix
+   sudo tinderbox-ng analyze
+
+   # Or a quick per-target compare while iterating locally:
+   tinderbox-ng compare <category>/<package>
    ```
+
+   `tinderbox-ng analyze` produces `analysis.json` + `analysis.txt` in
+   the matrix run directory, replacing the old
+   `compare-<date>-<hash>.json.gz` snapshots.
 
 6. **Review the comparison table** for regressions in CN, CN+V, CN+V+U
    match percentages, ordering concordance, and assumption counts.
@@ -191,15 +199,19 @@ suffix_rank('_alpha', 1).
 
 ## Compare tooling
 
-Comparison scripts live in `Reports/Scripts/`:
+Comparison tooling is split across two repositories:
 
-- `compare-merge-emerge.py` — merge-vs-emerge plan comparison
-- `compare-prover-failset.py` — prover fail-set regression detection
+- **Merge-vs-emerge plan comparison** — driven by
+  [tinderbox-ng](https://github.com/pvdabeel/tinderbox-ng) via
+  `tinderbox-ng compare` / `tinderbox-ng compare-matrix` /
+  `tinderbox-ng analyze`. The underlying Python script lives at
+  `share/tinderbox-ng/compare-merge-emerge.py` in that repository and
+  is invoked automatically by `tinderbox-ng analyze`. Outputs are
+  `analysis.json` + `analysis.txt` in the matrix run directory.
+- **Prover fail-set regression detection** — `Reports/Scripts/compare-prover-failset.py`
+  in this repository (diff two `prover:test(portage)` logs).
 
-Report filenames follow the format:
-`compare-<YYYY-MM-DD>-<short-commit-hash>.json`
-
-Do not create ad-hoc compare scripts outside `Reports/Scripts/`.
+Do not create ad-hoc compare scripts outside these two locations.
 
 
 ## Further reading

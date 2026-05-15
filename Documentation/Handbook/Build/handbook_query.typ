@@ -8069,16 +8069,32 @@ fixed.
 == Merge vs emerge comparison
 <merge-vs-emerge-comparison>
 The primary correctness metric is comparison against Portage's `emerge`
-output across the entire Portage tree.
+output across the entire Portage tree. The comparison harness now lives
+in the #link("https://github.com/pvdabeel/tinderbox-ng")[tinderbox-ng]
+repository, which drives both engines through identical sessions and
+analyses the resulting plan logs.
 
 === Running a comparison
 <running-a-comparison>
-```bash
-python3 -u Reports/Scripts/compare-merge-emerge.py \
-  --root /Volumes/Storage/Graph/portage \
-  --full-lists \
-  --out Reports/compare-$(date +%Y-%m-%d)-$(git rev-parse --short HEAD).json
+Per-target compare (planner only, fresh sessions on both sides):
+
+```sh
+tinderbox-ng compare www-servers/apache
 ```
+
+Whole-tree matrix run plus aggregate analysis:
+
+```sh
+sudo tinderbox-ng compare-matrix
+sudo tinderbox-ng analyze                       # latest matrix run
+sudo tinderbox-ng analyze --run /srv/tinderbox-ng/reports/compare-matrix-<stamp>
+```
+
+`tinderbox-ng analyze` feeds each `portage-ng.plan.log` /
+`emerge.plan.log` pair through
+`share/tinderbox-ng/compare-merge-emerge.py` (inside the tinderbox-ng
+repo) and writes `analysis.json` + `analysis.txt` into the matrix run
+directory.
 
 === Metrics
 <metrics>
@@ -8110,14 +8126,16 @@ Additional counts (from `emerge_ok` pairs only):
 
 === Targeted comparison
 <targeted-comparison>
-For a single package:
+For a single package, use `--target-regex` on `tinderbox-ng analyze`:
 
-```bash
-python3 -u Reports/Scripts/compare-merge-emerge.py \
-  --root /Volumes/Storage/Graph/portage \
-  --target-regex '^sys-apps/portage-3.0.77-r3$' \
-  --full-lists \
-  --out Reports/compare-targeted.json
+```sh
+sudo tinderbox-ng analyze --target-regex '^sys-apps/portage-3.0.77-r3$'
+```
+
+Or run a one-off per-target compare directly:
+
+```sh
+tinderbox-ng compare sys-apps/portage
 ```
 
 == Prover fail-set comparison
@@ -8407,14 +8425,23 @@ testing practices for contributing to portage-ng.
 + #strong[Regenerate `.merge` files] by asking the maintainer to run
   `--graph` to produce updated `.merge` output for the graph directory.
 
-+ #strong[Run compare analysis] to detect regressions:
++ #strong[Run compare analysis] to detect regressions. The compare
+  harness lives in the
+  #link("https://github.com/pvdabeel/tinderbox-ng")[tinderbox-ng]
+  repository:
 
-  ```bash
-  python3 -u Reports/Scripts/compare-merge-emerge.py \
-    --root /Volumes/Storage/Graph/portage \
-    --full-lists \
-    --out Reports/compare-$(date +%Y-%m-%d)-$(git rev-parse --short HEAD).json
+  ```sh
+  # Whole-tree matrix run (on the tinderbox host):
+  sudo tinderbox-ng compare-matrix
+  sudo tinderbox-ng analyze
+
+  # Or a quick per-target compare while iterating locally:
+  tinderbox-ng compare <category>/<package>
   ```
+
+  `tinderbox-ng analyze` produces `analysis.json` + `analysis.txt` in
+  the matrix run directory, replacing the old
+  `compare-<date>-<hash>.json.gz` snapshots.
 
 + #strong[Review the comparison table] for regressions in CN, CN+V,
   CN+V+U match percentages, ordering concordance, and assumption counts.
@@ -8576,15 +8603,20 @@ suffix_rank('_alpha', 1).
 
 == Compare tooling
 <compare-tooling>
-Comparison scripts live in `Reports/Scripts/`:
+Comparison tooling is split across two repositories:
 
-- `compare-merge-emerge.py` --- merge-vs-emerge plan comparison
-- `compare-prover-failset.py` --- prover fail-set regression detection
+- #strong[Merge-vs-emerge plan comparison] --- driven by
+  #link("https://github.com/pvdabeel/tinderbox-ng")[tinderbox-ng] via
+  `tinderbox-ng compare` / `tinderbox-ng compare-matrix` /
+  `tinderbox-ng analyze`. The underlying Python script lives at
+  `share/tinderbox-ng/compare-merge-emerge.py` in that repository and
+  is invoked automatically by `tinderbox-ng analyze`. Outputs are
+  `analysis.json` + `analysis.txt` in the matrix run directory.
+- #strong[Prover fail-set regression detection] ---
+  `Reports/Scripts/compare-prover-failset.py` in this repository (diff
+  two `prover:test(portage)` logs).
 
-Report filenames follow the format:
-`compare-<YYYY-MM-DD>-<short-commit-hash>.json`
-
-Do not create ad-hoc compare scripts outside `Reports/Scripts/`.
+Do not create ad-hoc compare scripts outside these two locations.
 
 == Things to avoid
 <things-to-avoid>
