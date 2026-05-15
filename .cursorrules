@@ -344,38 +344,111 @@ The canonical load graph for standalone is in `portage-ng.pl`:
   of calls redundant for complex packages. See top-of-file comment in `query.pl`.
 
 ## Development flow
-- We use a git workflow. 
-- Start development always with clean committed state  
-- When development is done, ask user to regenerate .merge files 
-- Run compare analysis between merge and emerge files (see below) to detect regressions.
+- We use a git workflow.
+- Start development always with clean committed state.
+- When development is done, ask the user to run a tinderbox-ng regression
+  test on `vm-linux.local` (see "Resolver regression testing via
+  tinderbox-ng" below). The resulting `analysis.json` / `analysis.txt`
+  diff is the authoritative regression check; it replaces the legacy
+  `--graph` + `Reports/Scripts/compare-merge-emerge.py` loop, which has
+  been removed from this repo and migrated to the
+  [tinderbox-ng](https://github.com/pvdabeel/tinderbox-ng) repository.
 - Ask user for permission to commit.
 
-## Compare merge vs emerge plans
--  Merge vs Emerge files:
-  - `*.merge`: files in the graph directory for a given repository contain output of portage-ng
-  - `*.emerge`: files in the graph directory for a given repository contain output of gentoo emerge
 
-- The configuration on both the Gentoo system and portage-ng is identical (same portage snapshot, same vdb pkg data, same config
+## Resolver regression testing via tinderbox-ng (vm-linux.local)
 
-- Report filename format: `compare-<YYYY-MM-DD>-<short-commit-hash>.json.gz`
-  - Example: `compare-2026-02-26-cbef075.json.gz`
-  - Use `git rev-parse --short HEAD` for the commit hash (7 chars).
-  - Reports are gzipped before committing (raw JSON is in `.gitignore`).
+After a resolver change (rules, prover, planner, scheduler, printer)
+the authoritative regression check is a side-by-side compare against
+traditional Gentoo `emerge` run by
+[tinderbox-ng](https://github.com/pvdabeel/tinderbox-ng) on the Linux
+test VM `vm-linux.local`. It runs the same target through both engines
+in fresh, identical OverlayFS sessions and diffs their plan/build logs.
 
-- Full run:
-  - `python3 -u Reports/Scripts/compare-merge-emerge.py --root /Volumes/Storage/Graph/portage --full-lists --out Reports/compare-$(date +%Y-%m-%d)-$(git rev-parse --short HEAD).json && gzip Reports/compare-$(date +%Y-%m-%d)-$(git rev-parse --short HEAD).json`
+### After-commit workflow
 
-- Targeted run:
-  - `python3 -u Reports/Scripts/compare-merge-emerge.py --root /Volumes/Storage/Graph/portage --target-regex '^pkg-ver$' --full-lists --out Reports/compare-$(date +%Y-%m-%d)-$(git rev-parse --short HEAD).json && gzip Reports/compare-$(date +%Y-%m-%d)-$(git rev-parse --short HEAD).json`
+```sh
+# 1. From this macOS host, push the new portage-ng source into the VM
+#    baseline. Does NOT regenerate kb.qlf — only do that (refresh-kb)
+#    after parser / grammar / knowledge-base schema changes; resolver
+#    edits (prover / planner / scheduler / printer / rules) need only
+#    refresh-portage-ng.
+cd ~/Desktop/tinderbox-ng
+bin/deploy-host.sh --refresh-portage-ng root@vm-linux.local
 
-- Useful output fields:
+# 2. Quick per-target sanity check (planner only, fresh sessions on
+#    both sides, both destroyed at the end):
+ssh root@vm-linux.local 'tinderbox-ng compare <category>/<package>'
+
+# 3. Whole-tree matrix regression inside a fresh session:
+ssh root@vm-linux.local 'tinderbox-ng new regress'
+ssh root@vm-linux.local 'tinderbox-ng exec regress -- \
+  tinderbox-matrix resolver \
+  /usr/local/share/tinderbox-ng/share/tinderbox-ng/manifest-1000.txt'
+
+# 4. Analyse the latest matrix run (auto-detects the most recent
+#    /srv/tinderbox-ng/reports/compare-matrix-<stamp>/).
+#    --md5-cache enables dep-aware metrics (DepConc%, Viol%):
+ssh root@vm-linux.local 'tinderbox-ng analyze \
+  --md5-cache /srv/tinderbox-ng/baseline/var/db/repos/gentoo/metadata/md5-cache'
+
+# 5. Pull the structured analysis back for review:
+scp root@vm-linux.local:'/srv/tinderbox-ng/reports/compare-matrix-*/analysis.{json,txt}' /tmp/
+```
+
+`tinderbox-ng analyze` writes `analysis.json` + `analysis.txt` into the
+matrix run directory; both replace the old
+`Reports/compare-<YYYY-MM-DD>-<short-commit-hash>.json.gz` snapshots.
+
+### When to run what
+
+- `tinderbox-ng compare <pkg>` — quick smoke after a one-off rule edit.
+  Per-target only, both engines run in parallel, output lands in
+  `/srv/tinderbox-ng/logs/compare-<label>-<stamp>/`.
+- `tinderbox-matrix resolver <manifest>` inside a session — full
+  regression. Use `manifest-100.txt` for smoke and `manifest-1000.txt`
+  for serious checks; both ship under
+  `/usr/local/share/tinderbox-ng/share/tinderbox-ng/` in the deployed
+  layout.
+- `tinderbox-ng refresh-kb` on the VM — ONLY after parser / grammar /
+  knowledge-base changes (regenerates `kb.qlf`). For prover / planner /
+  scheduler / printer / rules edits, `refresh-portage-ng` is enough.
+- `tinderbox-ng phase-stats` — consolidate per-session
+  `phase_stats.pl` files into a master forecast for build-time
+  estimation; orthogonal to the merge-vs-emerge regression check.
+
+## Compare merge vs emerge plans (metric semantics)
+
+The merge-vs-emerge comparison is driven by `tinderbox-ng analyze` (see
+"Resolver regression testing via tinderbox-ng" above). The metric
+formulas below are canonical and shared with the tinderbox-ng repo's
+`.cursorrules`, which intentionally does NOT duplicate them — defer to
+this section as the source of truth.
+
+- Inputs (per package, produced inside a tinderbox-ng session):
+  - `portage-ng.plan.log`: portage-ng `--pretend` output (the same
+    plan text that ends up in `*.merge` for the on-disk graph
+    directory).
+  - `emerge.plan.log`: traditional `emerge -vp` output.
+  - The configuration on both sides is identical: same Portage tree
+    pin, same VDB, same `/etc/portage`. `tinderbox-ng` enforces this
+    via `_patch_portage_ng_host_config` and the immutable baseline.
+
+- Analyzer output (per matrix run, in
+  `/srv/tinderbox-ng/reports/compare-matrix-<stamp>/`):
+  - `analysis.json` — full structured metrics dump (use `jq` to drill in).
+  - `analysis.txt`  — captured stdout summary (line-oriented overview).
+
+- Useful output fields inside `analysis.json`:
   - `aggregate_counts` (missing/extra/version/use/action totals)
   - `aggregate_assumptions` (domain assumptions / blockers / cycle breaks)
   - `top_missing_cpn`, `top_extra_cpn`, `top_domain_assumptions`
 
-- When comparing provide output in a table;
-  - Columns: comparing previous compare data vs currect compare data (columns)
-  - Rows: % vs portage merge_ok for CN, CN+V, CN+V+U, Order%, #blockers, #cycle breaks, #domain assumptions
+- When comparing two `analysis.json` files (baseline vs current
+  branch), provide output in a table:
+  - Columns: previous analysis vs current analysis
+  - Rows: % vs portage merge_ok for CN, CN+V, CN+V+U, Order%,
+    #blockers, #cycle breaks, #domain assumptions
 
 - Canonical metric formula for `% vs portage merge_ok` rows (use this exact formula):
   - Filter to `emerge_ok == true` pairs only.
@@ -404,13 +477,24 @@ The canonical load graph for standalone is in `portage-ng.pl`:
     - `#cycle breaks = Σ assumptions.cycle_breaks`
     - `#domain assumptions = Σ assumptions.domain_assumptions`
 
-- The table output is used to determine regressions
+- The table output is used to determine regressions.
+
 
 ## Compare tooling (authoritative paths + usage)
-- Keep compare scripts in `Reports/Scripts/`:
-  - `Reports/Scripts/compare-merge-emerge.py`
-  - `Reports/Scripts/compare-prover-failset.py`
-- Do not create ad-hoc compare scripts outside `Reports/Scripts/`.
+
+Comparison tooling is split across two repositories:
+
+- **Merge-vs-emerge plan comparison** lives in the
+  [tinderbox-ng](https://github.com/pvdabeel/tinderbox-ng) repository
+  at `share/tinderbox-ng/compare-merge-emerge.py`. It is invoked
+  automatically by `tinderbox-ng analyze`, and exposed for one-off
+  per-target runs via `tinderbox-ng compare`. Do NOT vendor this
+  script back into portage-ng; the source of truth is the tinderbox-ng
+  repo.
+- **Prover fail-set regression detection** lives in this repo:
+  `Reports/Scripts/compare-prover-failset.py` (diff two
+  `prover:test(portage)` logs).
+- Do not create ad-hoc compare scripts outside these two locations.
 
 ### Compare prover fail-sets
 - Compare two `prover:test(portage)` logs:
