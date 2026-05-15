@@ -518,31 +518,60 @@ Regression tooling is hosted in two places:
 
 ## Running emerge -vp on macOS (comparison tool)
 
-A gentoo-prefix environment at `~/gentoo-prefix/` allows running `emerge -vp`
-on macOS for quick comparison against portage-ng output.
+A gentoo-prefix environment allows running `emerge -vp` on macOS for quick
+comparison against portage-ng output. The install location is per-host and
+not hardcoded anywhere outside `Source/config.pl` and the user's shell rc.
+
+### Discovering the prefix on the current host
+- Authoritative path: look up the current hostname in
+  `config:emerge_vp_path/2` in `Source/config.pl`. The prefix root is the
+  parent of the `bin/` directory in that path. Examples present today:
+  - `imac-pro.local`    → `/Volumes/Disk 1/gentoo-prefix`
+  - `mac-pro.local`     → `/Volumes/Storage/gentoo-prefix`
+  - `macbook-pro.local` → `/opt/local/gentoo-prefix`
+- Convenience: if `emerge-vp` is on `$PATH` (the user's `.zshrc` typically
+  prepends `<prefix>/bin`), `command -v emerge-vp` resolves it; the prefix
+  is then `dirname "$(dirname "$(command -v emerge-vp)")"`.
+- Adding a new host: add a `config:emerge_vp_path(Host, Path)` clause in
+  `Source/config.pl` and (optionally) add `<prefix>/bin` to the user's
+  `PATH` in `~/.zshrc`. Also add a per-host config like
+  `Source/Config/<host>.local.pl` if `config:ebuild_command/1` needs to
+  point at `<prefix>/bin/ebuild-prefix`.
 
 ### Setup
 - Installed via the external `emerge-install.sh` script (run once per machine).
 - Requires a local clone of the portage source (e.g. `~/Git/portage`).
-- Config files under `~/gentoo-prefix/etc/portage/` are symlinked from the
-  portage-ng config directory.
+- Config files under `<prefix>/etc/portage/` are symlinked from the
+  portage-ng config directory (`Source/Config/Gentoo/`).
 
 ### Usage
+The wrappers compute their own `EPREFIX` from `$0`, so the prefix can live
+anywhere on disk. Set `PREFIX` to the value resolved above, then:
+
 ```sh
+PREFIX=/opt/local/gentoo-prefix    # or whatever this host uses
+
 # Quick pretend (uses PORTAGE_DIR env or auto-detects):
-PORTAGE_DIR=~/Git/portage/bin ~/gentoo-prefix/bin/emerge-vp sys-apps/portage
+PORTAGE_DIR=~/Git/portage/bin "$PREFIX/bin/emerge-vp" sys-apps/portage
 
 # General wrapper (pass any emerge flags):
-PORTAGE_DIR=~/Git/portage/bin ~/gentoo-prefix/bin/emerge-wrapper --info
+PORTAGE_DIR=~/Git/portage/bin "$PREFIX/bin/emerge-wrapper" --info
 ```
+
+If `<prefix>/bin` is on `$PATH`, the bare `emerge-vp` / `emerge-wrapper`
+commands work directly with no `PREFIX` indirection.
 
 ### Key design decision
 - The wrappers set `EPREFIX` (and patch `portage.const.EPREFIX`) to the prefix
   path. This tells portage it is running in a Gentoo Prefix environment, so it
   creates a single config tree. Profile, VDB, and cache all resolve under the
   prefix directory.
-- VDB is consulted via `~/gentoo-prefix/var/db/pkg` (symlinked to the portage-ng
+- VDB is consulted via `<prefix>/var/db/pkg` (symlinked to the portage-ng
   VDB), so installed packages correctly show as `[nomerge]`.
+- Nothing inside the prefix tree itself uses absolute self-references, so the
+  whole `<prefix>` directory is relocatable: move it, update
+  `config:emerge_vp_path/2` (and `config:ebuild_command/1` if used) plus the
+  user's `PATH`, and it keeps working.
 
 ## Compare to portage source code
 - Tranditional emerge is available on this system and uses the same Portage 

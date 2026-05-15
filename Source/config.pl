@@ -462,7 +462,7 @@ config:graph_modified_only_default(true).
 
 config:emerge_vp_path('imac-pro.local',    '/Volumes/Disk 1/gentoo-prefix/bin/emerge-vp')  :- !.
 config:emerge_vp_path('mac-pro.local',     '/Volumes/Storage/gentoo-prefix/bin/emerge-vp') :- !.
-config:emerge_vp_path('macbook-pro.local', '/Users/pvdabeel/gentoo-prefix/bin/emerge-vp')  :- !.
+config:emerge_vp_path('macbook-pro.local', '/opt/local/gentoo-prefix/bin/emerge-vp')      :- !.
 
 
 %! config:emerge_vp_timeout(?Seconds)
