@@ -1214,3 +1214,98 @@ test(any_different_slot, [true(D == any)]) :-
   version_domain:slot_domain_from_reqs([[any_different_slot]], D).
 
 :- end_tests(version_slot_domain_from_reqs).
+
+
+% =============================================================================
+%  Bracketed-USE rebuild for already-installed packages
+% =============================================================================
+
+% Regression test for the planner gap that caused podman → iptables[nftables]
+% to schedule libnftnl/libmnl AFTER iptables. Root cause: rule(:install/:run
+% ?{Ctx}) short-circuited to []/[reinstall] for already-installed packages
+% without checking whether the requested build_with_use matched the VDB-
+% recorded USE. Fix: when BWU mismatches, re-emit as a transactional :update
+% with `replaces(pkg://Ebuild)` so candidate:resolve walks DEPEND/BDEPEND
+% under the new BWU and the planner schedules newly-required deps before
+% the rebuild.
+
+:- begin_tests(rules_install_run_bwu_rebuild).
+
+% Find an installed package with at least one IUSE flag the VDB build
+% does NOT have enabled, so we can construct a real BWU mismatch. We
+% prefer net-firewall/iptables (has nftables IUSE) and fall back to any
+% installed entry that satisfies the predicate.
+test_setup_pick(pkg://Ebuild, Flag) :-
+  ( query:search([category('net-firewall'),name(iptables),installed(true)], pkg://Ebuild),
+    Flag = nftables,
+    cache:entry_metadata(pkg, Ebuild, iuse, Flag),
+    \+ cache:entry_metadata(pkg, Ebuild, use, Flag), !
+  ; query:search([category(C),name(N),installed(true)], pkg://Ebuild),
+    cache:entry_metadata(pkg, Ebuild, iuse, Flag),
+    \+ cache:entry_metadata(pkg, Ebuild, use, Flag),
+    \+ memberchk(C, ['virtual','acct-group','acct-user']),
+    atom(N), atom(Flag), !
+  ).
+
+% Pre-fix probe: confirms `installed_entry_satisfies_build_with_use` returns
+% false for the chosen mismatched flag (i.e. the test scenario is valid).
+test(probe_setup) :-
+  test_setup_pick(pkg://Ebuild, Flag),
+  Ctx = [build_with_use:use_state([Flag],[])],
+  \+ use:installed_entry_satisfies_build_with_use(pkg://Ebuild, Ctx).
+
+% rule(:install?{Ctx with mismatched bracketed-USE}) on an installed entry
+% must NOT short-circuit to []. It must emit a :update?{[...,replaces,...]}
+% literal so the dep walker runs.
+test(install_rule_emits_update_on_bwu_mismatch) :-
+  test_setup_pick(pkg://Ebuild, Flag),
+  Ctx = [build_with_use:use_state([Flag],[])],
+  rules:rule(portage://Ebuild:install?{Ctx}, Conds),
+  Conds = [portage://Ebuild:update?{UpdCtx}],
+  memberchk(replaces(pkg://Ebuild), UpdCtx),
+  memberchk(rebuild_reason(build_with_use), UpdCtx).
+
+% rule(:run?{Ctx with mismatched bracketed-USE}) on an installed entry must
+% emit the same :update literal (instead of degrading to :reinstall with an
+% empty body).
+test(run_rule_emits_update_on_bwu_mismatch) :-
+  test_setup_pick(pkg://Ebuild, Flag),
+  Ctx = [build_with_use:use_state([Flag],[])],
+  rules:rule(portage://Ebuild:run?{Ctx}, Conds),
+  Conds = [portage://Ebuild:update?{UpdCtx}],
+  memberchk(replaces(pkg://Ebuild), UpdCtx),
+  memberchk(rebuild_reason(build_with_use), UpdCtx).
+
+% Empty Ctx (no bracketed-USE annotation) on an installed entry preserves
+% the existing fast-path: no rebuild emitted.
+test(install_rule_empty_ctx_keeps_short_circuit) :-
+  test_setup_pick(pkg://Ebuild, _),
+  rules:rule(portage://Ebuild:install?{[]}, Conds),
+  Conds == [].
+
+% End-to-end: prove + plan iptables:run with bracketed-[nftables].
+% Verify (a) libnftnl ends up in the proof, (b) iptables:update appears in
+% the plan, (c) libnftnl:install is in an EARLIER wave than iptables:update.
+test(plan_orders_bwu_dep_before_rebuild,
+     [condition(query:search([category('net-firewall'),name(iptables),
+                              installed(true)], pkg://_))]) :-
+  query:search([category('net-firewall'),name(iptables)], portage://RepoE),
+  !,
+  Goal = portage://RepoE:run?{[build_with_use:use_state([nftables],[])]},
+  pipeline:prove_with_fallback([Goal], Proof, _Model, Triggers),
+  planner:plan(Proof, Triggers, t, Plan, _Rem),
+  % Find the wave index of any libnftnl literal vs any iptables-VVV:update.
+  nth1(WLib, Plan, WaveLib),
+    member(RLib, WaveLib),
+    ( RLib = rule(HLib, _) ; RLib = assumed(rule(HLib, _)) ; RLib = rule(assumed(HLib), _) ),
+    prover:canon_literal(HLib, CHLib, _),
+    term_to_atom(CHLib, ALib), sub_atom(ALib, _, _, _, libnftnl), !,
+  nth1(WIp, Plan, WaveIp),
+    member(RIp, WaveIp),
+    ( RIp = rule(HIp, _) ; RIp = assumed(rule(HIp, _)) ; RIp = rule(assumed(HIp), _) ),
+    prover:canon_literal(HIp, CHIp, _),
+    term_to_atom(CHIp, AIp), sub_atom(AIp, _, _, _, 'iptables'),
+    sub_atom(AIp, _, _, _, ':update'), !,
+  WLib < WIp.
+
+:- end_tests(rules_install_run_bwu_rebuild).

@@ -269,7 +269,21 @@ rule(Repository://Ebuild:install?{Context}, Conditions) :-
   candidate:eligible(Repository://Ebuild:install?{Context}),
   ( candidate:installed(Repository://Ebuild),
     \+ preference:flag(emptytree) ->
-      Conditions = []
+      ( use:installed_entry_satisfies_build_with_use(pkg://Ebuild, Context) ->
+          % Already-installed and the requested bracketed USE matches the
+          % VDB-recorded USE: nothing to do.
+          Conditions = []
+      ;   % Already-installed but the requested bracketed USE differs from
+          % what is on disk (e.g. parent dep `iptables[nftables]` against an
+          % installed iptables built without nftables). Re-emit the request as
+          % a transactional :update so candidate:resolve walks DEPEND/BDEPEND
+          % under the new build_with_use state and the planner can schedule
+          % the newly-required deps before the rebuild.
+          feature_unification:unify([replaces(pkg://Ebuild),
+                                     rebuild_reason(build_with_use)],
+                                    Context, UpdCtx),
+          Conditions = [Repository://Ebuild:update?{UpdCtx}]
+      )
   ; preference:flag(nodeps) ->
       Conditions = []
   ; candidate:resolve(Repository://Ebuild:install?{Context}, Conditions)
@@ -291,9 +305,25 @@ rule(Repository://Ebuild:run?{Context}, Conditions) :-
   candidate:eligible(Repository://Ebuild:run?{Context}),
   ( candidate:installed(Repository://Ebuild),
     \+ preference:flag(emptytree) ->
-      ( config:avoid_reinstall(true) ->
-          Conditions = []
-      ; featureterm:set(reinstall, Repository://Ebuild, Context, Conditions)
+      ( use:installed_entry_satisfies_build_with_use(pkg://Ebuild, Context) ->
+          % Already-installed and the requested bracketed USE matches the
+          % VDB-recorded USE: short-circuit through :reinstall (or to nothing
+          % when --avoid-reinstall is set).
+          ( config:avoid_reinstall(true) ->
+              Conditions = []
+          ; featureterm:set(reinstall, Repository://Ebuild, Context, Conditions)
+          )
+      ;   % Already-installed but the requested bracketed USE differs from the
+          % installed one. Re-emit as a transactional :update so the prover
+          % walks RDEPEND/DEPEND under the new build_with_use and the planner
+          % schedules the newly-required deps before the rebuild. Without
+          % this, a parent dep like `iptables[nftables]` would silently degrade
+          % to an empty :reinstall body and the bracketed-USE-gated child
+          % deps (libnftnl, libmnl) would never enter the plan.
+          feature_unification:unify([replaces(pkg://Ebuild),
+                                     rebuild_reason(build_with_use)],
+                                    Context, UpdCtx),
+          Conditions = [Repository://Ebuild:update?{UpdCtx}]
       )
   ; candidate:resolve(Repository://Ebuild:run?{Context}, Conditions)
   ).
