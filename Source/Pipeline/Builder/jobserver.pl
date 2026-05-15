@@ -214,9 +214,18 @@ jobserver:collect(Remaining, Callback) :-
   jobserver:get_result(_Job, Result),
   ( Result = result(Slot, Outcome)
   -> call(Callback, Slot, Outcome)
-  ;  format(user_error,
-            '[jobserver collect] dropped result not matching result(_,_): ~q~n',
-            [Result])
+  ;  % Historically this branch just logged and continued, which meant
+     % a malformed result silently disappeared from the failure tally:
+     % the per-step counter decremented but no slot_outcome/2 fact was
+     % asserted, so tally_outcomes/6 saw no failure even though one
+     % had clearly occurred. Now we synthesise a typed failure outcome
+     % and feed it through the callback so it lands in slot_outcome
+     % and gets counted. The `dropped` slot key is a non-integer
+     % sentinel that cannot collide with real LineOffsets.
+     format(user_error,
+            '[jobserver collect] dropped malformed result, recording as failure: ~q~n',
+            [Result]),
+     catch(call(Callback, dropped, failed(malformed_result(Result))), _, true)
   ),
   R1 is Remaining - 1,
   jobserver:collect(R1, Callback).

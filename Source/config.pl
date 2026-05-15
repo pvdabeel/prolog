@@ -801,6 +801,7 @@ config:verbose(false).
 :- dynamic config:dep_early/1.
 :- dynamic config:dep_late/1.
 :- dynamic config:continue_on_failure/1.
+:- dynamic config:build_live_phases/1.
 :- dynamic config:show_use_descriptions/1.
 :- dynamic config:show_build_logs/1.
 

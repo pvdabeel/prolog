@@ -1323,6 +1323,122 @@ test(plan_orders_bwu_dep_before_rebuild,
 :- end_tests(rules_install_run_bwu_rebuild).
 
 
+% -----------------------------------------------------------------------------
+%  Builder: VDB reconciliation backstop tests
+% -----------------------------------------------------------------------------
+%
+% Defensive backstop for the "silent --ci --build exit 0 despite a
+% sub-dep install failure" class of regression. Verifies the predicates
+% in `Source/Pipeline/builder.pl` (builder:reconcile_install_actions/3,
+% builder:apply_vdb_reconciliation/4, etc.) behave as documented when
+% the input plan contains a mix of install rules whose VDB entries do
+% or do not exist on disk.
+
+:- begin_tests(builder_vdb_reconciliation).
+
+% A bogus entry that is guaranteed not to exist in any host's VDB.
+% Used to simulate the "install action whose target never landed"
+% scenario without needing a real failing build.
+
+test(is_install_rule_install_matches, [nondet, condition(eapi_repo_registered)]) :-
+  Rule = rule(portage://'app-misc/jq-1.8.1':install?{[]}, []),
+  builder:is_install_rule(Rule, R, E, A),
+  R == portage, E == 'app-misc/jq-1.8.1', A == install.
+
+test(is_install_rule_reinstall_matches, [nondet, condition(eapi_repo_registered)]) :-
+  Rule = rule(portage://'app-misc/jq-1.8.1':reinstall?{[]}, []),
+  builder:is_install_rule(Rule, _, _, A),
+  A == reinstall.
+
+test(is_install_rule_rejects_non_install_actions, [fail]) :-
+  Rule = rule(portage://'app-misc/jq-1.8.1':run?{[]}, []),
+  builder:is_install_rule(Rule, _, _, _).
+
+test(is_install_rule_rejects_world_rules, [fail]) :-
+  Rule = rule(world('@world'):register?{[]}, []),
+  builder:is_install_rule(Rule, _, _, _).
+
+test(is_install_rule_rejects_uninstall, [fail]) :-
+  Rule = rule(portage://'app-misc/jq-1.8.1':uninstall?{[]}, []),
+  builder:is_install_rule(Rule, _, _, _).
+
+test(is_install_rule_rejects_non_eapi_repo, [fail]) :-
+  % `pkg` is the VDB repo (type=vdb). Rules synthesized for VDB-typed
+  % targets are not real plan installs and must be skipped by the
+  % backstop -- otherwise unrelated entries would falsely trip it.
+  Rule = rule(pkg://'app-misc/jq-1.8.1':install?{[]}, []),
+  builder:is_install_rule(Rule, _, _, _).
+
+test(vdb_entry_present_false_for_bogus, [fail]) :-
+  builder:vdb_entry_present('/var/db/pkg', 'no-such-cat/no-such-pkg-0.0').
+
+test(reconcile_active_false_when_merge_missing, [setup(stash_live_phases(Saved)),
+                                                   cleanup(restore_live_phases(Saved))]) :-
+  % Drop `merge` from live phases. Reconciliation must short-circuit
+  % to Active=false with Missing=[] regardless of plan contents.
+  retractall(config:build_live_phases(_)),
+  assertz(config:build_live_phases([clean, setup, unpack, prepare, configure, compile, test, install])),
+  Plan = [[rule(portage://'no-such-cat/no-such-pkg-0.0':install?{[]}, [])]],
+  builder:reconcile_install_actions(Plan, Missing, Active),
+  Active == false,
+  Missing == [].
+
+test(reconcile_flags_missing_install_when_active, [setup(stash_live_phases(Saved)),
+                                                    cleanup(restore_live_phases(Saved)),
+                                                    condition((eapi_repo_registered,
+                                                               pkg_repo_registered))]) :-
+  % Full live phases (including merge) AND a registered pkg repo on
+  % the host = reconciliation is active. A plan whose only install
+  % targets a guaranteed-absent entry must report it as missing.
+  retractall(config:build_live_phases(_)),
+  assertz(config:build_live_phases([clean, setup, unpack, prepare, configure, compile, test, install, merge])),
+  Plan = [[rule(portage://'no-such-cat/no-such-pkg-0.0':install?{[]}, [])]],
+  builder:reconcile_install_actions(Plan, Missing, Active),
+  Active == true,
+  Missing = [_|_],
+  member(portage://'no-such-cat/no-such-pkg-0.0':install, Missing).
+
+test(apply_reconciliation_increments_failed_count, [setup(stash_live_phases(Saved)),
+                                                     cleanup(restore_live_phases(Saved)),
+                                                     condition((eapi_repo_registered,
+                                                                pkg_repo_registered))]) :-
+  retractall(config:build_live_phases(_)),
+  assertz(config:build_live_phases([clean, setup, unpack, prepare, configure, compile, test, install, merge])),
+  Plan = [[rule(portage://'no-such-cat/no-such-pkg-0.0':install?{[]}, [])]],
+  with_output_to(string(_),
+    builder:apply_vdb_reconciliation(Plan, 0, Failed, Missing)),
+  Missing \= [],
+  Failed > 0.
+
+test(apply_reconciliation_leaves_failed_alone_when_inactive, [setup(stash_live_phases(Saved)),
+                                                               cleanup(restore_live_phases(Saved))]) :-
+  retractall(config:build_live_phases(_)),
+  assertz(config:build_live_phases([])),
+  Plan = [[rule(portage://'no-such-cat/no-such-pkg-0.0':install?{[]}, [])]],
+  builder:apply_vdb_reconciliation(Plan, 7, Failed, Missing),
+  Failed == 7,
+  Missing == [].
+
+% --- helpers -----------------------------------------------------------------
+
+stash_live_phases(Saved) :-
+  findall(P, config:build_live_phases(P), Saved).
+
+restore_live_phases(Saved) :-
+  retractall(config:build_live_phases(_)),
+  forall(member(P, Saved), assertz(config:build_live_phases(P))).
+
+pkg_repo_registered :-
+  current_predicate(pkg:get_location/1),
+  catch(pkg:get_location(Root), _, fail),
+  exists_directory(Root).
+
+eapi_repo_registered :-
+  catch(portage:get_type(eapi), _, fail).
+
+:- end_tests(builder_vdb_reconciliation).
+
+
 % =============================================================================
 %  md5-cache validation harness
 % =============================================================================
