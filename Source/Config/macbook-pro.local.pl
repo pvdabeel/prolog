@@ -44,7 +44,7 @@
 %  Ebuild command (Gentoo Prefix wrapper)
 % -----------------------------------------------------------------------------
 
-:- asserta(config:ebuild_command('/Users/pvdabeel/gentoo-prefix/bin/ebuild-prefix')).
+:- asserta(config:ebuild_command('/opt/local/gentoo-prefix/bin/ebuild-prefix')).
 
 
 % -----------------------------------------------------------------------------
