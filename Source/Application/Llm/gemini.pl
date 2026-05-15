@@ -49,17 +49,21 @@ update_history(History) :-
 
 gemini(Input,ResponseContent) :-
   Service = 'gemini',
-  config:llm_api_key(Service, Key),
-  config:llm_model(Service, Model),
-  config:llm_endpoint(Service,Endpoint),
-  history(History),
-  llm:prepare_message(History,'user',Input,Messages),
-  llm:stream(Endpoint, Key, Model, Messages, Response),
-  (Response = _{contents: Contents, history: NewHistory}
-  ->  atomic_list_concat(Contents, ResponseContent),
-      llm:handle_response(Key, Model, Endpoint, Service:update_history, ResponseContent, NewHistory)
-  ;   Response = _{error: Error, history: _}
-      ->  write('Error: '), write(Error), nl ),!.
+  ( config:llm_api_key(Service,Key) -> true ; Key = '' ),
+  ( llm:check_api_key(Service,Key)
+  -> config:llm_model(Service,Model),
+     config:llm_endpoint(Service,Endpoint),
+     history(History),
+     llm:prepare_message(History,'user',Input,Messages),
+     llm:stream(Endpoint, Key, Model, Messages, Response),
+     ( Response = _{contents: Contents, history: NewHistory}
+     -> atomic_list_concat(Contents, ResponseContent),
+        llm:handle_response(Key, Model, Endpoint, Service:update_history, ResponseContent, NewHistory)
+     ; Response = _{error: Error, history: _}
+     -> write('Error: '), write(Error), nl, ResponseContent = ''
+     )
+  ;  ResponseContent = ''
+  ), !.
 
 
 %! gemini:gemini(+Input)
