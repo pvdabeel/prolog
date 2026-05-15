@@ -231,9 +231,10 @@ Reports can include:
   assumptions, cycle breaks, and blocker conflicts.
 - **Performance statistics** — proof time, plan time, cache hit
   rates, reprove retry counts.
-- **Comparison data** — structured output used by the compare
-  tooling (`Reports/Scripts/compare-merge-emerge.py`) to compare
-  portage-ng plans against emerge output.
+- **Comparison data** — structured output consumed by the
+  [tinderbox-ng](https://github.com/pvdabeel/tinderbox-ng) compare
+  harness (`tinderbox-ng compare` / `tinderbox-ng analyze`), which
+  diffs portage-ng plans against emerge output.
 
 
 ## Printer submodules

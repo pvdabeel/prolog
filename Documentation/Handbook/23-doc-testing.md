@@ -80,16 +80,31 @@ fixed.
 ## Merge vs emerge comparison
 
 The primary correctness metric is comparison against Portage's `emerge`
-output across the entire Portage tree.
+output across the entire Portage tree. The comparison harness now lives
+in the [tinderbox-ng](https://github.com/pvdabeel/tinderbox-ng)
+repository, which drives both engines through identical sessions and
+analyses the resulting plan logs.
 
 ### Running a comparison
 
-```bash
-python3 -u Reports/Scripts/compare-merge-emerge.py \
-  --root /Volumes/Storage/Graph/portage \
-  --full-lists \
-  --out Reports/compare-$(date +%Y-%m-%d)-$(git rev-parse --short HEAD).json
+Per-target compare (planner only, fresh sessions on both sides):
+
+```sh
+tinderbox-ng compare www-servers/apache
 ```
+
+Whole-tree matrix run plus aggregate analysis:
+
+```sh
+sudo tinderbox-ng compare-matrix
+sudo tinderbox-ng analyze                       # latest matrix run
+sudo tinderbox-ng analyze --run /srv/tinderbox-ng/reports/compare-matrix-<stamp>
+```
+
+`tinderbox-ng analyze` feeds each `portage-ng.plan.log` / `emerge.plan.log`
+pair through `share/tinderbox-ng/compare-merge-emerge.py` (inside the
+tinderbox-ng repo) and writes `analysis.json` + `analysis.txt` into the
+matrix run directory.
 
 ### Metrics
 
@@ -110,14 +125,16 @@ Additional counts (from `emerge_ok` pairs only):
 
 ### Targeted comparison
 
-For a single package:
+For a single package, use `--target-regex` on `tinderbox-ng analyze`:
 
-```bash
-python3 -u Reports/Scripts/compare-merge-emerge.py \
-  --root /Volumes/Storage/Graph/portage \
-  --target-regex '^sys-apps/portage-3.0.77-r3$' \
-  --full-lists \
-  --out Reports/compare-targeted.json
+```sh
+sudo tinderbox-ng analyze --target-regex '^sys-apps/portage-3.0.77-r3$'
+```
+
+Or run a one-off per-target compare directly:
+
+```sh
+tinderbox-ng compare sys-apps/portage
 ```
 
 
