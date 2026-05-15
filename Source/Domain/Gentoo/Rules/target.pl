@@ -493,8 +493,16 @@ candidate:resolve(Repository://Ebuild:update?{Context}, Conditions) :-
   ),
   !.
 
-candidate:resolve(Repository://Ebuild:update?{_Context}, []) :-
+candidate:resolve(Repository://Ebuild:update?{Context}, []) :-
   candidate:installed(Repository://Ebuild),
+  % An incoming `replaces(...)` annotation means an upstream caller (e.g.
+  % rule(:install/:run?{Ctx}) detecting a build_with_use mismatch, or
+  % grouped_dep_determine_action/7) has explicitly requested a transactional
+  % update. In that case we must NOT short-circuit even though the same-
+  % version entry is on disk -- the transactional update clause below has to
+  % run to walk DEPEND/BDEPEND under the new BWU and pull the newly-required
+  % deps into the plan.
+  \+ memberchk(replaces(_), Context),
   !.
 
 candidate:resolve(Repository://Ebuild:update?{Context}, Conditions) :-
