@@ -443,6 +443,56 @@ config:graph_modified_only(Bool) :-
 config:graph_modified_only_default(true).
 
 
+% -----------------------------------------------------------------------------
+%  Emerge file generation (--graph emerge)
+% -----------------------------------------------------------------------------
+
+% Interface can dynamically force full regeneration for a single run.
+% (Used by `--graph emerge full`.)
+
+:- dynamic config:force_emerge_regen/1.
+
+%! config:emerge_vp_path(?Hostname, ?Path)
+%
+% Per-host path to the `emerge-vp` wrapper used by `--graph emerge` to
+% generate `.emerge` files alongside the `.merge` files in the graph
+% directory. The wrapper invokes Gentoo's traditional `emerge -vp` so
+% portage-ng can render side-by-side comparisons in HTML. If no clause
+% matches the current hostname, `--graph emerge` raises a clear error.
+
+config:emerge_vp_path('imac-pro.local',    '/Volumes/Disk 1/gentoo-prefix/bin/emerge-vp')  :- !.
+config:emerge_vp_path('mac-pro.local',     '/Volumes/Storage/gentoo-prefix/bin/emerge-vp') :- !.
+config:emerge_vp_path('macbook-pro.local', '/Users/pvdabeel/gentoo-prefix/bin/emerge-vp')  :- !.
+
+
+%! config:emerge_vp_timeout(?Seconds)
+%
+% Per-ebuild timeout for emerge-vp invocations. Mirrors the legacy
+% generate-emerge-files.sh default.
+
+config:emerge_vp_timeout(120).
+
+
+%! config:emerge_vp_concurrency(?N)
+%
+% Number of parallel emerge-vp workers spawned by `--graph emerge`.
+% Defaults to 1 (matches the legacy shell). Increase cautiously: emerge-vp
+% inside a gentoo-prefix is fork-heavy and concurrent runs can saturate I/O.
+
+config:emerge_vp_concurrency(1).
+
+
+%! config:graph_include_emerge(?Bool)
+%
+% When true, the default `--graph` run also generates `.emerge` files at
+% the end of the pipeline (after writing proof files). False by default;
+% use `--graph emerge` for explicit regeneration. Set to true on hosts
+% where the gentoo-prefix emerge-vp wrapper is available and you want
+% one-command refresh of the entire graph directory.
+
+config:graph_include_emerge(false).
+
+
 %! config:graph_html_type(?List)
 %
 % Defines all HTML graph types produced by --graph.  Each type maps to a

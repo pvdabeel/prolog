@@ -9,12 +9,15 @@
 
 
 /** <module> WRITER
-The Writer produces per-ebuild plan files (.merge, .fetchonly, .info) and
-HTML index files for the graph directory.
+The Writer produces per-ebuild plan files (.merge, .fetchonly, .info,
+.emerge) and HTML index files for the graph directory.
 
 Responsibilities:
 - Writing .merge and .fetchonly plan files with timing metadata (% merge / % fetchonly lines).
 - Writing .info files with ebuild detail output.
+- Writing .emerge files capturing `emerge -vp` output via the gentoo-prefix
+  emerge-vp wrapper, wrapped with `% emerge started/ended/wall_time_ms`
+  lines so the terminal grapher can render them next to .merge files.
 - Writing per-repository / per-category / per-package HTML index files.
 - Orchestrating batch proof-file generation for --graph.
 - Converting proof files to HTML via the aha script.
@@ -115,6 +118,117 @@ writer:write_info_file(Directory,Repository://Entry) :-
    ;  (told,with_mutex(mutex,message:warning([Repository,'://',Entry,' ',info])))).
 
 
+% -----------------------------------------------------------------------------
+%  Emerge file writer
+% -----------------------------------------------------------------------------
+
+%! writer:write_emerge_file(+Directory, +Repository://Entry) is det.
+%
+% Run the external `emerge-vp` wrapper for the ebuild and write its
+% output to <Directory>/<Entry>.emerge, wrapped with timing lines
+% (`% emerge started/ended/wall_time_ms`). Replaces the legacy
+% generate-emerge-files.sh shell driver.
+%
+% Skips when the .emerge file is already newer than the corresponding
+% .ebuild (incremental mode). Set `config:force_emerge_regen(true)` to
+% bypass the check (this is what `--graph emerge full` does).
+% Assumes Directory exists. (See repository:prepare_directory.)
+
+writer:write_emerge_file(Directory, Repository://Entry) :-
+  atomic_list_concat([Directory,'/',Entry,'.emerge'], File),
+  ( catch(Repository:get_ebuild_file(Entry, Ebuild), _, fail) -> true
+  ; with_mutex(mutex, message:warning([Repository,'://',Entry,' emerge (no ebuild)'])),
+    fail
+  ),
+  ( writer:emerge_file_fresh(File, Ebuild)
+  -> true
+  ;  writer:do_write_emerge_file(File, Repository://Entry)
+  ).
+
+
+%! writer:emerge_file_fresh(+EmergeFile, +EbuildFile) is semidet.
+%
+% Succeed when EmergeFile exists and is newer than EbuildFile, *and*
+% no forced-regeneration override is active.
+
+writer:emerge_file_fresh(EmergeFile, Ebuild) :-
+  \+ config:force_emerge_regen(true),
+  exists_file(EmergeFile),
+  exists_file(Ebuild),
+  time_file(EmergeFile, FT),
+  time_file(Ebuild, ET),
+  FT > ET.
+
+
+%! writer:do_write_emerge_file(+OutFile, +Repository://Entry) is det.
+%
+% Resolve the emerge-vp binary for the current host, spawn it on the
+% target ebuild (with stdout+stderr merged to OutFile via an atomic
+% rename), and surround the output with timing header/footer lines.
+
+writer:do_write_emerge_file(OutFile, Repository://Entry) :-
+  atom_concat(OutFile, '.tmp', TmpFile),
+  atom_concat('=', Entry, EmergeTarget),
+  config:hostname(H),
+  ( config:emerge_vp_path(H, EmergeBin) -> true
+  ; with_mutex(mutex,
+      message:warning(['No config:emerge_vp_path/2 for host ', H, '; cannot write .emerge'])),
+    fail
+  ),
+  config:emerge_vp_timeout(Timeout),
+  file_directory_name(OutFile, OutDir),
+  catch(os:ensure_directory_path(OutDir), _, true),
+  get_time(T0),
+  ( catch(
+      setup_call_cleanup(
+        tell(TmpFile),
+        ( set_stream(current_output, tty(true)),
+          timing:print_timing_header('emerge', T0),
+          nl,
+          writer:run_emerge_vp(EmergeBin, EmergeTarget, Timeout),
+          nl,
+          timing:print_timing_footer('emerge', T0)
+        ),
+        told
+      ),
+      E,
+      ( told,
+        catch(delete_file(TmpFile), _, true),
+        term_to_atom(E, EA),
+        with_mutex(mutex,
+          message:warning([Repository,'://',Entry,' emerge (',EA,')'])),
+        fail
+      )
+    )
+  -> catch(rename_file(TmpFile, OutFile), _, true)
+  ;  catch(delete_file(TmpFile), _, true),
+     with_mutex(mutex, message:warning([Repository,'://',Entry,' emerge']))
+  ).
+
+
+%! writer:run_emerge_vp(+Bin, +Target, +Timeout) is det.
+%
+% Spawn `Bin --color y Target`, stream stdout+stderr to current_output,
+% and bound the run with Timeout seconds. On timeout the child is sent
+% SIGKILL. Replicates `gtimeout T emerge-vp --color y =cat/pkg-ver 2>&1`.
+
+writer:run_emerge_vp(Bin, Target, Timeout) :-
+  process_set_method(vfork),
+  process_create(Bin, ['--color','y', Target],
+                 [ stdout(pipe(Out)),
+                   stderr(pipe(Out)),
+                   process(Pid) ]),
+  call_cleanup(
+    copy_stream_data(Out, current_output),
+    ( close(Out),
+      ( process_wait(Pid, _, [timeout(Timeout)])
+      -> true
+      ;  catch(process_kill(Pid, 9), _, true),
+         catch(process_wait(Pid, _), _, true)
+      )
+    )).
+
+
 % =============================================================================
 %  Index file writers (HTML)
 % =============================================================================
@@ -188,7 +302,9 @@ writer:write_graph_files(Directory,Repository) :-
 %! writer:write_proof_files(+Directory,+Repository)
 %
 % Write text proof files (.merge, .fetchonly, .info) for all entries
-% in a repository.
+% in a repository. When config:graph_include_emerge(true), also writes
+% .emerge files via the emerge-vp wrapper (otherwise use
+% `--graph emerge` for explicit regeneration).
 % Assumes directory exists. (See repository:prepare_directory)
 
 writer:write_proof_files(Directory,Repository) :-
@@ -205,7 +321,69 @@ writer:write_proof_files(Directory,Repository) :-
                 ;  true)),
 	      ((writer:write_merge_file(Directory,Repository://Entry);true),
 	       (writer:write_fetchonly_file(Directory,Repository://Entry);true),
-               (writer:write_info_file(Directory,Repository://Entry);true))).
+               (writer:write_info_file(Directory,Repository://Entry);true))),
+  ( config:graph_include_emerge(true)
+  -> writer:write_emerge_files(Directory, Repository)
+  ;  true
+  ).
+
+
+%! writer:write_emerge_files(+Directory, +Repository) is det.
+%
+% Generate `.emerge` files for every entry in Repository by invoking the
+% gentoo-prefix `emerge-vp` wrapper. Honours `config:graph_modified_only/1`
+% for coarse filtering (skip ebuilds whose source isn't newer than the
+% md5-cache entry) and the per-file mtime check in
+% writer:emerge_file_fresh/2 for fine-grained incremental behaviour.
+%
+% Concurrency is controlled by `config:emerge_vp_concurrency/1`
+% (default 1, matching the legacy generate-emerge-files.sh).
+
+writer:write_emerge_files(Directory, Repository) :-
+  config:emerge_vp_concurrency(N),
+  Goal = writer:write_emerge_file_with_progress(Directory, Repository://Entry),
+  ( integer(N), N > 1
+  -> concurrent_forall(writer:emerge_candidate(Repository, Entry), Goal,
+                       [threads(N)])
+  ;  forall(writer:emerge_candidate(Repository, Entry), Goal)
+  ),
+  with_mutex(mutex, format('~N')).
+
+
+%! writer:emerge_candidate(+Repository, -Entry) is nondet.
+%
+% Enumerate ebuild entries that should be considered for .emerge
+% generation. When config:graph_modified_only/1 is true, only yields
+% entries whose .ebuild is newer than the md5-cache mtime; otherwise
+% yields every entry.
+
+writer:emerge_candidate(Repository, Entry) :-
+  Repository:entry(Entry),
+  ( config:graph_modified_only(true)
+  -> Repository:entry(Entry, Time),
+     catch(Repository:get_ebuild_file(Entry, Ebuild), _, fail),
+     system:exists_file(Ebuild),
+     system:time_file(Ebuild, Modified),
+     Modified > Time
+  ;  true
+  ).
+
+
+%! writer:write_emerge_file_with_progress(+Directory, +Repository://Entry) is det.
+%
+% Wrap writer:write_emerge_file/2 with mutex-protected progress output
+% so the user sees per-ebuild status during long `--graph emerge` runs.
+
+writer:write_emerge_file_with_progress(Directory, Repository://Entry) :-
+  with_mutex(mutex,
+    message:scroll_notice(['Writing emerge - ',Repository,'://',Entry])),
+  ( catch(writer:write_emerge_file(Directory, Repository://Entry), E,
+          ( term_to_atom(E, EA),
+            with_mutex(mutex,
+              message:warning([Repository,'://',Entry,' emerge (',EA,')']))
+          ))
+  ; true
+  ).
 
 
 %! writer:produce_html(+Directory)

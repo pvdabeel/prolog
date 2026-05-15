@@ -69,6 +69,7 @@ Examples of repositories: Gentoo Portage, Github repositories, ...
 :- dpublic(read_ebuild/3).
 
 :- dpublic(graph/0).
+:- dpublic(graph_emerge/0).
 :- dpublic(prepare_directory/1).
 
 
@@ -792,6 +793,22 @@ graph ::-
      writer:write_graph_files(D,Repository),
      writer:write_proof_files(D,Repository),
      writer:write_index_files(D,Repository)
+     )).
+
+
+%! repository:graph_emerge
+%
+% Generates .emerge files for the repository by invoking the gentoo-prefix
+% `emerge-vp` wrapper for every ebuild. Skips entries whose .emerge file
+% is already newer than the source .ebuild unless force_emerge_regen is
+% asserted. Intended to be driven by `--graph emerge` (see graph.pl).
+
+graph_emerge ::-
+  :this(Repository),
+  atomic_concat(graph_emerge,Repository,Mutex),
+  with_mutex(Mutex,
+    (:prepare_directory(D),
+     writer:write_emerge_files(D,Repository)
      )).
 
 

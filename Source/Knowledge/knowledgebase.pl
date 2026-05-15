@@ -43,6 +43,7 @@ Query module. The knowledge base is typically initialized as a singleton instanc
 :- dpublic(clear/0).
 :- dpublic(compile/0).
 :- dpublic(graph/0).
+:- dpublic(graph_emerge/0).
 
 :- dpublic(entry/1).
 :- dpublic(query/2).
@@ -267,6 +268,26 @@ graph ::-
   \+ proxy,!,
   with_mutex(graph, % todo: this should iterate over all registered repositories
     (portage:graph)).
+
+
+%! knowledgebase:graph_emerge
+%
+% Public predicate
+%
+% Generate .emerge files (via emerge-vp) for all entries in the
+% registered repositories. Mirrors knowledgebase:graph/0 but writes
+% only the .emerge artefacts.
+
+graph_emerge ::-
+  proxy,!,
+  ::host(Host),
+  ::port(Port),
+  client:execute_remotely(Host,Port,'/graph_emerge'),!.
+
+graph_emerge ::-
+  \+ proxy,!,
+  with_mutex(graph, % todo: this should iterate over all registered repositories
+    (portage:graph_emerge)).
 
 
 %! knowledgebase:compile

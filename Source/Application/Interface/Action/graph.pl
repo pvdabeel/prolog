@@ -17,9 +17,9 @@
 %   --graph                 uses config:graph_modified_only/1
 %   --graph modified        overrides to modified-only for this run
 %   --graph full            overrides to graph everything for this run
-%   --graph build           graph + builder test (download + safe phases)
-%   --graph build modified  graph modified + builder test
-%   --graph build full      graph full + builder test
+%   --graph emerge          generates only .emerge files (calls emerge-vp)
+%   --graph emerge modified .emerge files for modified ebuilds only
+%   --graph emerge full     force-regenerate all .emerge files
 
 action:process_graph([]) :-
   kb:graph,
@@ -38,25 +38,24 @@ action:process_graph([full]) :-
     retractall(config:interface_graph_modified_only(_))
   ),
   !.
-action:process_graph([build]) :-
-  kb:graph,
-  builder:test_stats(portage),
+action:process_graph([emerge]) :-
+  kb:graph_emerge,
   !.
-action:process_graph([build, modified]) :-
+action:process_graph([emerge, modified]) :-
   setup_call_cleanup(
     asserta(config:interface_graph_modified_only(true)),
-    kb:graph,
+    kb:graph_emerge,
     retractall(config:interface_graph_modified_only(_))
   ),
-  builder:test_stats(portage),
   !.
-action:process_graph([build, full]) :-
+action:process_graph([emerge, full]) :-
   setup_call_cleanup(
-    asserta(config:interface_graph_modified_only(false)),
-    kb:graph,
-    retractall(config:interface_graph_modified_only(_))
+    ( asserta(config:interface_graph_modified_only(false)),
+      asserta(config:force_emerge_regen(true)) ),
+    kb:graph_emerge,
+    ( retractall(config:interface_graph_modified_only(_)),
+      retractall(config:force_emerge_regen(_)) )
   ),
-  builder:test_stats(portage),
   !.
 action:process_graph(Args) :-
   message:warning(['--graph: ignoring unexpected args: ', Args]),
