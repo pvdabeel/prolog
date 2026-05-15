@@ -98,18 +98,8 @@ make test-overlay    # Overlay regression tests (requires loaded overlay)
 
 After making resolver changes:
 
-1. Ask the user to regenerate `.merge` files.
-2. Run the compare analysis:
-
-   ```bash
-   python3 -u Reports/Scripts/compare-merge-emerge.py \
-     --root /Volumes/Storage/Graph/portage \
-     --full-lists \
-     --out Reports/compare-$(date +%Y-%m-%d)-$(git rev-parse --short HEAD).json
-   ```
-
-3. Compare the new report against the previous baseline to detect regressions.
-4. Ask the user for permission before committing.
+1. Ask the user to run a tinderbox-ng session comparing portage-ng and emerge planning output.
+2. Ask the user for permission before committing.
 
 ## Naming conventions
 
