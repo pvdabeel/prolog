@@ -282,6 +282,15 @@ download:parse_thirdpartymirror_line(Line) :-
 % relative path. Tries each mirror URL in order on backtracking.
 
 download:resolve_mirror_uri(Base, _Filename, URL) :-
+  % Defense-in-depth: if upstream metadata leaked through with an
+  % unbound Base (historically: the eapi:uri/3 DCG operator-precedence
+  % bug that left P and B unbound on `->`-renamed distfiles), fail
+  % cleanly rather than throwing `instantiation_error` from
+  % atom_string/2 -- the surrounding findall/3 in
+  % builder:try_upstream_fallback/11 will then simply move on to the
+  % next candidate URL, which is the right behaviour even when the
+  % parser is misbehaving.
+  nonvar(Base),
   download:load_thirdpartymirrors,
   atom_string(Base, BaseStr),
   split_string(BaseStr, "/", "", [MirrorStr|PathParts]),
@@ -664,14 +673,22 @@ download:verify_hashes(Path, Pairs) :-
 
 download:upstream_url(Repo, Entry, Filename, URL) :-
   kb:query(all(src_uri(Model)), Repo://Entry),
-  query:deep_member(preference, uri(mirror, Base, Filename), Model),
+  query:deep_member(preference, uri(Proto, Base, Filename), Model),
+  % Guard against partially-bound URI terms (see eapi:uri/3 parser
+  % regression). Without nonvar/1 here, an `uri(_,_,Filename)` term
+  % would unify with `uri(mirror,...)` regardless of the actual stored
+  % protocol, sending the call into resolve_mirror_uri/3 with an
+  % unbound Base.
+  nonvar(Proto), nonvar(Base),
+  Proto == mirror,
   download:resolve_mirror_uri(Base, Filename, URL).
 
 download:upstream_url(Repo, Entry, Filename, URL) :-
   kb:query(all(src_uri(Model)), Repo://Entry),
   query:deep_member(preference, uri(Proto, Base, Filename), Model),
-  Proto \= '',
-  Proto \= mirror,
+  nonvar(Proto), nonvar(Base),
+  Proto \== '',
+  Proto \== mirror,
   atomic_list_concat([Proto, '://', Base], URL).
 
 

@@ -1470,9 +1470,25 @@ eapi:uri(uri(P, B, L)) -->
   [58,47,47], !,                                         % required ://
   eapi:uri_chars(Bs),                                    % required
   eapi:arrow(Ls),                                        % optional
+  % Operator precedence note: the if-then-else MUST be parenthesised.
+  % `,` (1000) binds tighter than `->` (1050), so without the parens
+  % `atom_codes(P, Ps), atom_codes(B, Bs), Ls = [] -> ... ; ...`
+  % parses as `(...,...,Ls=[]) -> ... ; ...`, meaning when Ls is the
+  % `-> RENAME` arrow content (a non-empty list), the if-condition
+  % fails and the bindings for P and B are *undone*. Renamed distfiles
+  % (e.g. veracrypt-1.26.20: `https://.../VeraCrypt_1.26.20.tar.gz
+  % -> veracrypt-1.26.20.tar.gz`) then surface as
+  % `uri(_,_,'veracrypt-1.26.20.tar.gz')` with unbound P/B, which in
+  % turn made `download:resolve_mirror_uri/3` blow up in
+  % `atom_string(Base,_)` with `instantiation_error` during fetch
+  % fallback. See tinderbox-ng compare matrix fail/fail report for
+  % app-crypt/veracrypt, app-editors/{cursor,vscode,logseq-desktop-bin},
+  % app-office/{moneydance,onlyoffice-bin}, app-text/paperwork.
   { atom_codes(P, Ps),
     atom_codes(B, Bs),
-    Ls = [] -> file_base_name(B, L) ; atom_codes(L, Ls), ! }.
+    ( Ls = [] -> file_base_name(B, L) ; atom_codes(L, Ls) ),
+    !
+  }.
 
 
 % DCG uriCASE: a non-prototyped URI

@@ -453,6 +453,76 @@ test(parse_dist_manifest, [nondet]) :-
 
 
 % -----------------------------------------------------------------------------
+%  EAPI SRC_URI / URI parsing tests
+% -----------------------------------------------------------------------------
+%
+% Covers the eapi:uri/3 DCG, especially the `->` rename form (PMS 9 §7.3.2).
+% The historical operator-precedence bug in the inline if-then-else left the
+% Proto/Base atoms unbound on renamed distfiles, which then propagated to
+% download:resolve_mirror_uri/3 -> atom_string/2 -> instantiation_error in
+% the upstream-fallback path. These tests pin both the rename and non-rename
+% shapes so the bug cannot regress silently.
+
+:- begin_tests(eapi_uri_parsing).
+
+test(plain_uri, [nondet]) :-
+  atom_codes('https://example.com/foo-1.0.tar.gz', Codes),
+  phrase(eapi:uri(uri(P, B, L)), Codes, []),
+  P == https,
+  B == 'example.com/foo-1.0.tar.gz',
+  L == 'foo-1.0.tar.gz'.
+
+test(plain_uri_local_is_basename, [true(L == 'bar.tar.xz'), nondet]) :-
+  atom_codes('ftp://mirror.example.org/pub/path/bar.tar.xz', Codes),
+  phrase(eapi:uri(uri(_, _, L)), Codes, []).
+
+test(mirror_uri, [nondet]) :-
+  atom_codes('mirror://gnu/emacs/emacs-29.4.tar.xz', Codes),
+  phrase(eapi:uri(uri(P, B, L)), Codes, []),
+  P == mirror,
+  B == 'gnu/emacs/emacs-29.4.tar.xz',
+  L == 'emacs-29.4.tar.xz'.
+
+% Renamed distfile (the actual regression case). Every field must be a
+% ground atom -- veracrypt-1.26.20 used to come back as uri(_,_,'veracrypt-
+% 1.26.20.tar.gz') with Proto and Base unbound.
+
+test(renamed_uri_binds_all_fields, [nondet]) :-
+  atom_codes('https://github.com/veracrypt/VeraCrypt/archive/VeraCrypt_1.26.20.tar.gz -> veracrypt-1.26.20.tar.gz', Codes),
+  phrase(eapi:uri(uri(P, B, L)), Codes, []),
+  ground(P), ground(B), ground(L),
+  P == https,
+  B == 'github.com/veracrypt/VeraCrypt/archive/VeraCrypt_1.26.20.tar.gz',
+  L == 'veracrypt-1.26.20.tar.gz'.
+
+test(renamed_uri_proto_not_unbound, [nondet]) :-
+  atom_codes('https://example.org/upstream-name.tgz -> local-name.tgz', Codes),
+  phrase(eapi:uri(uri(P, _, _)), Codes, []),
+  nonvar(P).
+
+test(renamed_uri_base_not_unbound, [nondet]) :-
+  atom_codes('https://example.org/upstream-name.tgz -> local-name.tgz', Codes),
+  phrase(eapi:uri(uri(_, B, _)), Codes, []),
+  nonvar(B).
+
+test(renamed_uri_local_matches_arrow_target, [nondet]) :-
+  atom_codes('https://example.org/very/long/path/upstream-original.tar.gz -> short.tar.gz', Codes),
+  phrase(eapi:uri(uri(_, _, L)), Codes, []),
+  L == 'short.tar.gz'.
+
+% Non-prototyped URI (rare, but covered by the second eapi:uri/3 clause).
+
+test(nonprototyped_uri, [nondet]) :-
+  atom_codes('plain-distfile.tar.gz', Codes),
+  phrase(eapi:uri(uri(P, B, L)), Codes, []),
+  P == '',
+  B == '',
+  L == 'plain-distfile.tar.gz'.
+
+:- end_tests(eapi_uri_parsing).
+
+
+% -----------------------------------------------------------------------------
 %  Version domain normalization tests
 % -----------------------------------------------------------------------------
 
