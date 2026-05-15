@@ -66,9 +66,10 @@ builder:build(Goals) :-
   StartStep is PreSteps + 1,
   builder:num_workers(NumWorkers),
   jobserver:init(NumWorkers, builder:execute_build_job),
-  builder:execute_plan(Plan, StartStep, NumSteps, 0, 0, 0, Completed, Failed, Stubs),
+  builder:execute_plan(Plan, StartStep, NumSteps, 0, 0, 0, Completed, Failed0, Stubs),
   jobserver:shutdown(NumWorkers),
   snapshot:finalize,
+  builder:apply_vdb_reconciliation(Plan, Failed0, Failed, _Missing),
   ( Failed =:= 0
   -> builder:clear_resume_state
   ;  true
@@ -112,8 +113,9 @@ builder:build_resume :-
      build:header(NumSteps, RemainingActions),
      builder:num_workers(NumWorkers),
      jobserver:init(NumWorkers, builder:execute_build_job),
-     builder:execute_plan(FilteredPlan, 1, NumSteps, 0, 0, 0, Completed, Failed, Stubs),
+     builder:execute_plan(FilteredPlan, 1, NumSteps, 0, 0, 0, Completed, Failed0, Stubs),
      jobserver:shutdown(NumWorkers),
+     builder:apply_vdb_reconciliation(FilteredPlan, Failed0, Failed, _Missing),
      ( Failed =:= 0
      -> builder:clear_resume_state
      ;  true
@@ -275,6 +277,136 @@ builder:count_nonempty_steps([Step|Rest], Acc, Total) :-
 builder:is_executable_rule(rule(_Repository://_Entry:_Action?{_Context}, _Body)) :- !.
 builder:is_executable_rule(rule(world(_Atom):_Action?{_Ctx}, _Body)) :- !.
 builder:is_executable_rule(_) :- fail.
+
+
+% =============================================================================
+%  VDB reconciliation (defensive backstop)
+% =============================================================================
+%
+% Even with correct per-step failure counting, the engine has historically
+% leaked silent-success regressions: a sub-dependency's install fails,
+% but the aggregate `Failed` counter ends up at 0 and `--ci --build`
+% exits 0. The downstream comparison harness (tinderbox-ng's
+% render-compare-matrix.py:real_pn_built/parse_vdb_delta) catches this
+% post-hoc by parsing the VDB delta, but by then the engine has already
+% lied about its own success.
+%
+% This block pulls that ground-truth check up into the engine itself.
+% After execute_plan returns, we walk the plan and verify that every
+% rule whose action would install a package (install / update /
+% downgrade / reinstall) has produced an on-disk VDB entry. Any
+% missing entries are counted as failures regardless of what the
+% step-by-step tally said, so `builder:last_build_status/3` -- and
+% therefore `action:maybe_ci_exit_on_build_failure/1` -- reflects
+% reality.
+%
+% The check is intentionally cheap (one directory-stat per install
+% action) and is gated so it only runs when a real merge could have
+% happened: `merge` must be in `config:build_live_phases/1` and the
+% `pkg` repository (VDB) must be registered with a stat'able location.
+% Stubbed runs (build_live_phases empty, --pretend-style) are skipped
+% silently.
+
+%! builder:apply_vdb_reconciliation(+Plan, +F0, -F, -Missing) is det.
+%
+% Wrapper that combines `reconcile_install_actions/3` with the
+% Failed-counter adjustment + warning print. F = F0 + len(Missing) when
+% the check fired; F = F0 otherwise. Missing is the list of plan rules
+% (Repo://Entry:Action terms) whose VDB entry is missing on disk.
+
+builder:apply_vdb_reconciliation(Plan, F0, F, Missing) :-
+  builder:reconcile_install_actions(Plan, Missing, Active),
+  ( Active == true, Missing \= []
+  -> length(Missing, N),
+     F is F0 + N,
+     builder:print_reconciliation_warning(Missing, N)
+  ;  F = F0
+  ).
+
+
+%! builder:reconcile_install_actions(+Plan, -Missing, -Active) is det.
+%
+% Walk Plan and collect install-shaped rules whose target package has
+% no corresponding directory under the VDB root. Active is `true`
+% when the check actually ran, `false` when it was skipped (no merge
+% in live phases, or no pkg repository). When Active is `false`,
+% callers MUST ignore Missing -- it is bound to `[]` by convention but
+% carries no information about reality.
+
+builder:reconcile_install_actions(Plan, Missing, Active) :-
+  ( builder:reconciliation_should_run(VdbRoot)
+  -> Active = true,
+     findall(Repo://Entry:Action,
+             ( member(Step, Plan),
+               member(Rule, Step),
+               builder:is_install_rule(Rule, Repo, Entry, Action),
+               \+ builder:vdb_entry_present(VdbRoot, Entry)
+             ),
+             Missing)
+  ;  Active = false,
+     Missing = []
+  ).
+
+
+%! builder:reconciliation_should_run(-VdbRoot) is semidet.
+%
+% Succeeds (binding VdbRoot to the on-disk VDB location) iff a real
+% merge could have happened during this run AND the VDB is stat'able.
+% Fails silently for stubbed builds, fully-dry runs, or hosts without
+% a registered `pkg` repository.
+
+builder:reconciliation_should_run(VdbRoot) :-
+  config:build_live_phases(LP),
+  memberchk(merge, LP),
+  current_predicate(pkg:get_location/1),
+  catch(pkg:get_location(VdbRoot), _, fail),
+  exists_directory(VdbRoot).
+
+
+%! builder:is_install_rule(+Rule, -Repo, -Entry, -Action) is semidet.
+%
+% True when Rule is an `install` / `update` / `downgrade` / `reinstall`
+% action on an eapi-typed source repository -- i.e. an action expected
+% to land a directory under `<vdb_root>/<cat>/<pf>/` when it succeeds.
+% Other actions (download, fetchonly, register, uninstall, world ops,
+% non-eapi script execs) don't write to the VDB and are excluded from
+% reconciliation.
+
+builder:is_install_rule(rule(Repo://Entry:Action?{_Ctx}, _Body), Repo, Entry, Action) :-
+  memberchk(Action, [install, update, downgrade, reinstall]),
+  catch(Repo:get_type(eapi), _, fail).
+
+
+%! builder:vdb_entry_present(+VdbRoot, +Entry) is semidet.
+%
+% True iff `<VdbRoot>/<Entry>/` exists as a directory. Entry is the
+% canonical `<cat>/<pf>` form used throughout cache:ordered_entry/5,
+% which matches the on-disk VDB layout (cf. repository:find_vdb_entry/4).
+
+builder:vdb_entry_present(VdbRoot, Entry) :-
+  atomic_list_concat([VdbRoot, '/', Entry], Path),
+  exists_directory(Path).
+
+
+%! builder:print_reconciliation_warning(+Missing, +N) is det.
+%
+% Print a clearly-flagged warning enumerating the missing installs.
+% Format mirrors the existing builder warnings (message:warning) so the
+% line shows up in build logs with the standard "!!!" prefix and
+% orange/red coloring, making this easy to grep for in CI reports.
+
+builder:print_reconciliation_warning(Missing, N) :-
+  ( N =:= 1 -> Suffix = '' ; Suffix = 's' ),
+  format(atom(Header),
+         'VDB reconciliation: ~w install action~w missing from /var/db/pkg after build',
+         [N, Suffix]),
+  message:warning([Header]),
+  forall(member(Repo://Entry:Action, Missing),
+         ( format(atom(Line), '  ~w  ~w://~w', [Action, Repo, Entry]),
+           message:warning([Line])
+         )),
+  message:warning(['Counting these as failures even though the per-step tally missed them.']),
+  message:warning(['See builder:apply_vdb_reconciliation/4 for the backstop logic.']).
 
 
 % =============================================================================
@@ -584,7 +716,16 @@ builder:execute_build_job(
   with_mutex(build_display,
     build:update_slot(LineOff, TotalLines, done, PlanStep, NumSteps, ActionIdx, Action, Atom)).
 
-builder:execute_build_job(_, _WorkerSlot, result(0, stub)).
+% Catch-all: a job whose rule shape doesn't match either of the two
+% recognized executable patterns above. Historically this silently
+% returned `stub`, which tally_outcomes counted as a (harmless) stub
+% rather than a failure -- so any future malformed rule would slip
+% through `--ci --build` as exit 0. Treat it as a failure with a
+% descriptive reason so the bug surfaces immediately.
+builder:execute_build_job(Job, _WorkerSlot, result(unknown, failed(unrecognised_job_shape(Job)))) :-
+  format(user_error,
+         '[builder] unrecognised job shape, treating as failure: ~q~n',
+         [Job]).
 
 
 %! builder:run_action(+Action, +Repo, +Entry, +Ctx, -Outcome) is det.

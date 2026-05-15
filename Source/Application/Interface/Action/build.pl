@@ -51,8 +51,45 @@ action:process_build(ArgsSets, Options) :-
   ( Proposal == []
   -> ignore(message:failure('No valid targets found.')),
      action:exit_on_invalid_targets(Options)
-  ;  builder:build(Proposal),
+  ;  action:run_build_with_ci_guard(Proposal, Options),
      action:maybe_ci_exit_on_build_failure(Options)
+  ).
+
+
+%! action:run_build_with_ci_guard(+Proposal, +Options) is det.
+%
+% Runs `builder:build/1` with an exception guard. In `--ci` mode any
+% uncaught exception is converted to `halt(3)` so the silent-failure
+% class of bug -- "pipeline exited 0 but the build clearly didn't
+% finish" -- cannot escape via the uncaught-exception path either.
+% Outside `--ci` the exception is re-raised so interactive users still
+% see the full stack trace.
+
+action:run_build_with_ci_guard(Proposal, Options) :-
+  catch(builder:build(Proposal), Err, action:handle_build_exception(Err, Options)).
+
+
+%! action:handle_build_exception(+Err, +Options) is det.
+%
+% In `--ci` mode: log the exception to stderr and `halt(3)` so the
+% pipeline exit code matches the "execution failed" semantics
+% documented on `maybe_ci_exit_on_build_failure/1`. Outside `--ci`:
+% rethrow so the interactive caller's debugger / top-level handler
+% sees it unchanged. `halt/1` exceptions (`unwind(halt(_))`) are
+% always rethrown so explicit halts inside builder:build/1 keep their
+% exit code.
+
+action:handle_build_exception(unwind(halt(Code)), _Options) :- !,
+  throw(unwind(halt(Code))).
+
+action:handle_build_exception(halt(Code), _Options) :- !,
+  throw(halt(Code)).
+
+action:handle_build_exception(Err, Options) :-
+  format(user_error, '[builder] exception during build: ~q~n', [Err]),
+  ( memberchk(ci(true), Options)
+  -> halt(3)
+  ;  throw(Err)
   ).
 
 

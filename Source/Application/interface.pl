@@ -771,7 +771,8 @@ interface:process_requests(Mode) :-
     memberchk(load(true),Options)     -> (kb:load,!,                                                 Continue) ;
     memberchk(fetchonly(true),Options) -> (action:process_action(fetchonly,Args,Options),            Continue) ;
     memberchk(resume(true),Options)  -> (action:assert_resume_skip_args(Args),
-                                         builder:build_resume,                                       Continue) ;
+                                         builder:build_resume,
+                                         action:maybe_ci_exit_on_build_failure(Options),           Continue) ;
     memberchk(build(true),Options)   -> (action:process_build(Args,Options),                         Continue) ;
     memberchk(contents(true),Options) -> (action:process_vdb_query(contents,Args),                   Continue) ;
     memberchk(owner(true),Options)   -> (action:process_vdb_query(owner,Args),                      Continue) ;
