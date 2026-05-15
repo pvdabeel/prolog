@@ -18,7 +18,7 @@
    | Git | Yes | Version detection, worker snapshot sync |
    | curl | Yes | Distfile downloading (`download.pl`) |
    | OpenSSL CLI | Yes | Manifest hash verification (`mirror.pl`) |
-   | Python 3 | Recommended | Hard timeout watchdog, report scripts (`Reports/Scripts/`) |
+   | Python 3 | Recommended | Hard timeout watchdog |
    | dns-sd | Optional | Bonjour/Zeroconf service discovery (distributed mode) |
    | ldd / otool | Optional | ELF linkage analysis (`linkage.pl`; otool on macOS, ldd on Linux) |
 

@@ -40,7 +40,7 @@ The following are convenient but not required for core operation.
 
 | **Dependency** | **Purpose** |
 |:---|:---|
-| **Python 3** | Timeout watchdog in the dev wrapper; comparison scripts in `Reports/Scripts/`. |
+| **Python 3** | Timeout watchdog in the dev wrapper. |
 | **make** / **cmake** | Used by build helper scripts for packages that need them. |
 | **aha** / **perl** | Pretty-print HTML output generation. |
 | **pv** | Progress bars during batch graph generation. |

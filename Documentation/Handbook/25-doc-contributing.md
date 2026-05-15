@@ -199,7 +199,7 @@ suffix_rank('_alpha', 1).
 
 ## Compare tooling
 
-Comparison tooling is split across two repositories:
+Regression tooling is hosted in two places:
 
 - **Merge-vs-emerge plan comparison** — driven by
   [tinderbox-ng](https://github.com/pvdabeel/tinderbox-ng) via
@@ -208,8 +208,10 @@ Comparison tooling is split across two repositories:
   `share/tinderbox-ng/compare-merge-emerge.py` in that repository and
   is invoked automatically by `tinderbox-ng analyze`. Outputs are
   `analysis.json` + `analysis.txt` in the matrix run directory.
-- **Prover fail-set regression detection** — `Reports/Scripts/compare-prover-failset.py`
-  in this repository (diff two `prover:test(portage)` logs).
+- **md5-cache extractor regression** — `md5cache_validate/0,1` in
+  `Source/Test/unittest.pl` (re-extracts metadata via
+  `Source/Domain/Gentoo/Ebuild/ebuild-depend.sh --batch` and diffs
+  the result key by key against the on-disk md5-cache).
 
 Do not create ad-hoc compare scripts outside these two locations.
 
