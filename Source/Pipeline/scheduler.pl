@@ -197,10 +197,18 @@ scheduler:enforce_order_after_constraints(PlanIn, PlanOut) :-
   ( scheduler:flat_has_order_after_constraints(Flat0) ->
       scheduler:plan_step_lengths(PlanIn, Lens),
       scheduler:flat_order_after_constraints(Flat0, Flat),
-      scheduler:rechunk_by_lengths(Flat, Lens, PlanMid),
-      scheduler:repair_ordering_violations(PlanMid, PlanOut)
-  ; PlanOut = PlanIn
+      scheduler:rechunk_by_lengths(Flat, Lens, PlanMid)
+  ; PlanMid = PlanIn
   ),
+  % Always run repair_ordering_violations: even without order_after
+  % constraints, a rule body may carry an `assumed(grouped_package_dep…)`
+  % dep that aliases to a concrete planned install/run further down the
+  % wave list (typical case: a soft-blocker cycle forced the prover into
+  % a domain assumption while another path resolved the same package
+  % concretely with a USE mutation). The repair pass is alias-aware (see
+  % `max_dep_wave_/4`) and promotes the parent so it lands after the
+  % concrete action it actually depends on.
+  scheduler:repair_ordering_violations(PlanMid, PlanOut),
   !.
 
 scheduler:flat_has_order_after_constraints(Rules) :-
@@ -313,45 +321,47 @@ scheduler:rechunk_by_lengths_(Rules, [N|Ns], [Step|Rest]) :-
 
 scheduler:repair_ordering_violations(PlanIn, PlanOut) :-
   scheduler:build_head_wave_map(PlanIn, 1, t, Map0),
+  scheduler:build_pkg_wave_map(PlanIn, PkgMap),
   append(PlanIn, AllRules),
-  scheduler:sweep_repair(strict, AllRules, Map0, 20, Map1),
-  scheduler:sweep_repair(merge, AllRules, Map1, 20, Map2),
+  scheduler:sweep_repair(strict, AllRules, Map0, PkgMap, 20, Map1),
+  scheduler:sweep_repair(merge,  AllRules, Map1, PkgMap, 20, Map2),
   scheduler:rebuild_plan_from_map(AllRules, Map2, PlanOut).
 
 
-%! scheduler:sweep_repair(+Mode, +AllRules, +MapIn, +MaxIter, -MapOut)
+%! scheduler:sweep_repair(+Mode, +AllRules, +MapIn, +PkgMap, +MaxIter, -MapOut)
 %
 % Sweep through all rules, promoting those whose deps violate ordering.
-% Repeat until stable or MaxIter reached.
+% Repeat until stable or MaxIter reached. `PkgMap` is the (PhaseClass-C-N)
+% wave map used by `max_dep_wave_/4` for assumed-dep aliasing.
 
-scheduler:sweep_repair(_, _, Map, 0, Map) :- !.
-scheduler:sweep_repair(Mode, AllRules, Map0, N, MapOut) :-
-  scheduler:sweep_once(Mode, AllRules, Map0, Map1, false, Changed),
+scheduler:sweep_repair(_, _, Map, _PkgMap, 0, Map) :- !.
+scheduler:sweep_repair(Mode, AllRules, Map0, PkgMap, N, MapOut) :-
+  scheduler:sweep_once(Mode, AllRules, Map0, PkgMap, Map1, false, Changed),
   ( Changed == false ->
       MapOut = Map1
   ;
       N1 is N - 1,
-      scheduler:sweep_repair(Mode, AllRules, Map1, N1, MapOut)
+      scheduler:sweep_repair(Mode, AllRules, Map1, PkgMap, N1, MapOut)
   ).
 
 
-%! scheduler:sweep_once(+Mode, +Rules, +MapIn, -MapOut, +ChIn, -ChOut)
+%! scheduler:sweep_once(+Mode, +Rules, +MapIn, +PkgMap, -MapOut, +ChIn, -ChOut)
 %
 % Single forward pass over all rules, updating the map for any violations.
 
-scheduler:sweep_once(_, [], Map, Map, Ch, Ch).
-scheduler:sweep_once(Mode, [Rule|Rules], Map0, MapOut, Ch0, ChOut) :-
+scheduler:sweep_once(_, [], Map, _PkgMap, Map, Ch, Ch).
+scheduler:sweep_once(Mode, [Rule|Rules], Map0, PkgMap, MapOut, Ch0, ChOut) :-
   ( scheduler:rule_head(Rule, Head),
     get_assoc(Head, Map0, CurWave),
-    scheduler:max_dep_wave(Rule, Map0, MaxDep),
+    scheduler:max_dep_wave(Rule, Map0, PkgMap, MaxDep),
     MaxDep >= 0,
     scheduler:needs_promotion(Mode, MaxDep, CurWave)
   ->
     scheduler:promotion_target(Mode, MaxDep, Target),
     put_assoc(Head, Map0, Target, Map1),
-    scheduler:sweep_once(Mode, Rules, Map1, MapOut, true, ChOut)
+    scheduler:sweep_once(Mode, Rules, Map1, PkgMap, MapOut, true, ChOut)
   ;
-    scheduler:sweep_once(Mode, Rules, Map0, MapOut, Ch0, ChOut)
+    scheduler:sweep_once(Mode, Rules, Map0, PkgMap, MapOut, Ch0, ChOut)
   ).
 
 scheduler:needs_promotion(strict, MaxDep, CurWave) :- MaxDep >= CurWave.
@@ -361,26 +371,142 @@ scheduler:promotion_target(strict, MaxDep, Target) :- Target is MaxDep + 1.
 scheduler:promotion_target(merge,  MaxDep, MaxDep).
 
 
-%! scheduler:max_dep_wave(+Rule, +Map, -MaxDepWave)
+%! scheduler:max_dep_wave(+Rule, +Map, +PkgMap, -MaxDepWave)
 %
 % Compute the maximum wave among non-constraint body deps present in
 % the map. Returns -1 if no in-plan deps exist.
+%
+% A body dep contributes a wave in two ways:
+%
+%  1. Direct head match: the canonicalised dep literal is a key in `Map`.
+%     This is the normal "B depends on A and A's rule was scheduled at
+%     wave W" case.
+%
+%  2. Assumed-dep alias: the dep is an `assumed(grouped_package_dependency
+%     (C,N,_):Action?{_})` (or the legacy `assumed(package_dependency(_,_,
+%     C,N,_,_,_,_):Action?{_})`) AND `PkgMap` has a concrete planned action
+%     in the same `PhaseClass` for (C,N). This recovers the dependency edge
+%     that was severed when the prover fell back to a domain assumption for
+%     (C,N) on one path while another path resolved the same package
+%     concretely. Without this aliasing the parent would be scheduled in
+%     wave 1 alongside the empty-body `rule(assumed(...), [])` verify rule
+%     and run before the concrete install (Qt6 cmake-find ordering bug).
 
-scheduler:max_dep_wave(Rule, Map, MaxDepWave) :-
+scheduler:max_dep_wave(Rule, Map, PkgMap, MaxDepWave) :-
   scheduler:rule_body(Rule, Body),
-  scheduler:max_dep_wave_(Body, Map, -1, MaxDepWave).
+  scheduler:max_dep_wave_(Body, Map, PkgMap, -1, MaxDepWave).
 
-scheduler:max_dep_wave_([], _, Max, Max).
-scheduler:max_dep_wave_([Dep|Rest], Map, CurMax, MaxOut) :-
-  ( \+ constraint:is_constraint(Dep),
-    prover:canon_literal(Dep, DepHead, _),
-    get_assoc(DepHead, Map, DepWave),
-    DepWave > CurMax
-  ->
-    scheduler:max_dep_wave_(Rest, Map, DepWave, MaxOut)
+scheduler:max_dep_wave_([], _Map, _PkgMap, Max, Max).
+scheduler:max_dep_wave_([Dep|Rest], Map, PkgMap, CurMax, MaxOut) :-
+  ( constraint:is_constraint(Dep)
+  -> CurMax1 = CurMax
   ;
-    scheduler:max_dep_wave_(Rest, Map, CurMax, MaxOut)
+      ( prover:canon_literal(Dep, DepHead, _),
+        get_assoc(DepHead, Map, DepWave),
+        DepWave > CurMax
+      -> CurMaxA = DepWave
+      ;  CurMaxA = CurMax
+      ),
+      ( scheduler:assumed_dep_alias_key(Dep, AliasKey),
+        get_assoc(AliasKey, PkgMap, AliasWave),
+        AliasWave > CurMaxA
+      -> CurMax1 = AliasWave
+      ;  CurMax1 = CurMaxA
+      )
+  ),
+  scheduler:max_dep_wave_(Rest, Map, PkgMap, CurMax1, MaxOut).
+
+
+% -----------------------------------------------------------------------------
+%  Assumed-dep → concrete-action wave aliasing
+% -----------------------------------------------------------------------------
+%
+% When the prover cannot strictly satisfy a `package_dep on C/N`, it emits
+% `[assumed(grouped_package_dependency(C,N,Deps):Action?{Ctx})]` as the body
+% conditions for the dep (see `candidate:grouped_dep_build_assumption/7`).
+% The matching `rules:rule(assumed(_), [])` has an empty body, so the
+% planner ranks the verify rule at wave 1 and the parent never sees the
+% real concrete action's wave.
+%
+% These helpers let the repair pass recover that lost ordering edge by
+% maintaining a (PhaseClass-C-N) -> Wave map of every concrete planned
+% install / update / downgrade / reinstall / run rule and looking each
+% assumed dep up against it.
+
+%! scheduler:phase_class(+Action, -PhaseClass)
+%
+% Classifies a concrete action into the broader phase it satisfies for an
+% assumed dep alias. `install` / `update` / `downgrade` / `reinstall` all
+% put the package on disk (same satisfaction as a BDEPEND/DEPEND `:install`
+% sub-goal); `run` matches an RDEPEND/PDEPEND `:run` sub-goal.
+
+scheduler:phase_class(install,   install_phase).
+scheduler:phase_class(update,    install_phase).
+scheduler:phase_class(downgrade, install_phase).
+scheduler:phase_class(reinstall, install_phase).
+scheduler:phase_class(run,       run_phase).
+
+
+%! scheduler:build_pkg_wave_map(+Plan, -PkgWaveMap)
+%
+% Builds a (PhaseClass-C-N) -> Wave map from the concrete planned rule
+% heads in `Plan`. Earlier waves win when the same package shows up in
+% multiple waves (e.g. install precedes run): we keep the FIRST wave we
+% see for a given key, which is the install/update wave, while a later
+% `run` wave is recorded against the `run_phase` key.
+
+scheduler:build_pkg_wave_map(Plan, PkgMap) :-
+  empty_assoc(M0),
+  scheduler:build_pkg_wave_map_(Plan, 1, M0, PkgMap).
+
+scheduler:build_pkg_wave_map_([], _Idx, M, M).
+scheduler:build_pkg_wave_map_([Wave|Ws], Idx, M0, M) :-
+  foldl(scheduler:add_pkg_for_wave(Idx), Wave, M0, M1),
+  Idx1 is Idx + 1,
+  scheduler:build_pkg_wave_map_(Ws, Idx1, M1, M).
+
+scheduler:add_pkg_for_wave(Idx, Rule, In, Out) :-
+  ( scheduler:rule_head(Rule, Head),
+    Head = Repo://Entry:Action,
+    scheduler:phase_class(Action, PhaseClass),
+    cache:ordered_entry(Repo, Entry, C, N, _)
+  ->
+    Key = PhaseClass-C-N,
+    ( get_assoc(Key, In, _Old) ->
+        % Keep the earliest wave we already recorded for this key
+        % (PlanIn is wave-ordered, so the first sighting is the
+        % canonical install/run wave for this package).
+        Out = In
+    ;   put_assoc(Key, In, Idx, Out)
+    )
+  ; Out = In
   ).
+
+
+%! scheduler:assumed_dep_alias_key(+Dep, -Key)
+%
+% If `Dep` is an assumed package dependency literal (grouped or legacy
+% per-dep form, with or without a `?{Ctx}` annotation), returns the
+% (PhaseClass-C-N) key under which a concrete planned action for the same
+% package would appear in `PkgWaveMap`. Fails for any other body element.
+
+scheduler:assumed_dep_alias_key(assumed(Inner), Key) :-
+  !,
+  scheduler:assumed_inner_alias_key(Inner, Key).
+scheduler:assumed_dep_alias_key(assumed(Inner)?{_}, Key) :-
+  !,
+  scheduler:assumed_inner_alias_key(Inner, Key).
+
+scheduler:assumed_inner_alias_key((Body:Action)?{_}, PhaseClass-C-N) :-
+  !,
+  scheduler:assumed_inner_pkg(Body, C, N),
+  scheduler:phase_class(Action, PhaseClass).
+scheduler:assumed_inner_alias_key(Body:Action, PhaseClass-C-N) :-
+  scheduler:assumed_inner_pkg(Body, C, N),
+  scheduler:phase_class(Action, PhaseClass).
+
+scheduler:assumed_inner_pkg(grouped_package_dependency(C, N, _Deps),     C, N) :- !.
+scheduler:assumed_inner_pkg(package_dependency(_, _, C, N, _, _, _, _), C, N).
 
 
 %! scheduler:rebuild_plan_from_map(+AllRules, +Map, -Plan)
