@@ -240,7 +240,8 @@ binpkg_exec:bid_desc(Order, BidA-_, BidB-_) :-
 %   1. SLOT compatibility
 %   2. KEYWORDS acceptability for the host ARCH
 %   3. USE compatibility (modulated by `config:binpkg_respect_use/1`)
-%   4. RDEPEND drift (modulated by `config:binpkg_changed_deps/1`)
+%   4. Subslot-pin (`:slot/subslot=`) compatibility against the live VDB
+%   5. RDEPEND drift (modulated by `config:binpkg_changed_deps/1`)
 %
 % Each check is a separate predicate so individual policies stay
 % testable in isolation.
@@ -249,6 +250,7 @@ binpkg_exec:candidate_passes_filters(SrcRepo, SrcEntry, BinpkgEid, Ctx) :-
   binpkg_exec:slot_compatible(SrcRepo, SrcEntry, BinpkgEid),
   binpkg_exec:keywords_acceptable(BinpkgEid),
   binpkg_exec:use_compatible(SrcRepo, SrcEntry, BinpkgEid, Ctx),
+  binpkg_exec:subslot_pins_compatible(BinpkgEid),
   binpkg_exec:rdepend_acceptable(SrcRepo, SrcEntry, BinpkgEid).
 
 
@@ -435,6 +437,182 @@ binpkg_exec:ebuild_iuse(SrcRepo, SrcEntry, IuseSet) :-
 binpkg_exec:iuse_flag_name(plus(F),  F) :- !.
 binpkg_exec:iuse_flag_name(minus(F), F) :- !.
 binpkg_exec:iuse_flag_name(F,        F).
+
+
+% -----------------------------------------------------------------------------
+%  Subslot-pin (`:slot/subslot=`) validation against the live VDB
+% -----------------------------------------------------------------------------
+
+%! binpkg_exec:subslot_pins_compatible(+BinpkgEid) is semidet.
+%
+% Mirrors emerge's binpkg-acceptance rule for slot-operator (`:=`)
+% dependencies (PMS 8.2 / EAPI 7): when a binpkg was produced its
+% recorded DEPEND-family fields embed the resolved
+% `<category>/<name>:<slot>/<subslot>=` of every dep that carried a
+% `:=` operator. The binpkg is only acceptable if every such pin
+% still matches the live VDB record of the depended-on package; a
+% subslot mismatch indicates the producer of the binpkg linked
+% against an ABI that no longer exists on the consuming host (e.g.
+% an OCaml `.cmi` baked against `dev-lang/ocaml:0/5.3.0` is unreadable
+% by the live `dev-lang/ocaml:0/5.4.0` compiler).
+%
+% We walk DEPEND, RDEPEND, PDEPEND, BDEPEND and IDEPEND so any pin in
+% any dep field is honoured. Within each field we recurse through
+% group constructors (`all_of_group`, `any_of_group`,
+% `use_conditional_group`, `exactly_one_of_group`,
+% `at_most_one_of_group`) so conditional / nested deps are not
+% silently skipped. Per-atom rejection rule is conservative: we only
+% reject when we can positively confirm a mismatch (recorded subslot
+% present, live install for the dep at the same slot exists, and
+% their canonicalised subslots differ). Missing live install, missing
+% live subslot or parse failure all degrade to "accept" so this check
+% only ever causes regressions when emerge would also reject.
+
+binpkg_exec:subslot_pins_compatible(BinpkgEid) :-
+  forall(
+    member(Key, [depend, rdepend, pdepend, bdepend, idepend]),
+    binpkg_exec:dep_field_subslot_compatible(BinpkgEid, Key)).
+
+
+%! binpkg_exec:dep_field_subslot_compatible(+BinpkgEid, +Key) is semidet.
+%
+% Reads one dep field (lowercased atom: `depend`, `rdepend`, ...) from
+% the binpkg cache, parses it with the EAPI dependency grammar, and
+% requires every embedded `:slot/subslot=` pin to be satisfied. A
+% missing field accepts. A parse failure also accepts (defensive: the
+% binpkg may be in a slightly newer format than our grammar handles,
+% and we would rather defer to emerge's logic than over-reject).
+
+binpkg_exec:dep_field_subslot_compatible(BinpkgEid, Key) :-
+  ( cache:entry_metadata(binpkg, BinpkgEid, Key, ValueAtom),
+    ValueAtom \== ''
+  -> ( binpkg_exec:parse_dep_value(ValueAtom, Deps)
+     -> binpkg_exec:walk_deps_subslot(Deps)
+     ;  true
+     )
+  ;  true
+  ).
+
+
+%! binpkg_exec:parse_dep_value(+ValueAtom, -Deps) is semidet.
+%
+% Parses a verbatim DEPEND-family atom (as stored in the binpkg
+% `Packages` index) into a list of EAPI dependency terms. The
+% pseudo `R://E` context expected by `eapi:depend//2` is filled with
+% anonymous variables -- it is only used by the grammar to thread
+% provenance back into error messages and is not consulted by the
+% structural shape we walk here.
+
+binpkg_exec:parse_dep_value(ValueAtom, Deps) :-
+  ( atom(ValueAtom)   -> atom_codes(ValueAtom, Codes)
+  ; string(ValueAtom) -> string_codes(ValueAtom, Codes)
+  ),
+  catch(phrase(eapi:depend(_://_, Deps), Codes), _, fail).
+
+
+%! binpkg_exec:walk_deps_subslot(+Deps) is semidet.
+%
+% Walks a parsed dependency list, descending into group constructors
+% and validating any atom-level `:slot/subslot=` pin against the live
+% VDB. Succeeds iff every confirmed pin matches.
+
+binpkg_exec:walk_deps_subslot([]).
+binpkg_exec:walk_deps_subslot([D|Ds]) :-
+  binpkg_exec:walk_dep_subslot(D),
+  binpkg_exec:walk_deps_subslot(Ds).
+
+
+%! binpkg_exec:walk_dep_subslot(+Dep) is semidet.
+%
+% Per-node visitor. Group constructors recurse into their child list;
+% `package_dependency/8` atoms are validated against the live VDB;
+% anything else (blocker-only atoms, virtuals already lowered, etc.)
+% passes through.
+
+binpkg_exec:walk_dep_subslot(package_dependency(_, _, C, P, _, _, Slot, _)) :- !,
+  binpkg_exec:check_atom_subslot_pin(C, P, Slot).
+
+binpkg_exec:walk_dep_subslot(all_of_group(D)) :- !,
+  binpkg_exec:walk_deps_subslot(D).
+
+binpkg_exec:walk_dep_subslot(any_of_group(D)) :- !,
+  binpkg_exec:walk_deps_subslot(D).
+
+binpkg_exec:walk_dep_subslot(use_conditional_group(_, _, _, D)) :- !,
+  binpkg_exec:walk_deps_subslot(D).
+
+binpkg_exec:walk_dep_subslot(exactly_one_of_group(D)) :- !,
+  binpkg_exec:walk_deps_subslot(D).
+
+binpkg_exec:walk_dep_subslot(at_most_one_of_group(D)) :- !,
+  binpkg_exec:walk_deps_subslot(D).
+
+binpkg_exec:walk_dep_subslot(_).
+
+
+%! binpkg_exec:check_atom_subslot_pin(+Category, +Name, +Slot) is semidet.
+%
+% Validates one dependency atom's slot list. The grammar emits Slot
+% as a list that, for a resolved `:N/M=` pin, contains both
+% `subslot(M)` and the `equal` marker. Anything else (plain `:N`,
+% bare `:=`, `:*`, missing slot list) carries no concrete subslot
+% pin and is accepted unconditionally. When a pin IS present, we
+% require either no live install of (Category, Name) at the recorded
+% slot, no recorded live subslot, or live-vs-recorded subslot
+% equality (after `canon_slot` normalisation).
+
+binpkg_exec:check_atom_subslot_pin(Cat, Name, Slot) :-
+  ( is_list(Slot),
+    memberchk(equal, Slot),
+    memberchk(subslot(RecSubRaw), Slot)
+  -> ( memberchk(slot(RecSlotRaw), Slot)
+     -> candidate:canon_slot(RecSlotRaw, RecSlot)
+     ;  RecSlot = (-)
+     ),
+     candidate:canon_slot(RecSubRaw, RecSub),
+     binpkg_exec:live_subslot_matches(Cat, Name, RecSlot, RecSub)
+  ;  true
+  ).
+
+
+%! binpkg_exec:live_subslot_matches(+Category, +Name, +RecSlot, +RecSub) is semidet.
+%
+% Looks up the live (VDB) install of (Category, Name). If RecSlot is
+% bound to a concrete atom we restrict to installs in that slot;
+% otherwise the first installed (Category, Name) is considered.
+% Succeeds (accept) when there is no install or the install records
+% no subslot; otherwise requires `RecSub` to equal the live subslot.
+
+binpkg_exec:live_subslot_matches(Cat, Name, RecSlot, RecSub) :-
+  ( binpkg_exec:find_live_install_for_slot(Cat, Name, RecSlot, LiveEntry)
+  -> ( query:search(subslot(LiveSubRaw), pkg://LiveEntry)
+     -> candidate:canon_slot(LiveSubRaw, LiveSub),
+        LiveSub == RecSub
+     ;  true
+     )
+  ;  true
+  ).
+
+
+%! binpkg_exec:find_live_install_for_slot(+Cat, +Name, +RecSlot, -Entry) is semidet.
+%
+% Resolves the live VDB entry that matches the recorded slot. When
+% `RecSlot == (-)` (no slot constraint recorded) the first installed
+% entry wins. Otherwise we backtrack through every installed entry
+% of (Cat, Name) and pick the first whose canonicalised slot equals
+% RecSlot.
+
+binpkg_exec:find_live_install_for_slot(Cat, Name, (-), Entry) :- !,
+  query:search([name(Name), category(Cat), installed(true)], pkg://Entry).
+
+binpkg_exec:find_live_install_for_slot(Cat, Name, RecSlot, Entry) :-
+  query:search([name(Name), category(Cat), installed(true)], pkg://Entry),
+  ( query:search(slot(LiveSlotRaw), pkg://Entry)
+  -> candidate:canon_slot(LiveSlotRaw, LiveSlot),
+     LiveSlot == RecSlot
+  ;  true
+  ),
+  !.
 
 
 %! binpkg_exec:rdepend_acceptable(+SrcRepo, +SrcEntry, +BinpkgEid) is semidet.
