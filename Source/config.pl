@@ -167,13 +167,22 @@ config:gentoo_profile('default/linux/amd64/23.0/split-usr/no-multilib').
 %             live       — parse profile tree on every preference:init (slower)
 %
 % When strategy is 'cached' but Knowledge/profile.qlf is missing, falls back to 'live'.
-% Default: live for all modes (backward compatible).
 
-config:profile_loading(standalone, live).
+config:profile_loading(standalone, cached).
 config:profile_loading(daemon,     cached).
 config:profile_loading(worker,     cached).
 config:profile_loading(client,     live).
 config:profile_loading(server,     cached).
+
+% Materialized preference state (Knowledge/preference.qlf).  Requires kb:load
+% before preference:init.  Stamp covers kb.qlf, profile.qlf, /etc/portage,
+% world/set files, use.desc, and USE/ACCEPT_* environment variables.
+
+config:preference_cache(standalone, cached).
+config:preference_cache(daemon,     cached).
+config:preference_cache(worker,     cached).
+config:preference_cache(client,     live).
+config:preference_cache(server,     cached).
 
 % -----------------------------------------------------------------------------
 %  /etc/portage configuration directory

@@ -161,6 +161,7 @@ then materializes fresh cache facts and QLF artifacts.
 2. Reads md5-cache files via the EAPI grammar into cache predicates
 3. Generates `Knowledge/kb.qlf` (qcompiled facts for fast reload)
 4. Generates `Knowledge/profile.qlf` (serialized profile data)
+5. Invalidates `Knowledge/preference.qlf` (materialized preference cache; rebuilt on next startup)
 
 **`--regen`** regenerates the md5-cache incrementally.  It replaces
 `egencache`: only changed or new ebuilds are re-parsed, and
@@ -178,6 +179,12 @@ fact base, not the shell sources.
 
 The raw Prolog facts are also available as `Knowledge/kb.raw` for
 debugging.
+
+When `config:preference_cache/2` is set to `cached` for the active mode,
+the first `preference:init/0` after startup (or after invalidation) writes
+`Knowledge/preference.qlf` and a companion `Knowledge/preference.stamp`.  Subsequent
+starts reload the materialized preference state in milliseconds while the stamp
+matches (see [Chapter 3: Configuration](03-doc-configuration.md)).
 
 
 ## Query layer

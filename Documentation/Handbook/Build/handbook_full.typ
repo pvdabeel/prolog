@@ -1454,7 +1454,7 @@ below.
     align: (left,left,left,),
     table.header([#strong[Setting]], [#strong[Default]], [#strong[Purpose]],),
     table.hline(),
-    [`config:profile_loading/2`], [`standalone → live`], [Controls
+    [`config:profile_loading/2`], [`standalone → cached`], [Controls
     whether profile data is parsed from the Portage tree on every
     startup (`live`) or loaded from a pre-serialized cache (`cached`).
     Set per mode: standalone, daemon, worker, client, server.],
@@ -2015,7 +2015,7 @@ server --- see
 Each mode can use a different loading strategy:
 
 ```prolog
-config:profile_loading(standalone, live).
+config:profile_loading(standalone, cached).
 config:profile_loading(daemon,     cached).
 config:profile_loading(worker,     cached).
 config:profile_loading(client,     live).

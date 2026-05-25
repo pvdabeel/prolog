@@ -37,9 +37,11 @@ The central configuration file is `Source/config.pl`.  It is a plain Prolog sour
 
 | **Setting** | **Default** | **Purpose** |
 |:---|:---|:---|
-| `config:profile_loading/2` | `standalone → live` | Controls whether profile data is parsed from the Portage tree on every startup (`live`) or loaded from a pre-serialized cache (`cached`).  Set per mode: standalone, daemon, worker, client, server. |
+| `config:profile_loading/2` | `standalone → cached` | Controls whether profile data is parsed from the Portage tree on every startup (`live`) or loaded from a pre-serialized cache (`cached`).  Set per mode: standalone, daemon, worker, client, server. |
+| `config:preference_cache/2` | `standalone → cached` | Controls whether `preference:init/0` reloads materialized state from `Knowledge/preference.qlf` when the stamp matches, or rebuilds from profile + `/etc/portage` on every startup. |
 
 See [Profile loading strategy](#profile-loading-strategy) for details on generating and using the profile cache.
+See [Preference cache](#preference-cache) for the materialized preference cache.
 
 ### Paths
 
@@ -226,6 +228,7 @@ The result is two serialised cache files:
 
 - **`Knowledge/kb.qlf`** — all repository and cache facts (ebuilds, metadata, manifests).
 - **`Knowledge/profile.qlf`** — all profile-derived data (USE terms, masks, per-package USE, license groups).
+- **`Knowledge/preference.qlf`** — materialized preference state (built on first startup; see [Preference cache](#preference-cache)).
 
 See [Profile loading strategy](#profile-loading-strategy) for details on live vs. cached profile loading.
 
@@ -363,7 +366,7 @@ Profile data (USE flags, masks, per-package USE, license groups) can be loaded i
 The strategy is set per operating mode in `config.pl`.  portage-ng supports several modes of operation (standalone, daemon, worker, client, server — see [Chapter 14: Command-Line Interface](14-doc-cli.md) for details).  Each mode can use a different loading strategy:
 
 ```prolog
-config:profile_loading(standalone, live).
+config:profile_loading(standalone, cached).
 config:profile_loading(daemon,     cached).
 config:profile_loading(worker,     cached).
 config:profile_loading(client,     live).
@@ -395,6 +398,40 @@ The profile cache captures the following data so it does not need to be re-deriv
 | Per-package USE masks and forced flags | `package.use.mask`, `package.use.force` |
 | License groups | `license_groups` |
 
+## Preference cache
+
+After profile and `/etc/portage` data are merged, `preference:init/0` normally
+materializes a large set of dynamic facts (global USE, package masks, per-package
+USE overrides, license groups, world snapshots).  That work can take a few seconds
+when profile masks must be matched against the full portage cache.
+
+To avoid repeating that on every startup, portage-ng can persist the **materialized
+preference state** to disk:
+
+| **File** | **Role** |
+|:---------|:---------|
+| `Knowledge/preference.raw` | Textual serialization of preference facts (intermediate) |
+| `Knowledge/preference.qlf` | QLC-compiled reload unit |
+| `Knowledge/preference.stamp` | Fingerprint of inputs (file mtimes + env vars) |
+
+The cache is **regenerated automatically** when the stamp no longer matches — for
+example after `--sync` (which invalidates the cache when `kb.qlf` / `profile.qlf`
+change), after editing `/etc/portage`, or when `USE` / `ACCEPT_KEYWORDS` /
+`ACCEPT_LICENSE` change in the environment.
+
+Control per mode in `config.pl`:
+
+```prolog
+config:preference_cache(standalone, cached).
+config:preference_cache(daemon,     cached).
+config:preference_cache(worker,     cached).
+config:preference_cache(client,     live).
+config:preference_cache(server,     cached).
+```
+
+Client mode keeps `live` rebuilding because preference facts are injected from
+the server in distributed proving.
+
 ## World sets
 
 portage-ng maintains world sets — the list of packages explicitly requested
@@ -408,7 +445,7 @@ World set management is handled through the `set.pl` module, which supports
 `world(Atom):register` and `world(Atom):unregister` proof literals to
 add/remove packages during `--merge` operations.
 
-After you change world membership or sync new tree data, rely on the same **sync workflow** described above: a standalone **`--sync`** refreshes `Knowledge/kb.qlf` (and the profile cache) so resolution sees an up-to-date union of tree, VDB, and world-related facts.
+After you change world membership or sync new tree data, rely on the same **sync workflow** described above: a standalone **`--sync`** refreshes `Knowledge/kb.qlf` and the profile cache (and invalidates the preference cache) so resolution sees an up-to-date union of tree, VDB, and world-related facts.
 
 
 ## Further reading
