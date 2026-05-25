@@ -217,7 +217,8 @@ load ::-
 load ::-
   \+ proxy,
   exists_file('Knowledge/kb.qlf'),!,
-  ensure_loaded('Knowledge/kb.qlf').
+  ensure_loaded('Knowledge/kb.qlf'),
+  knowledgebase:kb_warm_metadata_index.
 
 load ::-
   \+ proxy,
@@ -392,3 +393,18 @@ host(Host) ::-
 
 port(Port) ::-
   integer(Port).
+
+
+%! knowledgebase:kb_warm_metadata_index is det.
+%
+% Prime the JIT index on cache:entry_metadata/4 for the (Repo, Id, slot, slot(_))
+% access pattern used by preference:init profile-mask slot checks.  Without this,
+% the first slotted package.mask atom after kb.qlf load can spend ~0.7s per entry
+% until SWI-Prolog builds the index.
+
+kb_warm_metadata_index :-
+  cache:ordered_entry(Repo, Id, C, N, _),
+  cache:entry_metadata(Repo, Id, slot, slot(_)),
+  !,
+  forall(cache:ordered_entry(Repo, Eid, C, N, _),
+         ( cache:entry_metadata(Repo, Eid, slot, slot(_)) -> true ; true )).

@@ -24,6 +24,10 @@ Submodules:
   - profile.pl      : reads the profile tree
   - userconfig.pl   : reads user configurationfiles
   - fallback.pl     : hardcoded defaults fallback
+
+Materialized preference state is written to `Knowledge/preference.qlf` via
+`preference:cache_save/0` and reloaded by `preference:cache_try_load/0`
+(controlled by `config:preference_cache/2`).
 */
 
 :- module(preference, []).
@@ -91,10 +95,37 @@ Submodules:
 % Sets the active local USE flags and ACCEPT_KEYWORDS according to
 % environment, profile, and /etc/portage overrides.  Also loads license
 % groups and applies ACCEPT_LICENSE.  Must never fail.
+%
+% When a valid `Knowledge/preference.qlf` stamp matches current inputs,
+% reloads the materialized preference state instead of rebuilding it.
 
 preference:init :-
+  ( preference:cache_try_load ->
+      !
+  ; preference:init_fresh,
+    preference:cache_save
+  ).
 
-  % Retract all dynamic facts
+
+%! preference:init_reset_indexes is det.
+%
+% Invalidate preference AVL index caches.  Called at the start of a fresh
+% init and after loading `Knowledge/preference.qlf`.
+
+preference:init_reset_indexes :-
+  ( nb_current(pref_userconfig_use_soft_flags, _) -> nb_setval(pref_userconfig_use_soft_flags, t) ; true ),
+  ( nb_current(pref_userconfig_use_soft_cns, _) -> nb_setval(pref_userconfig_use_soft_cns, t) ; true ),
+  ( nb_current(pref_profile_use_soft_flags, _) -> nb_setval(pref_profile_use_soft_flags, t) ; true ), 
+  ( nb_current(pref_profile_use_soft_cns, _) -> nb_setval(pref_profile_use_soft_cns, t) ; true ),
+  ( nb_current(pref_profile_forced_cns, _) -> nb_setval(pref_profile_forced_cns, t) ; true ),
+  ( nb_current(pref_profile_masked_cns, _) -> nb_setval(pref_profile_masked_cns, t) ; true ).
+
+
+%! preference:init_fresh is det.
+%
+% Full preference rebuild from profile, userconfig, environment, and sets.
+
+preference:init_fresh :-
 
   retractall(preference:local_masked(_)),
   retractall(preference:local_userconfig_use(_,_,_,_)),
@@ -108,15 +139,14 @@ preference:init :-
   retractall(preference:local_accept_license_wildcard),
   retractall(preference:local_accepted_license(_)),
   retractall(preference:local_denied_license(_)),
-
-  % Reset preference AVL indexes
-
-  ( nb_current(pref_userconfig_use_soft_flags, _) -> nb_setval(pref_userconfig_use_soft_flags, t) ; true ),
-  ( nb_current(pref_userconfig_use_soft_cns, _) -> nb_setval(pref_userconfig_use_soft_cns, t) ; true ),
-  ( nb_current(pref_profile_use_soft_flags, _) -> nb_setval(pref_profile_use_soft_flags, t) ; true ), 
-  ( nb_current(pref_profile_use_soft_cns, _) -> nb_setval(pref_profile_use_soft_cns, t) ; true ),
-  ( nb_current(pref_profile_forced_cns, _) -> nb_setval(pref_profile_forced_cns, t) ; true ),
-  ( nb_current(pref_profile_masked_cns, _) -> nb_setval(pref_profile_masked_cns, t) ; true ),
+  retractall(preference:local_use(_)),
+  retractall(preference:local_env_use(_)),
+  retractall(preference:local_accept_keywords(_)),
+  retractall(preference:local_flag(_)),
+  retractall(preference:local_set(_,_)),
+  retractall(preference:local_world_entry(_)),
+  retractall(preference:system_pkg(_,_)),
+  preference:init_reset_indexes,
 
   % 1. Load /etc/portage configuration (if portage_confdir is set).
   %    When unset, fallback defaults are used instead (step 4).
@@ -1371,6 +1401,8 @@ preference:unmask_catpkg_atom(Atom) :-
 %
 % Best-effort profile package.mask support.  Handles simple cat/pkg atoms
 % (mask all versions) and versioned atoms parsed via eapi:qualified_target/1.
+% Simple masks use `cache:ordered_entry/5` on category/name (indexed).
+% Versioned masks iterate only matching category/name entries, not the full tree.
 
 preference:mask_profile_atom(Atom) :-
   atom(Atom),
@@ -1389,13 +1421,12 @@ preference:mask_profile_atom(Atom) :-
     Q = qualified_target(Op, _Repo, C, N, Ver, Filters),
     nonvar(C), nonvar(N) ->
       ( Filters = [SlotReq,UseReq], UseReq == [] -> true ; SlotReq = [] ),
-      forall(cache:ordered_entry(portage, Id, C, N, _),
-             ( cache:ordered_entry(portage, Id, C, N, ProposedVersion),
-               ( preference:version_match(Op, ProposedVersion, Ver),
-                 preference:slot_req_match_(SlotReq, portage, Id) ->
-                 assertz(preference:local_masked(portage://Id))
-               ; true
-               )))
+      forall(cache:ordered_entry(portage, Id, C, N, ProposedVersion),
+             ( preference:version_match(Op, ProposedVersion, Ver),
+               preference:slot_req_match_(SlotReq, portage, Id) ->
+               assertz(preference:local_masked(portage://Id))
+             ; true
+             ))
   ; true.
 
 
@@ -1420,13 +1451,12 @@ preference:unmask_profile_atom(Atom) :-
     Q = qualified_target(Op, _Repo, C, N, Ver, Filters),
     nonvar(C), nonvar(N) ->
       ( Filters = [SlotReq,UseReq], UseReq == [] -> true ; SlotReq = [] ),
-      forall(cache:ordered_entry(portage, Id, C, N, _),
-             ( cache:ordered_entry(portage, Id, C, N, ProposedVersion),
-               ( preference:version_match(Op, ProposedVersion, Ver),
-                 preference:slot_req_match_(SlotReq, portage, Id) ->
-                 retractall(preference:local_masked(portage://Id))
-               ; true
-               )))
+      forall(cache:ordered_entry(portage, Id, C, N, ProposedVersion),
+             ( preference:version_match(Op, ProposedVersion, Ver),
+               preference:slot_req_match_(SlotReq, portage, Id) ->
+               retractall(preference:local_masked(portage://Id))
+             ; true
+             ))
   ; true.
 
 
@@ -1438,26 +1468,38 @@ preference:slot_req_match_([], _Repo, _Id) :- !.
 
 preference:slot_req_match_([slot(S0)], Repo, Id) :-
   !,
-  cache:entry_metadata(Repo, Id, slot, slot(S0)).
+  preference:entry_satisfies_slot_req_(Repo, Id, [slot(S0)]).
 
 preference:slot_req_match_([slot(S0),subslot(Ss0)], Repo, Id) :-
   !,
-  cache:entry_metadata(Repo, Id, slot, slot(S0)),
+  cache:entry_metadata(Repo, Id, slot, slot(S1)),
+  preference:canon_slot_atom_(S0, S),
+  preference:canon_slot_atom_(S1, Slot),
+  S == Slot,
   ( cache:entry_metadata(Repo, Id, slot, subslot(Ss))
-  -> Ss == Ss0
-  ; Ss0 == S0
+  -> preference:canon_slot_atom_(Ss0, SsW),
+     preference:canon_slot_atom_(Ss, SsC),
+     SsW == SsC
+  ; preference:canon_slot_atom_(Ss0, SsW),
+     SsW == Slot
   ).
 
 preference:slot_req_match_([slot(S0),equal], Repo, Id) :-
   !,
-  cache:entry_metadata(Repo, Id, slot, slot(S0)).
+  preference:entry_satisfies_slot_req_(Repo, Id, [slot(S0)]).
 
 preference:slot_req_match_([slot(S0),subslot(Ss0),equal], Repo, Id) :-
   !,
-  cache:entry_metadata(Repo, Id, slot, slot(S0)),
+  cache:entry_metadata(Repo, Id, slot, slot(S1)),
+  preference:canon_slot_atom_(S0, S),
+  preference:canon_slot_atom_(S1, Slot),
+  S == Slot,
   ( cache:entry_metadata(Repo, Id, slot, subslot(Ss))
-  -> Ss == Ss0
-  ; Ss0 == S0
+  -> preference:canon_slot_atom_(Ss0, SsW),
+     preference:canon_slot_atom_(Ss, SsC),
+     SsW == SsC
+  ; preference:canon_slot_atom_(Ss0, SsW),
+     SsW == Slot
   ).
 
 preference:slot_req_match_([any_same_slot], _Repo, _Id) :- !.
@@ -1779,6 +1821,333 @@ preference:init_world_entries :-
 
 
 % -----------------------------------------------------------------------------
+%  Materialized preference state (Knowledge/preference.qlf)
+% -----------------------------------------------------------------------------
+
+%! preference:cache_try_load is semidet.
+%
+% Load `Knowledge/preference.qlf` when the on-disk stamp matches current
+% inputs.  On success, preference/userconfig/profile dynamics are restored
+% and AVL index invalidation flags are set.
+
+preference:cache_try_load :-
+  preference:cache_enabled,
+  preference:stamp_file(StampFile),
+  preference:cache_file(QlfFile),
+  exists_file(QlfFile),
+  exists_file(StampFile),
+  preference:cache_read_stamp(Stored),
+  preference:cache_current_stamp(Current),
+  Stored =@= Current,
+  !,
+  preference:cache_load_qlf(QlfFile),
+  preference:init_reset_indexes.
+
+
+%! preference:cache_save is det.
+%
+% Serialize the current materialized preference state to disk and write a
+% matching stamp file.  Silently skips when caching is disabled.
+
+preference:cache_save :-
+  ( preference:cache_enabled ->
+      working_directory(Cwd, Cwd),
+      lock:with_system_lock(pref_cache_save(Cwd),
+        preference:cache_save_locked)
+  ; true
+  ).
+
+
+%! preference:cache_invalidate is det.
+%
+% Delete generated preference cache artefacts.
+
+preference:cache_invalidate :-
+  forall(member(File, ['Knowledge/preference.qlf',
+                       'Knowledge/preference.raw',
+                       'Knowledge/preference.stamp']),
+         catch(delete_file(File), _, true)),
+  catch(unload_file('Knowledge/preference.qlf'), _, true),
+  retractall(preference:cache_loaded/0).
+
+
+%! preference:cache_file(-File) is det.
+%
+% Path to the compiled preference cache (`Knowledge/preference.qlf`).
+
+preference:cache_file(File) :-
+  working_directory(Cwd, Cwd),
+  directory_file_path(Cwd, 'Knowledge/preference.qlf', File).
+
+
+%! preference:raw_file(-File) is det.
+%
+% Path to the preference cache source (`Knowledge/preference.raw`).
+
+preference:raw_file(File) :-
+  working_directory(Cwd, Cwd),
+  directory_file_path(Cwd, 'Knowledge/preference.raw', File).
+
+
+%! preference:stamp_file(-File) is det.
+%
+% Path to the preference cache stamp file (`Knowledge/preference.stamp`).
+
+preference:stamp_file(File) :-
+  working_directory(Cwd, Cwd),
+  directory_file_path(Cwd, 'Knowledge/preference.stamp', File).
+
+
+preference:cache_enabled :-
+  current_predicate(interface:process_mode/1),
+  catch(interface:process_mode(Mode), _, fail),
+  current_predicate(config:preference_cache/2),
+  config:preference_cache(Mode, cached).
+
+
+%! preference:cache_current_stamp(-Stamp) is det.
+
+preference:cache_current_stamp(Stamp) :-
+  findall(Input, preference:cache_stamp_input(Input), Inputs0),
+  sort(Inputs0, Stamp).
+
+
+preference:cache_stamp_input(src(Path, Mtime)) :-
+  preference:cache_tracked_path(Path),
+  preference:cache_path_mtime(Path, Mtime).
+
+preference:cache_stamp_input(env(Name, Value)) :-
+  member(Name, ['USE', 'ACCEPT_KEYWORDS', 'ACCEPT_LICENSE']),
+  ( interface:getenv(Name, Value) -> true ; Value = '' ).
+
+
+preference:cache_tracked_path('Knowledge/kb.qlf').
+preference:cache_tracked_path('Knowledge/profile.qlf').
+
+preference:cache_tracked_path(Path) :-
+  current_predicate(config:world_file/1),
+  config:world_file(Path).
+
+preference:cache_tracked_path(Path) :-
+  current_predicate(config:portage_confdir/1),
+  config:portage_confdir(Dir),
+  member(Base, [ 'make.conf',
+                'package.use',
+                'package.mask',
+                'package.unmask',
+                'package.accept_keywords',
+                'package.license' ]),
+  directory_file_path(Dir, Base, Path).
+
+preference:cache_tracked_path(Path) :-
+  current_predicate(config:set_dir/1),
+  config:set_dir(Dir),
+  exists_directory(Dir),
+  directory_files(Dir, Names),
+  member(Name, Names),
+  \+ preference:cache_skip_set_name(Name),
+  directory_file_path(Dir, Name, Path),
+  exists_file(Path).
+
+preference:cache_tracked_path(Path) :-
+  catch(portage:get_location(Root), _, fail),
+  os:compose_path([Root, 'profiles', 'use.desc'], Path).
+
+
+preference:cache_skip_set_name(Name) :-
+  ( sub_atom(Name, 0, 1, _, '.')
+  ; Name == world
+  ).
+
+
+preference:cache_path_mtime(Path, Mtime) :-
+  ( exists_file(Path) ->
+      time_file(Path, Mtime)
+  ; exists_directory(Path) ->
+      Mtime = dir
+  ; Mtime = missing
+  ).
+
+
+preference:cache_read_stamp(Stamp) :-
+  preference:stamp_file(File),
+  setup_call_cleanup(
+    open(File, read, In, [encoding(utf8)]),
+    read_term(In, Stamp, []),
+    close(In)).
+
+
+preference:cache_write_stamp(Stamp) :-
+  preference:stamp_file(File),
+  setup_call_cleanup(
+    open(File, write, Out, [encoding(utf8)]),
+    ( format(Out, '~q.~n', [Stamp]) ),
+    close(Out)).
+
+
+:- dynamic preference:cache_loaded/0.
+
+preference:cache_load_qlf(QlfFile) :-
+  preference:cache_clear_loaded_state,
+  ensure_loaded(QlfFile),
+  assertz(preference:cache_loaded),
+  forall(preferencedata:entry(Type, Args),
+         preference:cache_apply_entry(Type, Args)).
+
+
+preference:cache_clear_loaded_state :-
+  retractall(preference:cache_loaded/0),
+  preference:cache_retract_preference_facts,
+  retractall(userconfig:env(_, _)),
+  retractall(userconfig:package_keyword(_, _)),
+  retractall(userconfig:package_license_entry(_, _)),
+  retractall(profile:use_description(_, _)).
+
+
+preference:cache_retract_preference_facts :-
+  retractall(preference:local_masked(_)),
+  retractall(preference:local_use(_)),
+  retractall(preference:local_env_use(_)),
+  retractall(preference:local_accept_keywords(_)),
+  retractall(preference:local_flag(_)),
+  retractall(preference:local_userconfig_use(_,_,_,_)),
+  retractall(preference:local_profile_use_soft(_,_,_)),
+  retractall(preference:local_userconfig_use_versioned(_,_,_)),
+  retractall(preference:local_profile_masked_use_flag(_)),
+  retractall(preference:local_profile_forced_use_flag(_)),
+  retractall(preference:local_profile_use_masked(_,_)),
+  retractall(preference:local_profile_use_forced(_,_)),
+  retractall(preference:local_set(_,_)),
+  retractall(preference:local_world_entry(_)),
+  retractall(preference:local_license_group_raw(_,_)),
+  retractall(preference:local_accept_license_wildcard),
+  retractall(preference:local_accepted_license(_)),
+  retractall(preference:local_denied_license(_)),
+  retractall(preference:system_pkg(_,_)).
+
+
+preference:cache_apply_entry(local_masked, [Atom]) :-
+  assertz(preference:local_masked(Atom)).
+preference:cache_apply_entry(local_use, [Use]) :-
+  assertz(preference:local_use(Use)).
+preference:cache_apply_entry(local_env_use, [Use]) :-
+  assertz(preference:local_env_use(Use)).
+preference:cache_apply_entry(local_accept_keywords, [Key]) :-
+  assertz(preference:local_accept_keywords(Key)).
+preference:cache_apply_entry(local_flag, [Flag]) :-
+  assertz(preference:local_flag(Flag)).
+preference:cache_apply_entry(local_userconfig_use, [C,N,Use,State]) :-
+  assertz(preference:local_userconfig_use(C,N,Use,State)).
+preference:cache_apply_entry(local_profile_use_soft, [Spec,Flag,State]) :-
+  assertz(preference:local_profile_use_soft(Spec,Flag,State)).
+preference:cache_apply_entry(local_userconfig_use_versioned, [Spec,Use,State]) :-
+  assertz(preference:local_userconfig_use_versioned(Spec,Use,State)).
+preference:cache_apply_entry(local_profile_masked_use_flag, [U]) :-
+  assertz(preference:local_profile_masked_use_flag(U)).
+preference:cache_apply_entry(local_profile_forced_use_flag, [U]) :-
+  assertz(preference:local_profile_forced_use_flag(U)).
+preference:cache_apply_entry(local_profile_use_masked, [Spec,Flag]) :-
+  assertz(preference:local_profile_use_masked(Spec,Flag)).
+preference:cache_apply_entry(local_profile_use_forced, [Spec,Flag]) :-
+  assertz(preference:local_profile_use_forced(Spec,Flag)).
+preference:cache_apply_entry(local_set, [Name,Entries]) :-
+  assertz(preference:local_set(Name,Entries)).
+preference:cache_apply_entry(local_world_entry, [Entry]) :-
+  assertz(preference:local_world_entry(Entry)).
+preference:cache_apply_entry(local_license_group_raw, [Name,Members]) :-
+  assertz(preference:local_license_group_raw(Name,Members)).
+preference:cache_apply_entry(local_accept_license_wildcard, []) :-
+  assertz(preference:local_accept_license_wildcard).
+preference:cache_apply_entry(local_accepted_license, [Lic]) :-
+  assertz(preference:local_accepted_license(Lic)).
+preference:cache_apply_entry(local_denied_license, [Lic]) :-
+  assertz(preference:local_denied_license(Lic)).
+preference:cache_apply_entry(system_pkg, [Cat,Name]) :-
+  assertz(preference:system_pkg(Cat,Name)).
+preference:cache_apply_entry(userconfig_env, [K,V]) :-
+  assertz(userconfig:env(K,V)).
+preference:cache_apply_entry(userconfig_package_keyword, [Atom,KW]) :-
+  assertz(userconfig:package_keyword(Atom,KW)).
+preference:cache_apply_entry(userconfig_package_license, [Atom,Lic]) :-
+  assertz(userconfig:package_license_entry(Atom,Lic)).
+preference:cache_apply_entry(use_description, [Flag,Desc]) :-
+  assertz(profile:use_description(Flag,Desc)).
+preference:cache_apply_entry(_, _).
+
+
+preference:cache_save_locked :-
+  preference:raw_file(RawFile),
+  preference:cache_collect_entries(Entries),
+  setup_call_cleanup(
+    open(RawFile, write, Out, [encoding(utf8)]),
+    preference:cache_write_raw(Out, Entries),
+    close(Out)),
+  catch(qcompile(RawFile), _, true),
+  preference:cache_current_stamp(Stamp),
+  preference:cache_write_stamp(Stamp).
+
+
+preference:cache_write_raw(Out, Entries) :-
+  format(Out, ':- module(preferencedata, []).~n', []),
+  format(Out, '% Auto-generated preference cache — do not edit.~n~n', []),
+  format(Out, ':- dynamic entry/2.~n~n', []),
+  forall(member(entry(Type, Args), Entries),
+         format(Out, '~q.~n', [entry(Type, Args)])).
+
+
+preference:cache_collect_entries(Entries) :-
+  findall(entry(Type, Args), preference:cache_collect_entry(Type, Args), Entries).
+
+
+preference:cache_collect_entry(local_masked, [Atom]) :-
+  preference:local_masked(Atom).
+preference:cache_collect_entry(local_use, [Use]) :-
+  preference:local_use(Use).
+preference:cache_collect_entry(local_env_use, [Use]) :-
+  preference:local_env_use(Use).
+preference:cache_collect_entry(local_accept_keywords, [Key]) :-
+  preference:local_accept_keywords(Key).
+preference:cache_collect_entry(local_flag, [Flag]) :-
+  preference:local_flag(Flag).
+preference:cache_collect_entry(local_userconfig_use, [C,N,Use,State]) :-
+  preference:local_userconfig_use(C,N,Use,State).
+preference:cache_collect_entry(local_profile_use_soft, [Spec,Flag,State]) :-
+  preference:local_profile_use_soft(Spec,Flag,State).
+preference:cache_collect_entry(local_userconfig_use_versioned, [Spec,Use,State]) :-
+  preference:local_userconfig_use_versioned(Spec,Use,State).
+preference:cache_collect_entry(local_profile_masked_use_flag, [U]) :-
+  preference:local_profile_masked_use_flag(U).
+preference:cache_collect_entry(local_profile_forced_use_flag, [U]) :-
+  preference:local_profile_forced_use_flag(U).
+preference:cache_collect_entry(local_profile_use_masked, [Spec,Flag]) :-
+  preference:local_profile_use_masked(Spec,Flag).
+preference:cache_collect_entry(local_profile_use_forced, [Spec,Flag]) :-
+  preference:local_profile_use_forced(Spec,Flag).
+preference:cache_collect_entry(local_set, [Name,Entries]) :-
+  preference:local_set(Name,Entries).
+preference:cache_collect_entry(local_world_entry, [Entry]) :-
+  preference:local_world_entry(Entry).
+preference:cache_collect_entry(local_license_group_raw, [Name,Members]) :-
+  preference:local_license_group_raw(Name,Members).
+preference:cache_collect_entry(local_accept_license_wildcard, []) :-
+  preference:local_accept_license_wildcard.
+preference:cache_collect_entry(local_accepted_license, [Lic]) :-
+  preference:local_accepted_license(Lic).
+preference:cache_collect_entry(local_denied_license, [Lic]) :-
+  preference:local_denied_license(Lic).
+preference:cache_collect_entry(system_pkg, [Cat,Name]) :-
+  preference:system_pkg(Cat,Name).
+preference:cache_collect_entry(userconfig_env, [K,V]) :-
+  userconfig:env(K,V).
+preference:cache_collect_entry(userconfig_package_keyword, [Atom,KW]) :-
+  userconfig:package_keyword(Atom,KW).
+preference:cache_collect_entry(userconfig_package_license, [Atom,Lic]) :-
+  userconfig:package_license_entry(Atom,Lic).
+preference:cache_collect_entry(use_description, [Flag,Desc]) :-
+  profile:use_description(Flag,Desc).
+
+
+% -----------------------------------------------------------------------------
 %  Configuration status
 % -----------------------------------------------------------------------------
 
@@ -1801,6 +2170,10 @@ preference:status :-
   ( preference:use_cached_profile ->
       format('    Profile cache:  active (Knowledge/profile.qlf)~n')
   ; format('    Profile cache:  not used (live parsing)~n')
+  ),
+  ( preference:cache_enabled ->
+      format('    Preference cache: enabled (Knowledge/preference.qlf)~n')
+  ; format('    Preference cache: disabled~n')
   ),
   aggregate_all(count, preference:global_use(_), UseCount),
   aggregate_all(count, preference:masked(_), MaskCount),

@@ -36,6 +36,14 @@ compiled cache, after which reasoning works directly over in-memory facts.
 Everything else in this chapter assumes that this first pillar is in place;
 without it, no amount of clever proving would feel fast enough.
 
+**Companion caches.**  `Knowledge/profile.qlf` (profile tree data, built by
+`--sync`) and `Knowledge/preference.qlf` (materialized preference state after
+`preference:init/0`, built on first startup and invalidated by `--sync` or input
+changes) further reduce startup work.  After `kb.qlf` loads, `knowledgebase:load/0`
+also primes the JIT index on `cache:entry_metadata/4` for slotted profile-mask
+lookups so the first `preference:init/0` does not pay a multi-second penalty on
+atoms such as `dev-qt/qtimageformats:5`.
+
 
 ## Pillar 2: Goal expansion macros
 

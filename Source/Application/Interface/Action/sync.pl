@@ -46,6 +46,7 @@ action:process_sync(Mode, []) :-
   kb:sync,
   message:header(['Syncing profile']), nl,
   catch(profile:cache_save, _, true),
+  catch(preference:cache_invalidate, _, true),
   ( Mode == standalone -> kb:save ; true ).
 
 action:process_sync(Mode, RepoNames) :-
@@ -53,6 +54,7 @@ action:process_sync(Mode, RepoNames) :-
          kb:sync(Name)),
   message:header(['Syncing profile']), nl,
   catch(profile:cache_save, _, true),
+  catch(preference:cache_invalidate, _, true),
   ( Mode == standalone -> kb:save ; true ).
 
 
