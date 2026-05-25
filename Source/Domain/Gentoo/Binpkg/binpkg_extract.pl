@@ -218,7 +218,8 @@ binpkg_extract:decompress_environment_if_present(BuildInfoDir, EnvFile) :-
 %
 % Spawns `bunzip2 -c <input>` and pipes stdout to OutputFile. We avoid
 % shelling out via `sh -c '... > ...'` to keep the path/argv contract
-% explicit and quote-safe.
+% explicit and quote-safe.  The stdout pipe is read in octet mode so
+% ISO-8859 bytes in saved binpkg environments copy through unchanged.
 
 binpkg_extract:bunzip2_to_file(InputBz2, OutputFile) :-
   setup_call_cleanup(
@@ -227,6 +228,7 @@ binpkg_extract:bunzip2_to_file(InputBz2, OutputFile) :-
         path(bunzip2),
         ['-c', InputBz2],
         [stdout(pipe(InPipe)), process(Pid)]),
+      set_stream(InPipe, encoding(octet)),
       copy_stream_data(InPipe, OutStream),
       close(InPipe),
       process_wait(Pid, exit(0))
