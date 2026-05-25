@@ -65,8 +65,10 @@ BUILD_IDs 8 (oniguruma=on) and 10 (oniguruma=off) during initial bring-up.
 %   4. Extract `metadata.tar.zst`  -> `BuildDir/build-info/`
 %      (with `--transform 's,^metadata/,build-info/,'`).
 %   5. Decompress `environment.bz2` -> `BuildDir/temp/environment`.
-%   5b. Append `MERGE_TYPE=binary` / `EMERGE_FROM=binary` to
-%       `temp/environment` (overrides source-build markers from the gpkg).
+%   5b. Rewrite `temp/environment` for binary merge (`MERGE_TYPE`,
+%       `EMERGE_FROM`) and refresh `build-info/environment.bz2`.
+%   5c. Copy `image/etc/env.d/*` into `temp/` when absent (ebuilds such as
+%       `app-backup/amanda` expect `${T}/97amanda` during postinst).
 %   6. Backfill `CATEGORY` / `PF` in `build-info/` if the gpkg omitted them.
 %   7. Touch `BuildDir/.installed` (qmerge precondition).
 %
@@ -103,7 +105,8 @@ binpkg_extract:populate_builddir(GpkgPath, InnerName, BuildDir, ScratchDir) :-
   os:compose_path([BuildDir, 'build-info'], BuildInfoDir),
   os:compose_path([BuildDir, 'temp', 'environment'], EnvFile),
   binpkg_extract:decompress_environment_if_present(BuildInfoDir, EnvFile),
-  binpkg_extract:patch_binary_merge_environment(EnvFile),
+  binpkg_extract:patch_binary_merge_environment(EnvFile, BuildInfoDir),
+  binpkg_extract:backfill_temp_envd_from_image(BuildDir),
   binpkg_extract:backfill_category_pf(InnerName, BuildInfoDir),
   binpkg_extract:touch_installed_marker(BuildDir).
 
@@ -237,26 +240,134 @@ binpkg_extract:bunzip2_to_file(InputBz2, OutputFile) :-
   ).
 
 
-%! binpkg_extract:patch_binary_merge_environment(+EnvFile) is det.
+%! binpkg_extract:patch_binary_merge_environment(+EnvFile, +BuildInfoDir) is det.
 %
-% Appends binary-merge markers to `temp/environment` after decompression.
-% The gpkg's saved environment was captured during a source build and
-% typically records `MERGE_TYPE="source"`.  `ebuild.sh` sources this
-% file before postinst, which would defeat the `MERGE_TYPE=binary` that
-% `binpkg_exec:run_qmerge/5` passes via `process_create/3` env (Portage
-% also sets merge type from `configdict["pkg"]`, which defaults to
-% `source` when the ebuild path lives in a porttree).  Appending the
-% binary markers last mirrors `_emerge/Binpkg.py` and ensures ebuilds
-% like `app-backup/amanda` can fall back from `${T}/97amanda` to
-% `${EROOT}/etc/env.d/97amanda` during qmerge postinst.
+% Rewrites `temp/environment` for binary qmerge and, when the gpkg shipped
+% `build-info/environment.bz2`, recompresses the patched file back into
+% place.  The saved environment was captured during a source build; qmerge
+% preinst re-saves `${T}/environment` via `__save_ebuild_env`, so a
+% trailing append alone is not durable.  Stripping prior `MERGE_TYPE` /
+% `EMERGE_FROM` exports and writing canonical binary markers mirrors
+% `_emerge/Binpkg.py`.
 
-binpkg_extract:patch_binary_merge_environment(EnvFile) :-
-  setup_call_cleanup(
-    open(EnvFile, append, OutStream, [type(binary)]),
-    ( format(OutStream, '~nexport MERGE_TYPE="binary"~n', []),
-      format(OutStream, 'export EMERGE_FROM="binary"~n', [])
-    ),
-    close(OutStream)
+binpkg_extract:patch_binary_merge_environment(EnvFile, BuildInfoDir) :-
+  binpkg_extract:rewrite_binary_merge_markers(EnvFile),
+  binpkg_extract:recompress_environment_bz2_if_present(EnvFile, BuildInfoDir).
+
+
+%! binpkg_extract:rewrite_binary_merge_markers(+EnvFile) is det.
+
+binpkg_extract:rewrite_binary_merge_markers(EnvFile) :-
+  ( exists_file(EnvFile)
+  -> setup_call_cleanup(
+       open(EnvFile, read, In, [type(binary)]),
+       binpkg_extract:read_env_lines(In, Lines),
+       close(In)
+     ),
+     exclude(binpkg_extract:binary_merge_env_export_line, Lines, Kept),
+     append(Kept,
+            ["", 'export MERGE_TYPE="binary"', 'export EMERGE_FROM="binary"'],
+            OutLines),
+     setup_call_cleanup(
+       open(EnvFile, write, Out, [type(binary)]),
+       binpkg_extract:write_env_lines(Out, OutLines),
+       close(Out)
+     )
+  ;  setup_call_cleanup(
+       open(EnvFile, write, Out, [type(binary)]),
+       ( format(Out, 'export MERGE_TYPE="binary"~n', []),
+         format(Out, 'export EMERGE_FROM="binary"~n', [])
+       ),
+       close(Out)
+     )
+  ).
+
+
+%! binpkg_extract:read_env_lines(+Stream, -Lines) is det.
+
+binpkg_extract:read_env_lines(In, Lines) :-
+  read_line_to_string(In, Line0),
+  binpkg_extract:read_env_lines_loop(In, Line0, Lines).
+
+binpkg_extract:read_env_lines_loop(_, end_of_file, []) :- !.
+binpkg_extract:read_env_lines_loop(In, Line, [Line|Rest]) :-
+  read_line_to_string(In, Line0),
+  binpkg_extract:read_env_lines_loop(In, Line0, Rest).
+
+
+%! binpkg_extract:write_env_lines(+Stream, +Lines) is det.
+
+binpkg_extract:write_env_lines(_, []).
+binpkg_extract:write_env_lines(Out, [Line|Rest]) :-
+  format(Out, '~s~n', [Line]),
+  binpkg_extract:write_env_lines(Out, Rest).
+
+
+%! binpkg_extract:binary_merge_env_export_line(+Line) is semidet.
+%
+% True when Line is an environment export of `MERGE_TYPE` or
+% `EMERGE_FROM` at column zero (not ebuild snippet text embedded in the
+% saved environment).
+
+binpkg_extract:binary_merge_env_export_line(Line) :-
+  ( Line == "export MERGE_TYPE=\"binary\""
+  ; Line == "export EMERGE_FROM=\"binary\""
+  ; sub_string(Line, 0, _, _, "export MERGE_TYPE=")
+  ; sub_string(Line, 0, _, _, "export EMERGE_FROM=")
+  ).
+
+
+%! binpkg_extract:recompress_environment_bz2_if_present(+EnvFile, +BuildInfoDir) is det.
+%
+% When the gpkg shipped `environment.bz2`, rewrite it from the patched
+% `temp/environment` so any later extraction sees binary-merge markers.
+
+binpkg_extract:recompress_environment_bz2_if_present(EnvFile, BuildInfoDir) :-
+  os:compose_path([BuildInfoDir, 'environment.bz2'], EnvBz2),
+  ( exists_file(EnvBz2)
+  -> setup_call_cleanup(
+       open(EnvBz2, write, OutStream, [type(binary)]),
+       ( process_create(
+           path(bzip2),
+           ['-c', EnvFile],
+           [stdout(pipe(InPipe)), process(Pid)]),
+         set_stream(InPipe, encoding(octet)),
+         copy_stream_data(InPipe, OutStream),
+         close(InPipe),
+         process_wait(Pid, exit(0))
+       ),
+       close(OutStream)
+     )
+  ;  true
+  ).
+
+
+%! binpkg_extract:backfill_temp_envd_from_image(+BuildDir) is det.
+%
+% Copies `image/etc/env.d/*` into `${T}/` when the temp counterpart is
+% absent.  Some ebuilds write config to `${T}/${ENVDFILE}` during setup
+% and expect that file (or a binary-merge fallback to `${EROOT}/etc/env.d`)
+% during postinst.  Binpkgs only carry the installed payload in `image/`,
+% not the transient temp files from the producer's setup phase.
+
+binpkg_extract:backfill_temp_envd_from_image(BuildDir) :-
+  os:compose_path([BuildDir, 'image', 'etc', 'env.d'], ImageEnvDir),
+  os:compose_path([BuildDir, 'temp'], TempDir),
+  ( exists_directory(ImageEnvDir)
+  -> directory_files(ImageEnvDir, Names0),
+     exclude(=('.'), Names0, Names1),
+     exclude(=('..'), Names1, Names),
+     forall(
+       ( member(Name, Names),
+         \+ sub_string(Name, 0, 1, _, '.'),
+         os:compose_path([ImageEnvDir, Name], Src),
+         os:compose_path([TempDir, Name], Dest),
+         exists_file(Src),
+         \+ exists_file(Dest)
+       ),
+       copy_file(Src, Dest)
+     )
+  ;  true
   ).
 
 
