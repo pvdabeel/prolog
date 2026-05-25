@@ -138,6 +138,27 @@ tinderbox-ng compare sys-apps/portage
 ```
 
 
+## Bulk plan fingerprint comparison
+
+`Source/Test/plancompare.pl` fingerprints the full pipeline (prove + plan +
+schedule) for every ebuild in a repository.  Use it to verify that a
+resolver change produces identical plans before committing:
+
+```sh
+./Source/Application/Wrapper/portage-ng-dev --mode standalone --shell <<'PL'
+load_files(portage('Source/Test/plancompare'), [if(true)]).
+plancompare:run(portage, '/tmp/plan-compare.tsv').
+halt.
+PL
+```
+
+Compare two TSV files from before/after runs:
+
+```sh
+plancompare:diff('/tmp/before.tsv', '/tmp/after.tsv').
+```
+
+
 ## md5-cache extractor regression
 
 `md5cache_validate/0,1` (in `Source/Test/unittest.pl`) runs the
