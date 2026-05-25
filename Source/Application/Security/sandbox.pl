@@ -132,6 +132,9 @@ sandbox:safe_primitive(prover:test_stats(_,_,_)).
 sandbox:safe_primitive(prover:test_stats_pkgs(_,_)).
 sandbox:safe_primitive(prover:test_stats_pkgs(_,_,_,_)).
 
+sandbox:safe_primitive(plancompare:run(_,_)).
+sandbox:safe_primitive(plancompare:diff(_,_)).
+
 sandbox:safe_primitive(builder:test_stats(_)).
 sandbox:safe_primitive(builder:test_stats(_,_)).
 sandbox:safe_primitive(builder:test_stats(_,_,_)).
