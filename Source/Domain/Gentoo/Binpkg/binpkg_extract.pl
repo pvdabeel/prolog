@@ -65,6 +65,8 @@ BUILD_IDs 8 (oniguruma=on) and 10 (oniguruma=off) during initial bring-up.
 %   4. Extract `metadata.tar.zst`  -> `BuildDir/build-info/`
 %      (with `--transform 's,^metadata/,build-info/,'`).
 %   5. Decompress `environment.bz2` -> `BuildDir/temp/environment`.
+%   5b. Append `MERGE_TYPE=binary` / `EMERGE_FROM=binary` to
+%       `temp/environment` (overrides source-build markers from the gpkg).
 %   6. Backfill `CATEGORY` / `PF` in `build-info/` if the gpkg omitted them.
 %   7. Touch `BuildDir/.installed` (qmerge precondition).
 %
@@ -101,6 +103,7 @@ binpkg_extract:populate_builddir(GpkgPath, InnerName, BuildDir, ScratchDir) :-
   os:compose_path([BuildDir, 'build-info'], BuildInfoDir),
   os:compose_path([BuildDir, 'temp', 'environment'], EnvFile),
   binpkg_extract:decompress_environment_if_present(BuildInfoDir, EnvFile),
+  binpkg_extract:patch_binary_merge_environment(EnvFile),
   binpkg_extract:backfill_category_pf(InnerName, BuildInfoDir),
   binpkg_extract:touch_installed_marker(BuildDir).
 
@@ -227,6 +230,29 @@ binpkg_extract:bunzip2_to_file(InputBz2, OutputFile) :-
       copy_stream_data(InPipe, OutStream),
       close(InPipe),
       process_wait(Pid, exit(0))
+    ),
+    close(OutStream)
+  ).
+
+
+%! binpkg_extract:patch_binary_merge_environment(+EnvFile) is det.
+%
+% Appends binary-merge markers to `temp/environment` after decompression.
+% The gpkg's saved environment was captured during a source build and
+% typically records `MERGE_TYPE="source"`.  `ebuild.sh` sources this
+% file before postinst, which would defeat the `MERGE_TYPE=binary` that
+% `binpkg_exec:run_qmerge/5` passes via `process_create/3` env (Portage
+% also sets merge type from `configdict["pkg"]`, which defaults to
+% `source` when the ebuild path lives in a porttree).  Appending the
+% binary markers last mirrors `_emerge/Binpkg.py` and ensures ebuilds
+% like `app-backup/amanda` can fall back from `${T}/97amanda` to
+% `${EROOT}/etc/env.d/97amanda` during qmerge postinst.
+
+binpkg_extract:patch_binary_merge_environment(EnvFile) :-
+  setup_call_cleanup(
+    open(EnvFile, append, OutStream, [type(binary)]),
+    ( format(OutStream, '~nexport MERGE_TYPE="binary"~n', []),
+      format(OutStream, 'export EMERGE_FROM="binary"~n', [])
     ),
     close(OutStream)
   ).
