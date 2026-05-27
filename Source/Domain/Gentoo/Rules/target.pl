@@ -726,6 +726,7 @@ candidate:install_dep_model(Repository://Ebuild, Model, AfterForDeps, install,
   query:search(model(dependency(MergedDeps0,install)):config?{ModelExt}, Repository://Ebuild),
   dependency:add_self_to_dep_contexts(Repository://Ebuild, MergedDeps0, MergedDeps),
   featureterm:add_after_to_dep_contexts(AfterForDeps, MergedDeps, MergedDepsAfter),
+  candidate:seed_bwu_memo_from_dep_tree(MergedDepsAfter),
   candidate:order_deps_for_proof(install, MergedDepsAfter, MergedDepsOrdered),
   ( memberchk(C, ['virtual','acct-group','acct-user']) ->
       Prefix0 = [ Selected,
@@ -762,6 +763,13 @@ candidate:run_dep_model(Repository://Ebuild, Model, AfterForDeps, run,
   query:search(model(dependency(MergedDeps0,run)):config?{ModelExt}, Repository://Ebuild),
   dependency:add_self_to_dep_contexts(Repository://Ebuild, MergedDeps0, MergedDeps),
   featureterm:add_after_to_dep_contexts(AfterForDeps, MergedDeps, MergedDepsAfter),
+  ( query:search(model(dependency(MergedDepsInstall0,install)):config?{ModelExt}, Repository://Ebuild) ->
+      dependency:add_self_to_dep_contexts(Repository://Ebuild, MergedDepsInstall0, MergedDepsInstall),
+      featureterm:add_after_to_dep_contexts(AfterForDeps, MergedDepsInstall, MergedDepsInstallAfter)
+  ; MergedDepsInstallAfter = []
+  ),
+  candidate:seed_bwu_memo_from_dep_tree(MergedDepsInstallAfter),
+  candidate:seed_bwu_memo_from_dep_tree(MergedDepsAfter),
   candidate:order_deps_for_proof(run, MergedDepsAfter, MergedDepsOrdered),
   target:run_install_action(Repository://Ebuild, C, N, R, BResolved, InstallAction, InstallCtx0),
   target:run_tag_suggestions(Repository://Ebuild, BResolved, R, InstallCtx0, InstallCtx),
@@ -813,6 +821,7 @@ candidate:resolve_required_use(_Phase, C, N, Repository://Ebuild, Context1, R, B
 % or downgrade based on the VDB state.
 
 target:run_install_action(Repository://Ebuild, C, N, R, BResolved, InstallAction, InstallCtx0) :-
+  use:merge_memo_candidate_bwu(C, N, BResolved, BResolved1),
   ( \+ preference:flag(emptytree),
     candidate:entry_slot_default(Repository, Ebuild, SlotNew),
     query:search(package(C,N), pkg://_),
@@ -830,9 +839,9 @@ target:run_install_action(Repository://Ebuild, C, N, R, BResolved, InstallAction
     -> UpdateOrDowngrade = downgrade
     ;  UpdateOrDowngrade = update
     ),
-    InstallCtx0 = [replaces(OldRepo://OldEbuild),required_use:R,build_with_use:BResolved],
+    InstallCtx0 = [replaces(OldRepo://OldEbuild),required_use:R,build_with_use:BResolved1],
     InstallAction = UpdateOrDowngrade
-  ; InstallCtx0 = [required_use:R,build_with_use:BResolved],
+  ; InstallCtx0 = [required_use:R,build_with_use:BResolved1],
     InstallAction = install
   ).
 
