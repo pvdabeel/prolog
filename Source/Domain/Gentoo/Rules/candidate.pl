@@ -3173,18 +3173,45 @@ candidate:grouped_dep_use_and_slot(_Action, C, N, PackageDeps1, SlotReq, Context
   dependency:process_slot(SlotReq, SlotMeta, C, N, FoundRepo://Candidate, NewContextMemo, NewerContext0).
 
 
+%! candidate:entry_has_choice_required_use(+Repo, +Entry) is semidet.
+%
+% True when the ebuild has REQUIRED_USE choice groups (||, ^^, etc.)
+% that grouped_dep stabilization may need to resolve from a partial BWU.
+% Cheap metadata scan only; avoids calling verify/stabilize on every
+% foo[bar] edge (PR #16 regression).
+
+candidate:entry_has_choice_required_use(Repo, Entry) :-
+  cache:entry_metadata(Repo, Entry, required_use, Term),
+  candidate:required_use_term_has_choice(Term).
+
+
+%! candidate:required_use_term_has_choice(+Term) is semidet.
+
+candidate:required_use_term_has_choice(any_of_group(_)).
+candidate:required_use_term_has_choice(exactly_one_of_group(_)).
+candidate:required_use_term_has_choice(at_most_one_of_group(_)).
+candidate:required_use_term_has_choice(use_conditional_group(_, _, _, SubDeps)) :-
+  member(Sub, SubDeps),
+  candidate:required_use_term_has_choice(Sub).
+
+
 %! candidate:grouped_dep_stabilize_bwu(+RepoEntry, +CtxIn, -CtxOut) is det.
 %
-% When bracketed USE deps supply a partial BWU (e.g. clutter[introspection]),
-% run REQUIRED_USE stabilization so || ( aqua wayland X ) picks a global
-% flag like X before check_bwu_cross_dep runs.
+% Bug B (clutter[introspection]): bracket USE can thread a partial BWU
+% before || ( aqua wayland X ) picks a global flag. Only packages with
+% choice-shaped REQUIRED_USE need an extra stabilize here; target.pl
+% already stabilizes the root :run/:install candidate.
 
 candidate:grouped_dep_stabilize_bwu(Repo://Entry, CtxIn, CtxOut) :-
   use:context_build_with_use_state(CtxIn, BWU0),
-  ( BWU0 == use_state([], []) ->
-      CtxOut = CtxIn
-  ; use:stabilize_required_use(Repo://Entry, BWU0, BWU1),
-    feature_unification:unify([build_with_use:BWU1], CtxIn, CtxOut)
+  ( BWU0 == use_state([], [])
+  -> CtxOut = CtxIn
+  ; \+ candidate:entry_has_choice_required_use(Repo, Entry)
+  -> CtxOut = CtxIn
+  ; \+ use:verify_required_use_with_bwu(Repo://Entry, BWU0)
+  -> use:stabilize_required_use(Repo://Entry, BWU0, BWU1),
+     feature_unification:unify([build_with_use:BWU1], CtxIn, CtxOut)
+  ; CtxOut = CtxIn
   ).
 
 
@@ -3322,12 +3349,6 @@ candidate:grouped_dep_assemble_conditions(Action, C, N, PackageDeps1, SlotReq, C
 % Builds an assumption condition when no candidate could satisfy the
 % grouped dependency. Tags context with explanation reason and
 % actionable suggestions (keyword, unmask, slot conflict, REQUIRED_USE).
-
-candidate:grouped_dep_build_assumption(_Action, C, N, _PackageDeps1, _PackageDepsOrig, _Context, _Conditions) :-
-  memo:requse_violation_(C, N, _),
-  \+ query:search([category(C), name(N), installed(true)], pkg://_),
-  !,
-  fail.
 
 candidate:grouped_dep_build_assumption(Action, C, N, PackageDeps1, PackageDepsOrig, Context, Conditions) :-
   explanation:assumption_reason_for_grouped_dep(Action, C, N, PackageDepsOrig, Context, Reason),
