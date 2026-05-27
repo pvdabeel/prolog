@@ -1406,6 +1406,72 @@ use:describe_required_use_violation(Repo://Entry, use_state(Enable, Disable), De
 
 
 % =============================================================================
+%  Cross-dependency BWU aggregation (per category/name)
+% =============================================================================
+
+%! use:merge_memo_candidate_bwu(+C, +N, +BWU0, -BWU) is det.
+%
+% Union incoming context BWU with the per-(C,N) memo accumulated from every
+% grouped_dep edge that targeted this package (bracketed USE on BDEPEND/DEPEND).
+% Used when resolving a provider's :install/:run entry so early proofs without
+% bracket USE still pick up requirements discovered later in the proof.
+
+use:merge_memo_candidate_bwu(C, N, BWU0, BWU0) :-
+    \+ memo:candidate_bwu_(C, N, _),
+    !.
+use:merge_memo_candidate_bwu(C, N, BWU0, BWU) :-
+    memo:candidate_bwu_(C, N, BAgg),
+    ( BWU0 == use_state([], []) ->
+        BWU = BAgg
+    ; feature_unification:val_hook(BWU0, BAgg, BWU) ->
+        true
+    ; BWU = BWU0
+    ).
+
+
+%! use:replace_candidate_bwu(+C, +N, +BWU) is det.
+%
+% Store (or replace) the aggregated build_with_use state for (C,N).
+
+use:replace_candidate_bwu(C, N, BWU) :-
+    retractall(memo:candidate_bwu_(C, N, _)),
+    assertz(memo:candidate_bwu_(C, N, BWU)).
+
+
+%! use:accumulate_candidate_bwu(+C, +N, +BWU)
+%
+% Merge BWU from a dependency edge into the per-(C,N) memo.  Fails on
+% enable/disable conflicts.  Does not run REQUIRED_USE verification (the
+% provider entry is not fixed yet on grouped_dep edges).
+
+use:accumulate_candidate_bwu(_C, _N, use_state([], [])) :- !.
+use:accumulate_candidate_bwu(C, N, BWU) :-
+    ( memo:candidate_bwu_(C, N, OldBWU) ->
+        ( feature_unification:val_hook(OldBWU, BWU, MergedBWU) ->
+            use:replace_candidate_bwu(C, N, MergedBWU)
+        ; use:compute_ed_conflict_desc(OldBWU, BWU, ViolDesc),
+          ( \+ memo:requse_violation_(C, N, _) ->
+              assertz(memo:requse_violation_(C, N, ViolDesc))
+          ; true
+          ),
+          fail
+        )
+    ; assertz(memo:candidate_bwu_(C, N, BWU))
+    ).
+
+
+%! use:verify_candidate_satisfies_bwu_state(+RepoEntry, +BWU) is semidet.
+%
+% True when the portage candidate's effective IUSE matches aggregated BWU.
+
+use:verify_candidate_satisfies_bwu_state(Repo://Entry, use_state(En, Dis)) :-
+    forall(member(F, En),
+           use:candidate_effective_use_enabled_in_iuse(Repo://Entry, F)),
+    forall(member(F, Dis),
+           \+ use:candidate_effective_use_enabled_in_iuse(Repo://Entry, F)).
+
+
+% =============================================================================
 %  Cross-dependency BWU REQUIRED_USE conflict detection
 % =============================================================================
 
@@ -1419,8 +1485,7 @@ use:check_bwu_cross_dep(C, N, RepoEntry, BWU) :-
         ( memo:candidate_bwu_(C, N, OldBWU) ->
             ( feature_unification:val_hook(OldBWU, BWU, MergedBWU) ->
                 ( use:verify_required_use_with_bwu(RepoEntry, MergedBWU) ->
-                    retractall(memo:candidate_bwu_(C, N, _)),
-                    assertz(memo:candidate_bwu_(C, N, MergedBWU))
+                    use:replace_candidate_bwu(C, N, MergedBWU)
                 ; use:describe_required_use_violation(RepoEntry, MergedBWU, ViolDesc),
                   ( \+ memo:requse_violation_(C, N, _) ->
                       assertz(memo:requse_violation_(C, N, ViolDesc))
@@ -1435,7 +1500,15 @@ use:check_bwu_cross_dep(C, N, RepoEntry, BWU) :-
               ),
               fail
             )
-        ; assertz(memo:candidate_bwu_(C, N, BWU))
+        ; ( use:verify_required_use_with_bwu(RepoEntry, BWU) ->
+              assertz(memo:candidate_bwu_(C, N, BWU))
+          ; use:describe_required_use_violation(RepoEntry, BWU, ViolDesc),
+            ( \+ memo:requse_violation_(C, N, _) ->
+                assertz(memo:requse_violation_(C, N, ViolDesc))
+            ; true
+            ),
+            fail
+          )
         )
     ; true
     ).
@@ -1454,22 +1527,8 @@ use:clear_bwu_cross_dep_memos :-
 % Lightweight Enable/Disable conflict check for grouped_package_dependency.
 
 use:check_bwu_ed_conflict(C, N, Context) :-
-    ( use:context_build_with_use_state(Context, BWU),
-      BWU \= use_state([], []) ->
-        ( memo:candidate_bwu_(C, N, OldBWU) ->
-            ( feature_unification:val_hook(OldBWU, BWU, _) ->
-                true
-            ; use:compute_ed_conflict_desc(OldBWU, BWU, ViolDesc),
-              ( \+ memo:requse_violation_(C, N, _) ->
-                  assertz(memo:requse_violation_(C, N, ViolDesc))
-              ; true
-              ),
-              fail
-            )
-        ; true
-        )
-    ; true
-    ).
+    use:context_build_with_use_state(Context, BWU),
+    use:accumulate_candidate_bwu(C, N, BWU).
 
 
 %! use:compute_ed_conflict_desc(+OldBWU, +NewBWU, -ViolDesc)

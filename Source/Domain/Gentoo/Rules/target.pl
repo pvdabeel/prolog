@@ -785,7 +785,8 @@ candidate:run_dep_model(Repository://Ebuild, Model, AfterForDeps, run,
 % violation) when REQUIRED_USE cannot be satisfied.
 
 candidate:resolve_required_use(_Phase, C, N, Repository://Ebuild, Context1, R, BResolved, Model) :-
-  use:context_build_with_use_state(Context1, B),
+  use:context_build_with_use_state(Context1, B0),
+  use:merge_memo_candidate_bwu(C, N, B0, B),
   ( memberchk(required_use:R, Context1) -> true ; true ),
   query:search(model(Model,required_use(R),build_with_use(B)), Repository://Ebuild),
   use:check_bwu_cross_dep(C, N, Repository://Ebuild, B),

@@ -1023,13 +1023,7 @@ plan:print_config(Repository://Entry:fetchonly?{_Context}) :-
 
 plan:print_config(Repository://Entry:fetchonly?{Context}) :-
  !,
- findall(Use,
-         (member(Term,Context),
-          (Term = required_use(Uses) ; Term = build_with_use(Uses)),
-           member(assumed(Use),Uses)),
-         Assumed0),
- plan:use_changes_to_assumed(Context, SuggAssumed),
- append(Assumed0, SuggAssumed, Assumed),
+ plan:collect_context_assumed_use(Context, Assumed),
  plan:set_old_use_context(Repository://Entry, Context),
  findall([Reason,Group], group_by(Reason, Use, kb:query(iuse_filtered(Use,Reason),Repository://Entry), Group), Useflags),
 
@@ -1088,13 +1082,7 @@ plan:print_config(Repository://Entry:install?{Context}) :-
 
 plan:print_config(Repository://Entry:install?{Context}) :-
   !,
-  findall(Use,
-         (member(Term,Context),
-          (Term = required_use(Uses) ; Term = build_with_use(Uses)),
-           member(assumed(Use),Uses)),
-         Assumed0),
-  plan:use_changes_to_assumed(Context, SuggAssumed),
-  append(Assumed0, SuggAssumed, Assumed),
+  plan:collect_context_assumed_use(Context, Assumed),
 
   plan:set_old_use_context(Repository://Entry, Context),
 
@@ -1576,6 +1564,31 @@ plan:collect_all_flags(List, Assumed, AllFlags) :-
 % Converts a flag to a flag term.
 
 plan:to_flag_term(Type, Assumed, Flag, flag(Type, Flag, Assumed)).
+
+
+%! plan:collect_context_assumed_use(+Context, -Assumed) is det.
+%
+% Collect USE overrides for plan display: legacy required_use/build_with_use
+% lists, canonical build_with_use:use_state/2, and suggestion(use_change).
+
+plan:collect_context_assumed_use(Context, Assumed) :-
+  findall(A, plan:context_assumed_use_atom(Context, A), Assumed0),
+  plan:use_changes_to_assumed(Context, SuggAssumed),
+  append(Assumed0, SuggAssumed, AssumedDup),
+  sort(AssumedDup, Assumed).
+
+
+plan:context_assumed_use_atom(Context, Use) :-
+  member(Term, Context),
+  ( Term = required_use(Uses) ; Term = build_with_use(Uses) ),
+  is_list(Uses),
+  member(assumed(Use), Uses).
+plan:context_assumed_use_atom(Context, Flag) :-
+  memberchk(build_with_use:use_state(En, _Dis), Context),
+  member(Flag, En).
+plan:context_assumed_use_atom(Context, minus(Flag)) :-
+  memberchk(build_with_use:use_state(_En, Dis), Context),
+  member(Flag, Dis).
 
 
 %! plan:use_changes_to_assumed(+Context, -Assumed)

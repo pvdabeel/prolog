@@ -1092,6 +1092,27 @@ test(list_form_disable_assumed, [true(Dis == [z])]) :-
 :- end_tests(use_bwu_requirements).
 
 
+:- begin_tests(use_candidate_bwu_memo).
+
+test(merge_empty_ctx_with_memo, [true(B == use_state([wayland],[]))]) :-
+  use:clear_bwu_cross_dep_memos,
+  assertz(memo:candidate_bwu_('dev-qt', qtbase, use_state([wayland], []))),
+  use:merge_memo_candidate_bwu('dev-qt', qtbase, use_state([], []), B).
+
+test(merge_union_ctx_and_memo, [true(B == use_state([gui,wayland],[]))]) :-
+  use:clear_bwu_cross_dep_memos,
+  assertz(memo:candidate_bwu_('dev-qt', qtbase, use_state([wayland], []))),
+  use:merge_memo_candidate_bwu('dev-qt', qtbase, use_state([gui], []), B).
+
+test(accumulate_two_edges, [true(M == use_state([icu,wayland],[]))]) :-
+  use:clear_bwu_cross_dep_memos,
+  use:accumulate_candidate_bwu('dev-qt', qtbase, use_state([wayland], [])),
+  use:accumulate_candidate_bwu('dev-qt', qtbase, use_state([icu], [])),
+  memo:candidate_bwu_('dev-qt', qtbase, M).
+
+:- end_tests(use_candidate_bwu_memo).
+
+
 :- begin_tests(use_iuse_assoc).
 
 test(single_pair, [true(V == positive)]) :-
