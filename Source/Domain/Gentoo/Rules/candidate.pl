@@ -3165,11 +3165,27 @@ candidate:grouped_dep_use_and_slot(_Action, C, N, PackageDeps1, SlotReq, Context
     ContextDep = Context
   ),
   use:candidate_satisfies_use_deps(ContextDep, FoundRepo://Candidate, MergedUse),
-  dependency:process_build_with_use(MergedUse, ContextDep, NewContext, Constraints, FoundRepo://Candidate),
+  dependency:process_build_with_use(MergedUse, ContextDep, NewContext0, Constraints, FoundRepo://Candidate),
+  candidate:grouped_dep_stabilize_bwu(FoundRepo://Candidate, NewContext0, NewContext),
   use:check_bwu_ed_conflict(C, N, NewContext),
   use:unify_memo_bwu_into_context(C, N, NewContext, NewContextMemo),
   candidate:query_search_slot_constraint(SlotReq, FoundRepo://Candidate, SlotMeta),
   dependency:process_slot(SlotReq, SlotMeta, C, N, FoundRepo://Candidate, NewContextMemo, NewerContext0).
+
+
+%! candidate:grouped_dep_stabilize_bwu(+RepoEntry, +CtxIn, -CtxOut) is det.
+%
+% When bracketed USE deps supply a partial BWU (e.g. clutter[introspection]),
+% run REQUIRED_USE stabilization so || ( aqua wayland X ) picks a global
+% flag like X before check_bwu_cross_dep runs.
+
+candidate:grouped_dep_stabilize_bwu(Repo://Entry, CtxIn, CtxOut) :-
+  use:context_build_with_use_state(CtxIn, BWU0),
+  ( BWU0 == use_state([], []) ->
+      CtxOut = CtxIn
+  ; use:stabilize_required_use(Repo://Entry, BWU0, BWU1),
+    feature_unification:unify([build_with_use:BWU1], CtxIn, CtxOut)
+  ).
 
 
 %! candidate:grouped_dep_tag_suggestions(+Entry, +Context0, -Context) is det.
@@ -3306,6 +3322,12 @@ candidate:grouped_dep_assemble_conditions(Action, C, N, PackageDeps1, SlotReq, C
 % Builds an assumption condition when no candidate could satisfy the
 % grouped dependency. Tags context with explanation reason and
 % actionable suggestions (keyword, unmask, slot conflict, REQUIRED_USE).
+
+candidate:grouped_dep_build_assumption(_Action, C, N, _PackageDeps1, _PackageDepsOrig, _Context, _Conditions) :-
+  memo:requse_violation_(C, N, _),
+  \+ query:search([category(C), name(N), installed(true)], pkg://_),
+  !,
+  fail.
 
 candidate:grouped_dep_build_assumption(Action, C, N, PackageDeps1, PackageDepsOrig, Context, Conditions) :-
   explanation:assumption_reason_for_grouped_dep(Action, C, N, PackageDepsOrig, Context, Reason),
