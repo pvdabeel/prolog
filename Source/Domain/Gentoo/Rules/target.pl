@@ -52,6 +52,8 @@ module for PDEPEND goal filtering.
 
 :- module(target, []).
 
+:- discontiguous candidate:resolve/2.
+
 % =============================================================================
 %  Target candidate resolution (CN vs CNV)
 % =============================================================================
@@ -457,6 +459,35 @@ candidate:resolve(Repository://Ebuild:depclean?{Context}, Conditions) :-
 % 4. Transactional update (replaces in context): resolve dependencies and
 %    assemble the full condition set (USE + slot + download + deps).
 
+%! candidate:update_requires_use_rebuild(+RepoEntry, +Context) is semidet.
+%
+% True when an :update on an already-installed same-version entry must run
+% the transactional resolver (replaces + DEPEND walk), not the empty no-op.
+% Covers suggestion(use_change) from the planner and bracketed-USE mismatch.
+
+candidate:update_requires_use_rebuild(Repository://Ebuild, Context) :-
+  memberchk(suggestion(use_change, Repository://Ebuild, _Changes), Context),
+  !.
+candidate:update_requires_use_rebuild(_Repository://_Ebuild, Context) :-
+  memberchk(rebuild_reason(build_with_use), Context),
+  !.
+candidate:update_requires_use_rebuild(Repository://Ebuild, Context) :-
+  use:context_build_with_use_state(Context, BWU),
+  BWU \= use_state([], []),
+  candidate:update_vdb_entry_for_ebuild(Repository://Ebuild, pkg://InstalledEntry),
+  \+ use:installed_entry_satisfies_build_with_use(pkg://InstalledEntry, Context),
+  !.
+
+
+%! candidate:update_vdb_entry_for_ebuild(+RepoEntry, -PkgEntry) is semidet.
+%
+% Maps a portage-tree entry to the installed VDB entry with the same C/N/V.
+
+candidate:update_vdb_entry_for_ebuild(Repository://Ebuild, pkg://InstalledEntry) :-
+  query:search([category(C),name(N),version(V)], Repository://Ebuild),
+  query:search([category(C),name(N),version(V),installed(true)], pkg://InstalledEntry).
+
+
 candidate:resolve(Repository://Ebuild:update?{Context}, Conditions) :-
   \+ memberchk(replaces(_), Context),
   \+ preference:flag(emptytree),
@@ -492,6 +523,17 @@ candidate:resolve(Repository://Ebuild:update?{Context}, Conditions) :-
   ;  Conditions = [Repository://Ebuild:install?{Context}]
   ),
   !.
+
+candidate:resolve(Repository://Ebuild:update?{Context}, Conditions) :-
+  \+ memberchk(replaces(_), Context),
+  candidate:installed(Repository://Ebuild),
+  candidate:update_requires_use_rebuild(Repository://Ebuild, Context),
+  candidate:update_vdb_entry_for_ebuild(Repository://Ebuild, pkg://InstalledEntry),
+  !,
+  feature_unification:unify([replaces(pkg://InstalledEntry),
+                             rebuild_reason(build_with_use)],
+                            Context, UpdCtx),
+  candidate:resolve(Repository://Ebuild:update?{UpdCtx}, Conditions).
 
 candidate:resolve(Repository://Ebuild:update?{Context}, []) :-
   candidate:installed(Repository://Ebuild),

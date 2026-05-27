@@ -1362,6 +1362,28 @@ test(plan_orders_bwu_dep_before_rebuild,
     sub_atom(AIp, _, _, _, ':update'), !,
   WLib < WIp.
 
+
+% =============================================================================
+%  Issue #9: same-version :update must not no-op on USE change
+% =============================================================================
+
+:- begin_tests(update_use_change_resolve).
+
+test_setup_same_version_installed(portage://RepoE, pkg://PkgE, Flag) :-
+  test_setup_pick(pkg://PkgE, Flag),
+  query:search([category(C),name(N),version(V)], pkg://PkgE),
+  query:search([category(C),name(N),version(V)], portage://RepoE).
+
+test(update_resolve_not_empty_on_use_change,
+     [condition(test_setup_same_version_installed(_, _, _))]) :-
+  test_setup_same_version_installed(portage://RepoE, _PkgE, Flag),
+  Changes = [use_change(Flag, enable)],
+  Ctx = [suggestion(use_change, portage://RepoE, Changes)],
+  candidate:resolve(portage://RepoE:update?{Ctx}, Conds),
+  Conds \== [].
+
+:- end_tests(update_use_change_resolve).
+
 :- end_tests(rules_install_run_bwu_rebuild).
 
 
