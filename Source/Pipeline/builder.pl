@@ -228,7 +228,7 @@ builder:print_pre_action(unmask(R, E, _C, _N)) :-
   message:color(normal).
 
 builder:print_pre_action(accept_license(R, E, _C, _N)) :-
-  message:bubble(yellow, license),
+  message:bubble(orange, license),
   message:color(green),
   message:column(24, R://E),
   message:color(normal).
