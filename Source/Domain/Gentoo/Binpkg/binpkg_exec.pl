@@ -237,21 +237,34 @@ binpkg_exec:bid_desc(Order, BidA-_, BidB-_) :-
 %! binpkg_exec:candidate_passes_filters(+SrcRepo, +SrcEntry, +BinpkgEid, +Ctx) is semidet.
 %
 % Conjunction of all eligibility checks for a candidate binpkg:
-%   1. SLOT compatibility
-%   2. KEYWORDS acceptability for the host ARCH
-%   3. USE compatibility (modulated by `config:binpkg_respect_use/1`)
-%   4. Subslot-pin (`:slot/subslot=`) compatibility against the live VDB
-%   5. RDEPEND drift (modulated by `config:binpkg_changed_deps/1`)
+%   1. On-disk gpkg archive present (index entry may be stale)
+%   2. SLOT compatibility
+%   3. KEYWORDS acceptability for the host ARCH
+%   4. USE compatibility (modulated by `config:binpkg_respect_use/1`)
+%   5. Subslot-pin (`:slot/subslot=`) compatibility against the live VDB
+%   6. RDEPEND drift (modulated by `config:binpkg_changed_deps/1`)
 %
 % Each check is a separate predicate so individual policies stay
 % testable in isolation.
 
 binpkg_exec:candidate_passes_filters(SrcRepo, SrcEntry, BinpkgEid, Ctx) :-
+  binpkg_exec:gpkg_on_disk(BinpkgEid),
   binpkg_exec:slot_compatible(SrcRepo, SrcEntry, BinpkgEid),
   binpkg_exec:keywords_acceptable(BinpkgEid),
   binpkg_exec:use_compatible(SrcRepo, SrcEntry, BinpkgEid, Ctx),
   binpkg_exec:subslot_pins_compatible(BinpkgEid),
   binpkg_exec:rdepend_acceptable(SrcRepo, SrcEntry, BinpkgEid).
+
+
+%! binpkg_exec:gpkg_on_disk(+BinpkgEntryId) is semidet.
+%
+% Succeeds when the on-disk gpkg archive for this index entry exists.
+% The Packages index can list variants whose files were removed or never
+% synced into this session (common on tinderbox-ng shared binpkg caches).
+
+binpkg_exec:gpkg_on_disk(BinpkgEntryId) :-
+  binpkg_exec:gpkg_path(BinpkgEntryId, GpkgPath),
+  exists_file(GpkgPath).
 
 
 %! binpkg_exec:slot_compatible(+SrcRepo, +SrcEntry, +BinpkgEid) is semidet.
@@ -650,7 +663,10 @@ binpkg_exec:rdepend_acceptable(_SrcRepo, _SrcEntry, _BinpkgEid).
 
 binpkg_exec:execute(_Action, SrcRepo, SrcEntry, BinpkgEntryId, Ctx, Outcome) :-
   catch(
-    binpkg_exec:execute_inner(SrcRepo, SrcEntry, BinpkgEntryId, Ctx, Outcome),
+    ( binpkg_exec:execute_inner(SrcRepo, SrcEntry, BinpkgEntryId, Ctx, Outcome)
+    -> true
+    ;  Outcome = failed(inner_aborted)
+    ),
     Err,
     ( format(user_error, 'binpkg_exec:execute exception: ~q~n', [Err]),
       Outcome = failed(exception(Err))
@@ -670,30 +686,19 @@ binpkg_exec:execute_inner(SrcRepo, SrcEntry, BinpkgEntryId, Ctx, Outcome) :-
   binpkg_exec:builddir_for(SrcRepo, SrcEntry, BuildDir),
   binpkg_exec:inner_name_for(BinpkgEntryId, InnerName),
 
-  % --- preconditions -------------------------------------------------------
-  ( exists_file(GpkgPath)
-  -> true
-  ;  Outcome = failed(missing_gpkg(GpkgPath)), !
-  ),
-  ( exists_file(EbuildPath)
-  -> true
-  ;  Outcome = failed(missing_ebuild(EbuildPath)), !
-  ),
-
-  % --- prepare build dir (extract image+metadata, .installed marker, ...) --
-  ( binpkg_extract:prepare_builddir(GpkgPath, InnerName, BuildDir)
-  -> true
-  ;  Outcome = failed(extract_failed(GpkgPath)), !
-  ),
-
-  % --- build USE string for env --------------------------------------------
-  ebuild_exec:collect_use_string(SrcRepo, SrcEntry, Ctx, UseString),
-
-  % --- spawn ebuild qmerge -------------------------------------------------
-  binpkg_exec:run_qmerge(EbuildPath, GpkgPath, BuildDir, UseString, ExitCode),
-  ( ExitCode =:= 0
-  -> Outcome = done
-  ;  Outcome = failed(qmerge_exit(ExitCode))
+  % --- preconditions + qmerge (single branch tree; never fall through) -----
+  ( \+ exists_file(GpkgPath)
+  -> Outcome = failed(missing_gpkg(GpkgPath))
+  ; \+ exists_file(EbuildPath)
+  -> Outcome = failed(missing_ebuild(EbuildPath))
+  ; binpkg_extract:prepare_builddir(GpkgPath, InnerName, BuildDir)
+  -> ebuild_exec:collect_use_string(SrcRepo, SrcEntry, Ctx, UseString),
+     binpkg_exec:run_qmerge(EbuildPath, GpkgPath, BuildDir, UseString, ExitCode),
+     ( ExitCode =:= 0
+     -> Outcome = done
+     ;  Outcome = failed(qmerge_exit(ExitCode))
+     )
+  ;  Outcome = failed(extract_failed(GpkgPath))
   ).
 
 
