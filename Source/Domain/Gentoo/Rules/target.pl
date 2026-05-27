@@ -852,14 +852,14 @@ target:run_install_action(Repository://Ebuild, C, N, R, BResolved, InstallAction
 
 %! target:run_tag_suggestions(+Entry, +BResolved, +R, +Ctx0, -Ctx) is det.
 %
-% Tags the install context with unmask, keyword-acceptance, and USE-change
-% suggestions when applicable.
+% Tags the install context with unmask, license, keyword-acceptance, and
+% USE-change suggestions when applicable.
 
 target:run_tag_suggestions(Repository://Ebuild, BResolved, R, Ctx0, Ctx) :-
   ( prover:assuming(unmask), query:search(masked(true), Repository://Ebuild) ->
       Ctx1 = [suggestion(unmask, Repository://Ebuild)|Ctx0]
   ; candidate:license_masked(Repository://Ebuild) ->
-      Ctx1 = [suggestion(unmask, Repository://Ebuild)|Ctx0]
+      Ctx1 = [suggestion(accept_license, Repository://Ebuild)|Ctx0]
   ; Ctx1 = Ctx0
   ),
   ( prover:assuming(keyword_acceptance),

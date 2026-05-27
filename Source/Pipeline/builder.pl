@@ -227,6 +227,12 @@ builder:print_pre_action(unmask(R, E, _C, _N)) :-
   message:column(24, R://E),
   message:color(normal).
 
+builder:print_pre_action(accept_license(R, E, _C, _N)) :-
+  message:bubble(yellow, license),
+  message:color(green),
+  message:column(24, R://E),
+  message:color(normal).
+
 builder:print_pre_action(accept_keyword(R, E, _C, _N, K)) :-
   warning:keyword_atom(K, KAtom),
   message:bubble(orange, keyword),

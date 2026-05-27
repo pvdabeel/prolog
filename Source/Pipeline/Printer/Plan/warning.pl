@@ -273,13 +273,17 @@ warning:print_blocker_line(Strength, Phase, BlockAtom, RequiredBy) :-
 warning:print_suggestions_section(NonBlockerAssumptions, _BlockerAssumptions, ProofAVL) :-
   warning:collect_keyword_suggestions(NonBlockerAssumptions, ProofAVL, KwSuggestions),
   warning:collect_unmask_suggestions(NonBlockerAssumptions, ProofAVL, UnmaskSuggestions),
+  warning:collect_license_suggestions(ProofAVL, LicenseSuggestions),
   warning:collect_use_change_suggestions(ProofAVL, UseSuggestions),
-  ( KwSuggestions == [], UnmaskSuggestions == [], UseSuggestions == [] -> true
+  ( KwSuggestions == [], UnmaskSuggestions == [], LicenseSuggestions == [],
+    UseSuggestions == [] ->
+      true
   ; nl,
     message:header('Assumptions taken during proving & planning:'),
     nl,
     warning:print_keyword_suggestions(KwSuggestions),
     warning:print_unmask_suggestions(UnmaskSuggestions),
+    warning:print_license_suggestions(LicenseSuggestions),
     warning:print_use_change_suggestions(UseSuggestions)
   ).
 
@@ -328,16 +332,67 @@ warning:collect_unmask_suggestions(Assumptions, ProofAVL, Suggestions) :-
             warning:assumption_has_unmask_suggestion(Content, R, E, C, N)
           ),
           Suggestions1),
-  % From fully resolved proof entries (unmask fallback)
+  % From fully resolved proof entries (package.mask / unmask fallback only)
   findall(unmask(Repo, Entry, C, N),
           ( assoc:gen_assoc(rule(Repo://Entry:_Action), ProofAVL, _?Ctx0),
             warning:unwrap_ctx(Ctx0, Ctx),
             memberchk(suggestion(unmask, _), Ctx),
+            \+ memberchk(suggestion(accept_license, _), Ctx),
             cache:ordered_entry(Repo, Entry, C, N, _)
           ),
           Suggestions2),
   append(Suggestions1, Suggestions2, Suggestions0),
   sort(Suggestions0, Suggestions).
+
+
+%! warning:collect_license_suggestions(+ProofAVL, -Suggestions)
+%
+% Gathers license acceptance suggestions from proof entries tagged with
+% suggestion(accept_license, _).
+
+warning:collect_license_suggestions(ProofAVL, Suggestions) :-
+  findall(accept_license(Repo, Entry, C, N),
+          ( assoc:gen_assoc(rule(Repo://Entry:_Action), ProofAVL, _?Ctx0),
+            warning:unwrap_ctx(Ctx0, Ctx),
+            memberchk(suggestion(accept_license, _), Ctx),
+            cache:ordered_entry(Repo, Entry, C, N, _)
+          ),
+          Suggestions0),
+  sort(Suggestions0, Suggestions).
+
+
+%! warning:print_license_suggestions(+Suggestions)
+%
+% Prints license acceptance hints with package.license instructions.
+
+warning:print_license_suggestions([]) :- !.
+warning:print_license_suggestions(LicenseSuggestions) :-
+  length(LicenseSuggestions, Count),
+  ( Count =:= 1 -> Suf = '' ; Suf = 's' ),
+  message:color(yellow),
+  format('  License acceptance (~d package~w):~n', [Count, Suf]),
+  message:color(normal),
+  message:color(darkgray),
+  message:print('  Add to /etc/portage/package.license:'), nl,
+  forall(member(accept_license(R, E, _C, _N), LicenseSuggestions),
+         warning:print_license_suggestion_line(R, E)),
+  message:color(normal),
+  nl.
+
+
+%! warning:print_license_suggestion_line(+Repo, +Entry)
+%
+% One package.license line: =cat/pkg-version followed by required licenses.
+
+warning:print_license_suggestion_line(R, E) :-
+  ( builder:atom_for_entry(R, E, Atom) -> true ; Atom = E ),
+  findall(Lic, candidate:effective_license(R://E, Lic), Lics0),
+  sort(Lics0, Lics),
+  ( Lics == [] ->
+      format('    =~w~n', [Atom])
+  ; atomic_list_concat(Lics, ' ', LicAtom),
+    format('    =~w ~w~n', [Atom, LicAtom])
+  ).
 
 %! warning:assumption_has_unmask_suggestion(+Content, -R, -E, -C, -N)
 %
