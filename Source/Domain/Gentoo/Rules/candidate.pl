@@ -1375,6 +1375,72 @@ candidate:order_deps_for_proof(_Action, Deps, Ordered) :-
   pairs_values(Sorted, Ordered),
   !.
 
+
+% -----------------------------------------------------------------------------
+%  Bracket USE memo seeding (cross-phase, before dep proof order)
+% -----------------------------------------------------------------------------
+
+%! candidate:seed_bwu_memo_from_dep_tree(+Deps) is det
+%
+% Walk a merged dependency model and union every bracketed USE atom into
+% memo:candidate_bwu_/3 before any grouped_dep is proved.  Fixes RDEPEND
+% bracket USE (e.g. glib[dbus]) being discovered only after an install-phase
+% subtree already scheduled the provider's first :install (issue #7).
+
+candidate:seed_bwu_memo_from_dep_tree(Deps) :-
+  is_list(Deps),
+  !,
+  forall(member(Dep, Deps), candidate:seed_bwu_memo_from_dep(Dep)).
+candidate:seed_bwu_memo_from_dep_tree(_).
+
+
+%! candidate:seed_bwu_memo_from_dep(+Dep) is det
+%
+% Recurse dependency groups; accumulate bracket USE on package_dependency
+% leaves.  Ignores blockers and unknown node shapes.
+
+candidate:seed_bwu_memo_from_dep(grouped_package_dependency(_, _, _, PackageDeps):_) :- !,
+  candidate:seed_bwu_memo_from_dep_tree(PackageDeps).
+candidate:seed_bwu_memo_from_dep(grouped_package_dependency(_, _, _, PackageDeps)) :- !,
+  candidate:seed_bwu_memo_from_dep_tree(PackageDeps).
+candidate:seed_bwu_memo_from_dep(grouped_package_dependency(_, _, _, PackageDeps):_Action?{_}) :- !,
+  candidate:seed_bwu_memo_from_dep_tree(PackageDeps).
+candidate:seed_bwu_memo_from_dep(package_dependency(_, _, C, N, _, _, _, UseReqs)) :-
+  UseReqs \== [],
+  !,
+  candidate:seed_bwu_memo_for_cn(C, N, UseReqs).
+candidate:seed_bwu_memo_from_dep(all_of_group(Deps)) :- !,
+  candidate:seed_bwu_memo_from_dep_tree(Deps).
+candidate:seed_bwu_memo_from_dep(any_of_group(Deps)) :- !,
+  candidate:seed_bwu_memo_from_dep_tree(Deps).
+candidate:seed_bwu_memo_from_dep(exactly_one_of_group(Deps)) :- !,
+  candidate:seed_bwu_memo_from_dep_tree(Deps).
+candidate:seed_bwu_memo_from_dep(at_most_one_of_group(Deps)) :- !,
+  candidate:seed_bwu_memo_from_dep_tree(Deps).
+candidate:seed_bwu_memo_from_dep(use_conditional_group(_, _, _, Deps)) :- !,
+  candidate:seed_bwu_memo_from_dep_tree(Deps).
+candidate:seed_bwu_memo_from_dep(_).
+
+
+%! candidate:seed_bwu_memo_for_cn(+C, +N, +UseReqs) is det
+%
+% Build BWU from bracket atoms on one edge and merge into the (C,N) memo.
+% Never fails the caller (conflicting edges leave the memo unchanged).
+
+candidate:seed_bwu_memo_for_cn(C, N, UseReqs) :-
+  dependency:process_build_with_use(UseReqs, [], Ctx, _, _),
+  ( use:context_build_with_use_state(Ctx, BWU) ->
+      candidate:seed_accumulate_bwu(C, N, BWU)
+  ; true
+  ).
+
+
+%! candidate:seed_accumulate_bwu(+C, +N, +BWU) is det
+
+candidate:seed_accumulate_bwu(_C, _N, use_state([], [])) :- !.
+candidate:seed_accumulate_bwu(C, N, BWU) :-
+  ( use:accumulate_candidate_bwu(C, N, BWU) -> true ; true ).
+
 candidate:dep_priority_kv(Dep, K-Dep) :-
   dep_priority(Dep, K),
   !.
@@ -3101,8 +3167,9 @@ candidate:grouped_dep_use_and_slot(_Action, C, N, PackageDeps1, SlotReq, Context
   use:candidate_satisfies_use_deps(ContextDep, FoundRepo://Candidate, MergedUse),
   dependency:process_build_with_use(MergedUse, ContextDep, NewContext, Constraints, FoundRepo://Candidate),
   use:check_bwu_ed_conflict(C, N, NewContext),
+  use:unify_memo_bwu_into_context(C, N, NewContext, NewContextMemo),
   candidate:query_search_slot_constraint(SlotReq, FoundRepo://Candidate, SlotMeta),
-  dependency:process_slot(SlotReq, SlotMeta, C, N, FoundRepo://Candidate, NewContext, NewerContext0).
+  dependency:process_slot(SlotReq, SlotMeta, C, N, FoundRepo://Candidate, NewContextMemo, NewerContext0).
 
 
 %! candidate:grouped_dep_tag_suggestions(+Entry, +Context0, -Context) is det.
