@@ -689,8 +689,12 @@ ebuild_exec:execute(run, _Repo, _Entry, _Ctx, done) :- !.
 ebuild_exec:execute(Action, Repo, Entry, Ctx, Outcome) :-
   memberchk(Action, [install, reinstall, update, downgrade]),
   binpkg_exec:available_for(Repo, Entry, Ctx, BinpkgEntryId),
-  !,
-  binpkg_exec:execute(Action, Repo, Entry, BinpkgEntryId, Ctx, Outcome).
+  ( binpkg_exec:execute(Action, Repo, Entry, BinpkgEntryId, Ctx, BinOutcome),
+    BinOutcome == done
+  -> Outcome = done
+  ;  ebuild_exec:execute_phases(Action, Repo, Entry, Ctx, Outcome)
+  ),
+  !.
 
 ebuild_exec:execute(Action, Repo, Entry, Ctx, Outcome) :-
   ebuild_exec:execute_phases(Action, Repo, Entry, Ctx, Outcome).
@@ -737,16 +741,14 @@ ebuild_exec:execute_phases(Action, Repo, Entry, Ctx, Outcome) :-
 ebuild_exec:execute_with_progress(Action, Repo, Entry, Ctx, PhaseCallback, Outcome) :-
   memberchk(Action, [install, reinstall, update, downgrade]),
   binpkg_exec:available_for(Repo, Entry, Ctx, BinpkgEntryId),
-  !,
   catch(call(PhaseCallback, qmerge, active), _, true),
-  binpkg_exec:execute(Action, Repo, Entry, BinpkgEntryId, Ctx, Outcome),
-  ( Outcome == done
-  -> catch(call(PhaseCallback, qmerge, done), _, true)
-  ;  ( Outcome = failed(qmerge_exit(N))
-     -> catch(call(PhaseCallback, qmerge, failed(N, no_log)), _, true)
-     ;  catch(call(PhaseCallback, qmerge, failed(1, no_log)), _, true)
-     )
-  ).
+  ( binpkg_exec:execute(Action, Repo, Entry, BinpkgEntryId, Ctx, BinOutcome),
+    BinOutcome == done
+  -> catch(call(PhaseCallback, qmerge, done), _, true),
+     Outcome = done
+  ;  ebuild_exec:execute_phases_sequential(Action, Repo, Entry, Ctx, PhaseCallback, Outcome)
+  ),
+  !.
 
 ebuild_exec:execute_with_progress(Action, Repo, Entry, Ctx, PhaseCallback, Outcome) :-
   ebuild_exec:execute_phases_sequential(Action, Repo, Entry, Ctx, PhaseCallback, Outcome).
