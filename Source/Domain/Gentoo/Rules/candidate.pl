@@ -417,7 +417,6 @@ candidate:grouped_dep_candidate_satisfies_constraints(Action, C, N, PackageDeps,
   forall(member(package_dependency(_Phase,no,C,N,O,V,_SlotReq,_Use), PackageDeps),
          query:search(select(version, O, V), Repo://Entry)),
   grouped_dep_candidate_satisfies_effective_domain(Action, C, N, PackageDeps, Context, Repo://Entry),
-  candidate:grouped_dep_candidate_satisfies_bwu_memo(C, N, Repo://Entry),
   !.
 
 %! candidate:grouped_dep_candidate_satisfies_constraints_precomputed(+C, +N, +PackageDeps, +EffDom, +RejectDom, +RepoEntry)
@@ -429,22 +428,6 @@ candidate:grouped_dep_candidate_satisfies_constraints_precomputed(C, N, PackageD
   forall(member(package_dependency(_Phase,no,C,N,O,V,_SlotReq,_Use), PackageDeps),
          query:search(select(version, O, V), Repo://Entry)),
   grouped_dep_candidate_satisfies_effective_domain_precomputed(EffDom, RejectDom, C, N, Repo://Entry),
-  candidate:grouped_dep_candidate_satisfies_bwu_memo(C, N, Repo://Entry),
-  !.
-
-
-%! candidate:grouped_dep_candidate_satisfies_bwu_memo(+C, +N, +RepoEntry) is semidet.
-%
-% When bracket USE from other proof branches was accumulated in
-% memo:candidate_bwu_/3, reject portage candidates whose effective IUSE
-% cannot satisfy that aggregated state.
-
-candidate:grouped_dep_candidate_satisfies_bwu_memo(C, N, Repo://Entry) :-
-  ( memo:candidate_bwu_(C, N, BAgg),
-    BAgg \= use_state([], []) ->
-      use:verify_candidate_satisfies_bwu_state(Repo://Entry, BAgg)
-  ; true
-  ),
   !.
 
 %! candidate:grouped_dep_effective_domain_precomputed(+Action, +C, +N, +PackageDeps, +Context, -EffDom, -RejectDom)
@@ -3256,14 +3239,6 @@ candidate:grouped_dep_assemble_conditions(Action, C, N, PackageDeps1, SlotReq, C
 % Builds an assumption condition when no candidate could satisfy the
 % grouped dependency. Tags context with explanation reason and
 % actionable suggestions (keyword, unmask, slot conflict, REQUIRED_USE).
-
-candidate:grouped_dep_build_assumption(Action, C, N, _PackageDeps1, PackageDepsOrig, Context, _Conditions) :-
-  memo:candidate_bwu_(C, N, BAgg),
-  BAgg \= use_state([], []),
-  explanation:assumption_reason_for_grouped_dep(Action, C, N, PackageDepsOrig, Context, Reason),
-  Reason == unsatisfied_constraints,
-  !,
-  fail.
 
 candidate:grouped_dep_build_assumption(Action, C, N, PackageDeps1, PackageDepsOrig, Context, Conditions) :-
   explanation:assumption_reason_for_grouped_dep(Action, C, N, PackageDepsOrig, Context, Reason),
