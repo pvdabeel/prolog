@@ -121,6 +121,7 @@ gantt:visible_action(downgrade).
 gantt:visible_action(reinstall).
 gantt:visible_action(fetchonly).
 gantt:visible_action(unmask).
+gantt:visible_action(license).
 gantt:visible_action(keyword).
 gantt:visible_action(useflag).
 
@@ -219,9 +220,17 @@ gantt:collect_pre_actions(ProofAVL, Grid0, Grid, HasPre) :-
             ( member(rule(R://Entry:_A)-(_?Ctx), Pairs),
               is_list(Ctx),
               memberchk(suggestion(unmask, _), Ctx),
+              \+ memberchk(suggestion(accept_license, _), Ctx),
               entry_in_grid(Entry, Grid0, R)
             ), Unmasks0),
     sort(Unmasks0, Unmasks),
+    findall(Entry-license,
+            ( member(rule(R://Entry:_A1)-(_?Ctx1), Pairs),
+              is_list(Ctx1),
+              memberchk(suggestion(accept_license, _), Ctx1),
+              entry_in_grid(Entry, Grid0, R)
+            ), Licenses0),
+    sort(Licenses0, Licenses),
     findall(Entry-keyword,
             ( member(rule(R://Entry:_A2)-(_?Ctx2), Pairs),
               is_list(Ctx2),
@@ -236,7 +245,7 @@ gantt:collect_pre_actions(ProofAVL, Grid0, Grid, HasPre) :-
               entry_in_grid(Entry, Grid0, R)
             ), UseChanges0),
     sort(UseChanges0, UseChanges),
-    append([Unmasks, Keywords, UseChanges], AllPre),
+    append([Unmasks, Licenses, Keywords, UseChanges], AllPre),
     (   AllPre == []
     ->  Grid = Grid0,
         HasPre = false
@@ -737,6 +746,7 @@ gantt:action_css(downgrade, inst).
 gantt:action_css(reinstall, inst).
 gantt:action_css(fetchonly, dl).
 gantt:action_css(unmask, unmask).
+gantt:action_css(license, license).
 gantt:action_css(keyword, keyword).
 gantt:action_css(useflag, useflag).
 
@@ -752,6 +762,7 @@ gantt:action_label(downgrade, downgrade).
 gantt:action_label(reinstall, reinstall).
 gantt:action_label(fetchonly, fetchonly).
 gantt:action_label(unmask, unmask).
+gantt:action_label(license, license).
 gantt:action_label(keyword, keyword).
 gantt:action_label(useflag, useflag).
 
@@ -767,6 +778,7 @@ gantt:action_id_suffix(downgrade, inst).
 gantt:action_id_suffix(reinstall, inst).
 gantt:action_id_suffix(fetchonly, dl).
 gantt:action_id_suffix(unmask, umsk).
+gantt:action_id_suffix(license, lic).
 gantt:action_id_suffix(keyword, kw).
 gantt:action_id_suffix(useflag, uf).
 

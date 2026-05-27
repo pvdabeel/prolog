@@ -3174,8 +3174,8 @@ candidate:grouped_dep_use_and_slot(_Action, C, N, PackageDeps1, SlotReq, Context
 
 %! candidate:grouped_dep_tag_suggestions(+Entry, +Context0, -Context) is det.
 %
-% Tags the context with keyword-acceptance, unmask, license, and USE-change
-% suggestions when applicable.
+% Tags the context with keyword-acceptance, package unmask, license acceptance,
+% and USE-change suggestions when applicable.
 
 candidate:grouped_dep_tag_suggestions(FoundRepo://Candidate, Ctx0, Ctx) :-
   ( prover:assuming(keyword_acceptance),
@@ -3188,7 +3188,7 @@ candidate:grouped_dep_tag_suggestions(FoundRepo://Candidate, Ctx0, Ctx) :-
     feature_unification:unify([suggestion(unmask, FoundRepo://Candidate)], Ctx0, Ctx1)
   ; candidate:license_masked(FoundRepo://Candidate)
   ->
-    feature_unification:unify([suggestion(unmask, FoundRepo://Candidate)], Ctx0, Ctx1)
+    feature_unification:unify([suggestion(accept_license, FoundRepo://Candidate)], Ctx0, Ctx1)
   ; Ctx1 = Ctx0
   ),
   ( use:context_build_with_use_state(Ctx1, BWUState),
