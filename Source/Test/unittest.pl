@@ -1110,6 +1110,17 @@ test(accumulate_two_edges, [true(M == use_state([icu,wayland],[]))]) :-
   use:accumulate_candidate_bwu('dev-qt', qtbase, use_state([icu], [])),
   memo:candidate_bwu_('dev-qt', qtbase, M).
 
+test(seed_run_before_install_phase, [true(M == use_state([dbus],[]))]) :-
+  use:clear_bwu_cross_dep_memos,
+  InstallDeps = [grouped_package_dependency(no, 'dev-libs', glib,
+      [package_dependency(install, no, 'dev-libs', glib, none, version_none, [], [])])],
+  RunDeps = [grouped_package_dependency(no, 'dev-libs', glib,
+      [package_dependency(run, no, 'dev-libs', glib, none, version_none, [],
+                          [use(enable(dbus), positive)])])],
+  candidate:seed_bwu_memo_from_dep_tree(InstallDeps),
+  candidate:seed_bwu_memo_from_dep_tree(RunDeps),
+  memo:candidate_bwu_('dev-libs', glib, M).
+
 :- end_tests(use_candidate_bwu_memo).
 
 

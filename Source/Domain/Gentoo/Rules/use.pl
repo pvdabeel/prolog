@@ -1429,6 +1429,22 @@ use:merge_memo_candidate_bwu(C, N, BWU0, BWU) :-
     ).
 
 
+%! use:unify_memo_bwu_into_context(+C, +N, +Ctx0, -Ctx) is det.
+%
+% Merge per-(C,N) memo:candidate_bwu_/3 into Ctx0 as build_with_use:use_state/2
+% so grouped_dep action goals and nested :install sub-goals see bracket USE
+% discovered on other edges (e.g. RDEPEND after COMMON_DEPEND in :run proofs).
+
+use:unify_memo_bwu_into_context(C, N, Ctx0, Ctx) :-
+    use:context_build_with_use_state(Ctx0, BWU0),
+    use:merge_memo_candidate_bwu(C, N, BWU0, BWUMerged),
+    ( BWUMerged == use_state([], []) ->
+        Ctx = Ctx0
+    ; ( select(build_with_use:_, Ctx0, Ctx1) -> true ; Ctx1 = Ctx0 ),
+      feature_unification:unify([build_with_use:BWUMerged], Ctx1, Ctx)
+    ).
+
+
 %! use:replace_candidate_bwu(+C, +N, +BWU) is det.
 %
 % Store (or replace) the aggregated build_with_use state for (C,N).
