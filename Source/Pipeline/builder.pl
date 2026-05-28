@@ -53,6 +53,7 @@ builder:build(Goals) :-
   ),
   builder:maybe_create_snapshot(Plan),
   retractall(builder:resume_done(_, _)),
+  builder:prepare_binpkg_index,
   builder:save_resume_state(Goals, Plan),
   plan:collect_plan_pre_actions(ProofAVL, PreActions),
   builder:count_actions(Plan, 0, PlanActions),
@@ -109,6 +110,7 @@ builder:build_resume :-
      nl, nl,
      assertz(ebuild_exec:resuming),
      retractall(builder:resume_done(_, _)),
+     builder:prepare_binpkg_index,
      builder:count_nonempty_steps(FilteredPlan, 0, NumSteps),
      build:header(NumSteps, RemainingActions),
      builder:num_workers(NumWorkers),
@@ -137,6 +139,15 @@ builder:alert :-
   -> message:bell
   ;  true
   ).
+
+
+%! builder:prepare_binpkg_index is det.
+%
+% Re-read the on-disk binpkg `Packages` index when `config:binpkg_refresh/1`
+% is `mtime` and an external producer may have updated it since startup.
+
+builder:prepare_binpkg_index :-
+  catch(binpkg_exec:maybe_refresh_index, _, true).
 
 
 %! builder:ask_confirmation is semidet.
@@ -332,12 +343,13 @@ builder:apply_vdb_reconciliation(Plan, F0, F, Missing) :-
 
 %! builder:reconcile_install_actions(+Plan, -Missing, -Active) is det.
 %
-% Walk Plan and collect install-shaped rules whose target package has
-% no corresponding directory under the VDB root. Active is `true`
-% when the check actually ran, `false` when it was skipped (no merge
-% in live phases, or no pkg repository). When Active is `false`,
-% callers MUST ignore Missing -- it is bound to `[]` by convention but
-% carries no information about reality.
+% Walk Plan and collect install-shaped rules that completed with
+% outcome `done` (see `builder:resume_done/2`) but whose target has no
+% corresponding directory under the VDB root. Failed or skipped installs
+% are excluded so reconciliation does not inflate the failure tally
+% (portage-ng#11). Active is `true` when the check actually ran,
+% `false` when it was skipped (no merge in live phases, or no pkg
+% repository). When Active is `false`, callers MUST ignore Missing.
 
 builder:reconcile_install_actions(Plan, Missing, Active) :-
   ( builder:reconciliation_should_run(VdbRoot)
@@ -346,6 +358,7 @@ builder:reconcile_install_actions(Plan, Missing, Active) :-
              ( member(Step, Plan),
                member(Rule, Step),
                builder:is_install_rule(Rule, Repo, Entry, Action),
+               builder:resume_done(Entry, Action),
                \+ builder:vdb_entry_present(VdbRoot, Entry)
              ),
              Missing)

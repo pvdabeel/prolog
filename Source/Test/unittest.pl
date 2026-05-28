@@ -1387,6 +1387,27 @@ test(update_resolve_not_empty_on_use_change,
 :- end_tests(rules_install_run_bwu_rebuild).
 
 
+% =============================================================================
+%  Phantom grouped-dep assumptions (portage-ng#10, #14, #15)
+% =============================================================================
+
+:- begin_tests(phantom_grouped_dep_assumption).
+
+test(unsatisfied_constraints_is_phantom) :-
+  explanation:phantom_grouped_dep_assumption(unsatisfied_constraints, 'media-libs', clutter).
+
+test(masked_is_phantom) :-
+  explanation:phantom_grouped_dep_assumption(masked, 'sys-apps', systemd).
+
+test(acct_group_keyword_filtered_is_phantom) :-
+  explanation:phantom_grouped_dep_assumption(keyword_filtered, 'acct-group', buildbot).
+
+test(other_keyword_filtered_not_phantom, [fail]) :-
+  explanation:phantom_grouped_dep_assumption(keyword_filtered, 'dev-qt', qtbase).
+
+:- end_tests(phantom_grouped_dep_assumption).
+
+
 % -----------------------------------------------------------------------------
 %  Builder: VDB reconciliation backstop tests
 % -----------------------------------------------------------------------------
@@ -1452,15 +1473,32 @@ test(reconcile_flags_missing_install_when_active, [setup(stash_live_phases(Saved
                                                     condition((eapi_repo_registered,
                                                                pkg_repo_registered))]) :-
   % Full live phases (including merge) AND a registered pkg repo on
-  % the host = reconciliation is active. A plan whose only install
-  % targets a guaranteed-absent entry must report it as missing.
+  % the host = reconciliation is active. Only install steps recorded
+  % as done (resume_done) are checked; a succeeded merge with no VDB
+  % row must be reported missing.
   retractall(config:build_live_phases(_)),
   assertz(config:build_live_phases([clean, setup, unpack, prepare, configure, compile, test, install, merge])),
+  retractall(builder:resume_done(_, _)),
+  assertz(builder:resume_done('no-such-cat/no-such-pkg-0.0', install)),
   Plan = [[rule(portage://'no-such-cat/no-such-pkg-0.0':install?{[]}, [])]],
   builder:reconcile_install_actions(Plan, Missing, Active),
   Active == true,
   Missing = [_|_],
   member(portage://'no-such-cat/no-such-pkg-0.0':install, Missing).
+
+test(reconcile_ignores_failed_install_without_resume_done,
+     [setup(stash_live_phases(Saved)),
+      cleanup(restore_live_phases(Saved)),
+      condition((eapi_repo_registered, pkg_repo_registered))]) :-
+  % portage-ng#11: failed/skipped installs stay out of the plan but must
+  % not inflate the reconciliation failure tally.
+  retractall(config:build_live_phases(_)),
+  assertz(config:build_live_phases([clean, setup, unpack, prepare, configure, compile, test, install, merge])),
+  retractall(builder:resume_done(_, _)),
+  Plan = [[rule(portage://'no-such-cat/no-such-pkg-0.0':install?{[]}, [])]],
+  builder:reconcile_install_actions(Plan, Missing, Active),
+  Active == true,
+  Missing == [].
 
 test(apply_reconciliation_increments_failed_count, [setup(stash_live_phases(Saved)),
                                                      cleanup(restore_live_phases(Saved)),
@@ -1468,6 +1506,8 @@ test(apply_reconciliation_increments_failed_count, [setup(stash_live_phases(Save
                                                                 pkg_repo_registered))]) :-
   retractall(config:build_live_phases(_)),
   assertz(config:build_live_phases([clean, setup, unpack, prepare, configure, compile, test, install, merge])),
+  retractall(builder:resume_done(_, _)),
+  assertz(builder:resume_done('no-such-cat/no-such-pkg-0.0', install)),
   Plan = [[rule(portage://'no-such-cat/no-such-pkg-0.0':install?{[]}, [])]],
   with_output_to(string(_),
     builder:apply_vdb_reconciliation(Plan, 0, Failed, Missing)),

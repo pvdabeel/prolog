@@ -29,6 +29,8 @@ merge/VDB code.
 :- dynamic ebuild_exec:phase_stats_loaded/0.
 :- dynamic ebuild_exec:resuming/0.
 
+:- mutex_create(portage_pkg_merge).
+
 
 % =============================================================================
 %  Action-to-phase mapping
@@ -467,6 +469,13 @@ ebuild_exec:run_phase_logged(EbuildPath, Phase, LogPath, UseString, ExitCode) :-
   ( sanitize:safe_phase(Phase) -> true
   ; throw(error(permission_error(execute, phase, Phase), context(ebuild_exec:run_phase_logged/5, 'Invalid phase name')))
   ),
+  ebuild_exec:with_portage_pkg_merge_lock(Phase,
+    ebuild_exec:run_phase_logged_unlocked(EbuildPath, Phase, LogPath, UseString, ExitCode)).
+
+
+%! ebuild_exec:run_phase_logged_unlocked(+EbuildPath, +Phase, +LogPath, +UseString, -ExitCode) is det.
+
+ebuild_exec:run_phase_logged_unlocked(EbuildPath, Phase, LogPath, UseString, ExitCode) :-
   config:ebuild_command(EbuildCmd),
   atom_string(Phase, PhaseStr),
   process_create(
@@ -475,6 +484,23 @@ ebuild_exec:run_phase_logged(EbuildPath, Phase, LogPath, UseString, ExitCode) :-
      '_', EbuildCmd, EbuildPath, PhaseStr, LogPath],
     [process(Pid), environment(['USE'=UseString])]),
   process_wait(Pid, exit(ExitCode)).
+
+
+%! ebuild_exec:with_portage_pkg_merge_lock(+Phase, :Goal) is det.
+%
+% Serialize the `merge` phase (and binpkg `qmerge`) across parallel build
+% workers so concurrent installs do not race on `.pkg.portage_lockfile`.
+
+:- meta_predicate ebuild_exec:with_portage_pkg_merge_lock(+, 0).
+
+ebuild_exec:with_portage_pkg_merge_lock(merge, Goal) :-
+  !,
+  with_mutex(portage_pkg_merge, call(Goal)).
+ebuild_exec:with_portage_pkg_merge_lock(qmerge, Goal) :-
+  !,
+  with_mutex(portage_pkg_merge, call(Goal)).
+ebuild_exec:with_portage_pkg_merge_lock(_, Goal) :-
+  call(Goal).
 
 
 %! ebuild_exec:log_phase_header(+LogPath, +Phase) is det.
@@ -495,6 +521,16 @@ ebuild_exec:log_phase_header(LogPath, Phase) :-
 % Used for bulk execution without per-phase progress tracking.
 
 ebuild_exec:run_phases(EbuildPath, Phases, UseString, ExitCode) :-
+  ( memberchk(merge, Phases)
+  -> ebuild_exec:with_portage_pkg_merge_lock(merge,
+        ebuild_exec:run_phases_unlocked(EbuildPath, Phases, UseString, ExitCode))
+  ;  ebuild_exec:run_phases_unlocked(EbuildPath, Phases, UseString, ExitCode)
+  ).
+
+
+%! ebuild_exec:run_phases_unlocked(+EbuildPath, +Phases, +UseString, -ExitCode) is det.
+
+ebuild_exec:run_phases_unlocked(EbuildPath, Phases, UseString, ExitCode) :-
   config:ebuild_command(EbuildCmd),
   maplist(atom_string, Phases, PhaseStrs),
   process_create(
