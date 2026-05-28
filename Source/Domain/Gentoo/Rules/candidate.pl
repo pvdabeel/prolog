@@ -1375,6 +1375,72 @@ candidate:order_deps_for_proof(_Action, Deps, Ordered) :-
   pairs_values(Sorted, Ordered),
   !.
 
+
+% -----------------------------------------------------------------------------
+%  Bracket USE memo seeding (cross-phase, before dep proof order)
+% -----------------------------------------------------------------------------
+
+%! candidate:seed_bwu_memo_from_dep_tree(+Deps) is det
+%
+% Walk a merged dependency model and union every bracketed USE atom into
+% memo:candidate_bwu_/3 before any grouped_dep is proved.  Fixes RDEPEND
+% bracket USE (e.g. glib[dbus]) being discovered only after an install-phase
+% subtree already scheduled the provider's first :install (issue #7).
+
+candidate:seed_bwu_memo_from_dep_tree(Deps) :-
+  is_list(Deps),
+  !,
+  forall(member(Dep, Deps), candidate:seed_bwu_memo_from_dep(Dep)).
+candidate:seed_bwu_memo_from_dep_tree(_).
+
+
+%! candidate:seed_bwu_memo_from_dep(+Dep) is det
+%
+% Recurse dependency groups; accumulate bracket USE on package_dependency
+% leaves.  Ignores blockers and unknown node shapes.
+
+candidate:seed_bwu_memo_from_dep(grouped_package_dependency(_, _, _, PackageDeps):_) :- !,
+  candidate:seed_bwu_memo_from_dep_tree(PackageDeps).
+candidate:seed_bwu_memo_from_dep(grouped_package_dependency(_, _, _, PackageDeps)) :- !,
+  candidate:seed_bwu_memo_from_dep_tree(PackageDeps).
+candidate:seed_bwu_memo_from_dep(grouped_package_dependency(_, _, _, PackageDeps):_Action?{_}) :- !,
+  candidate:seed_bwu_memo_from_dep_tree(PackageDeps).
+candidate:seed_bwu_memo_from_dep(package_dependency(_, _, C, N, _, _, _, UseReqs)) :-
+  UseReqs \== [],
+  !,
+  candidate:seed_bwu_memo_for_cn(C, N, UseReqs).
+candidate:seed_bwu_memo_from_dep(all_of_group(Deps)) :- !,
+  candidate:seed_bwu_memo_from_dep_tree(Deps).
+candidate:seed_bwu_memo_from_dep(any_of_group(Deps)) :- !,
+  candidate:seed_bwu_memo_from_dep_tree(Deps).
+candidate:seed_bwu_memo_from_dep(exactly_one_of_group(Deps)) :- !,
+  candidate:seed_bwu_memo_from_dep_tree(Deps).
+candidate:seed_bwu_memo_from_dep(at_most_one_of_group(Deps)) :- !,
+  candidate:seed_bwu_memo_from_dep_tree(Deps).
+candidate:seed_bwu_memo_from_dep(use_conditional_group(_, _, _, Deps)) :- !,
+  candidate:seed_bwu_memo_from_dep_tree(Deps).
+candidate:seed_bwu_memo_from_dep(_).
+
+
+%! candidate:seed_bwu_memo_for_cn(+C, +N, +UseReqs) is det
+%
+% Build BWU from bracket atoms on one edge and merge into the (C,N) memo.
+% Never fails the caller (conflicting edges leave the memo unchanged).
+
+candidate:seed_bwu_memo_for_cn(C, N, UseReqs) :-
+  dependency:process_build_with_use(UseReqs, [], Ctx, _, _),
+  ( use:context_build_with_use_state(Ctx, BWU) ->
+      candidate:seed_accumulate_bwu(C, N, BWU)
+  ; true
+  ).
+
+
+%! candidate:seed_accumulate_bwu(+C, +N, +BWU) is det
+
+candidate:seed_accumulate_bwu(_C, _N, use_state([], [])) :- !.
+candidate:seed_accumulate_bwu(C, N, BWU) :-
+  ( use:accumulate_candidate_bwu(C, N, BWU) -> true ; true ).
+
 candidate:dep_priority_kv(Dep, K-Dep) :-
   dep_priority(Dep, K),
   !.
@@ -2967,9 +3033,13 @@ candidate:grouped_dep_keep_installed(Action, C, N, PackageDeps1, Context) :-
   findall(U0, member(package_dependency(_P0,no,C,N,_O,_V,_,U0),PackageDeps1), MergedUse0),
   append(MergedUse0, MergedUse),
   dependency:process_build_with_use(MergedUse, Context, ContextWU, _BWUCons, pkg://InstalledEntry),
+  use:context_build_with_use_state(ContextWU, BWUEdge),
+  use:accumulate_candidate_bwu(C, N, BWUEdge),
+  ( memo:candidate_bwu_(C, N, BWUEff) -> true ; BWUEff = BWUEdge ),
   ( C == 'virtual'
   -> true
-  ; use:installed_entry_satisfies_build_with_use(pkg://InstalledEntry, ContextWU)
+  ; use:installed_entry_satisfies_build_with_use(pkg://InstalledEntry,
+                                                 [build_with_use:BWUEff])
   ),
   ( preference:flag(newuse) ->
       \+ use:newuse_mismatch(pkg://InstalledEntry)
@@ -3095,16 +3165,60 @@ candidate:grouped_dep_use_and_slot(_Action, C, N, PackageDeps1, SlotReq, Context
     ContextDep = Context
   ),
   use:candidate_satisfies_use_deps(ContextDep, FoundRepo://Candidate, MergedUse),
-  dependency:process_build_with_use(MergedUse, ContextDep, NewContext, Constraints, FoundRepo://Candidate),
+  dependency:process_build_with_use(MergedUse, ContextDep, NewContext0, Constraints, FoundRepo://Candidate),
+  candidate:grouped_dep_stabilize_bwu(FoundRepo://Candidate, NewContext0, NewContext),
   use:check_bwu_ed_conflict(C, N, NewContext),
+  use:unify_memo_bwu_into_context(C, N, NewContext, NewContextMemo),
   candidate:query_search_slot_constraint(SlotReq, FoundRepo://Candidate, SlotMeta),
-  dependency:process_slot(SlotReq, SlotMeta, C, N, FoundRepo://Candidate, NewContext, NewerContext0).
+  dependency:process_slot(SlotReq, SlotMeta, C, N, FoundRepo://Candidate, NewContextMemo, NewerContext0).
+
+
+%! candidate:entry_has_choice_required_use(+Repo, +Entry) is semidet.
+%
+% True when the ebuild has REQUIRED_USE choice groups (||, ^^, etc.)
+% that grouped_dep stabilization may need to resolve from a partial BWU.
+% Cheap metadata scan only; avoids calling verify/stabilize on every
+% foo[bar] edge (PR #16 regression).
+
+candidate:entry_has_choice_required_use(Repo, Entry) :-
+  cache:entry_metadata(Repo, Entry, required_use, Term),
+  candidate:required_use_term_has_choice(Term).
+
+
+%! candidate:required_use_term_has_choice(+Term) is semidet.
+
+candidate:required_use_term_has_choice(any_of_group(_)).
+candidate:required_use_term_has_choice(exactly_one_of_group(_)).
+candidate:required_use_term_has_choice(at_most_one_of_group(_)).
+candidate:required_use_term_has_choice(use_conditional_group(_, _, _, SubDeps)) :-
+  member(Sub, SubDeps),
+  candidate:required_use_term_has_choice(Sub).
+
+
+%! candidate:grouped_dep_stabilize_bwu(+RepoEntry, +CtxIn, -CtxOut) is det.
+%
+% Bug B (clutter[introspection]): bracket USE can thread a partial BWU
+% before || ( aqua wayland X ) picks a global flag. Only packages with
+% choice-shaped REQUIRED_USE need an extra stabilize here; target.pl
+% already stabilizes the root :run/:install candidate.
+
+candidate:grouped_dep_stabilize_bwu(Repo://Entry, CtxIn, CtxOut) :-
+  use:context_build_with_use_state(CtxIn, BWU0),
+  ( BWU0 == use_state([], [])
+  -> CtxOut = CtxIn
+  ; \+ candidate:entry_has_choice_required_use(Repo, Entry)
+  -> CtxOut = CtxIn
+  ; \+ use:verify_required_use_with_bwu(Repo://Entry, BWU0)
+  -> use:stabilize_required_use(Repo://Entry, BWU0, BWU1),
+     feature_unification:unify([build_with_use:BWU1], CtxIn, CtxOut)
+  ; CtxOut = CtxIn
+  ).
 
 
 %! candidate:grouped_dep_tag_suggestions(+Entry, +Context0, -Context) is det.
 %
-% Tags the context with keyword-acceptance, unmask, license, and USE-change
-% suggestions when applicable.
+% Tags the context with keyword-acceptance, package unmask, license acceptance,
+% and USE-change suggestions when applicable.
 
 candidate:grouped_dep_tag_suggestions(FoundRepo://Candidate, Ctx0, Ctx) :-
   ( prover:assuming(keyword_acceptance),
@@ -3117,7 +3231,7 @@ candidate:grouped_dep_tag_suggestions(FoundRepo://Candidate, Ctx0, Ctx) :-
     feature_unification:unify([suggestion(unmask, FoundRepo://Candidate)], Ctx0, Ctx1)
   ; candidate:license_masked(FoundRepo://Candidate)
   ->
-    feature_unification:unify([suggestion(unmask, FoundRepo://Candidate)], Ctx0, Ctx1)
+    feature_unification:unify([suggestion(accept_license, FoundRepo://Candidate)], Ctx0, Ctx1)
   ; Ctx1 = Ctx0
   ),
   ( use:context_build_with_use_state(Ctx1, BWUState),
@@ -3235,6 +3349,14 @@ candidate:grouped_dep_assemble_conditions(Action, C, N, PackageDeps1, SlotReq, C
 % Builds an assumption condition when no candidate could satisfy the
 % grouped dependency. Tags context with explanation reason and
 % actionable suggestions (keyword, unmask, slot conflict, REQUIRED_USE).
+
+candidate:grouped_dep_build_assumption(Action, C, N, _PackageDeps1, PackageDepsOrig, Context) :-
+  explanation:assumption_reason_for_grouped_dep(Action, C, N, PackageDepsOrig, Context, Reason),
+  ( explanation:phantom_grouped_dep_assumption(Reason, C, N)
+  ; memo:requse_violation_(C, N, _)
+  ),
+  !,
+  fail.
 
 candidate:grouped_dep_build_assumption(Action, C, N, PackageDeps1, PackageDepsOrig, Context, Conditions) :-
   explanation:assumption_reason_for_grouped_dep(Action, C, N, PackageDepsOrig, Context, Reason),

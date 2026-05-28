@@ -53,6 +53,7 @@ builder:build(Goals) :-
   ),
   builder:maybe_create_snapshot(Plan),
   retractall(builder:resume_done(_, _)),
+  builder:prepare_binpkg_index,
   builder:save_resume_state(Goals, Plan),
   plan:collect_plan_pre_actions(ProofAVL, PreActions),
   builder:count_actions(Plan, 0, PlanActions),
@@ -109,6 +110,7 @@ builder:build_resume :-
      nl, nl,
      assertz(ebuild_exec:resuming),
      retractall(builder:resume_done(_, _)),
+     builder:prepare_binpkg_index,
      builder:count_nonempty_steps(FilteredPlan, 0, NumSteps),
      build:header(NumSteps, RemainingActions),
      builder:num_workers(NumWorkers),
@@ -137,6 +139,35 @@ builder:alert :-
   -> message:bell
   ;  true
   ).
+
+
+%! builder:prepare_binpkg_index is det.
+%
+% Ensure the in-memory binpkg cache is populated from the on-disk
+% `Packages` index before a build starts (portage-ng#12).
+%
+% `kb:register(binpkg)` only records the repository fact; it does NOT
+% parse `Packages`, and `Knowledge/kb.qlf` carries no binpkg
+% `cache:ordered_entry/5` facts. On a cold process the binpkg cache is
+% therefore empty, and `binpkg_exec:maybe_refresh_index` (mtime policy)
+% only records a baseline mtime on first observation -- it never loads
+% an empty cache. The result was that `available_for/4` found no
+% candidates and every build fell through to a full source build even
+% when a USE-compatible gpkg existed.
+%
+% Fix: when the binpkg repository is registered but its cache is empty,
+% force a full `binpkg:sync(kb)` to parse the index. Otherwise fall back
+% to the cheap mtime refresh so a concurrent external producer's updates
+% are still picked up.
+
+builder:prepare_binpkg_index :-
+  ( config:use_binpkg(true),
+    cache:repository(binpkg),
+    \+ cache:ordered_entry(binpkg, _, _, _, _)
+  -> catch(binpkg:sync(kb), _, true)
+  ;  true
+  ),
+  catch(binpkg_exec:maybe_refresh_index, _, true).
 
 
 %! builder:ask_confirmation is semidet.
@@ -223,6 +254,12 @@ builder:print_pre_actions([Action|Rest]) :-
 
 builder:print_pre_action(unmask(R, E, _C, _N)) :-
   message:bubble(orange, unmask),
+  message:color(green),
+  message:column(24, R://E),
+  message:color(normal).
+
+builder:print_pre_action(accept_license(R, E, _C, _N)) :-
+  message:bubble(orange, license),
   message:color(green),
   message:column(24, R://E),
   message:color(normal).
@@ -326,12 +363,13 @@ builder:apply_vdb_reconciliation(Plan, F0, F, Missing) :-
 
 %! builder:reconcile_install_actions(+Plan, -Missing, -Active) is det.
 %
-% Walk Plan and collect install-shaped rules whose target package has
-% no corresponding directory under the VDB root. Active is `true`
-% when the check actually ran, `false` when it was skipped (no merge
-% in live phases, or no pkg repository). When Active is `false`,
-% callers MUST ignore Missing -- it is bound to `[]` by convention but
-% carries no information about reality.
+% Walk Plan and collect install-shaped rules that completed with
+% outcome `done` (see `builder:resume_done/2`) but whose target has no
+% corresponding directory under the VDB root. Failed or skipped installs
+% are excluded so reconciliation does not inflate the failure tally
+% (portage-ng#11). Active is `true` when the check actually ran,
+% `false` when it was skipped (no merge in live phases, or no pkg
+% repository). When Active is `false`, callers MUST ignore Missing.
 
 builder:reconcile_install_actions(Plan, Missing, Active) :-
   ( builder:reconciliation_should_run(VdbRoot)
@@ -340,6 +378,7 @@ builder:reconcile_install_actions(Plan, Missing, Active) :-
              ( member(Step, Plan),
                member(Rule, Step),
                builder:is_install_rule(Rule, Repo, Entry, Action),
+               builder:resume_done(Entry, Action),
                \+ builder:vdb_entry_present(VdbRoot, Entry)
              ),
              Missing)

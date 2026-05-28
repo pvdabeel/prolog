@@ -52,6 +52,8 @@ module for PDEPEND goal filtering.
 
 :- module(target, []).
 
+:- discontiguous candidate:resolve/2.
+
 % =============================================================================
 %  Target candidate resolution (CN vs CNV)
 % =============================================================================
@@ -457,6 +459,35 @@ candidate:resolve(Repository://Ebuild:depclean?{Context}, Conditions) :-
 % 4. Transactional update (replaces in context): resolve dependencies and
 %    assemble the full condition set (USE + slot + download + deps).
 
+%! candidate:update_requires_use_rebuild(+RepoEntry, +Context) is semidet.
+%
+% True when an :update on an already-installed same-version entry must run
+% the transactional resolver (replaces + DEPEND walk), not the empty no-op.
+% Covers suggestion(use_change) from the planner and bracketed-USE mismatch.
+
+candidate:update_requires_use_rebuild(Repository://Ebuild, Context) :-
+  memberchk(suggestion(use_change, Repository://Ebuild, _Changes), Context),
+  !.
+candidate:update_requires_use_rebuild(_Repository://_Ebuild, Context) :-
+  memberchk(rebuild_reason(build_with_use), Context),
+  !.
+candidate:update_requires_use_rebuild(Repository://Ebuild, Context) :-
+  use:context_build_with_use_state(Context, BWU),
+  BWU \= use_state([], []),
+  candidate:update_vdb_entry_for_ebuild(Repository://Ebuild, pkg://InstalledEntry),
+  \+ use:installed_entry_satisfies_build_with_use(pkg://InstalledEntry, Context),
+  !.
+
+
+%! candidate:update_vdb_entry_for_ebuild(+RepoEntry, -PkgEntry) is semidet.
+%
+% Maps a portage-tree entry to the installed VDB entry with the same C/N/V.
+
+candidate:update_vdb_entry_for_ebuild(Repository://Ebuild, pkg://InstalledEntry) :-
+  query:search([category(C),name(N),version(V)], Repository://Ebuild),
+  query:search([category(C),name(N),version(V),installed(true)], pkg://InstalledEntry).
+
+
 candidate:resolve(Repository://Ebuild:update?{Context}, Conditions) :-
   \+ memberchk(replaces(_), Context),
   \+ preference:flag(emptytree),
@@ -492,6 +523,17 @@ candidate:resolve(Repository://Ebuild:update?{Context}, Conditions) :-
   ;  Conditions = [Repository://Ebuild:install?{Context}]
   ),
   !.
+
+candidate:resolve(Repository://Ebuild:update?{Context}, Conditions) :-
+  \+ memberchk(replaces(_), Context),
+  candidate:installed(Repository://Ebuild),
+  candidate:update_requires_use_rebuild(Repository://Ebuild, Context),
+  candidate:update_vdb_entry_for_ebuild(Repository://Ebuild, pkg://InstalledEntry),
+  !,
+  feature_unification:unify([replaces(pkg://InstalledEntry),
+                             rebuild_reason(build_with_use)],
+                            Context, UpdCtx),
+  candidate:resolve(Repository://Ebuild:update?{UpdCtx}, Conditions).
 
 candidate:resolve(Repository://Ebuild:update?{Context}, []) :-
   candidate:installed(Repository://Ebuild),
@@ -726,6 +768,7 @@ candidate:install_dep_model(Repository://Ebuild, Model, AfterForDeps, install,
   query:search(model(dependency(MergedDeps0,install)):config?{ModelExt}, Repository://Ebuild),
   dependency:add_self_to_dep_contexts(Repository://Ebuild, MergedDeps0, MergedDeps),
   featureterm:add_after_to_dep_contexts(AfterForDeps, MergedDeps, MergedDepsAfter),
+  candidate:seed_bwu_memo_from_dep_tree(MergedDepsAfter),
   candidate:order_deps_for_proof(install, MergedDepsAfter, MergedDepsOrdered),
   ( memberchk(C, ['virtual','acct-group','acct-user']) ->
       Prefix0 = [ Selected,
@@ -762,6 +805,13 @@ candidate:run_dep_model(Repository://Ebuild, Model, AfterForDeps, run,
   query:search(model(dependency(MergedDeps0,run)):config?{ModelExt}, Repository://Ebuild),
   dependency:add_self_to_dep_contexts(Repository://Ebuild, MergedDeps0, MergedDeps),
   featureterm:add_after_to_dep_contexts(AfterForDeps, MergedDeps, MergedDepsAfter),
+  ( query:search(model(dependency(MergedDepsInstall0,install)):config?{ModelExt}, Repository://Ebuild) ->
+      dependency:add_self_to_dep_contexts(Repository://Ebuild, MergedDepsInstall0, MergedDepsInstall),
+      featureterm:add_after_to_dep_contexts(AfterForDeps, MergedDepsInstall, MergedDepsInstallAfter)
+  ; MergedDepsInstallAfter = []
+  ),
+  candidate:seed_bwu_memo_from_dep_tree(MergedDepsInstallAfter),
+  candidate:seed_bwu_memo_from_dep_tree(MergedDepsAfter),
   candidate:order_deps_for_proof(run, MergedDepsAfter, MergedDepsOrdered),
   target:run_install_action(Repository://Ebuild, C, N, R, BResolved, InstallAction, InstallCtx0),
   target:run_tag_suggestions(Repository://Ebuild, BResolved, R, InstallCtx0, InstallCtx),
@@ -785,7 +835,8 @@ candidate:run_dep_model(Repository://Ebuild, Model, AfterForDeps, run,
 % violation) when REQUIRED_USE cannot be satisfied.
 
 candidate:resolve_required_use(_Phase, C, N, Repository://Ebuild, Context1, R, BResolved, Model) :-
-  use:context_build_with_use_state(Context1, B),
+  use:context_build_with_use_state(Context1, B0),
+  use:merge_memo_candidate_bwu(C, N, B0, B),
   ( memberchk(required_use:R, Context1) -> true ; true ),
   query:search(model(Model,required_use(R),build_with_use(B)), Repository://Ebuild),
   use:check_bwu_cross_dep(C, N, Repository://Ebuild, B),
@@ -812,6 +863,7 @@ candidate:resolve_required_use(_Phase, C, N, Repository://Ebuild, Context1, R, B
 % or downgrade based on the VDB state.
 
 target:run_install_action(Repository://Ebuild, C, N, R, BResolved, InstallAction, InstallCtx0) :-
+  use:merge_memo_candidate_bwu(C, N, BResolved, BResolved1),
   ( \+ preference:flag(emptytree),
     candidate:entry_slot_default(Repository, Ebuild, SlotNew),
     query:search(package(C,N), pkg://_),
@@ -829,9 +881,9 @@ target:run_install_action(Repository://Ebuild, C, N, R, BResolved, InstallAction
     -> UpdateOrDowngrade = downgrade
     ;  UpdateOrDowngrade = update
     ),
-    InstallCtx0 = [replaces(OldRepo://OldEbuild),required_use:R,build_with_use:BResolved],
+    InstallCtx0 = [replaces(OldRepo://OldEbuild),required_use:R,build_with_use:BResolved1],
     InstallAction = UpdateOrDowngrade
-  ; InstallCtx0 = [required_use:R,build_with_use:BResolved],
+  ; InstallCtx0 = [required_use:R,build_with_use:BResolved1],
     InstallAction = install
   ).
 
@@ -842,14 +894,14 @@ target:run_install_action(Repository://Ebuild, C, N, R, BResolved, InstallAction
 
 %! target:run_tag_suggestions(+Entry, +BResolved, +R, +Ctx0, -Ctx) is det.
 %
-% Tags the install context with unmask, keyword-acceptance, and USE-change
-% suggestions when applicable.
+% Tags the install context with unmask, license, keyword-acceptance, and
+% USE-change suggestions when applicable.
 
 target:run_tag_suggestions(Repository://Ebuild, BResolved, R, Ctx0, Ctx) :-
   ( prover:assuming(unmask), query:search(masked(true), Repository://Ebuild) ->
       Ctx1 = [suggestion(unmask, Repository://Ebuild)|Ctx0]
   ; candidate:license_masked(Repository://Ebuild) ->
-      Ctx1 = [suggestion(unmask, Repository://Ebuild)|Ctx0]
+      Ctx1 = [suggestion(accept_license, Repository://Ebuild)|Ctx0]
   ; Ctx1 = Ctx0
   ),
   ( prover:assuming(keyword_acceptance),

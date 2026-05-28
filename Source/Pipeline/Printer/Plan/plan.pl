@@ -438,12 +438,31 @@ plan:print_element(_,rule(Repository://Entry:Action?{Context},_Body)) :-
 
 
 % -----------------------------------------------------------
+% CASE: package resolved via license acceptance suggestion
+% -----------------------------------------------------------
+
+plan:print_element(_,rule(Repository://Entry:Action?{Context},_Body)) :-
+  is_list(Context),
+  memberchk(suggestion(accept_license, _), Context),
+  !,
+  message:color(cyan),
+  message:print(Action),
+  message:color(green),
+  message:column(24,Repository://Entry),
+  message:color(darkgray),
+  message:print(' (license)'),
+  message:color(normal),
+  plan:print_config(Repository://Entry:Action?{Context}).
+
+
+% -----------------------------------------------------------
 % CASE: package resolved via unmask fallback (suggestion)
 % -----------------------------------------------------------
 
 plan:print_element(_,rule(Repository://Entry:Action?{Context},_Body)) :-
   is_list(Context),
   memberchk(suggestion(unmask, _), Context),
+  \+ memberchk(suggestion(accept_license, _), Context),
   !,
   message:color(cyan),
   message:print(Action),
@@ -463,6 +482,7 @@ plan:print_element(_,rule(Repository://Entry:Action?{Context},_Body)) :-
   is_list(Context),
   memberchk(suggestion(use_change, _, _Changes), Context),
   \+ memberchk(suggestion(unmask, _), Context),
+  \+ memberchk(suggestion(accept_license, _), Context),
   \+ memberchk(suggestion(accept_keyword, _), Context),
   !,
   message:color(cyan),
@@ -1023,13 +1043,7 @@ plan:print_config(Repository://Entry:fetchonly?{_Context}) :-
 
 plan:print_config(Repository://Entry:fetchonly?{Context}) :-
  !,
- findall(Use,
-         (member(Term,Context),
-          (Term = required_use(Uses) ; Term = build_with_use(Uses)),
-           member(assumed(Use),Uses)),
-         Assumed0),
- plan:use_changes_to_assumed(Context, SuggAssumed),
- append(Assumed0, SuggAssumed, Assumed),
+ plan:collect_context_assumed_use(Context, Assumed),
  plan:set_old_use_context(Repository://Entry, Context),
  findall([Reason,Group], group_by(Reason, Use, kb:query(iuse_filtered(Use,Reason),Repository://Entry), Group), Useflags),
 
@@ -1088,13 +1102,7 @@ plan:print_config(Repository://Entry:install?{Context}) :-
 
 plan:print_config(Repository://Entry:install?{Context}) :-
   !,
-  findall(Use,
-         (member(Term,Context),
-          (Term = required_use(Uses) ; Term = build_with_use(Uses)),
-           member(assumed(Use),Uses)),
-         Assumed0),
-  plan:use_changes_to_assumed(Context, SuggAssumed),
-  append(Assumed0, SuggAssumed, Assumed),
+  plan:collect_context_assumed_use(Context, Assumed),
 
   plan:set_old_use_context(Repository://Entry, Context),
 
@@ -1578,6 +1586,31 @@ plan:collect_all_flags(List, Assumed, AllFlags) :-
 plan:to_flag_term(Type, Assumed, Flag, flag(Type, Flag, Assumed)).
 
 
+%! plan:collect_context_assumed_use(+Context, -Assumed) is det.
+%
+% Collect USE overrides for plan display: legacy required_use/build_with_use
+% lists, canonical build_with_use:use_state/2, and suggestion(use_change).
+
+plan:collect_context_assumed_use(Context, Assumed) :-
+  findall(A, plan:context_assumed_use_atom(Context, A), Assumed0),
+  plan:use_changes_to_assumed(Context, SuggAssumed),
+  append(Assumed0, SuggAssumed, AssumedDup),
+  sort(AssumedDup, Assumed).
+
+
+plan:context_assumed_use_atom(Context, Use) :-
+  member(Term, Context),
+  ( Term = required_use(Uses) ; Term = build_with_use(Uses) ),
+  is_list(Uses),
+  member(assumed(Use), Uses).
+plan:context_assumed_use_atom(Context, Flag) :-
+  memberchk(build_with_use:use_state(En, _Dis), Context),
+  member(Flag, En).
+plan:context_assumed_use_atom(Context, minus(Flag)) :-
+  memberchk(build_with_use:use_state(_En, Dis), Context),
+  member(Flag, Dis).
+
+
 %! plan:use_changes_to_assumed(+Context, -Assumed)
 %
 % Extract USE flag changes from suggestion(use_change, ...) in the Context
@@ -2054,13 +2087,13 @@ plan:print_body(Target, Plan, Call, StartStep, Steps) :-
   ).
 
 % -----------------------------------------------------------------------------
-%  Pre-actions: unmask / keyword acceptance actions shown before the plan
+%  Pre-actions: unmask / license / keyword / USE-change before the plan
 % -----------------------------------------------------------------------------
 
 %! plan:collect_plan_pre_actions(+ProofAVL, -PreActions)
 %
-% Collects unmask and keyword acceptance actions from the proof that
-% should be shown as pre-plan steps.
+% Collects unmask, license, keyword, and USE-change actions from the proof
+% that should be shown as pre-plan steps.
 
 plan:collect_plan_pre_actions(ProofAVL, PreActions) :-
   findall(unmask(R, E, C, N),
@@ -2071,6 +2104,14 @@ plan:collect_plan_pre_actions(ProofAVL, PreActions) :-
           ),
           Unmasks0),
   sort(Unmasks0, Unmasks),
+  findall(accept_license(R, E, C, N),
+          ( assoc:gen_assoc(rule(R://E:_A1), ProofAVL, _?Ctx1),
+            is_list(Ctx1),
+            memberchk(suggestion(accept_license, _), Ctx1),
+            cache:ordered_entry(R, E, C, N, _)
+          ),
+          Licenses0),
+  sort(Licenses0, Licenses),
   findall(accept_keyword(R, E, C, N, K),
           ( assoc:gen_assoc(rule(R://E:_A2), ProofAVL, _?Ctx2),
             is_list(Ctx2),
@@ -2087,8 +2128,9 @@ plan:collect_plan_pre_actions(ProofAVL, PreActions) :-
           ),
           UseChanges0),
   sort(UseChanges0, UseChanges),
-  append(Unmasks, Keywords, PreActions0),
-  append(PreActions0, UseChanges, PreActions).
+  append(Unmasks, Licenses, PreActions0),
+  append(PreActions0, Keywords, PreActions1),
+  append(PreActions1, UseChanges, PreActions).
 
 
 %! plan:inject_cycle_break_verifies(+ProofAVL, +Plan, -AugmentedPlan)
@@ -2138,6 +2180,12 @@ plan:print_pre_action_first([Action|Rest]) :-
 
 plan:print_pre_action(unmask(R, E, _C, _N)) :-
   message:bubble(orange, unmask),
+  message:color(green),
+  message:column(24, R://E),
+  message:color(normal).
+
+plan:print_pre_action(accept_license(R, E, _C, _N)) :-
+  message:bubble(orange, license),
   message:color(green),
   message:column(24, R://E),
   message:color(normal).
@@ -2364,21 +2412,26 @@ plan:print_footer(Plan, _ModelAVL, PrintedSteps, PreActions) :-
 plan:footer_add_pre_actions([], S, S) :- !.
 plan:footer_add_pre_actions(PreActions, S0, S) :-
   include([A]>>(A = unmask(_,_,_,_)), PreActions, UnmaskActions),
+  include([A]>>(A = accept_license(_,_,_,_)), PreActions, LicenseActions),
   include([A]>>(A = accept_keyword(_,_,_,_,_)), PreActions, KeywordActions),
   include([A]>>(A = use_change(_,_,_,_,_)), PreActions, UseChangeActions),
   length(UnmaskActions, NUnmask),
+  length(LicenseActions, NLicenses),
   length(KeywordActions, NKeyword),
   length(UseChangeActions, NUseChange),
-  NewActions is S0.actions + NUnmask + NKeyword + NUseChange,
-  S = S0.put(_{actions:NewActions, unmasks:NUnmask, keywords:NKeyword, usechanges:NUseChange}).
+  NewActions is S0.actions + NUnmask + NLicenses + NKeyword + NUseChange,
+  S = S0.put(_{actions:NewActions, unmasks:NUnmask, licenses:NLicenses,
+                keywords:NKeyword, usechanges:NUseChange}).
 
 % Build the "(...)" part of the footer, omitting zero-count categories.
 plan:footer_action_breakdown(S, Breakdown) :-
   ( get_dict(unmasks,    S, UnmaskCount)    -> true ; UnmaskCount    = 0 ),
+  ( get_dict(licenses,   S, LicenseCount)   -> true ; LicenseCount   = 0 ),
   ( get_dict(keywords,   S, KeywordCount)   -> true ; KeywordCount   = 0 ),
   ( get_dict(usechanges, S, UseChangeCount) -> true ; UseChangeCount = 0 ),
   findall(Part,
           ( plan:footer_action_part(unmasks,     UnmaskCount,     unmask,      unmasks,     Part)
+          ; plan:footer_action_part(licenses,    LicenseCount,    license,     licenses,    Part)
           ; plan:footer_action_part(keywords,    KeywordCount,    keyword,     keywords,    Part)
           ; plan:footer_action_part(usechanges,  UseChangeCount,  useflag,     useflags,    Part)
           ; plan:footer_action_part(downloads,   S.downloads,     download,    downloads,   Part)
