@@ -1639,9 +1639,26 @@ group_dependencies(L, Groups) :-
 split_multislot_group(grouped_package_dependency(no,C,N,PackageDeps):Action?{Ctx}, Acc, Acc1) :-
     candidate:should_split_grouped_dep(PackageDeps),
     !,
-    foldl([D,A0,[grouped_package_dependency(no,C,N,[D]):Action?{Ctx}|A0]]>>true,
-          PackageDeps, Acc, Acc1).
+    split_grouped_singletons(PackageDeps, C, N, Action, Ctx, Acc, Acc1).
 split_multislot_group(Group, Acc, [Group|Acc]).
+
+
+%! split_grouped_singletons(+PackageDeps, +C, +N, +Action, +Ctx, +Acc, -Acc1)
+%
+% Prepend one singleton grouped_package_dependency/4 per dep onto Acc,
+% reusing the group's bound C/N/Action/Ctx. An earlier yall lambda
+% (`[D,A0,...]>>true`) was used here but yall does NOT share free
+% variables by default -- C, N, Action and Ctx were copied to fresh
+% unbound variables on every call, so the split singletons lost their
+% category/name. The prover's self-satisfied resolve clause then
+% rebound those unbound C/N from the anchor's `self(...)` context and
+% silently dropped the dependency (e.g. dotnet-sdk-bin's PDEPEND on
+% the dev-dotnet/dotnet-runtime-nugets packs -- portage-ng#17).
+
+split_grouped_singletons([], _C, _N, _Action, _Ctx, Acc, Acc).
+split_grouped_singletons([D|Ds], C, N, Action, Ctx, Acc, Acc1) :-
+    split_grouped_singletons(Ds, C, N, Action, Ctx,
+        [grouped_package_dependency(no,C,N,[D]):Action?{Ctx}|Acc], Acc1).
 
 
 
