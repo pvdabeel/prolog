@@ -776,6 +776,13 @@ binpkg_exec:inner_name_for(BinpkgEntryId, InnerName) :-
 % `ebuild_exec`.
 
 binpkg_exec:run_qmerge(EbuildPath, GpkgPath, BuildDir, UseString, ExitCode) :-
+  ebuild_exec:with_portage_pkg_merge_lock(qmerge,
+    binpkg_exec:run_qmerge_unlocked(EbuildPath, GpkgPath, BuildDir, UseString, ExitCode)).
+
+
+%! binpkg_exec:run_qmerge_unlocked(+EbuildPath, +GpkgPath, +BuildDir, +UseString, -ExitCode) is det.
+
+binpkg_exec:run_qmerge_unlocked(EbuildPath, GpkgPath, BuildDir, UseString, ExitCode) :-
   config:ebuild_command(EbuildCmd),
   process_create(
     path(EbuildCmd),

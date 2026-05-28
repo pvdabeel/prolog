@@ -491,11 +491,29 @@ scheduler:add_pkg_for_wave(Idx, Rule, In, Out) :-
 % package would appear in `PkgWaveMap`. Fails for any other body element.
 
 scheduler:assumed_dep_alias_key(assumed(Inner), Key) :-
+  \+ scheduler:assumed_inner_phantom(Inner),
   !,
   scheduler:assumed_inner_alias_key(Inner, Key).
 scheduler:assumed_dep_alias_key(assumed(Inner)?{_}, Key) :-
+  \+ scheduler:assumed_inner_phantom(Inner),
   !,
   scheduler:assumed_inner_alias_key(Inner, Key).
+
+
+%! scheduler:assumed_inner_phantom(+Inner) is semidet.
+%
+% Assumed deps tagged with a phantom reason (or REQUIRED_USE violation)
+% must not inherit a concrete install wave from another path.
+
+scheduler:assumed_inner_phantom(Inner) :-
+  explainer:term_ctx(Inner, Ctx),
+  memberchk(required_use_violation(_), Ctx),
+  !.
+scheduler:assumed_inner_phantom(Inner) :-
+  explainer:term_ctx(Inner, Ctx),
+  memberchk(assumption_reason(Reason), Ctx),
+  scheduler:assumed_inner_pkg(Inner, C, N),
+  explanation:phantom_grouped_dep_assumption(Reason, C, N).
 
 scheduler:assumed_inner_alias_key((Body:Action)?{_}, PhaseClass-C-N) :-
   !,
