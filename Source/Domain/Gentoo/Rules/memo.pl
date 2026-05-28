@@ -30,7 +30,9 @@ Each thread-local predicate caches a different aspect of resolver state:
 | iuse_info_cache_/3                 | Per-entry IUSE flag set + IUSE(+) set           |
 | eff_use_cache_/4                   | Per-entry effective USE resolution               |
 | self_use_cache_/4                  | Per-entry self-context USE resolution            |
-| candidate_bwu_/3                   | Per-(C,N) accumulated build_with_use state       |
+| candidate_bwu_/3                   | Per-(C,N) union of bracketed USE from all edges  |
+|                                    | (seeded from full dep tree, then provider        |
+|                                    | :install/:run and grouped_dep contexts)        |
 
 All caches are invalidated together by clear_caches/0 at the start of each
 proof run.  Individual caches (selected_cn_snap_, blocked_cn_source_snap_,

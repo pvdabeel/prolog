@@ -134,9 +134,10 @@ config:binpkg_changed_deps(warn).
 %            load. Useful when external producers are adding binpkgs
 %            concurrently with portage-ng builds.
 %
-% Default: manual. Set to `mtime` for live external-producer scenarios.
+% Default: mtime so concurrent binpkg producers (tinderbox-ng shared
+% cache) are visible without restarting portage-ng.
 
-config:binpkg_refresh(manual).
+config:binpkg_refresh(mtime).
 
 
 % -----------------------------------------------------------------------------

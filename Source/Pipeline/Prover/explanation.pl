@@ -160,6 +160,21 @@ explanation:target_ctx(Target, Ctx) :-
 %                               but their conjunction is empty)
 %   - `keyword_filtered`      : candidates exist but none match ACCEPT_KEYWORDS
 %   - `unsatisfied_constraints`: fallback when no specific reason can be isolated
+%
+% `phantom_grouped_dep_assumption/3` classifies reasons where a domain
+% assumption must not stand in for a real install (portage-ng#10, #14,
+% #15). The prover fails `grouped_dep_build_assumption/7`; the scheduler
+% must not alias the assumed dep to a concrete wave.
+
+%! explanation:phantom_grouped_dep_assumption(+Reason, +C, +N) is semidet.
+%
+% True when `assumed(grouped_package_dependency(C,N,...))` would be a
+% phantom provider (verify-only) rather than a satisfied dependency.
+
+explanation:phantom_grouped_dep_assumption(unsatisfied_constraints, _, _) :- !.
+explanation:phantom_grouped_dep_assumption(masked, _, _) :- !.
+explanation:phantom_grouped_dep_assumption(keyword_filtered, 'acct-group', _).
+
 
 assumption_reason_for_grouped_dep(Action, C, N, PackageDeps, Context, Reason) :-
   ( memo:assumption_reason_cache_(Action, C, N, CachedReason) ->
