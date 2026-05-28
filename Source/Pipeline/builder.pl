@@ -143,10 +143,30 @@ builder:alert :-
 
 %! builder:prepare_binpkg_index is det.
 %
-% Re-read the on-disk binpkg `Packages` index when `config:binpkg_refresh/1`
-% is `mtime` and an external producer may have updated it since startup.
+% Ensure the in-memory binpkg cache is populated from the on-disk
+% `Packages` index before a build starts (portage-ng#12).
+%
+% `kb:register(binpkg)` only records the repository fact; it does NOT
+% parse `Packages`, and `Knowledge/kb.qlf` carries no binpkg
+% `cache:ordered_entry/5` facts. On a cold process the binpkg cache is
+% therefore empty, and `binpkg_exec:maybe_refresh_index` (mtime policy)
+% only records a baseline mtime on first observation -- it never loads
+% an empty cache. The result was that `available_for/4` found no
+% candidates and every build fell through to a full source build even
+% when a USE-compatible gpkg existed.
+%
+% Fix: when the binpkg repository is registered but its cache is empty,
+% force a full `binpkg:sync(kb)` to parse the index. Otherwise fall back
+% to the cheap mtime refresh so a concurrent external producer's updates
+% are still picked up.
 
 builder:prepare_binpkg_index :-
+  ( config:use_binpkg(true),
+    cache:repository(binpkg),
+    \+ cache:ordered_entry(binpkg, _, _, _, _)
+  -> catch(binpkg:sync(kb), _, true)
+  ;  true
+  ),
   catch(binpkg_exec:maybe_refresh_index, _, true).
 
 
