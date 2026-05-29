@@ -1422,37 +1422,78 @@ test(other_keyword_filtered_not_phantom, [fail]) :-
 :- begin_tests(scheduler_pdepend_completion).
 
 % Fixtures: a synthetic provider `dev-lang/ruby` with one PDEPEND target
-% `fake/rubygems-1` (installed at wave 9, run at wave 10), its closure
-% (rubygems' own install/run), and an empty-context consumer grouped dep.
+% `fake/rubygems-1` (installed at wave 9, run at wave 10). The closure map is
+% per-target: target head -> set of (Category,Name) it transitively depends
+% on. Here rubygems' closure is just its own package (no cycle back to the
+% leaf consumer). Consumers are grouped dep literals (head_package resolves
+% them without a cache lookup).
 
 pdepend_fixture(Map, pd(AnchorMap, ClosureMap)) :-
   list_to_assoc([ (portage://'fake/rubygems-1':install)-9,
                   (portage://'fake/rubygems-1':run)-10 ], Map),
   list_to_assoc([ ('dev-lang'-ruby)-[portage://'fake/rubygems-1':run] ], AnchorMap),
-  list_to_assoc([ (portage://'fake/rubygems-1':install)-true,
-                  (portage://'fake/rubygems-1':run)-true ], ClosureSet),
-  list_to_assoc([ ('dev-lang'-ruby)-ClosureSet ], ClosureMap).
+  list_to_assoc([ ('dev-ruby'-rubygems)-true ], TargetCns),
+  list_to_assoc([ (portage://'fake/rubygems-1':run)-TargetCns ], ClosureMap).
 
-% A consumer outside the closure is ordered after the target's INSTALL wave
-% (9), not its cyclic :run wave (10).
+% A leaf consumer (outside the target's closure) is ordered after the
+% target's INSTALL wave (9), not its cyclic :run wave (10). This is the
+% ruby-gem case (portage-ng#18).
 test(consumer_completes_after_pdepend_install_wave) :-
   pdepend_fixture(Map, Pd),
   scheduler:pdepend_complete_wave(grouped_package_dependency(no,'dev-lang',ruby,[]):install,
-                                  portage://'fake/mecab-1':install, Map, Pd, W),
+                                  grouped_package_dependency(no,'dev-ruby','mecab-ruby',[]):install,
+                                  Map, Pd, W),
   W =:= 9.
 
-% A rule inside the provider's PDEPEND closure must NOT be bumped (cycle
-% safety): a target transitively depends on it.
-test(closure_member_not_bumped, [fail]) :-
+% A consumer whose package lies in the target's closure must NOT be bumped
+% (cycle safety, at (C,N) granularity): the target transitively depends on
+% it. This is the LLVM clang/compiler-rt cycle (portage-ng#19).
+test(cyclic_consumer_not_bumped, [fail]) :-
   pdepend_fixture(Map, Pd),
   scheduler:pdepend_complete_wave(grouped_package_dependency(no,'dev-lang',ruby,[]):install,
-                                  portage://'fake/rubygems-1':install, Map, Pd, _).
+                                  grouped_package_dependency(no,'dev-ruby',rubygems,[]):install,
+                                  Map, Pd, _).
+
+% Per-target filtering: a provider with two PDEPEND targets, one acyclic
+% (clang-toolchain-symlinks, install wave 10) and one cyclic w.r.t. the
+% consumer (clang-runtime, install wave 16, RDEPENDs the consumer). The
+% consumer (compiler-rt) is ordered after the acyclic target's install wave
+% (10) and never after the cyclic one (portage-ng#19).
+test(per_target_cycle_filter_uses_acyclic_max) :-
+  list_to_assoc([ (portage://'fake/symlinks-1':install)-10,
+                  (portage://'fake/symlinks-1':run)-11,
+                  (portage://'fake/runtime-1':install)-16,
+                  (portage://'fake/runtime-1':run)-17 ], Map),
+  list_to_assoc([ ('llvm-core'-clang)-[portage://'fake/symlinks-1':run,
+                                       portage://'fake/runtime-1':run] ], AnchorMap),
+  empty_assoc(SymCns),
+  list_to_assoc([ ('llvm-runtimes'-'compiler-rt')-true ], RunCns),
+  list_to_assoc([ (portage://'fake/symlinks-1':run)-SymCns,
+                  (portage://'fake/runtime-1':run)-RunCns ], ClosureMap),
+  scheduler:pdepend_complete_wave(grouped_package_dependency(no,'llvm-core',clang,[]):install,
+                                  grouped_package_dependency(no,'llvm-runtimes','compiler-rt',[]):install,
+                                  Map, pd(AnchorMap, ClosureMap), W),
+  W =:= 10.
+
+% A consumer that is ITSELF one of the provider's PDEPEND targets is never
+% ordered after the group (e.g. clang-toolchain-symlinks must not wait for
+% its sibling clang-runtime; portage-ng#19).
+test(pdepend_target_member_not_bumped, [fail]) :-
+  list_to_assoc([ (portage://'fake/symlinks-1':install)-5 ], Map),
+  GH = grouped_package_dependency(no,'llvm-core','clang-toolchain-symlinks',[]):run,
+  list_to_assoc([ ('llvm-core'-clang)-[GH] ], AnchorMap),
+  empty_assoc(EmptyCns),
+  list_to_assoc([ GH-EmptyCns ], ClosureMap),
+  scheduler:pdepend_complete_wave(grouped_package_dependency(no,'llvm-core',clang,[]):install,
+                                  grouped_package_dependency(no,'llvm-core','clang-toolchain-symlinks',[]):install,
+                                  Map, pd(AnchorMap, ClosureMap), _).
 
 % No PDEPEND provider in plan (empty AnchorMap): fast no-op failure.
 test(empty_anchor_map_is_noop, [fail]) :-
   pdepend_fixture(Map, _),
   scheduler:pdepend_complete_wave(grouped_package_dependency(no,'dev-lang',ruby,[]):install,
-                                  portage://'fake/mecab-1':install, Map, pd(t,t), _).
+                                  grouped_package_dependency(no,'dev-ruby','mecab-ruby',[]):install,
+                                  Map, pd(t,t), _).
 
 % A non-grouped (concrete) dep literal never triggers completion: consumer
 % edges are always grouped deps, and the concrete provider-install node is
@@ -1460,13 +1501,15 @@ test(empty_anchor_map_is_noop, [fail]) :-
 test(concrete_dep_does_not_complete, [fail]) :-
   pdepend_fixture(Map, Pd),
   scheduler:pdepend_complete_wave(portage://'fake/ruby-1':install,
-                                  portage://'fake/mecab-1':install, Map, Pd, _).
+                                  grouped_package_dependency(no,'dev-ruby','mecab-ruby',[]):install,
+                                  Map, Pd, _).
 
 % A dep on a provider without PDEPEND (absent from AnchorMap) fails.
 test(provider_without_pdepend_fails, [fail]) :-
   pdepend_fixture(Map, Pd),
   scheduler:pdepend_complete_wave(grouped_package_dependency(no,'dev-libs',glib,[]):install,
-                                  portage://'fake/consumer-1':install, Map, Pd, _).
+                                  grouped_package_dependency(no,'dev-libs',consumer,[]):install,
+                                  Map, Pd, _).
 
 % max_pd_install_wave prefers the package's :install wave over a :run head.
 test(install_wave_preferred_over_run) :-
@@ -1483,6 +1526,17 @@ test(forward_closure_reaches_transitive_deps) :-
   assoc_to_keys(Closure, Ks),
   sort(Ks, Sorted),
   Sorted == [a,b,c,d].
+
+% Collapsing a head closure to package (C,N) identity: grouped heads map to
+% their package, duplicate slots/actions collapse, and non-package heads
+% (assumptions/blockers) are dropped (portage-ng#19).
+test(closure_heads_to_cns_collapses_to_packages) :-
+  list_to_assoc([ (grouped_package_dependency(no,'dev-ruby',rubygems,[]):run)-true,
+                  (grouped_package_dependency(no,'dev-ruby',rubygems,[]):install)-true,
+                  (assumed(blocker(weak,run,a,b,none,version_none,[])))-true ], Closure),
+  scheduler:closure_heads_to_cns(Closure, CnSet),
+  assoc_to_keys(CnSet, Ks),
+  Ks == ['dev-ruby'-rubygems].
 
 :- end_tests(scheduler_pdepend_completion).
 
