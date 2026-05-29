@@ -1408,6 +1408,85 @@ test(other_keyword_filtered_not_phantom, [fail]) :-
 :- end_tests(phantom_grouped_dep_assumption).
 
 
+% =============================================================================
+%  Scheduler: PDEPEND completion ordering (portage-ng#18)
+% =============================================================================
+%
+% A provider P that declares PDEPEND is only functionally complete once its
+% post-install group is merged. A consumer of P (e.g. a ruby extension gem
+% whose `configure` phase runs the interpreter) must therefore be ordered
+% after P's whole PDEPEND closure, matching emerge. These tests cover the
+% pure helpers that implement that ordering in `Source/Pipeline/scheduler.pl`
+% (no knowledge base required).
+
+:- begin_tests(scheduler_pdepend_completion).
+
+% Fixtures: a synthetic provider `dev-lang/ruby` with one PDEPEND target
+% `fake/rubygems-1` (installed at wave 9, run at wave 10), its closure
+% (rubygems' own install/run), and an empty-context consumer grouped dep.
+
+pdepend_fixture(Map, pd(AnchorMap, ClosureMap)) :-
+  list_to_assoc([ (portage://'fake/rubygems-1':install)-9,
+                  (portage://'fake/rubygems-1':run)-10 ], Map),
+  list_to_assoc([ ('dev-lang'-ruby)-[portage://'fake/rubygems-1':run] ], AnchorMap),
+  list_to_assoc([ (portage://'fake/rubygems-1':install)-true,
+                  (portage://'fake/rubygems-1':run)-true ], ClosureSet),
+  list_to_assoc([ ('dev-lang'-ruby)-ClosureSet ], ClosureMap).
+
+% A consumer outside the closure is ordered after the target's INSTALL wave
+% (9), not its cyclic :run wave (10).
+test(consumer_completes_after_pdepend_install_wave) :-
+  pdepend_fixture(Map, Pd),
+  scheduler:pdepend_complete_wave(grouped_package_dependency(no,'dev-lang',ruby,[]):install,
+                                  portage://'fake/mecab-1':install, Map, Pd, W),
+  W =:= 9.
+
+% A rule inside the provider's PDEPEND closure must NOT be bumped (cycle
+% safety): a target transitively depends on it.
+test(closure_member_not_bumped, [fail]) :-
+  pdepend_fixture(Map, Pd),
+  scheduler:pdepend_complete_wave(grouped_package_dependency(no,'dev-lang',ruby,[]):install,
+                                  portage://'fake/rubygems-1':install, Map, Pd, _).
+
+% No PDEPEND provider in plan (empty AnchorMap): fast no-op failure.
+test(empty_anchor_map_is_noop, [fail]) :-
+  pdepend_fixture(Map, _),
+  scheduler:pdepend_complete_wave(grouped_package_dependency(no,'dev-lang',ruby,[]):install,
+                                  portage://'fake/mecab-1':install, Map, pd(t,t), _).
+
+% A non-grouped (concrete) dep literal never triggers completion: consumer
+% edges are always grouped deps, and the concrete provider-install node is
+% shared with the post-install group.
+test(concrete_dep_does_not_complete, [fail]) :-
+  pdepend_fixture(Map, Pd),
+  scheduler:pdepend_complete_wave(portage://'fake/ruby-1':install,
+                                  portage://'fake/mecab-1':install, Map, Pd, _).
+
+% A dep on a provider without PDEPEND (absent from AnchorMap) fails.
+test(provider_without_pdepend_fails, [fail]) :-
+  pdepend_fixture(Map, Pd),
+  scheduler:pdepend_complete_wave(grouped_package_dependency(no,'dev-libs',glib,[]):install,
+                                  portage://'fake/consumer-1':install, Map, Pd, _).
+
+% max_pd_install_wave prefers the package's :install wave over a :run head.
+test(install_wave_preferred_over_run) :-
+  list_to_assoc([ (portage://'fake/x-1':install)-3,
+                  (portage://'fake/x-1':run)-5 ], M),
+  scheduler:max_pd_install_wave(M, portage://'fake/x-1':run, -1, Out),
+  Out =:= 3.
+
+% Forward closure reaches every transitively-depended head (seeds included).
+test(forward_closure_reaches_transitive_deps) :-
+  list_to_assoc([ a-[b,c], b-[d], c-[], d-[] ], Fwd),
+  empty_assoc(V0),
+  scheduler:forward_closure([a], Fwd, V0, Closure),
+  assoc_to_keys(Closure, Ks),
+  sort(Ks, Sorted),
+  Sorted == [a,b,c,d].
+
+:- end_tests(scheduler_pdepend_completion).
+
+
 % -----------------------------------------------------------------------------
 %  Builder: VDB reconciliation backstop tests
 % -----------------------------------------------------------------------------
