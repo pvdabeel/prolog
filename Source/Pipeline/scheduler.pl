@@ -496,23 +496,67 @@ scheduler:add_anchor_dhead(DHead, CN, In, Out) :-
 %
 % For each provider key C-N (a key of `AnchorMap`), compute the forward
 % dependency closure of that provider's PDEPEND target heads -- i.e.
-% everything those targets (transitively) depend on. A rule whose head lies
-% in this closure is part of the provider's post-install group, so it must
-% NOT be ordered after the group (that would create a cycle: a target
-% depends on it, yet we would push it after the target). `ClosureMap` maps
-% C-N -> assoc(head->true).
+% everything those targets (transitively) depend on. A package that lies in
+% this closure is part of the provider's post-install group, so it must NOT
+% be ordered after the group (that would create a cycle: a target depends on
+% it, yet we would push it after the target).
+%
+% The closure is computed *per PDEPEND target* and collapsed to package
+% (Category,Name) identity (rather than kept as a per-provider union of exact
+% heads). Per-target granularity is essential: a provider's PDEPEND group can
+% mix targets that cycle back to the consumer with targets that do not. For
+% LLVM, `clang` PDEPENDs both `clang-toolchain-symlinks` (which a consumer
+% like `compiler-rt` must wait for -- it supplies the `${CHOST}-clang` PATH
+% wrappers) and `clang-runtime` (which RDEPENDs `compiler-rt` back, forming a
+% cycle). The consumer must be ordered after the former but never the latter.
+%
+% (C,N) identity (rather than exact heads) is also needed because a PDEPEND
+% cycle is typically only visible as a *grouped* / cross-slot literal in the
+% closure (e.g. `clang-runtime:22` RDEPENDs `grouped(... clang ...)`), never
+% as the concrete sibling-slot head being guarded (`clang-20:install`);
+% comparing at (C,N) bridges the grouped/concrete and cross-slot gaps
+% (portage-ng#19). `ClosureMap` maps each target head -> assoc(C-N -> true).
 
 scheduler:build_pdepend_closure_map(AllRules, AnchorMap, ClosureMap) :-
   scheduler:build_forward_dep_map(AllRules, FwdMap),
-  assoc_to_keys(AnchorMap, CNs),
+  assoc_to_values(AnchorMap, DHeadLists),
+  append(DHeadLists, DHeads0),
+  sort(DHeads0, DHeads),
   empty_assoc(C0),
-  foldl(scheduler:add_pdepend_closure(AnchorMap, FwdMap), CNs, C0, ClosureMap).
+  foldl(scheduler:add_target_closure(FwdMap), DHeads, C0, ClosureMap).
 
-scheduler:add_pdepend_closure(AnchorMap, FwdMap, CN, In, Out) :-
-  get_assoc(CN, AnchorMap, Seeds),
+scheduler:add_target_closure(FwdMap, DHead, In, Out) :-
   empty_assoc(V0),
-  scheduler:forward_closure(Seeds, FwdMap, V0, Closure),
-  put_assoc(CN, In, Closure, Out).
+  scheduler:forward_closure([DHead], FwdMap, V0, Closure),
+  scheduler:closure_heads_to_cns(Closure, CnSet),
+  put_assoc(DHead, In, CnSet, Out).
+
+%! scheduler:closure_heads_to_cns(+Closure, -CnSet)
+%
+% Collapse a closure of exact heads (assoc head->true) to the set of package
+% (Category,Name) pairs they belong to (assoc C-N->true). Heads with no
+% package identity (e.g. `assumed(blocker(...))`) are dropped.
+
+scheduler:closure_heads_to_cns(Closure, CnSet) :-
+  assoc_to_keys(Closure, Heads),
+  empty_assoc(C0),
+  foldl(scheduler:add_head_cn, Heads, C0, CnSet).
+
+scheduler:add_head_cn(Head, In, Out) :-
+  ( scheduler:head_package(Head, C, N)
+  -> put_assoc(C-N, In, true, Out)
+  ;  Out = In
+  ).
+
+%! scheduler:head_package(+Head, -Category, -Name)
+%
+% Extract the package (Category,Name) of a rule head, for both grouped
+% dependency literals and concrete `Repo://Entry:Action` heads. Fails for
+% heads that name no package (assumptions, blockers).
+
+scheduler:head_package(grouped_package_dependency(_G, C, N, _Deps):_Action, C, N) :- !.
+scheduler:head_package(Repo://Entry:_Action, C, N) :-
+  cache:ordered_entry(Repo, Entry, C, N, _).
 
 %! scheduler:build_forward_dep_map(+AllRules, -FwdMap)
 %
@@ -557,29 +601,52 @@ scheduler:forward_closure([H|Hs], FwdMap, V0, V) :-
 % If a body dep `DepHead` is a `grouped_package_dependency(_,C,N,_):Action`
 % on a provider (C,N) that declares PDEPEND, return the maximum *install*
 % wave among that provider's PDEPEND targets, so the consumer is ordered
-% after the provider's full post-install group (matching emerge, which
-% merges the whole interpreter stack before a consuming extension builds;
-% portage-ng#18). Matching the consumer's grouped dep literal (rather than a
-% concrete `Repo://Entry` head) is essential: the concrete provider-install
-% node is shared with the post-install group and would be excluded by the
-% closure guard. Fails (handled by the caller's if-then) when:
+% after the provider's post-install group (matching emerge, which merges the
+% whole interpreter stack before a consuming extension builds; portage-ng#18).
+% Matching the consumer's grouped dep literal (rather than a concrete
+% `Repo://Entry` head) is essential: the concrete provider-install node is
+% shared with the post-install group and would be excluded by the cycle
+% filter.
+%
+% Cycle-safety (portage-ng#19): PDEPEND targets whose forward closure depends
+% back on the consumer's package are filtered out *per target* before taking
+% the max. A consumer is thus ordered after the provider's non-cyclic
+% post-deps (e.g. `compiler-rt` after `clang-toolchain-symlinks`) while never
+% being pushed after a post-dep that requires it (e.g. `clang-runtime`, which
+% RDEPENDs `compiler-rt`). Fails (handled by the caller's if-then) when:
 %
 %  - no PDEPEND provider exists in the plan (`AnchorMap == t`), or
 %  - the dep is not a grouped dep on a PDEPEND provider, or
-%  - `RuleHead` is itself inside the provider's PDEPEND closure
-%    (cycle-safety: a target transitively depends on this rule, so it must
-%    not be pushed after the group), or
-%  - none of the provider's targets has a known install wave yet.
+%  - the consumer is itself one of the provider's PDEPEND targets (a member
+%    of the post-install group is never ordered after the whole group --
+%    e.g. `clang-toolchain-symlinks` must not wait for its sibling
+%    `clang-runtime`; portage-ng#19), or
+%  - every PDEPEND target cycles back to the consumer's package, or
+%  - none of the remaining targets has a known install wave yet.
 
 scheduler:pdepend_complete_wave(DepHead, RuleHead, Map, pd(AnchorMap, ClosureMap), MaxWave) :-
   AnchorMap \== t,
   DepHead = grouped_package_dependency(_G, C, N, _Deps):_Action,
   get_assoc(C-N, AnchorMap, DHeads),
-  \+ ( get_assoc(C-N, ClosureMap, ClosureSet),
-       get_assoc(RuleHead, ClosureSet, _)
-     ),
-  foldl(scheduler:max_pd_install_wave(Map), DHeads, -1, MaxWave),
+  ( scheduler:head_package(RuleHead, RC, RN)
+  -> \+ ( member(DH, DHeads), scheduler:head_package(DH, RC, RN) ),
+     include(scheduler:pdepend_target_acyclic(ClosureMap, RC-RN), DHeads, SafeDHeads)
+  ;  SafeDHeads = DHeads
+  ),
+  SafeDHeads \== [],
+  foldl(scheduler:max_pd_install_wave(Map), SafeDHeads, -1, MaxWave),
   MaxWave >= 0.
+
+%! scheduler:pdepend_target_acyclic(+ClosureMap, +ConsumerCN, +DHead)
+%
+% True when PDEPEND target `DHead` does NOT transitively depend on the
+% consumer package `ConsumerCN` -- i.e. ordering the consumer after `DHead`
+% introduces no cycle.
+
+scheduler:pdepend_target_acyclic(ClosureMap, ConsumerCN, DHead) :-
+  \+ ( get_assoc(DHead, ClosureMap, CnSet),
+       get_assoc(ConsumerCN, CnSet, _)
+     ).
 
 %! scheduler:max_pd_install_wave(+Map, +DHead, +In, -Out)
 %
