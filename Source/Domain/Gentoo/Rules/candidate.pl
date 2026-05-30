@@ -993,16 +993,47 @@ candidate:parent_is_single_version(C, N) :-
   \+ (cache:ordered_entry(_, E2, C, N, _), E2 \== E1).
 
 
+%! candidate:dep_target_selected_conflict(+C, +N, +PackageDeps, +Context) is semidet.
+%
+% True when the dependency *target* (C,N) is already pinned in the
+% selected_cn store at a candidate that violates this dep's own version
+% constraints. In that case the conflict lives at the child level
+% (e.g. dev-ruby/regexp_parser needs =dev-util/ragel-6*, but a sibling
+% pinned dev-util/ragel-7), so the correct repair is to re-select the
+% child (handled by maybe_request_grouped_dep_reprove/5, which rejects
+% the conflicting candidate and lets ragel-6.10 be chosen), exactly as
+% emerge backtracks the build-dep version. Narrowing the *parent* here
+% is futile: every parent version shares the same child constraint, so
+% parent_narrowing would churn through all parent versions and then emit
+% a spurious assumption. This guard makes parent_narrowing yield to the
+% child-level reprove in that situation.
+
+candidate:dep_target_selected_conflict(C, N, PackageDeps, Context) :-
+  ( context_selected_cn_candidates(C, N, Context, Selected)
+  ; snapshot_selected_cn_candidates(C, N, Selected)
+  ),
+  Selected \== [],
+  member(SelRepo://SelEntry, Selected),
+  \+ forall( member(package_dependency(_Phase,no,C,N,O,V,_Slot,_Use), PackageDeps),
+             query:search(select(version, O, V), SelRepo://SelEntry) ),
+  !.
+
+
 %! candidate:maybe_learn_parent_narrowing(+C, +N, +PackageDeps, +Context)
 %
 % When a dependency on (C,N) is unsatisfiable, learns to exclude the
 % parent version that introduced the dependency. This is the
 % "wrong-level fix": the parent introduced a dep that cannot be
 % satisfied, so exclude the parent version and reprove.
+%
+% Skipped when dep_target_selected_conflict/4 holds: a conflicting
+% pin on the child (C,N) is repaired by re-selecting the child via
+% maybe_request_grouped_dep_reprove/5, not by narrowing the parent.
 
 candidate:maybe_learn_parent_narrowing(C, N, PackageDeps, Context) :-
   \+ is_pdepend_failure(PackageDeps, Context),
   \+ is_multislot_miss(C, N, PackageDeps, Context),
+  \+ dep_target_selected_conflict(C, N, PackageDeps, Context),
   is_list(Context),
   memberchk(self(ParentRepo://ParentEntry), Context),
   cache:ordered_entry(ParentRepo, ParentEntry, ParentC, ParentN, _),
@@ -3349,14 +3380,17 @@ candidate:grouped_dep_assemble_conditions(Action, C, N, PackageDeps1, SlotReq, C
 % Builds an assumption condition when no candidate could satisfy the
 % grouped dependency. Tags context with explanation reason and
 % actionable suggestions (keyword, unmask, slot conflict, REQUIRED_USE).
-
-candidate:grouped_dep_build_assumption(Action, C, N, _PackageDeps1, PackageDepsOrig, Context, _Conditions) :-
-  explanation:assumption_reason_for_grouped_dep(Action, C, N, PackageDepsOrig, Context, Reason),
-  ( explanation:phantom_grouped_dep_assumption(Reason, C, N)
-  ; memo:requse_violation_(C, N, _)
-  ),
-  !,
-  fail.
+%
+% Phantom reasons (unsatisfied_constraints / masked / acct-group
+% keyword_filtered) and REQUIRED_USE violations (portage-ng#10, #14, #15)
+% are NOT failed here. Failing the assumption makes candidate:resolve/2
+% fail, which forces pipeline:prove_with_fallback through all five
+% relaxation tiers per target — a ~5x proof-cost regression on heavy
+% packages (portage-ng#20 fallout). Instead the assumption is emitted and
+% tagged (assumption_reason / required_use_violation) so the prover
+% completes with a domain assumption, while the scheduler keeps the
+% phantom out of concrete install waves via assumed_inner_phantom/1
+% (the correct layer for plan correctness).
 
 candidate:grouped_dep_build_assumption(Action, C, N, PackageDeps1, PackageDepsOrig, Context, Conditions) :-
   explanation:assumption_reason_for_grouped_dep(Action, C, N, PackageDepsOrig, Context, Reason),
