@@ -1405,22 +1405,34 @@ test(acct_group_keyword_filtered_is_phantom) :-
 test(other_keyword_filtered_not_phantom, [fail]) :-
   explanation:phantom_grouped_dep_assumption(keyword_filtered, 'dev-qt', qtbase).
 
-% Phantom guard must apply to the 7-arg call site used by target:resolve/2.
-test(build_assumption_rejects_phantom_reason, [fail]) :-
+% A phantom-reason grouped dep must still produce a domain assumption at the
+% prover (so the proof completes at tier 1 instead of cascading through all
+% five prove_with_fallback relaxation tiers, portage-ng#20 perf fallout). The
+% emitted assumption carries the assumption_reason tag so the scheduler /
+% printer classify it as phantom downstream (assumed_inner_phantom/1,
+% phantom_grouped_dep_assumption/3) and keep it out of concrete install waves.
+test(build_assumption_emits_phantom_with_reason_tag) :-
   assertz(memo:assumption_reason_cache_(install, 'dev-qt', qtbase, unsatisfied_constraints)),
-  ( candidate:grouped_dep_build_assumption(install, 'dev-qt', qtbase, [], [], [], _Conditions)
-  -> true
-  ;  fail
-  ),
-  retractall(memo:assumption_reason_cache_(install, 'dev-qt', qtbase, _)).
+  ( candidate:grouped_dep_build_assumption(install, 'dev-qt', qtbase, [], [], [], Conditions),
+    Conditions = [assumed(grouped_package_dependency('dev-qt', qtbase, _):install?{Ctx})],
+    memberchk(assumption_reason(unsatisfied_constraints), Ctx)
+  -> retractall(memo:assumption_reason_cache_(install, 'dev-qt', qtbase, _))
+  ;  retractall(memo:assumption_reason_cache_(install, 'dev-qt', qtbase, _)),
+     fail
+  ).
 
-test(build_assumption_rejects_requse_violation, [fail]) :-
+test(build_assumption_emits_requse_violation_with_tag) :-
+  assertz(memo:assumption_reason_cache_(install, 'dev-qt', qtbase, unsatisfied_constraints)),
   assertz(memo:requse_violation_('dev-qt', qtbase, use_flag_conflict([],[],[]))),
-  ( candidate:grouped_dep_build_assumption(install, 'dev-qt', qtbase, [], [], [], _Conditions)
-  -> true
-  ;  fail
-  ),
-  retractall(memo:requse_violation_('dev-qt', qtbase, _)).
+  ( candidate:grouped_dep_build_assumption(install, 'dev-qt', qtbase, [], [], [], Conditions),
+    Conditions = [assumed(grouped_package_dependency('dev-qt', qtbase, _):install?{Ctx})],
+    memberchk(required_use_violation(_), Ctx)
+  -> retractall(memo:assumption_reason_cache_(install, 'dev-qt', qtbase, _)),
+     retractall(memo:requse_violation_('dev-qt', qtbase, _))
+  ;  retractall(memo:assumption_reason_cache_(install, 'dev-qt', qtbase, _)),
+     retractall(memo:requse_violation_('dev-qt', qtbase, _)),
+     fail
+  ).
 
 :- end_tests(phantom_grouped_dep_assumption).
 
