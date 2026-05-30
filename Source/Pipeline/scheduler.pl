@@ -329,47 +329,49 @@ scheduler:repair_ordering_violations(PlanIn, PlanOut) :-
   ;  scheduler:build_pdepend_closure_map(AllRules, AnchorMap, ClosureMap),
      Pd = pd(AnchorMap, ClosureMap)
   ),
-  scheduler:sweep_repair(strict, AllRules, Map0, PkgMap, Pd, 20, Map1),
-  scheduler:sweep_repair(merge,  AllRules, Map1, PkgMap, Pd, 20, Map2),
+  scheduler:build_install_configure_dep_map(AllRules, CfgMap),
+  scheduler:sweep_repair(strict, AllRules, Map0, PkgMap, Pd, CfgMap, 20, Map1),
+  scheduler:sweep_repair(merge,  AllRules, Map1, PkgMap, Pd, CfgMap, 20, Map2),
   scheduler:rebuild_plan_from_map(AllRules, Map2, PlanOut).
 
 
-%! scheduler:sweep_repair(+Mode, +AllRules, +MapIn, +PkgMap, +Pd, +MaxIter, -MapOut)
+%! scheduler:sweep_repair(+Mode, +AllRules, +MapIn, +PkgMap, +Pd, +CfgMap, +MaxIter, -MapOut)
 %
 % Sweep through all rules, promoting those whose deps violate ordering.
 % Repeat until stable or MaxIter reached. `PkgMap` is the (PhaseClass-C-N)
 % wave map used by `max_dep_wave_/6` for assumed-dep aliasing; `Pd` is the
 % `pd(AnchorMap, ClosureMap)` bundle used for PDEPEND completion ordering
-% (portage-ng#18).
+% (portage-ng#18); `CfgMap` supplies RDEPEND configure deps for install-phase
+% heads (portage-ng#21).
 
-scheduler:sweep_repair(_, _, Map, _PkgMap, _Pd, 0, Map) :- !.
-scheduler:sweep_repair(Mode, AllRules, Map0, PkgMap, Pd, N, MapOut) :-
-  scheduler:sweep_once(Mode, AllRules, Map0, PkgMap, Pd, Map1, false, Changed),
+scheduler:sweep_repair(_, _, Map, _PkgMap, _Pd, _CfgMap, 0, Map) :- !.
+scheduler:sweep_repair(Mode, AllRules, Map0, PkgMap, Pd, CfgMap, N, MapOut) :-
+  scheduler:sweep_once(Mode, AllRules, Map0, PkgMap, Pd, CfgMap, Map1, false, Changed),
   ( Changed == false ->
       MapOut = Map1
   ;
       N1 is N - 1,
-      scheduler:sweep_repair(Mode, AllRules, Map1, PkgMap, Pd, N1, MapOut)
+      scheduler:sweep_repair(Mode, AllRules, Map1, PkgMap, Pd, CfgMap, N1, MapOut)
   ).
 
 
-%! scheduler:sweep_once(+Mode, +Rules, +MapIn, +PkgMap, +Pd, -MapOut, +ChIn, -ChOut)
+%! scheduler:sweep_once(+Mode, +Rules, +MapIn, +PkgMap, +Pd, +CfgMap, -MapOut, +ChIn, -ChOut)
 %
 % Single forward pass over all rules, updating the map for any violations.
 
-scheduler:sweep_once(_, [], Map, _PkgMap, _Pd, Map, Ch, Ch).
-scheduler:sweep_once(Mode, [Rule|Rules], Map0, PkgMap, Pd, MapOut, Ch0, ChOut) :-
+scheduler:sweep_once(_, [], Map, _PkgMap, _Pd, _CfgMap, Map, Ch, Ch).
+scheduler:sweep_once(Mode, [Rule|Rules], Map0, PkgMap, Pd, CfgMap, MapOut, Ch0, ChOut) :-
   ( scheduler:rule_head(Rule, Head),
     get_assoc(Head, Map0, CurWave),
-    scheduler:max_dep_wave(Rule, Head, Map0, PkgMap, Pd, MaxDep),
+    scheduler:max_dep_wave(Rule, Head, Map0, PkgMap, Pd, CfgMap, MaxDep),
     MaxDep >= 0,
     scheduler:needs_promotion(Mode, MaxDep, CurWave)
   ->
     scheduler:promotion_target(Mode, MaxDep, Target),
     put_assoc(Head, Map0, Target, Map1),
-    scheduler:sweep_once(Mode, Rules, Map1, PkgMap, Pd, MapOut, true, ChOut)
+    scheduler:sweep_once(Mode, Rules, Map1, PkgMap, Pd, CfgMap, MapOut, true, ChOut)
   ;
-    scheduler:sweep_once(Mode, Rules, Map0, PkgMap, Pd, MapOut, Ch0, ChOut)
+    scheduler:sweep_once(Mode, Rules, Map0, PkgMap, Pd, CfgMap, MapOut, Ch0, ChOut)
   ).
 
 scheduler:needs_promotion(strict, MaxDep, CurWave) :- MaxDep >= CurWave.
@@ -410,9 +412,11 @@ scheduler:promotion_target(merge,  MaxDep, MaxDep).
 %     wave 1 alongside the empty-body `rule(assumed(...), [])` verify rule
 %     and run before the concrete install (Qt6 cmake-find ordering bug).
 
-scheduler:max_dep_wave(Rule, RuleHead, Map, PkgMap, Pd, MaxDepWave) :-
+scheduler:max_dep_wave(Rule, RuleHead, Map, PkgMap, Pd, CfgMap, MaxDepWave) :-
   scheduler:rule_body(Rule, Body),
-  scheduler:max_dep_wave_(Body, RuleHead, Map, PkgMap, Pd, -1, MaxDepWave).
+  scheduler:max_dep_wave_(Body, RuleHead, Map, PkgMap, Pd, -1, MaxBody),
+  scheduler:configure_deps_wave(RuleHead, Map, PkgMap, Pd, CfgMap, MaxCfg),
+  MaxDepWave is max(MaxBody, MaxCfg).
 
 scheduler:max_dep_wave_([], _RuleHead, _Map, _PkgMap, _Pd, Max, Max).
 scheduler:max_dep_wave_([Dep|Rest], RuleHead, Map, PkgMap, Pd, CurMax, MaxOut) :-
@@ -429,7 +433,9 @@ scheduler:max_dep_wave_([Dep|Rest], RuleHead, Map, PkgMap, Pd, CurMax, MaxOut) :
          )
       ;  CurMaxA = CurMax
       ),
-      ( scheduler:assumed_dep_alias_key(Dep, AliasKey),
+      ( ( scheduler:assumed_dep_alias_key(Dep, AliasKey)
+        ; scheduler:grouped_run_dep_pkg_key(Dep, AliasKey)
+        ),
         get_assoc(AliasKey, PkgMap, AliasWave),
         AliasWave > CurMaxA
       -> CurMax1 = AliasWave
@@ -437,6 +443,66 @@ scheduler:max_dep_wave_([Dep|Rest], RuleHead, Map, PkgMap, Pd, CurMax, MaxOut) :
       )
   ),
   scheduler:max_dep_wave_(Rest, RuleHead, Map, PkgMap, Pd, CurMax1, MaxOut).
+
+
+% -----------------------------------------------------------------------------
+%  Install configure closure (RDEPEND at :install time, portage-ng#21)
+% -----------------------------------------------------------------------------
+%
+% Ebuild `:install` proof bodies carry DEPEND/BDEPEND only. RDEPEND literals
+% live on the sibling `:run` rule. Gentoo configure (notably Haskell/cabal
+% via ghc-pkg) still needs RDEPEND providers functionally complete before
+% configure starts. Map each install-phase head to its `:run` rule's
+% `:run`-action body deps and fold them into `max_dep_wave/7`.
+
+%! scheduler:build_install_configure_dep_map(+AllRules, -CfgMap)
+%
+% install/update/downgrade/reinstall head -> sorted list of `:run`-phase
+% body deps copied from the matching `:run` rule (when present).
+
+scheduler:build_install_configure_dep_map(AllRules, CfgMap) :-
+  empty_assoc(M0),
+  foldl(scheduler:add_install_configure_deps, AllRules, M0, CfgMap).
+
+scheduler:add_install_configure_deps(Rule, In, Out) :-
+  ( scheduler:rule_head(Rule, RunHead),
+    RunHead = _Repo://_Entry:run,
+    scheduler:rule_body(Rule, Body)
+  -> findall(Dep,
+             ( member(Dep, Body),
+               \+ constraint:is_constraint(Dep),
+               scheduler:dep_is_run_phase(Dep)
+             ),
+             Deps0),
+     ( Deps0 == [] ->
+         Out = In
+     ;  sort(Deps0, Deps),
+        scheduler:install_phase_key(RunHead, InstallKey),
+        put_assoc(InstallKey, In, Deps, Out)
+     )
+  ;  Out = In
+  ).
+
+scheduler:dep_is_run_phase(_Repo://_Entry:run) :- !.
+scheduler:dep_is_run_phase(grouped_package_dependency(_, _, _, _):run) :- !.
+scheduler:dep_is_run_phase(grouped_package_dependency(_, _, _, _):run?_) :- !.
+
+scheduler:install_phase_key(Repo://Entry:run, Repo://Entry:install) :- !.
+scheduler:install_phase_key(Repo://Entry:Action, Repo://Entry:install) :-
+  memberchk(Action, [install, update, downgrade, reinstall]).
+
+%! scheduler:configure_deps_wave(+RuleHead, +Map, +PkgMap, +Pd, +CfgMap, -MaxWave)
+%
+% For install-phase rule heads, return the max dependency wave among the
+% sibling `:run` rule's RDEPEND (`:run`) body literals. Returns -1 when
+% the head is not install-phase or no configure deps were recorded.
+
+scheduler:configure_deps_wave(RuleHead, Map, PkgMap, Pd, CfgMap, MaxWave) :-
+  ( scheduler:install_phase_key(RuleHead, InstallKey),
+    get_assoc(InstallKey, CfgMap, RunDeps)
+  -> scheduler:max_dep_wave_(RunDeps, InstallKey, Map, PkgMap, Pd, -1, MaxWave)
+  ;  MaxWave = -1
+  ).
 
 
 % -----------------------------------------------------------------------------
@@ -774,6 +840,16 @@ scheduler:assumed_inner_alias_key(Body:Action, PhaseClass-C-N) :-
 
 scheduler:assumed_inner_pkg(grouped_package_dependency(C, N, _Deps),     C, N) :- !.
 scheduler:assumed_inner_pkg(package_dependency(_, _, C, N, _, _, _, _), C, N).
+
+
+%! scheduler:grouped_run_dep_pkg_key(+Dep, -Key)
+%
+% Maps a concrete grouped RDEPEND literal to the `(run_phase-C-N)` key in
+% `PkgWaveMap`, so configure-closure deps resolve to the provider's merged
+% `:run` wave even when the plan only records concrete ebuild heads.
+
+scheduler:grouped_run_dep_pkg_key(grouped_package_dependency(_, C, N, _):run, run_phase-C-N) :- !.
+scheduler:grouped_run_dep_pkg_key(grouped_package_dependency(_, C, N, _):run?{_}, run_phase-C-N) :- !.
 
 
 %! scheduler:rebuild_plan_from_map(+AllRules, +Map, -Plan)

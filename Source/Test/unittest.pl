@@ -1405,7 +1405,55 @@ test(acct_group_keyword_filtered_is_phantom) :-
 test(other_keyword_filtered_not_phantom, [fail]) :-
   explanation:phantom_grouped_dep_assumption(keyword_filtered, 'dev-qt', qtbase).
 
+% Phantom guard must apply to the 7-arg call site used by target:resolve/2.
+test(build_assumption_rejects_phantom_reason, [fail]) :-
+  assertz(memo:assumption_reason_cache_(install, 'dev-qt', qtbase, unsatisfied_constraints)),
+  ( candidate:grouped_dep_build_assumption(install, 'dev-qt', qtbase, [], [], [], _Conditions)
+  -> true
+  ;  fail
+  ),
+  retractall(memo:assumption_reason_cache_(install, 'dev-qt', qtbase, _)).
+
+test(build_assumption_rejects_requse_violation, [fail]) :-
+  assertz(memo:requse_violation_('dev-qt', qtbase, use_flag_conflict([],[],[]))),
+  ( candidate:grouped_dep_build_assumption(install, 'dev-qt', qtbase, [], [], [], _Conditions)
+  -> true
+  ;  fail
+  ),
+  retractall(memo:requse_violation_('dev-qt', qtbase, _)).
+
 :- end_tests(phantom_grouped_dep_assumption).
+
+
+% =============================================================================
+%  Scheduler: install configure closure (portage-ng#21)
+% =============================================================================
+
+:- begin_tests(scheduler_install_configure_deps).
+
+test(install_waits_for_run_rule_rdepend) :-
+  BifRun = grouped_package_dependency(no, 'dev-haskell', bifunctors, []):run,
+  SgRun = rule(portage://'dev-haskell/semigroupoids-5.3.7-r1':run, [BifRun]),
+  SgInstall = rule(portage://'dev-haskell/semigroupoids-5.3.7-r1':install, []),
+  PlanIn = [[SgInstall], [SgRun, rule(portage://'dev-haskell/bifunctors-5.6.3':run, [])]],
+  scheduler:repair_ordering_violations(PlanIn, PlanOut),
+  nth1(WInstall, PlanOut, StepInstall),
+  member(SgInstall, StepInstall),
+  nth1(WBif, PlanOut, StepBif),
+  member(rule(portage://'dev-haskell/bifunctors-5.6.3':run, []), StepBif),
+  WInstall > WBif.
+
+test(configure_deps_wave_from_run_body) :-
+  BifRun = grouped_package_dependency(no, 'dev-haskell', bifunctors, []):run,
+  RunRule = rule(portage://'dev-haskell/semigroupoids-5.3.7-r1':run, [BifRun]),
+  list_to_assoc([ ('run_phase'-'dev-haskell'-bifunctors)-3 ], PkgMap),
+  empty_assoc(Map),
+  scheduler:build_install_configure_dep_map([RunRule], CfgMap),
+  scheduler:configure_deps_wave(portage://'dev-haskell/semigroupoids-5.3.7-r1':install,
+                                Map, PkgMap, pd(t,t), CfgMap, W),
+  W =:= 3.
+
+:- end_tests(scheduler_install_configure_deps).
 
 
 % =============================================================================

@@ -3350,7 +3350,7 @@ candidate:grouped_dep_assemble_conditions(Action, C, N, PackageDeps1, SlotReq, C
 % grouped dependency. Tags context with explanation reason and
 % actionable suggestions (keyword, unmask, slot conflict, REQUIRED_USE).
 
-candidate:grouped_dep_build_assumption(Action, C, N, _PackageDeps1, PackageDepsOrig, Context) :-
+candidate:grouped_dep_build_assumption(Action, C, N, _PackageDeps1, PackageDepsOrig, Context, _Conditions) :-
   explanation:assumption_reason_for_grouped_dep(Action, C, N, PackageDepsOrig, Context, Reason),
   ( explanation:phantom_grouped_dep_assumption(Reason, C, N)
   ; memo:requse_violation_(C, N, _)
