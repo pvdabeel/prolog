@@ -1431,25 +1431,32 @@ test(build_assumption_rejects_requse_violation, [fail]) :-
 
 :- begin_tests(scheduler_install_configure_deps).
 
-test(install_waits_for_run_rule_rdepend) :-
+% KB-independent: `build_pkg_wave_map/2` needs `cache:ordered_entry/5`, which
+% CI lacks. Exercise `sweep_repair/7` with synthetic heads and a hand-built
+% PkgWaveMap (grouped RDEPEND aliasing via run_phase-C-N).
+
+test(install_promoted_past_run_rdepend) :-
   BifRun = grouped_package_dependency(no, 'dev-haskell', bifunctors, []):run,
-  SgRun = rule(portage://'dev-haskell/semigroupoids-5.3.7-r1':run, [BifRun]),
-  SgInstall = rule(portage://'dev-haskell/semigroupoids-5.3.7-r1':install, []),
-  PlanIn = [[SgInstall], [SgRun, rule(portage://'dev-haskell/bifunctors-5.6.3':run, [])]],
-  scheduler:repair_ordering_violations(PlanIn, PlanOut),
-  nth1(WInstall, PlanOut, StepInstall),
-  member(SgInstall, StepInstall),
-  nth1(WBif, PlanOut, StepBif),
-  member(rule(portage://'dev-haskell/bifunctors-5.6.3':run, []), StepBif),
-  WInstall > WBif.
+  SgRun = rule(portage://'fake/sg-1':run, [BifRun]),
+  SgInstall = rule(portage://'fake/sg-1':install, []),
+  BifRunRule = rule(portage://'fake/bif-1':run, []),
+  AllRules = [SgInstall, SgRun, BifRunRule],
+  list_to_assoc([ (portage://'fake/sg-1':install)-1,
+                  (portage://'fake/sg-1':run)-2,
+                  (portage://'fake/bif-1':run)-2 ], Map0),
+  list_to_assoc([ ('run_phase'-'dev-haskell'-bifunctors)-2 ], PkgMap),
+  scheduler:build_install_configure_dep_map([SgRun], CfgMap),
+  scheduler:sweep_repair(strict, AllRules, Map0, PkgMap, pd(t, t), CfgMap, 20, Map1),
+  get_assoc(portage://'fake/sg-1':install, Map1, WInstall),
+  WInstall >= 3.
 
 test(configure_deps_wave_from_run_body) :-
   BifRun = grouped_package_dependency(no, 'dev-haskell', bifunctors, []):run,
-  RunRule = rule(portage://'dev-haskell/semigroupoids-5.3.7-r1':run, [BifRun]),
+  RunRule = rule(portage://'fake/sg-1':run, [BifRun]),
   list_to_assoc([ ('run_phase'-'dev-haskell'-bifunctors)-3 ], PkgMap),
   empty_assoc(Map),
   scheduler:build_install_configure_dep_map([RunRule], CfgMap),
-  scheduler:configure_deps_wave(portage://'dev-haskell/semigroupoids-5.3.7-r1':install,
+  scheduler:configure_deps_wave(portage://'fake/sg-1':install,
                                 Map, PkgMap, pd(t,t), CfgMap, W),
   W =:= 3.
 
