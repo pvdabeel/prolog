@@ -839,9 +839,9 @@ candidate:resolve_required_use(_Phase, C, N, Repository://Ebuild, Context1, R, B
   use:merge_memo_candidate_bwu(C, N, B0, B),
   ( memberchk(required_use:R, Context1) -> true ; true ),
   query:search(model(Model,required_use(R),build_with_use(B)), Repository://Ebuild),
-  use:check_bwu_cross_dep(C, N, Repository://Ebuild, B),
   use:build_with_use_resolve_required_use(B, Repository://Ebuild, BResolved0),
   use:stabilize_required_use(Repository://Ebuild, BResolved0, BResolved),
+  use:check_bwu_cross_dep(C, N, Repository://Ebuild, BResolved),
   ( \+ use:verify_required_use_with_bwu(Repository://Ebuild, BResolved) ->
       use:describe_required_use_violation(Repository://Ebuild, BResolved, ViolDesc),
       ( \+ memo:requse_violation_(C, N, _) ->
