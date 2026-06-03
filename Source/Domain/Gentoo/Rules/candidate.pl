@@ -2023,21 +2023,86 @@ candidate:dep_favour_avoid_bonus(C, N, Bonus) :-
 
 candidate:use_rank(Use, Rank) :-
   atom(Use),
-  ( llvm_slot_rank(Use, Rank)
-  ; lua_single_target_rank(Use, Rank)
-  ),
+  candidate:use_expand_target_rank(Use, Rank),
   !.
 candidate:use_rank(_, 0).
 
-candidate:llvm_slot_rank(Use, Rank) :-
-  atom_concat('llvm_slot_', Suffix, Use),
-  catch(atom_number(Suffix, N), _, fail),
-  Rank is 100000 + N.
 
-candidate:lua_single_target_rank(Use, Rank) :-
-  atom_concat('lua_single_target_lua5-', Suffix, Use),
-  catch(atom_number(Suffix, N), _, fail),
-  Rank is 90000 + N.
+%! candidate:use_expand_target_rank(+Use, -Rank) is semidet.
+%
+% Derives a positive rank from the trailing version/slot digits of a
+% USE_EXPAND target/slot flag, so that when a choice group offers several
+% single-target alternatives and the profile has NOT forced one, the
+% newest target/slot is preferred -- mirroring emerge's "highest available
+% slot" behaviour.
+%
+% Generic across every USE_EXPAND family registered in eapi:use_expand/1
+% (llvm_slot, lua_single_target, python_single_target, ruby_targets, ...):
+% the family prefix is stripped and the remaining digit groups are packed
+% into the rank, e.g. llvm_slot_20 -> 20,
+% lua_single_target_lua5-4 -> key([5,4]),
+% python_single_target_python3_13 -> key([3,13]). Flags with no numeric
+% component (e.g. lua_single_target_luajit) fail and fall through to rank 0
+% via use_rank/2. This was previously hardcoded for llvm_slot and lua5
+% only -- the two families whose profile defaults were dropped -- which
+% baked ecosystem-specific literals into the domain rules. Profile-selected
+% targets are handled separately by is_preferred_dep/2 (Pref*1e9), which
+% always dominates this tiebreaker.
+
+candidate:use_expand_target_rank(Use, Rank) :-
+  preference:use_expand_env(_EnvVar, Prefix),
+  atom_concat(Prefix, '_', PrefixU),
+  atom_concat(PrefixU, Value, Use),
+  Value \== '',
+  candidate:use_expand_version_key(Value, Rank),
+  !.
+
+
+%! candidate:use_expand_version_key(+Value, -Key) is semidet.
+%
+% Packs the maximal decimal-digit runs of Value into a single comparable
+% integer (newer = larger; each component occupies a fixed field). Fails
+% when Value carries no digits.
+
+candidate:use_expand_version_key(Value, Key) :-
+  atom_codes(Value, Codes),
+  candidate:digit_groups(Codes, Groups),
+  Groups \== [],
+  candidate:pack_version_key(Groups, 0, Key).
+
+
+%! candidate:digit_groups(+Codes, -Groups) is det.
+%
+% Extracts the maximal runs of decimal digits in Codes as integers, in
+% left-to-right order. e.g. "python3_13" -> [3,13], "lua5-4" -> [5,4],
+% "20" -> [20], "luajit" -> [].
+
+candidate:digit_groups([], []) :- !.
+candidate:digit_groups(Codes, [N|Rest]) :-
+  candidate:take_digits(Codes, DigitCodes, Codes1),
+  DigitCodes \== [],
+  !,
+  number_codes(N, DigitCodes),
+  candidate:digit_groups(Codes1, Rest).
+candidate:digit_groups([_|Codes], Rest) :-
+  candidate:digit_groups(Codes, Rest).
+
+
+%! candidate:take_digits(+Codes, -DigitCodes, -Rest) is det.
+
+candidate:take_digits([C|Cs], [C|Ds], Rest) :-
+  code_type(C, digit),
+  !,
+  candidate:take_digits(Cs, Ds, Rest).
+candidate:take_digits(Cs, [], Cs).
+
+
+%! candidate:pack_version_key(+Groups, +Acc, -Key) is det.
+
+candidate:pack_version_key([], Key, Key).
+candidate:pack_version_key([G|Gs], Acc0, Key) :-
+  Acc1 is Acc0 * 10000 + G,
+  candidate:pack_version_key(Gs, Acc1, Key).
 
 %! candidate:is_preferred_dep(+Context, +Dep)
 %

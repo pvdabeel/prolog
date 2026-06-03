@@ -1,6 +1,14 @@
 Feature exploration
 ===================
 
+- X generalized USE_EXPAND target ranking in candidate.pl: dropped hardcoded
+    llvm_slot/lua5 weights (use_rank), now derives "newest target wins" from the
+    trailing version digits of any eapi:use_expand flag. -bootstrap kept (generic).
+
+- multi-model is broken - needs fixing
+
+- dead code analysis - any AI slop?
+
 - exit code should give more information about build failure (known issue, masked, upstream, restricted download, ...)
 
 - Dark & Light mode colors
