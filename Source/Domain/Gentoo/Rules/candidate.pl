@@ -1448,9 +1448,31 @@ candidate:seed_bwu_memo_from_dep(exactly_one_of_group(Deps)) :- !,
   candidate:seed_bwu_memo_from_dep_tree(Deps).
 candidate:seed_bwu_memo_from_dep(at_most_one_of_group(Deps)) :- !,
   candidate:seed_bwu_memo_from_dep_tree(Deps).
-candidate:seed_bwu_memo_from_dep(use_conditional_group(_, _, _, Deps)) :- !,
-  candidate:seed_bwu_memo_from_dep_tree(Deps).
+candidate:seed_bwu_memo_from_dep(use_conditional_group(Pol, Use, RepoEntry, Deps)) :- !,
+  ( candidate:seed_use_conditional_inactive(Pol, Use, RepoEntry) ->
+      true
+  ; candidate:seed_bwu_memo_from_dep_tree(Deps)
+  ).
 candidate:seed_bwu_memo_from_dep(_).
+
+
+%! candidate:seed_use_conditional_inactive(+Polarity, +Use, +RepoEntry) is semidet
+%
+% True only when the USE-conditional guard is *positively determined* to be
+% inactive for its owning entry, i.e. seeding its bracketed USE would be
+% spurious.  A `flag? ( ... )` group is inactive when the entry has the flag
+% off; a `!flag? ( ... )` group is inactive when the flag is on.  Fails (so
+% the caller still recurses) when the state cannot be determined (flag not in
+% IUSE, minus-wrapped, or RepoEntry unbound), keeping seeding conservative.
+
+candidate:seed_use_conditional_inactive(positive, Use, Repo://Id) :-
+  \+ Use =.. [minus, _],
+  use:effective_use_for_entry(Repo://Id, Use, negative),
+  !.
+candidate:seed_use_conditional_inactive(negative, Use, Repo://Id) :-
+  \+ Use =.. [minus, _],
+  use:effective_use_for_entry(Repo://Id, Use, positive),
+  !.
 
 
 %! candidate:seed_bwu_memo_for_cn(+C, +N, +UseReqs) is det
@@ -1471,6 +1493,125 @@ candidate:seed_bwu_memo_for_cn(C, N, UseReqs) :-
 candidate:seed_accumulate_bwu(_C, _N, use_state([], [])) :- !.
 candidate:seed_accumulate_bwu(C, N, BWU) :-
   ( use:accumulate_candidate_bwu(C, N, BWU) -> true ; true ).
+
+
+% -----------------------------------------------------------------------------
+%  Equality-USE pin propagation ([flag=] / [!flag=])
+% -----------------------------------------------------------------------------
+
+%! candidate:equality_pins_from_providers(+RepoEntry, -PinState) is det
+%
+% Scan RepoEntry's own DEPEND/RDEPEND/BDEPEND for unconditional bracketed
+% equality USE deps (`provider[flag=]` / `provider[!flag=]`).  For each such
+% dep whose provider already has the flag pinned in memo:candidate_bwu_/3,
+% derive the flag value this entry must itself build with, so that
+% REQUIRED_USE resolution honours the bidirectional `=` constraint.
+%
+%   [flag=]  : this.flag == provider.flag    (provider on  -> enable here)
+%   [!flag=] : this.flag == \+ provider.flag (provider on  -> disable here)
+%
+% Only top-level / all_of_group deps are scanned (no descent into USE-
+% conditional or choice groups): a flag pinned from inside such a group is
+% the very flag being resolved, so it is left to normal resolution.  A pin
+% that would force a flag both on and off (independent providers disagree)
+% is dropped, letting the existing conflict machinery report it.  Returns
+% use_state([],[]) when nothing is pinned (the common case).
+
+candidate:equality_pins_from_providers(Repo://Entry, PinState) :-
+  findall(F-Mode,
+          ( member(Key, [depend, rdepend, bdepend]),
+            cache:entry_metadata(Repo, Entry, Key, Term),
+            candidate:equality_pin_from_term(Term, F, Mode)
+          ),
+          Pins0),
+  ( Pins0 == [] ->
+      use:empty_use_state(PinState)
+  ; sort(Pins0, Pins),
+    findall(EF, member(EF-enable, Pins), En0), sort(En0, En),
+    findall(DF, member(DF-disable, Pins), Dis0), sort(Dis0, Dis),
+    ( candidate:pin_flags_conflict(En, Dis) ->
+        use:empty_use_state(PinState)
+    ; PinState = use_state(En, Dis)
+    )
+  ).
+
+
+%! candidate:pin_flags_conflict(+Enable, +Disable) is semidet
+%
+% True when a flag appears in both the enable and disable pin sets.
+
+candidate:pin_flags_conflict(En, Dis) :-
+  member(F, En),
+  memberchk(F, Dis),
+  !.
+
+
+%! candidate:equality_pin_from_term(+DepTerm, -Flag, -Mode) is nondet
+%
+% Yield Flag-Mode (Mode = enable|disable) for each unconditional equality
+% bracket USE dep in DepTerm whose provider is pinned in the BWU memo.
+% Descends only all_of_group; choice and USE-conditional groups are skipped.
+
+candidate:equality_pin_from_term(package_dependency(_P, _S, PC, PN, _O, _V, _Slot, UseDeps), F, Mode) :-
+  member(UseDep, UseDeps),
+  candidate:equality_pin_from_usedep(PC, PN, UseDep, F, Mode).
+candidate:equality_pin_from_term(all_of_group(Deps), F, Mode) :-
+  member(D, Deps),
+  candidate:equality_pin_from_term(D, F, Mode).
+
+
+%! candidate:equality_pin_from_usedep(+PC, +PN, +UseDep, -Flag, -Mode) is nondet
+%
+% Map one `use(equal(F),_)` / `use(inverse(F),_)` directive on provider
+% (PC,PN) to the flag value this entry must build with, given the provider's
+% current BWU pin.
+
+candidate:equality_pin_from_usedep(PC, PN, use(equal(F), _), F, Mode) :-
+  candidate:provider_pin_mode(PC, PN, F, Mode).
+candidate:equality_pin_from_usedep(PC, PN, use(inverse(F), _), F, Mode) :-
+  candidate:provider_pin_mode(PC, PN, F, ProviderMode),
+  candidate:invert_pin_mode(ProviderMode, Mode).
+
+
+%! candidate:provider_pin_mode(+PC, +PN, +Flag, -Mode) is semidet
+%
+% Mode is enable/disable iff provider (PC,PN) has Flag pinned on/off in the
+% BWU memo.  Fails when the flag is unpinned (equality resolves normally).
+
+candidate:provider_pin_mode(PC, PN, F, enable) :-
+  memo:candidate_bwu_(PC, PN, use_state(En, _Dis)),
+  memberchk(F, En),
+  !.
+candidate:provider_pin_mode(PC, PN, F, disable) :-
+  memo:candidate_bwu_(PC, PN, use_state(_En, Dis)),
+  memberchk(F, Dis),
+  !.
+
+
+%! candidate:invert_pin_mode(+Mode, -Inverted) is det
+
+candidate:invert_pin_mode(enable, disable).
+candidate:invert_pin_mode(disable, enable).
+
+
+%! candidate:apply_equality_pins(+RepoEntry, +BWU0, -BWU) is det
+%
+% Union the equality-USE pins derived from RepoEntry's providers into the
+% candidate's own build_with_use state before REQUIRED_USE resolution.  When
+% a pin contradicts the existing state, BWU0 is kept unchanged and the clash
+% is left for check_bwu_cross_dep / REQUIRED_USE verification to report.
+
+candidate:apply_equality_pins(Repo://Entry, BWU0, BWU) :-
+  candidate:equality_pins_from_providers(Repo://Entry, PinState),
+  ( PinState == use_state([], []) ->
+      BWU = BWU0
+  ; BWU0 == use_state([], []) ->
+      BWU = PinState
+  ; feature_unification:val_hook(BWU0, PinState, BWU) ->
+      true
+  ; BWU = BWU0
+  ).
+
 
 candidate:dep_priority_kv(Dep, K-Dep) :-
   dep_priority(Dep, K),
