@@ -836,7 +836,8 @@ candidate:run_dep_model(Repository://Ebuild, Model, AfterForDeps, run,
 
 candidate:resolve_required_use(_Phase, C, N, Repository://Ebuild, Context1, R, BResolved, Model) :-
   use:context_build_with_use_state(Context1, B0),
-  use:merge_memo_candidate_bwu(C, N, B0, B),
+  use:merge_memo_candidate_bwu(C, N, B0, B1),
+  candidate:apply_equality_pins(Repository://Ebuild, B1, B),
   ( memberchk(required_use:R, Context1) -> true ; true ),
   query:search(model(Model,required_use(R),build_with_use(B)), Repository://Ebuild),
   use:build_with_use_resolve_required_use(B, Repository://Ebuild, BResolved0),

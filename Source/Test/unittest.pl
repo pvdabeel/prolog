@@ -1124,6 +1124,69 @@ test(seed_run_before_install_phase, [true(M == use_state([dbus],[]))]) :-
 :- end_tests(use_candidate_bwu_memo).
 
 
+:- begin_tests(equality_use_pin_propagation).
+
+test(equal_provider_enabled_enables_self, [true(Mode == enable)]) :-
+  use:clear_bwu_cross_dep_memos,
+  assertz(memo:candidate_bwu_('dev-qt', qtbase, use_state([icu], []))),
+  candidate:equality_pin_from_usedep('dev-qt', qtbase, use(equal(icu), negative), icu, Mode).
+
+test(equal_provider_disabled_disables_self, [true(Mode == disable)]) :-
+  use:clear_bwu_cross_dep_memos,
+  assertz(memo:candidate_bwu_('dev-qt', qtbase, use_state([], [icu]))),
+  candidate:equality_pin_from_usedep('dev-qt', qtbase, use(equal(icu), positive), icu, Mode).
+
+test(inverse_provider_enabled_disables_self, [true(Mode == disable)]) :-
+  use:clear_bwu_cross_dep_memos,
+  assertz(memo:candidate_bwu_('dev-qt', qtbase, use_state([icu], []))),
+  candidate:equality_pin_from_usedep('dev-qt', qtbase, use(inverse(icu), negative), icu, Mode).
+
+test(inverse_provider_disabled_enables_self, [true(Mode == enable)]) :-
+  use:clear_bwu_cross_dep_memos,
+  assertz(memo:candidate_bwu_('dev-qt', qtbase, use_state([], [icu]))),
+  candidate:equality_pin_from_usedep('dev-qt', qtbase, use(inverse(icu), positive), icu, Mode).
+
+test(unpinned_provider_yields_no_pin, [fail]) :-
+  use:clear_bwu_cross_dep_memos,
+  candidate:equality_pin_from_usedep('dev-qt', qtbase, use(equal(icu), negative), icu, _Mode).
+
+test(term_walk_collects_top_level, [true(Pairs == [icu-enable])]) :-
+  use:clear_bwu_cross_dep_memos,
+  assertz(memo:candidate_bwu_('dev-qt', qtbase, use_state([icu], []))),
+  Term = package_dependency(install, no, 'dev-qt', qtbase, tilde, version_none, [],
+                            [use(equal(icu), negative), use(enable(network), positive)]),
+  findall(F-M, candidate:equality_pin_from_term(Term, F, M), Pairs).
+
+test(term_walk_descends_all_of_group, [true(Pairs == [icu-enable])]) :-
+  use:clear_bwu_cross_dep_memos,
+  assertz(memo:candidate_bwu_('dev-qt', qtbase, use_state([icu], []))),
+  Term = all_of_group([package_dependency(install, no, 'dev-qt', qtbase, tilde, version_none, [],
+                                          [use(equal(icu), negative)])]),
+  findall(F-M, candidate:equality_pin_from_term(Term, F, M), Pairs).
+
+test(conditional_group_not_descended, [true(Pairs == [])]) :-
+  use:clear_bwu_cross_dep_memos,
+  assertz(memo:candidate_bwu_('dev-qt', qtbase, use_state([icu], []))),
+  Term = use_conditional_group(positive, someflag, none,
+           [package_dependency(install, no, 'dev-qt', qtbase, tilde, version_none, [],
+                               [use(equal(icu), negative)])]),
+  findall(F-M, candidate:equality_pin_from_term(Term, F, M), Pairs).
+
+test(pin_conflict_detected) :-
+  candidate:pin_flags_conflict([icu], [icu]).
+
+test(pin_no_conflict, [fail]) :-
+  candidate:pin_flags_conflict([icu], [foo]).
+
+test(seed_conditional_minus_use_recurses, [fail]) :-
+  candidate:seed_use_conditional_inactive(positive, minus(foo), some://entry).
+
+test(seed_conditional_non_entry_recurses, [fail]) :-
+  candidate:seed_use_conditional_inactive(positive, foo, not_an_entry).
+
+:- end_tests(equality_use_pin_propagation).
+
+
 :- begin_tests(use_iuse_assoc).
 
 test(single_pair, [true(V == positive)]) :-
