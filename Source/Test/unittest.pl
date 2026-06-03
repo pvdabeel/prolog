@@ -1187,6 +1187,43 @@ test(seed_conditional_non_entry_recurses, [fail]) :-
 :- end_tests(equality_use_pin_propagation).
 
 
+% =============================================================================
+%  Builder base USE state matches planner (portage-ng#22)
+% =============================================================================
+%
+% The builder's base USE string (ebuild_exec:collect_use_string/4) must agree
+% with the planner's view of each IUSE flag. Previously the builder folded the
+% raw iuse/2 facts with a last-wins dedup, which picked the wrong polarity for
+% flags declared with conflicting facts (e.g. x11-libs/wxGTK exposes `X` as
+% [positive:ebuild, negative:default], so last-wins gave `-X` while the planner
+% resolved `+X`, breaking REQUIRED_USE="spell? ( X )" at setup). The fix routes
+% the base polarity through use:effective_use_for_entry/3.
+%
+% These tests are KB-independent: they pre-seed memo:eff_use_cache_/4 so the
+% effective lookup short-circuits without needing cache:ordered_entry/5 (absent
+% in CI).
+
+:- begin_tests(builder_base_use_state).
+
+test(prefers_effective_positive, [true(S == positive)]) :-
+  retractall(memo:eff_use_cache_(testrepo, 'cat/p-1', _, _)),
+  assertz(memo:eff_use_cache_(testrepo, 'cat/p-1', 'X', positive)),
+  ( ebuild_exec:base_use_state(testrepo://'cat/p-1', 'X', S)
+  -> retractall(memo:eff_use_cache_(testrepo, 'cat/p-1', _, _))
+  ;  retractall(memo:eff_use_cache_(testrepo, 'cat/p-1', _, _)), fail
+  ).
+
+test(prefers_effective_negative, [true(S == negative)]) :-
+  retractall(memo:eff_use_cache_(testrepo, 'cat/p-1', _, _)),
+  assertz(memo:eff_use_cache_(testrepo, 'cat/p-1', spell, negative)),
+  ( ebuild_exec:base_use_state(testrepo://'cat/p-1', spell, S)
+  -> retractall(memo:eff_use_cache_(testrepo, 'cat/p-1', _, _))
+  ;  retractall(memo:eff_use_cache_(testrepo, 'cat/p-1', _, _)), fail
+  ).
+
+:- end_tests(builder_base_use_state).
+
+
 :- begin_tests(use_iuse_assoc).
 
 test(single_pair, [true(V == positive)]) :-
