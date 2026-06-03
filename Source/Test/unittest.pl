@@ -1129,22 +1129,22 @@ test(seed_run_before_install_phase, [true(M == use_state([dbus],[]))]) :-
 test(equal_provider_enabled_enables_self, [true(Mode == enable)]) :-
   use:clear_bwu_cross_dep_memos,
   assertz(memo:candidate_bwu_('dev-qt', qtbase, use_state([icu], []))),
-  candidate:equality_pin_from_usedep('dev-qt', qtbase, use(equal(icu), negative), icu, Mode).
+  once(candidate:equality_pin_from_usedep('dev-qt', qtbase, use(equal(icu), negative), icu, Mode)).
 
 test(equal_provider_disabled_disables_self, [true(Mode == disable)]) :-
   use:clear_bwu_cross_dep_memos,
   assertz(memo:candidate_bwu_('dev-qt', qtbase, use_state([], [icu]))),
-  candidate:equality_pin_from_usedep('dev-qt', qtbase, use(equal(icu), positive), icu, Mode).
+  once(candidate:equality_pin_from_usedep('dev-qt', qtbase, use(equal(icu), positive), icu, Mode)).
 
 test(inverse_provider_enabled_disables_self, [true(Mode == disable)]) :-
   use:clear_bwu_cross_dep_memos,
   assertz(memo:candidate_bwu_('dev-qt', qtbase, use_state([icu], []))),
-  candidate:equality_pin_from_usedep('dev-qt', qtbase, use(inverse(icu), negative), icu, Mode).
+  once(candidate:equality_pin_from_usedep('dev-qt', qtbase, use(inverse(icu), negative), icu, Mode)).
 
 test(inverse_provider_disabled_enables_self, [true(Mode == enable)]) :-
   use:clear_bwu_cross_dep_memos,
   assertz(memo:candidate_bwu_('dev-qt', qtbase, use_state([], [icu]))),
-  candidate:equality_pin_from_usedep('dev-qt', qtbase, use(inverse(icu), positive), icu, Mode).
+  once(candidate:equality_pin_from_usedep('dev-qt', qtbase, use(inverse(icu), positive), icu, Mode)).
 
 test(unpinned_provider_yields_no_pin, [fail]) :-
   use:clear_bwu_cross_dep_memos,
