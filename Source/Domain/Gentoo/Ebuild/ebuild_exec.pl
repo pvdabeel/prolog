@@ -260,18 +260,28 @@ ebuild_exec:log_file_size(Path, Size) :-
 % The context overrides take precedence over KB defaults.
 
 ebuild_exec:collect_use_string(Repo, Entry, Ctx, UseString) :-
+  % The base USE state must match the planner's view of the package. Each
+  % IUSE flag is resolved through use:effective_use_for_entry/3 -- the same
+  % predicate the prover/planner use -- which folds the ebuild default,
+  % profile, global and user-config layers in the correct priority order.
+  %
+  % A prior version collapsed the raw iuse/2 facts with a last-wins dedup.
+  % That silently picked the wrong polarity for flags declared with
+  % conflicting facts: e.g. x11-libs/wxGTK exposes `X` as
+  % [positive:ebuild, negative:default], so last-wins yielded `-X` while
+  % the planner resolved `+X`. The builder then emerged wxGTK with `spell`
+  % on but `X` off, breaking REQUIRED_USE="spell? ( X )" in the setup phase
+  % (issue #22). Resolving via effective_use_for_entry/3 makes the
+  % builder's base USE agree with the plan by construction.
+  findall(Flag, kb:query(iuse(Flag, _State0:_Reason), Repo://Entry), Flags0),
+  sort(Flags0, Flags),
   findall(Flag-State,
-    ( kb:query(iuse(Flag, State0:_Reason), Repo://Entry),
-      ( State0 == positive -> State = positive ; State = negative )
+    ( member(Flag, Flags),
+      ebuild_exec:base_use_state(Repo://Entry, Flag, State)
     ),
     BasePairs),
-  % `list_to_assoc/2` throws `domain_error(unique_key_pairs, _)` when a
-  % flag is declared more than once -- which happens in practice for
-  % packages that inherit several eclasses contributing IUSE (e.g.
-  % www-servers/apache declares `ssl` via both ssl.eclass and
-  % apache-2.eclass). Fold with `put_assoc/4` so duplicates are merged
-  % deterministically (last-write-wins); when both copies carry the
-  % same state -- which is the common case -- the result is the same.
+  % Flags is already deduplicated, but keep the tolerant fold (a flag could
+  % in principle resolve more than once) so a duplicate never throws.
   ebuild_exec:pairs_to_assoc_dedup(BasePairs, BaseAssoc),
   ebuild_exec:apply_ctx_use_overrides(Ctx, BaseAssoc, MergedAssoc),
   assoc_to_keys(MergedAssoc, AllFlags),
@@ -353,6 +363,25 @@ ebuild_exec:apply_ctx_use_overrides(Ctx, AssocIn, AssocOut) :-
 
 ebuild_exec:apply_use_override(Flag-State, AssocIn, AssocOut) :-
   put_assoc(Flag, AssocIn, State, AssocOut).
+
+
+%! ebuild_exec:base_use_state(+RepoEntry, +Flag, -State) is det.
+%
+% Effective base polarity (positive/negative) for Flag, matching the
+% planner via use:effective_use_for_entry/3. Falls back to the raw IUSE
+% default polarity (last fact wins) only when the effective lookup cannot
+% resolve the flag, so no IUSE flag is ever dropped from the USE string.
+
+ebuild_exec:base_use_state(Repo://Entry, Flag, State) :-
+  ( use:effective_use_for_entry(Repo://Entry, Flag, Eff) ->
+      State = Eff
+  ; findall(S,
+      ( kb:query(iuse(Flag, S0:_R), Repo://Entry),
+        ( S0 == positive -> S = positive ; S = negative )
+      ),
+      Ss),
+    ( last(Ss, State) -> true ; State = negative )
+  ).
 
 
 %! ebuild_exec:pairs_to_assoc_dedup(+Pairs, -Assoc) is det.
