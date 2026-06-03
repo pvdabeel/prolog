@@ -1224,6 +1224,53 @@ test(prefers_effective_negative, [true(S == negative)]) :-
 :- end_tests(builder_base_use_state).
 
 
+% =============================================================================
+%  USE_EXPAND target ranking is family-agnostic
+% =============================================================================
+%
+% The any_of/exactly-one choice ranking prefers the newest USE_EXPAND target
+% when the profile has not forced one. This used to be hardcoded for the
+% llvm_slot and lua5 families only (ecosystem-specific literals in the domain
+% rules). It is now generic over every eapi:use_expand/1 family: the rank is
+% derived from the trailing version digits of the flag.
+
+:- begin_tests(use_expand_target_rank).
+
+test(llvm_slot_numeric, [true(R == 20)]) :-
+  candidate:use_rank('llvm_slot_20', R).
+
+test(llvm_slot_newer_ranks_higher) :-
+  candidate:use_rank('llvm_slot_20', R20),
+  candidate:use_rank('llvm_slot_19', R19),
+  R20 > R19.
+
+test(python_single_target_newer_ranks_higher) :-
+  candidate:use_rank('python_single_target_python3_13', R13),
+  candidate:use_rank('python_single_target_python3_12', R12),
+  R13 > R12.
+
+test(lua5_newer_ranks_higher) :-
+  candidate:use_rank('lua_single_target_lua5-4', R4),
+  candidate:use_rank('lua_single_target_lua5-3', R3),
+  R4 > R3.
+
+test(lua_non_numeric_is_zero, [true(R == 0)]) :-
+  candidate:use_rank('lua_single_target_luajit', R).
+
+test(non_use_expand_is_zero, [true(R == 0)]) :-
+  candidate:use_rank(some_random_flag, R).
+
+test(digit_groups_multi, [true(G == [3,13])]) :-
+  atom_codes('python3_13', Cs),
+  candidate:digit_groups(Cs, G).
+
+test(digit_groups_none, [true(G == [])]) :-
+  atom_codes(luajit, Cs),
+  candidate:digit_groups(Cs, G).
+
+:- end_tests(use_expand_target_rank).
+
+
 :- begin_tests(use_iuse_assoc).
 
 test(single_pair, [true(V == positive)]) :-
