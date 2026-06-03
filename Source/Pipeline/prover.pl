@@ -298,6 +298,142 @@ prover:assuming(Literal) :-
 
 
 % -----------------------------------------------------------------------------
+% Native multi-model enumeration
+% -----------------------------------------------------------------------------
+
+% When enumeration mode is active the prover exposes the ||/^^/exactly_one_of
+% branch as the only meaningful choicepoint: each disjunctive alternative yields
+% one distinct model on backtracking (member/3-style). The default pipeline runs
+% with the flag OFF, so its single-solution behavior is byte-for-byte unchanged.
+%
+% Backtracking itself is native: Proof/Model/Constraints/Triggers are threaded
+% functionally through prove_recursive/9, so undoing a branch is just ordinary
+% Prolog backtracking over those AVLs. The only extra state is the per-model
+% record of which alternative a disjunction committed to (so the same
+% disjunction reached through a diamond, or via both DEPEND and RDEPEND, stays
+% consistent). That record is kept in a *backtrackable* global (b_setval), so it
+% rides on the same native backtracking and needs no manual snapshot/restore.
+
+
+%! prover:multimodel_enumeration is semidet.
+%
+% Succeeds when native multi-model enumeration is currently active.
+
+prover:multimodel_enumeration :-
+  nb_current(prover_multimodel_enumeration, true).
+
+
+%! prover:prove_models(+Target, +InProof, -OutProof, +InModel, -OutModel, +InCons, -OutCons, +InTriggers, -OutTriggers) is nondet.
+%
+% Like prover:prove/9, but enumerates one distinct model per satisfiable
+% disjunctive (||/^^/exactly_one_of) branch on backtracking, preferred
+% branch first. Equivalent to prove/9 for targets without disjunctions.
+
+prover:prove_models(Target, InProof, OutProof, InModel, OutModel, InCons, OutCons, InTriggers, OutTriggers) :-
+  ( nb_current(prover_multimodel_enumeration, Old) -> true ; Old = '$absent' ),
+  setup_call_cleanup(
+    nb_setval(prover_multimodel_enumeration, true),
+    prover:prove_models_tiered(Target, InProof, OutProof, InModel, OutModel, InCons, OutCons, InTriggers, OutTriggers),
+    ( Old == '$absent' -> nb_delete(prover_multimodel_enumeration)
+    ; nb_setval(prover_multimodel_enumeration, Old)
+    )).
+
+
+%! prover:prove_models_tiered(...) is nondet.
+%
+% Failure-revert: first enumerate the branch models that resolve without any
+% domain assumption (strict tier). Only if no branch is assumption-free does
+% the relaxed tier run, surfacing assumption-bearing models so a model is
+% always produced. The soft cut keeps every strict solution but falls through
+% only when the strict tier yields nothing.
+
+prover:prove_models_tiered(Target, InProof, OutProof, InModel, OutModel, InCons, OutCons, InTriggers, OutTriggers) :-
+  ( prover:prove_models_strict(Target, InProof, OutProof, InModel, OutModel, InCons, OutCons, InTriggers, OutTriggers)
+  *->
+    true
+  ;
+    prover:clear_branch_choices,
+    prover:prove(Target, InProof, OutProof, InModel, OutModel, InCons, OutCons, InTriggers, OutTriggers)
+  ).
+
+
+%! prover:prove_models_strict(...) is nondet.
+%
+% Enumerate only assumption-free branch models. Domain assumptions are turned
+% into proof failures (see the multimodel_strict guards in the rules), so a
+% branch that can only be resolved via an assumption fails and the prover
+% backtracks to the next branch. Reprove is disabled here to keep the strict
+% enumeration free of conflict-driven retries.
+
+prover:prove_models_strict(Target, InProof, OutProof, InModel, OutModel, InCons, OutCons, InTriggers, OutTriggers) :-
+  ( nb_current(prover_multimodel_strict, OldS) -> true ; OldS = '$absent' ),
+  setup_call_cleanup(
+    ( nb_setval(prover_multimodel_strict, true),
+      prover:clear_branch_choices ),
+    prover:with_reprove_disabled(
+      prover:prove(Target, InProof, OutProof, InModel, OutModel, InCons, OutCons, InTriggers, OutTriggers)
+    ),
+    ( OldS == '$absent' -> nb_delete(prover_multimodel_strict)
+    ; nb_setval(prover_multimodel_strict, OldS)
+    )).
+
+
+%! prover:multimodel_strict is semidet.
+%
+% Succeeds when the strict (assumption-free) enumeration tier is active.
+
+prover:multimodel_strict :-
+  nb_current(prover_multimodel_strict, true).
+
+
+% -----------------------------------------------------------------------------
+% Per-model disjunctive branch decisions
+% -----------------------------------------------------------------------------
+
+% A single disjunction (e.g. os's `|| ( linux bsd windows )`) can be re-derived
+% at several independent config-phase choicepoints when its package is reached
+% through a diamond, or appears in both DEPEND and RDEPEND. To keep one model
+% consistent, the first evaluation of a disjunction owns the choicepoint and
+% records its pick; every later evaluation of the same disjunction follows it.
+%
+% The record lives in a *backtrackable* global (b_setval): when the owner's
+% member/2 choicepoint backtracks to the next alternative, the trail restores
+% the record automatically, and the owner records the new pick. There is no
+% manual snapshot/restore — undoing a branch is ordinary Prolog backtracking
+% over the functionally-threaded Proof/Model/Constraints/Triggers plus this one
+% backtrackable record.
+
+
+%! prover:clear_branch_choices is det.
+%
+% Reset the backtrackable branch-choice record at the start of an enumeration
+% attempt; backtracking within the attempt restores it to this empty state.
+
+prover:clear_branch_choices :-
+  b_setval(prover_branch_choices, []).
+
+
+%! prover:branch_choice(+Key, -Value) is semidet.
+%
+% Succeeds with the branch already chosen for disjunction Key in this model.
+
+prover:branch_choice(Key, Value) :-
+  nb_current(prover_branch_choices, L),
+  memberchk(Key-Value, L).
+
+
+%! prover:set_branch_choice(+Key, +Value) is det.
+%
+% Record (overwriting any previous pick) the branch chosen for disjunction Key
+% in a backtrackable global, so the pick is undone on backtracking.
+
+prover:set_branch_choice(Key, Value) :-
+  ( nb_current(prover_branch_choices, L0) -> true ; L0 = [] ),
+  ( selectchk(Key-_, L0, L1) -> true ; L1 = L0 ),
+  b_setval(prover_branch_choices, [Key-Value|L1]).
+
+
+% -----------------------------------------------------------------------------
 % Core Recursive Prover
 % -----------------------------------------------------------------------------
 
