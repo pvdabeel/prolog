@@ -2350,7 +2350,10 @@ eapi:normalize_slot_term_(subslot(S0), subslot(S)) :-
 eapi:normalize_slot_term_(Other, Other) :-
   !.
 
-% Kept internal (not exported): used by repository cache generation.
+% Shared slot-value canonicalizer (integers/numbers -> atom; atoms pass
+% through). Used by repository cache generation and delegated to by
+% candidate:canon_slot/2, version_domain:canon_slot/2 and
+% preference:canon_slot_atom_/2.
 eapi:normalize_slot_value_(S0, S) :-
   ( atom(S0)    -> S = S0
   ; integer(S0) -> atom_number(S, S0)
@@ -2376,6 +2379,50 @@ eapi:version_compare(Op, Proposed, Required) :-
   compare(Op, Proposed, Required).
 
 eapi:version_full(version(_,_,_,_,_,_,Full), Full).
+
+
+% -----------------------------------------------------------------------------
+%  Helper: comparison-operator dispatch
+% -----------------------------------------------------------------------------
+
+%! eapi:version_op(?Op) is nondet.
+%
+% The order/equality comparison operators understood by eapi:version_op_match/3:
+% none, equal, notequal, smaller, smallerequal, greater, greaterequal. Excludes
+% tilde and wildcard, which need version structure beyond plain compare/3 and
+% are therefore handled by the callers that support them.
+
+eapi:version_op(none).
+eapi:version_op(equal).
+eapi:version_op(notequal).
+eapi:version_op(smaller).
+eapi:version_op(smallerequal).
+eapi:version_op(greater).
+eapi:version_op(greaterequal).
+
+
+%! eapi:version_op_match(+Op, +Proposed, +Required) is semidet.
+%
+% Shared comparison-operator dispatch over version/7 terms. Op must be one of
+% eapi:version_op/1. Equality uses term identity (==/\==) and ordering uses
+% compare/3 (which is exactly eapi:version_compare/3). This is the common core
+% behind preference:version_match/3, version_domain:version_constraint_holds/2
+% and candidate:blocker_version_matches/5; each of those keeps its own extras
+% (tilde/wildcard, unknown-op fallback) around this core.
+
+eapi:version_op_match(none, _Proposed, _Required).
+eapi:version_op_match(equal, Proposed, Required) :- Proposed == Required.
+eapi:version_op_match(notequal, Proposed, Required) :- Proposed \== Required.
+eapi:version_op_match(smaller, Proposed, Required) :- compare(<, Proposed, Required).
+eapi:version_op_match(smallerequal, Proposed, Required) :-
+  ( compare(<, Proposed, Required)
+  ; compare(=, Proposed, Required)
+  ).
+eapi:version_op_match(greater, Proposed, Required) :- compare(>, Proposed, Required).
+eapi:version_op_match(greaterequal, Proposed, Required) :-
+  ( compare(>, Proposed, Required)
+  ; compare(=, Proposed, Required)
+  ).
 
 
 % -----------------------------------------------------------------------------

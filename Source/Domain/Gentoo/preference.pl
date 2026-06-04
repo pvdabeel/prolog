@@ -820,12 +820,7 @@ preference:entry_satisfies_slot_req_(Repo, Id, SlotReq) :-
 % Normalize a slot value to an atom (integers/numbers are converted).
 
 preference:canon_slot_atom_(S0, S) :-
-  ( atom(S0) -> S = S0
-  ; integer(S0) -> atom_number(S, S0)
-  ; number(S0) -> atom_number(S, S0)
-  ; S = S0
-  ),
-  !.
+  eapi:normalize_slot_value_(S0, S).
 
 
 %! preference:profile_package_use_cp_from_spec_(+Spec, -C, -N) is semidet.
@@ -1515,45 +1510,20 @@ preference:slot_req_match_(_Other, _Repo, _Id) :- fail.
 % profile package.mask / package.unmask processing.  Avoids query:search/2
 % because this runs at init time before goal-expansion.
 
-preference:version_match(none, _Proposed, _Req) :- !.
-
-preference:version_match(equal, Proposed, Req) :-
-  Proposed == Req,
-  !.
-
 preference:version_match(tilde, Proposed, Req) :-
+  !,
   Proposed = version(N,A,SR,SN,SRe,_,_),
-  Req = version(N,A,SR,SN,SRe,_,_),
-  !.
+  Req = version(N,A,SR,SN,SRe,_,_).
 
 preference:version_match(wildcard, Proposed, version(_,_,_,_,_,_,Pattern)) :-
   !,
   Proposed = version(_,_,_,_,_,_,ProposedStr),
   query:wildcard_match(Pattern, ProposedStr).
 
-preference:version_match(smaller, Proposed, Req) :-
-  !,
-  eapi:version_compare(<, Proposed, Req).
-
-preference:version_match(greater, Proposed, Req) :-
-  !,
-  eapi:version_compare(>, Proposed, Req).
-
-preference:version_match(smallerequal, Proposed, Req) :-
-  !,
-  ( eapi:version_compare(<, Proposed, Req)
-  ; eapi:version_compare(=, Proposed, Req)
-  ).
-
-preference:version_match(greaterequal, Proposed, Req) :-
-  !,
-  ( eapi:version_compare(>, Proposed, Req)
-  ; eapi:version_compare(=, Proposed, Req)
-  ).
-
-preference:version_match(notequal, Proposed, Req) :-
-  Proposed \== Req,
-  !.
+% Standard comparison operators share eapi:version_op_match/3; unknown operators
+% (other than tilde/wildcard above) fail, as before.
+preference:version_match(Op, Proposed, Req) :-
+  eapi:version_op_match(Op, Proposed, Req).
 
 
 % -----------------------------------------------------------------------------
