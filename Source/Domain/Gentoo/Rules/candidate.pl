@@ -93,12 +93,7 @@ by the constraint_guard/2 prover hooks.
 % converted via atom_number/2; atoms pass through unchanged.
 
 candidate:canon_slot(S0, S) :-
-  ( atom(S0)   -> S = S0
-  ; integer(S0) -> atom_number(S, S0)
-  ; number(S0)  -> atom_number(S, S0)
-  ; S = S0
-  ),
-  !.
+  eapi:normalize_slot_value_(S0, S).
 
 %! candidate:canon_any_same_slot_meta(+Meta0, -Canonical)
 %
@@ -1300,15 +1295,13 @@ candidate:blocker_spec_matches_selected(SelVer, SelSlotMeta, Repo, Entry, O, V, 
   blocker_version_matches(O, V, SelVer, Repo, Entry),
   blocker_slot_matches(SlotReq, SelSlotMeta, Repo, Entry).
 
-candidate:blocker_version_matches(none, _Req, _SelVer, _Repo, _Entry) :- !.
-candidate:blocker_version_matches(equal, Req, SelVer, _Repo, _Entry) :- !, SelVer == Req.
-candidate:blocker_version_matches(notequal, Req, SelVer, _Repo, _Entry) :- !, SelVer \== Req.
-candidate:blocker_version_matches(smaller, Req, SelVer, _Repo, _Entry) :- !, system:compare(<, SelVer, Req).
-candidate:blocker_version_matches(greater, Req, SelVer, _Repo, _Entry) :- !, system:compare(>, SelVer, Req).
-candidate:blocker_version_matches(smallerequal, Req, SelVer, _Repo, _Entry) :- !,
-  ( system:compare(<, SelVer, Req) ; system:compare(=, SelVer, Req) ).
-candidate:blocker_version_matches(greaterequal, Req, SelVer, _Repo, _Entry) :- !,
-  ( system:compare(>, SelVer, Req) ; system:compare(=, SelVer, Req) ).
+% Standard comparison operators use the shared eapi:version_op_match/3 core
+% (note arg order: SelVer is the proposed version, Req the required); any other
+% operator (tilde/wildcard/...) falls back to the query engine.
+candidate:blocker_version_matches(Op, Req, SelVer, _Repo, _Entry) :-
+  eapi:version_op(Op),
+  !,
+  eapi:version_op_match(Op, SelVer, Req).
 candidate:blocker_version_matches(Op, Req, _SelVer, Repo, Entry) :-
   query:search(select(version,Op,Req), Repo://Entry).
 

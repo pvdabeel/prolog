@@ -348,12 +348,7 @@ version_domain:increment_last([H|T], [H|T1]) :-
   increment_last(T, T1).
 
 version_domain:canon_slot(S0, S) :-
-  ( atom(S0)   -> S = S0
-  ; integer(S0) -> atom_number(S, S0)
-  ; number(S0)  -> atom_number(S, S0)
-  ; S = S0
-  ),
-  !.
+  eapi:normalize_slot_value_(S0, S).
 
 version_domain:normalize_version_term(V, V) :-
   var(V), !.
@@ -380,18 +375,10 @@ version_domain:normalize_version_term_other(Num, Ver) :-
   normalize_version_term_other(Full, Ver).
 version_domain:normalize_version_term_other(Other, Other).
 
-version_domain:version_constraint_holds(_Ver, bound(none, _Req)) :- !.
-version_domain:version_constraint_holds(Ver, bound(equal, Req)) :- !, Ver == Req.
-version_domain:version_constraint_holds(Ver, bound(notequal, Req)) :- !, Ver \== Req.
-version_domain:version_constraint_holds(Ver, bound(smaller, Req)) :- !, eapi:version_compare(<, Ver, Req).
-version_domain:version_constraint_holds(Ver, bound(smallerequal, Req)) :- !,
-  ( eapi:version_compare(<, Ver, Req)
-  ; eapi:version_compare(=, Ver, Req)
-  ).
-version_domain:version_constraint_holds(Ver, bound(greater, Req)) :- !, eapi:version_compare(>, Ver, Req).
-version_domain:version_constraint_holds(Ver, bound(greaterequal, Req)) :- !,
-  ( eapi:version_compare(>, Ver, Req)
-  ; eapi:version_compare(=, Ver, Req)
-  ).
-% Keep unknown operators non-blocking for symbolic consistency checks.
-version_domain:version_constraint_holds(_Ver, _Other) :- !.
+% Known operators dispatch onto the shared eapi:version_op_match/3 core; unknown
+% operators stay non-blocking (true) for symbolic consistency checks.
+version_domain:version_constraint_holds(Ver, bound(Op, Req)) :-
+  ( eapi:version_op(Op) -> eapi:version_op_match(Op, Ver, Req)
+  ; true
+  ),
+  !.
