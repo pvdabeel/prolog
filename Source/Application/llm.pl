@@ -298,14 +298,21 @@ llm:execute_llm_code(Src) :-
 
 %! llm:llm_service(?Service) is nondet.
 %
-% Fact table of the supported chat backends. Service is the atom naming both
-% the module and its `Service/2` entry point (e.g. grok:grok/2).
+% Derived registry of the supported chat backends: a service is supported when
+% it is both configured (it has a chat endpoint in config:llm_endpoint/2) and
+% implemented (its module exports the `Service/2` entry point, e.g. grok:grok/2).
+% Deriving the registry this way means there is no separate service list to
+% maintain -- configuring an endpoint for a loaded backend is enough, while an
+% endpoint without an implementing module (or a module without an endpoint) is
+% correctly ignored.
+%
+% We key off the endpoint rather than config:llm_api_key/2 because locally
+% hosted services (e.g. ollama, see config:llm_local/1) are keyless and so have
+% no API key configured.
 
-llm:llm_service(grok).
-llm:llm_service(gemini).
-llm:llm_service(claude).
-llm:llm_service(chatgpt).
-llm:llm_service(ollama).
+llm:llm_service(Service) :-
+  config:llm_endpoint(Service, _),
+  current_predicate(Service:Service/2).
 
 
 %! llm:chat(+Service, :StreamGoal, +Input, -ResponseContent) is det.
