@@ -133,17 +133,20 @@ depclean:prove_required_(Roots, RequiredInstalled) :-
 % Filter the model list to pkg://Entry terms for entries that are both
 % in the proof model and installed in the VDB.
 
-depclean:model_required_installed([], []).
-depclean:model_required_installed([X|Xs], Out) :-
-  depclean:model_required_installed(Xs, Rest),
-  ( depclean:model_item_repo_entry(X, Repo://Entry) ->
-      ( query:search([category(C),name(N),version(V)], Repo://Entry),
-        query:search([name(N),category(C),version(V),installed(true)], pkg://InstalledEntry) ->
-          Out = [pkg://InstalledEntry|Rest]
-      ; Out = Rest
-      )
-  ; Out = Rest
-  ).
+depclean:model_required_installed(ModelList, RequiredInstalled) :-
+  convlist(depclean:model_item_installed, ModelList, RequiredInstalled).
+
+
+%! depclean:model_item_installed(+ModelItem, -InstalledEntry) is semidet.
+%
+% Maps a depclean model literal to its installed pkg://Entry, succeeding only
+% when the item resolves to a Repo://Entry that is both in the proof model and
+% installed in the VDB. Fails (so convlist/3 drops the item) otherwise.
+
+depclean:model_item_installed(X, pkg://InstalledEntry) :-
+  depclean:model_item_repo_entry(X, Repo://Entry),
+  query:search([category(C),name(N),version(V)], Repo://Entry),
+  query:search([name(N),category(C),version(V),installed(true)], pkg://InstalledEntry).
 
 
 %! depclean:model_item_repo_entry(+ModelItem, -RepoEntry)
