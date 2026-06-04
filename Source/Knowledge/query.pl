@@ -1666,10 +1666,13 @@ split_grouped_singletons([D|Ds], C, N, Action, Ctx, Acc, Acc1) :-
 %  Helper: Filter predicates
 % -----------------------------------------------------------------------------
 
-% Filter out versions based on comparison
-
-
-% Filtering of slot & usedep for qualified_target
+%! query:apply_filters(+RepoEntry, +Filters)
+%
+% Apply the slot/usedep filter list parsed by eapi:qualified_target/1 to a
+% candidate entry. Filters is the [SlotReq, UseDeps] pair, where SlotReq is a
+% slot restriction (e.g. [], [slot('5')], [any_same_slot]) and UseDeps is a
+% list of use(Spec, Default) terms. Both elements are applied in turn; an
+% entry passes only when it satisfies every filter element.
 
 apply_filters(_R://_I,[]) :- !.
 
@@ -1678,7 +1681,56 @@ apply_filters(R://I,[H|T]) :-
   apply_filter(R://I,H),
   apply_filters(R://I,T).
 
+
+%! query:apply_filter(+RepoEntry, +Filter)
+%
+% Apply a single filter element. An empty element imposes no restriction. A
+% use dependency list requires every referenced flag to be supported by the
+% candidate's IUSE (honouring (+)/(-) defaults for absent flags). Any other
+% non-empty element is treated as a slot restriction and matched against the
+% entry's slot metadata via preference:entry_satisfies_slot_req_/3.
+
 apply_filter(_R://_I,[]) :- !.
+
+apply_filter(R://I,[use(Spec,Default)|Rest]) :-
+  !,
+  forall(member(use(S,D), [use(Spec,Default)|Rest]),
+         apply_use_filter(R://I, use(S,D))).
+
+apply_filter(R://I,SlotReq) :-
+  preference:entry_satisfies_slot_req_(R, I, SlotReq).
+
+
+%! query:apply_use_filter(+RepoEntry, +UseDep)
+%
+% Selection-time check for a single use dependency: the candidate must declare
+% the flag in its IUSE, unless the dependency's IUSE default ((+)/(-)) makes an
+% absent flag acceptable. Optional directives (optenable/optdisable) only
+% constrain when the flag is present, so they never exclude a candidate here.
+% This is a presence filter only: it decides which ebuilds qualify, not which
+% flags are enabled. Enabling/disabling a flag remains governed by the USE
+% environment, package.use and the profile -- never by the target atom.
+
+apply_use_filter(_R://_I, use(optenable(_), _)) :- !.
+
+apply_use_filter(_R://_I, use(optdisable(_), _)) :- !.
+
+apply_use_filter(R://I, use(Spec, Default)) :-
+  query:use_dep_mode_flag(Spec, Mode, Use),
+  ( use:candidate_iuse_present(R://I, Use)
+  -> true
+  ;  use:use_dep_default_satisfies_absent_iuse(Default, Mode)
+  ).
+
+
+%! query:use_dep_mode_flag(+Spec, -Mode, -Flag)
+%
+% Map a parsed use dependency directive to its requirement mode and flag.
+
+use_dep_mode_flag(enable(U),  enable,  U).
+use_dep_mode_flag(disable(U), disable, U).
+use_dep_mode_flag(equal(U),   enable,  U).
+use_dep_mode_flag(inverse(U), disable, U).
 
 
 % -----------------------------------------------------------------------------

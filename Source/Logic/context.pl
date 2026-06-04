@@ -328,11 +328,11 @@ ddynamic(List) :-
   maplist(ddynamic,List).
 
 
-%! ddynamic(+Functor/+Arity)
+%! dstatic(+Functor/+Arity)
 %
 % Exported, transparent predicate
 %
-% Declare a dynamic predicate.
+% Declare a static predicate.
 
 dstatic(Functor/Arity) :-
   !,

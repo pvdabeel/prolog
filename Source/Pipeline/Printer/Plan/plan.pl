@@ -1039,17 +1039,11 @@ plan:resolve_slot(Repository://Entry, Context, Slot) :-
 plan:print_config(Repository://Entry:fetchonly?{_Context}) :-
   \+(kb:query(iuse(_),Repository://Entry)),!.
 
-% use flags to show - to rework: performance
+% use flags to show
 
 plan:print_config(Repository://Entry:fetchonly?{Context}) :-
  !,
- plan:collect_context_assumed_use(Context, Assumed),
- plan:set_old_use_context(Repository://Entry, Context),
- findall([Reason,Group], group_by(Reason, Use, kb:query(iuse_filtered(Use,Reason),Repository://Entry), Group), Useflags),
-
- (Useflags == [] ;
-   (plan:print_config_prefix('conf'),	                  % Use flags not empty
-    plan:print_config_item('use',Useflags,Assumed))).    % Use flags not empty
+ plan:print_config(Repository://Entry:install?{Context}).
 
 
 
@@ -1409,23 +1403,6 @@ plan:print_config_item('download',File,Size) :-
   ;  true
   ).
 
-plan:print_config_item('use',List,Assumed) :- !,
-  upcase_atom('use',KeyU),
-  message:print(KeyU),
-  message:print('="'),
-  catch(
-      ( config:printing_tty_size(_, TermWidth),
-        line_position(current_output, StartCol),
-        collect_all_flags(List, Assumed, AllFlags),
-        print_flags_wrapped(AllFlags, StartCol, TermWidth, StartCol, 0)
-      ),
-      error(io_error(check, stream(_)), _),
-      ( collect_all_flags(List, Assumed, AllFlags),
-        print_flags_unwrapped(AllFlags)
-      )
-  ),
-  message:print('"').
-
 plan:print_config_item('slot',Slot) :- !,
   upcase_atom('slot',KeyS),
   message:bubble(darkgray,KeyS),
@@ -1478,11 +1455,10 @@ plan:print_slot_value(Slot) :-
   message:print(Slot).
 
 
-%! plan:print_flags_wrapped(+AllFlags, +StartCol, +TermWidth, +IndentForWrap, +SpacesNeeded)
+%! plan:print_flags_wrapped(+AllFlags, +StartCol, +TermWidth)
 %
 % Prints a list of flags wrapped to the terminal width.
 
-plan:print_flags_wrapped([], _, _, _, _) :- !.
 plan:print_flags_wrapped(AllFlags, StartCol, TermWidth) :-
     foldl(plan:print_one_flag_wrapped(StartCol,TermWidth),
           AllFlags,
@@ -1490,7 +1466,7 @@ plan:print_flags_wrapped(AllFlags, StartCol, TermWidth) :-
           _).
 
 
-%! plan:print_one_flag_wrapped(+TermWidth, +IndentForWrap, +SpacesNeeded, +FlagTerm, +StateIn, -StateOut)
+%! plan:print_one_flag_wrapped(+StartCol, +TermWidth, +FlagTerm, +StateIn, -StateOut)
 %
 % Prints a single flag wrapped to the terminal width.
 
