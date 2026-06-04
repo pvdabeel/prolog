@@ -391,11 +391,9 @@ terminal:parse_sgr_params(Codes, Params) :-
     split_semicolon(Codes, Groups),
     maplist(param_number, Groups, Params).
 
-terminal:split_semicolon([], [[]]).
-terminal:split_semicolon([59 | Rest], [[] | Groups]) :- !,
-    split_semicolon(Rest, Groups).
-terminal:split_semicolon([C | Rest], [[C | G] | Gs]) :-
-    split_semicolon(Rest, [G | Gs]).
+terminal:split_semicolon(Codes, Groups) :-
+    split_string(Codes, ";", "", Strings),
+    maplist(string_codes, Strings, Groups).
 
 terminal:param_number([], 0).
 terminal:param_number(Codes, N) :- Codes \= [], catch(number_codes(N, Codes), _, N = 0).

@@ -1,8 +1,6 @@
 Feature exploration
 ===================
 
-- dead code analysis - any AI slop?
-
 - exit code should give more information about build failure (known issue, masked, upstream, restricted download, ...)
 
 - Dark & Light mode colors

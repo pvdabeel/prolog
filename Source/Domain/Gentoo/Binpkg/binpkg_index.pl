@@ -173,9 +173,8 @@ binpkg_index:split_kv(Line, Key, Value) :-
 %
 % Look up the first occurrence of Key in Record. Fails if Key is absent.
 
-binpkg_index:record_get([Key-Value | _], Key, Value) :- !.
-binpkg_index:record_get([_ | Rest], Key, Value) :-
-  binpkg_index:record_get(Rest, Key, Value).
+binpkg_index:record_get(Record, Key, Value) :-
+  memberchk(Key-Value, Record).
 
 
 %! binpkg_index:record_cpv(+Record, -Cpv) is semidet.

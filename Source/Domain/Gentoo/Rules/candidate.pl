@@ -1836,7 +1836,7 @@ candidate:wildcard_upper_bound_domain(C, N, PackageDeps, version_domain(any, Bou
 candidate:wildcard_to_upper(version(Nums, _, _, _, _, _, _), version(UpperNums, '', 4, 0, '', 0, UpperFull)) :-
   !,
   Nums = [_|_],
-  wildcard_increment_last(Nums, UpperNums),
+  version_domain:increment_last(Nums, UpperNums),
   atomic_list_concat(UpperNums, '.', UpperFull).
 candidate:wildcard_to_upper(V0, version(UpperNums, '', 4, 0, '', 0, UpperFull)) :-
   ( atom(V0) -> A = V0
@@ -1849,19 +1849,8 @@ candidate:wildcard_to_upper(V0, version(UpperNums, '', 4, 0, '', 0, UpperFull)) 
   atomic_list_concat(Parts, '.', Base),
   maplist(atom_number, Parts, Nums),
   Nums = [_|_],
-  wildcard_increment_last(Nums, UpperNums),
+  version_domain:increment_last(Nums, UpperNums),
   atomic_list_concat(UpperNums, '.', UpperFull).
-
-
-%! candidate:wildcard_increment_last(+Nums, -UpperNums) is det.
-%
-% Increments the last element of a number list.
-% [0,6] -> [0,7],  [1,2,3] -> [1,2,4]
-
-candidate:wildcard_increment_last(Nums, UpperNums) :-
-  append(Init, [Last], Nums),
-  Next is Last + 1,
-  append(Init, [Next], UpperNums).
 
 
 % =============================================================================
