@@ -304,6 +304,20 @@ If the validation literal fails (e.g. two members of an
 `exactly_one_of` group are both active), the prover backtracks to try
 a different USE configuration or candidate version.
 
+When a disjunctive dependency group (`||`, `^^`, `exactly_one_of`) must
+*select* an alternative, the candidate layer ranks the members
+preferred-first.  Profile-forced targets dominate (via
+`is_preferred_dep/2`); among unforced alternatives the tiebreaker is a
+**family-agnostic** USE_EXPAND target rank
+(`candidate:use_expand_target_rank/2`).  It strips any
+`eapi:use_expand/1` prefix and packs the trailing version digits into
+the rank — `llvm_slot_20` → `20`, `python_single_target_python3_13` →
+`[3,13]`, `lua_single_target_lua5-4` → `[5,4]`, non-numeric like
+`luajit` → `0` — so the newest target wins uniformly across every
+USE_EXPAND family.  Earlier revisions hardcoded weights only for the
+`llvm_slot` and `lua5` families; that per-ecosystem code has been
+removed.
+
 
 ## Slot operators
 

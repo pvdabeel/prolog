@@ -365,6 +365,49 @@ The `--variants` CLI option enables this mode, running the prover with different
 USE flag configurations via `variant:use_override` and
 `variant:branch_prefer`.
 
+### Native multi-model enumeration
+
+Beyond USE-driven variants, the prover offers a lower-level enumeration API,
+`prover:prove_models/9`, that yields **one distinct model per satisfiable
+disjunctive branch** of a `||`, `^^`, or `exactly_one_of` dependency.  For a
+target without disjunctions it behaves exactly like `prover:prove/9`.
+
+The key design point is that enumeration rides entirely on **native Prolog
+backtracking** — there is no manual snapshot/restore of proof state:
+
+- The `choice_group(Deps):config` rule clause normally commits to the first
+  viable alternative with a cut.  Under enumeration mode that cut is dropped, so
+  the underlying `member/2` over the ranked alternatives (preferred branch
+  first) stays as an open choicepoint.
+- Because `Proof`, `Model`, `Constraints`, and `Triggers` are **threaded
+  functionally** through `prove_recursive/9`, undoing a branch is just ordinary
+  backtracking over those AVLs.
+- The only extra state is a per-model record of which alternative each
+  disjunction committed to, kept in a *backtrackable* global (`b_setval`).  When
+  the owning choicepoint backtracks to the next alternative, the trail restores
+  the record automatically.  This keeps a single model consistent when the same
+  disjunction is re-derived at several config choicepoints — for instance via a
+  diamond, or because it appears in both `DEPEND` and `RDEPEND`.  The record key
+  is phase-independent (`candidate:choice_group_key/2`), so the build-time and
+  run-time copies of one disjunction share a single pick.
+
+Enumeration runs in two tiers (failure-revert), so a model is always produced:
+
+1. **Strict tier** (`prove_models_strict/9`) — enumerates only the branches that
+   resolve *without any domain assumption*.  In this tier an unresolvable
+   dependency becomes a proof failure (the `\+ prover:multimodel_strict` guards
+   in the rules suppress the assumption fallbacks), so the prover reverts to the
+   next disjunctive branch instead of assuming.  Reprove is disabled here to
+   keep the enumeration free of conflict-driven retries.
+2. **Relaxed tier** — only if no branch is assumption-free does the prover fall
+   back to surfacing assumption-bearing models, so enumeration never comes up
+   empty.
+
+All of this is gated behind the `prover_multimodel_enumeration` mode flag
+(checked via `prover:multimodel_enumeration/0`).  The default single-solution
+pipeline runs with the flag **off** and is byte-for-byte unchanged; the cut and
+the assumption fallbacks behave exactly as before.
+
 
 ## Proof obligations
 

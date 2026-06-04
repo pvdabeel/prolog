@@ -175,6 +175,12 @@ The chosen dependency enters the model; the others are discarded. This means
 that by the time the main proof begins, every OR group has been resolved to a
 single concrete dependency.
 
+In the default pipeline this commit is final (a cut after the first viable
+alternative). Under the prover's multi-model enumeration mode the cut is
+dropped, so the same `choice_group` resolution instead leaves a backtrackable
+choicepoint that yields one model per branch — see
+[Multiple stable models](08-doc-prover.md#multiple-stable-models).
+
 | **Action** | **Literal head** | **Meaning** |
 | :-- | :-- | :-- |
 | `config` | grouped dependency | Resolve a dependency group under USE flags |

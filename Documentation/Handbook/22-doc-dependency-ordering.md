@@ -150,13 +150,45 @@ slot specificity further refines the order.  See
   context tags that stop at the immediate children.  This makes them
   naturally softer.
 - **PDEPEND** are handled by `literal_hook` in a single pass during
-  proof search, without creating explicit ordering edges.
+  proof search, without creating explicit ordering edges in the proof.
 
 When cycles appear, the wave planner produces an acyclic plan for the
 majority of the graph.  The remaining cyclic portion goes to the
 scheduler, which uses Kosaraju's algorithm to find SCCs.  Runtime-only
 SCCs are treated as freely orderable (matching Paludis's insight),
 while build-dep SCCs require special handling.
+
+### PDEPEND completion ordering
+
+Although PDEPEND creates no edge during proof search, a package `P` that
+declares PDEPEND is only fully functional once its post-dependencies are
+merged.  If another package consumes `P` and starts building before `P`'s
+PDEPEND closure is installed, its build can fail (e.g. a Ruby extension's
+`extconf.rb` hits a `LoadError`, or a CMake `CMAKE_C_COMPILER` check fails
+because a toolchain component is not yet on `PATH`).
+
+The scheduler closes this gap in `scheduler:repair_ordering_violations`,
+keyed only on the generic `order_after` marker (no package-specific logic):
+
+- `build_pdepend_anchor_map` maps each provider `(C,N)` to its PDEPEND-target
+  heads, and `build_pdepend_closure_map` computes the forward closure of those
+  targets.
+- A consumer outside that closure is ordered after the **maximum install wave**
+  of `P`'s PDEPEND targets — i.e. after `P`'s whole post-install group, matching
+  emerge's behaviour.
+
+This bump is made **cycle-safe per target** so it does not collapse densely
+cyclic toolchain closures (e.g. LLVM):
+
+- The PDEPEND closure is collapsed to package `(C,N)` identity, so a cycle that
+  is only visible as a grouped or cross-slot literal is still detected.
+- The closure is computed *per PDEPEND target* and cyclic targets are filtered
+  individually, so a consumer is ordered after the provider's *acyclic*
+  post-deps but never after a post-dep that requires it back.
+- A consumer that is itself a member of the provider's PDEPEND group is never
+  bumped (a sibling must not wait for its sibling).
+
+A fast no-op path leaves plans without any PDEPEND provider unchanged.
 
 
 ## How the three approaches compare
@@ -172,7 +204,7 @@ indicates the weakest (post-dependency) constraints.
 | :--- | :--- | :--- | :--- |
 | DEPEND/BDEPEND | Hard edge, never broken | Hard edge, never broken | `:install` + `after()`, hard |
 | RDEPEND | Soft edge, broken for cycles | Soft edge, cycles freely ordered | `:run` + `after_only()`, soft |
-| PDEPEND | Weak edge, first to break | No edge at all | `literal_hook`, no edge |
+| PDEPEND | Weak edge, first to break | No edge at all | `literal_hook`, no proof edge; scheduler adds completion ordering |
 | Cycle strategy | Progressive relaxation | SCC classification | Wave plan + SCC scheduling |
 | Build-time cycles | Error / merge group | Relax met edges, then error | SCC merge-set |
 
@@ -333,8 +365,12 @@ installed before `lib`.
 
 Portage merges `plugin` first (it has no hard dependencies), then `lib`,
 then `app`.  portage-ng installs `lib` and `plugin` in parallel in
-step 2, since PDEPEND creates no ordering constraint between them.  The
-plugin's `:run` action comes last, after the main target.
+step 2, since PDEPEND creates no ordering constraint between them here.
+The plugin's `:run` action comes last, after the main target.  (When a
+package *outside* the PDEPEND closure consumes the provider, the
+scheduler's [PDEPEND completion ordering](#pdepend-completion-ordering)
+additionally orders that consumer after the provider's post-install
+group; this minimal test has no such external consumer.)
 
 **Portage output:**
 
