@@ -48,18 +48,7 @@ update_history(History) :-
 % Send Input to Ollama and unify ResponseContent with the response text.
 
 ollama(Input,ResponseContent) :-
-  Service = 'ollama',
-  config:llm_api_key(Service,Key),
-  config:llm_model(Service,Model),
-  config:llm_endpoint(Service,Endpoint),
-  history(History),
-  llm:prepare_message(History,'user',Input,Messages),
-  llm:stream(Endpoint, Key, Model, Messages, Response),
-  (Response = _{contents: Contents, history: NewHistory}
-   ->  atomic_list_concat(Contents, ResponseContent),
-       llm:handle_response(Key, Model, Endpoint, Service:update_history, ResponseContent, NewHistory)
-   ;   Response = _{error: Error, history: _}
-       ->  write('Error: '), write(Error), nl ),!.
+  llm:chat(ollama, llm:stream, Input, ResponseContent).
 
 
 %! ollama:ollama(+Input)

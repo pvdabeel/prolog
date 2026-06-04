@@ -1298,6 +1298,15 @@ config:llm_endpoint(llama,   'https://api.llama.com/v1/chat/completions').
 config:llm_endpoint(ollama,  'http://localhost:11434/v1/chat/completions').
 
 
+%! config:llm_local(?LLM)
+%
+% Declares which large language models run locally and therefore need no API
+% key. The chat driver (llm:check_api_key/2) skips the key requirement for
+% these services.
+
+config:llm_local(ollama).
+
+
 % -----------------------------------------------------------------------------
 %  Semantic search (natural-language package search via embeddings)
 % -----------------------------------------------------------------------------
