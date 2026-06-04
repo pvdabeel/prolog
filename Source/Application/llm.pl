@@ -56,11 +56,16 @@ LLM service specific code can be found in the files inside the 'Llm' subdirector
 
 %! llm:check_api_key(+Service, +Key) is semidet.
 %
-% Succeeds iff Key is a non-empty atom or string suitable for use as an
-% API key. On failure, prints a friendly diagnostic instructing the user
+% Succeeds iff the service needs no key (it runs locally, per
+% config:llm_local/1) or Key is a non-empty atom or string suitable for use
+% as an API key. On failure, prints a friendly diagnostic instructing the user
 % how to configure the key (so callers do not end up firing an HTTP
 % request with an empty `Authorization` / `x-api-key` header and getting
 % back a cryptic 401 Unauthorized).
+
+llm:check_api_key(Service, _Key) :-
+  config:llm_local(Service),
+  !.
 
 llm:check_api_key(_Service, Key) :-
   nonvar(Key),
