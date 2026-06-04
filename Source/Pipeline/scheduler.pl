@@ -1404,125 +1404,14 @@ scheduler:schedulable_component_waves(Comps, Forward, CompMap, BlockedIds, Waves
   scheduler:comp_edges(Forward, CompMap, Edges),
   findall(Id, (member(comp(Id, Kind, _), Comps), Kind \= bad, \+ memberchk(Id, BlockedIds)), Sched0),
   sort(Sched0, Sched),
-  scheduler:kahn_waves(Sched, Edges, Waves).
-
-scheduler:kahn_waves(Sched, Edges, Waves) :-
-  % Performance: implement Kahn using a reverse adjacency map so we only touch
-  % nodes whose indegree changes, rather than scanning all nodes/edges per wave.
-  scheduler:indegrees(Sched, Edges, Indeg0),
-  scheduler:rev_adj_map(Sched, Edges, RevAdj),
-  scheduler:assoc_set_from_list(Sched, RemSet0),
-  scheduler:ready_nodes(Sched, Indeg0, Ready0),
-  scheduler:kahn_loop_fast(Ready0, RemSet0, RevAdj, Indeg0, [], WavesRev),
-  reverse(WavesRev, Waves).
-
-scheduler:indegrees(Nodes, Edges, Indeg) :-
-  empty_assoc(E),
-  foldl(scheduler:init_zero, Nodes, E, I0),
-  foldl(scheduler:add_edge_indegree(Nodes), Edges, I0, Indeg).
-
-scheduler:init_zero(N, In, Out) :- put_assoc(N, In, 0, Out).
-
-scheduler:add_edge_indegree(Nodes, edge(From, To), In, Out) :-
-  ( memberchk(From, Nodes), memberchk(To, Nodes) ->
-      get_assoc(From, In, D0),
-      D is D0 + 1,
-      put_assoc(From, In, D, Out)
-  ; Out = In
-  ).
-
-scheduler:ready_nodes(Nodes, Indeg, Ready) :-
-  findall(N, (member(N, Nodes), get_assoc(N, Indeg, 0)), Ready).
-
-scheduler:kahn_loop([], _Nodes, _Edges, _Indeg, Waves, Waves).
-scheduler:kahn_loop(Ready, Nodes, Edges, Indeg0, Waves0, Waves) :-
-  Ready \= [],
-  Wave = Ready,
-  scheduler:remove_wave(Wave, Nodes, Nodes1),
-  scheduler:decrement_dependents(Wave, Edges, Indeg0, Indeg1, Nodes1, Ready1),
-  scheduler:kahn_loop(Ready1, Nodes1, Edges, Indeg1, [Wave|Waves0], Waves).
-
-scheduler:remove_wave(Wave, Nodes, Nodes1) :-
-  subtract(Nodes, Wave, Nodes1).
-
-scheduler:decrement_dependents(Wave, Edges, Indeg0, Indeg, RemainingNodes, NextReady) :-
-  foldl(scheduler:dec_for_node(Wave, Edges), RemainingNodes, Indeg0, Indeg),
-  scheduler:ready_nodes(RemainingNodes, Indeg, NextReady).
-
-% If N depends on any node in Wave, decrement its indegree.
-scheduler:dec_for_node(Wave, Edges, N, In, Out) :-
-  findall(Dep, (member(edge(N, Dep), Edges), memberchk(Dep, Wave)), Deps),
-  length(Deps, K),
-  ( K =:= 0 ->
-      Out = In
-  ; get_assoc(N, In, D0),
-    D is max(0, D0 - K),
-    put_assoc(N, In, D, Out)
-  ).
-
-% -----------------------------------------------------------------------------
-%  Faster Kahn implementation
-% -----------------------------------------------------------------------------
-
-% Build a reverse adjacency map Dep -> [From...], restricted to nodes in Sched.
-scheduler:rev_adj_map(Nodes, Edges, RevAdj) :-
-  empty_assoc(M0),
-  foldl(scheduler:rev_adj_put(Nodes), Edges, M0, RevAdj),
-  !.
-
-scheduler:rev_adj_put(Nodes, edge(From, To), In, Out) :-
-  ( memberchk(From, Nodes), memberchk(To, Nodes) ->
-      ( get_assoc(To, In, L0) -> true ; L0 = [] ),
-      ( memberchk(From, L0) -> L1 = L0 ; L1 = [From|L0] ),
-      put_assoc(To, In, L1, Out)
-  ; Out = In
-  ).
+  % The SCC condensation is a DAG; order it into parallel waves via the shared
+  % Kahn engine. edge(From,To) means "From depends on To".
+  kahn:waves(Sched, Edges, Waves).
 
 scheduler:assoc_set_from_list(List, Set) :-
   empty_assoc(S0),
   foldl(scheduler:assoc_set_put, List, S0, Set),
   !.
-
-scheduler:kahn_loop_fast([], _RemSet, _RevAdj, _Indeg, Waves, Waves) :- !.
-scheduler:kahn_loop_fast(Ready0, RemSet0, RevAdj, Indeg0, Waves0, Waves) :-
-  % Current wave is the current ready set.
-  Wave = Ready0,
-  % Remove wave nodes from remaining set.
-  scheduler:assoc_set_remove_all(Wave, RemSet0, RemSet1),
-  % Decrement dependents and compute next ready set.
-  scheduler:dec_dependents_for_wave(Wave, RemSet1, RevAdj, Indeg0, Indeg, NextReady),
-  scheduler:kahn_loop_fast(NextReady, RemSet1, RevAdj, Indeg, [Wave|Waves0], Waves).
-
-scheduler:assoc_set_remove_all([], Set, Set) :- !.
-scheduler:assoc_set_remove_all([K|Ks], Set0, Set) :-
-  ( del_assoc(K, Set0, _V, Set1) -> true ; Set1 = Set0 ),
-  scheduler:assoc_set_remove_all(Ks, Set1, Set).
-
-scheduler:dec_dependents_for_wave(Wave, RemSet, RevAdj, Indeg0, Indeg, NextReady) :-
-  empty_assoc(R0),
-  scheduler:dec_dependents_for_wave_(Wave, RemSet, RevAdj, Indeg0, Indeg, R0, R),
-  assoc:assoc_to_keys(R, NextReady).
-
-scheduler:dec_dependents_for_wave_([], _RemSet, _RevAdj, Indeg, Indeg, R, R) :- !.
-scheduler:dec_dependents_for_wave_([Dep|Deps], RemSet, RevAdj, Indeg0, Indeg, R0, R) :-
-  ( get_assoc(Dep, RevAdj, Froms0) -> true ; Froms0 = [] ),
-  scheduler:dec_dependents_list(Froms0, RemSet, Indeg0, Indeg1, R0, R1),
-  scheduler:dec_dependents_for_wave_(Deps, RemSet, RevAdj, Indeg1, Indeg, R1, R).
-
-scheduler:dec_dependents_list([], _RemSet, Indeg, Indeg, R, R) :- !.
-scheduler:dec_dependents_list([N|Ns], RemSet, Indeg0, Indeg, R0, R) :-
-  ( get_assoc(N, RemSet, true) ->
-      ( get_assoc(N, Indeg0, D0) -> true ; D0 = 0 ),
-      D1 is max(0, D0 - 1),
-      put_assoc(N, Indeg0, D1, Indeg1),
-      ( D1 =:= 0 ->
-          put_assoc(N, R0, true, R1)
-      ; R1 = R0
-      )
-  ; Indeg1 = Indeg0,
-    R1 = R0
-  ),
-  scheduler:dec_dependents_list(Ns, RemSet, Indeg1, Indeg, R1, R).
 
 scheduler:expand_component_waves_from_map([], _Comps, _Forward, _HeadRuleMap, []).
 scheduler:expand_component_waves_from_map([WaveIds|Rest], Comps, Forward, HeadRuleMap, AllWaves) :-

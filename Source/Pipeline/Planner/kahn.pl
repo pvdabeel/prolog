@@ -9,9 +9,14 @@
 
 
 /** <module> KAHN
-Kahn's algorithm for topological sorting. Operates on an adjacency list
-represented as an assoc (Node -> [Successor...]) where an edge A -> B means
-A depends on B. Detects cycles and returns unprocessed nodes separately.
+Kahn's algorithm for topological sorting. Two reusable entry points:
+
+- kahn:toposort/4 - linear order over an adjacency-assoc graph (Node ->
+  [Successor...]). Detects cycles and returns unprocessed nodes separately.
+  Used by depclean for uninstall ordering.
+- kahn:waves/3 - layered (parallel-wave) order over an edge(From,To) list,
+  using a reverse-adjacency map so each step only touches nodes whose
+  in-degree changes. Used by the scheduler to order the SCC condensation DAG.
 */
 
 :- module(kahn, []).
@@ -115,3 +120,134 @@ kahn:dec_neighbors([B|Bs], InDeg0, InDeg, NewZeros) :-
       kahn:dec_neighbors(Bs, InDeg1, InDeg, RestZeros)
   ; kahn:dec_neighbors(Bs, InDeg0, InDeg, NewZeros)
   ).
+
+
+% -----------------------------------------------------------------------------
+%  Wave-based topological sort (parallel levels)
+% -----------------------------------------------------------------------------
+
+%! kahn:waves(+Nodes, +Edges, -Waves)
+%
+% Layered topological sort. Edges is a list of edge(From, To) terms meaning
+% "From depends on To" (To must be scheduled before From). Waves is a list of
+% levels; each level is a list of nodes whose dependencies are all satisfied
+% by earlier levels, so the nodes within a level may be processed in parallel.
+% Nodes left in a cycle never become ready and are omitted -- callers that need
+% them detect cycles separately (e.g. the scheduler feeds an SCC condensation
+% DAG, which is acyclic by construction).
+%
+% Performance: uses a reverse-adjacency map so each step only touches nodes
+% whose in-degree actually changes, rather than rescanning all nodes/edges per
+% wave. This is the hot-path Kahn used by the scheduler.
+
+kahn:waves(Nodes, Edges, Waves) :-
+  kahn:wave_indegrees(Nodes, Edges, Indeg0),
+  kahn:rev_adj_map(Nodes, Edges, RevAdj),
+  kahn:set_from_list(Nodes, RemSet0),
+  kahn:wave_ready(Nodes, Indeg0, Ready0),
+  kahn:wave_loop(Ready0, RemSet0, RevAdj, Indeg0, [], WavesRev),
+  reverse(WavesRev, Waves).
+
+
+%! kahn:wave_indegrees(+Nodes, +Edges, -Indeg)
+%
+% In-degree (number of unsatisfied dependencies) per node, restricted to Nodes.
+
+kahn:wave_indegrees(Nodes, Edges, Indeg) :-
+  empty_assoc(E),
+  foldl(kahn:wave_init_zero, Nodes, E, I0),
+  foldl(kahn:wave_add_edge_indegree(Nodes), Edges, I0, Indeg).
+
+kahn:wave_init_zero(N, In, Out) :- put_assoc(N, In, 0, Out).
+
+kahn:wave_add_edge_indegree(Nodes, edge(From, To), In, Out) :-
+  ( memberchk(From, Nodes), memberchk(To, Nodes) ->
+      get_assoc(From, In, D0),
+      D is D0 + 1,
+      put_assoc(From, In, D, Out)
+  ; Out = In
+  ).
+
+
+%! kahn:wave_ready(+Nodes, +Indeg, -Ready)
+%
+% Nodes whose in-degree is zero (no remaining dependencies).
+
+kahn:wave_ready(Nodes, Indeg, Ready) :-
+  findall(N, (member(N, Nodes), get_assoc(N, Indeg, 0)), Ready).
+
+
+%! kahn:rev_adj_map(+Nodes, +Edges, -RevAdj)
+%
+% Reverse adjacency map To -> [From...] restricted to Nodes, so completing To
+% can decrement the in-degree of exactly its dependents.
+
+kahn:rev_adj_map(Nodes, Edges, RevAdj) :-
+  empty_assoc(M0),
+  foldl(kahn:rev_adj_put(Nodes), Edges, M0, RevAdj),
+  !.
+
+kahn:rev_adj_put(Nodes, edge(From, To), In, Out) :-
+  ( memberchk(From, Nodes), memberchk(To, Nodes) ->
+      ( get_assoc(To, In, L0) -> true ; L0 = [] ),
+      ( memberchk(From, L0) -> L1 = L0 ; L1 = [From|L0] ),
+      put_assoc(To, In, L1, Out)
+  ; Out = In
+  ).
+
+
+%! kahn:set_from_list(+List, -Set)
+%
+% Build an assoc-backed set (Key -> true) from a list of keys.
+
+kahn:set_from_list(List, Set) :-
+  empty_assoc(S0),
+  foldl(kahn:set_put, List, S0, Set),
+  !.
+
+kahn:set_put(K, A0, A) :- put_assoc(K, A0, true, A).
+
+kahn:set_remove_all([], Set, Set) :- !.
+kahn:set_remove_all([K|Ks], Set0, Set) :-
+  ( del_assoc(K, Set0, _V, Set1) -> true ; Set1 = Set0 ),
+  kahn:set_remove_all(Ks, Set1, Set).
+
+
+%! kahn:wave_loop(+Ready, +RemSet, +RevAdj, +Indeg, +WavesIn, -WavesOut)
+%
+% Emit one wave (the current ready set), remove it from the remaining set,
+% decrement the in-degree of its dependents, and recurse on the newly-ready
+% nodes. WavesOut is accumulated in reverse (newest wave first).
+
+kahn:wave_loop([], _RemSet, _RevAdj, _Indeg, Waves, Waves) :- !.
+kahn:wave_loop(Ready0, RemSet0, RevAdj, Indeg0, Waves0, Waves) :-
+  Wave = Ready0,
+  kahn:set_remove_all(Wave, RemSet0, RemSet1),
+  kahn:dec_dependents_for_wave(Wave, RemSet1, RevAdj, Indeg0, Indeg, NextReady),
+  kahn:wave_loop(NextReady, RemSet1, RevAdj, Indeg, [Wave|Waves0], Waves).
+
+kahn:dec_dependents_for_wave(Wave, RemSet, RevAdj, Indeg0, Indeg, NextReady) :-
+  empty_assoc(R0),
+  kahn:dec_dependents_for_wave_(Wave, RemSet, RevAdj, Indeg0, Indeg, R0, R),
+  assoc:assoc_to_keys(R, NextReady).
+
+kahn:dec_dependents_for_wave_([], _RemSet, _RevAdj, Indeg, Indeg, R, R) :- !.
+kahn:dec_dependents_for_wave_([Dep|Deps], RemSet, RevAdj, Indeg0, Indeg, R0, R) :-
+  ( get_assoc(Dep, RevAdj, Froms0) -> true ; Froms0 = [] ),
+  kahn:dec_dependents_list(Froms0, RemSet, Indeg0, Indeg1, R0, R1),
+  kahn:dec_dependents_for_wave_(Deps, RemSet, RevAdj, Indeg1, Indeg, R1, R).
+
+kahn:dec_dependents_list([], _RemSet, Indeg, Indeg, R, R) :- !.
+kahn:dec_dependents_list([N|Ns], RemSet, Indeg0, Indeg, R0, R) :-
+  ( get_assoc(N, RemSet, true) ->
+      ( get_assoc(N, Indeg0, D0) -> true ; D0 = 0 ),
+      D1 is max(0, D0 - 1),
+      put_assoc(N, Indeg0, D1, Indeg1),
+      ( D1 =:= 0 ->
+          put_assoc(N, R0, true, R1)
+      ; R1 = R0
+      )
+  ; Indeg1 = Indeg0,
+    R1 = R0
+  ),
+  kahn:dec_dependents_list(Ns, RemSet, Indeg1, Indeg, R1, R).
