@@ -36,6 +36,57 @@ navtheme:emit_css_link(Prefix) :-
 
 
 % -----------------------------------------------------------------------------
+%  HTML: document scaffolding
+% -----------------------------------------------------------------------------
+
+%! navtheme:emit_doctype is det.
+%
+% Emit the HTML5 doctype declaration.
+
+navtheme:emit_doctype :-
+    write('<!DOCTYPE html>'), nl.
+
+
+%! navtheme:emit_head_open(+Title) is det.
+%
+% Emit the opening <html>/<head> elements with the standard meta tags, an
+% optional <title> (omitted when Title == ''), and the shared CSS link.
+
+navtheme:emit_head_open(Title) :-
+    write('<html lang="en" data-theme="dark">'), nl,
+    write('<head>'), nl,
+    write('<meta charset="UTF-8">'), nl,
+    write('<meta name="viewport" content="width=device-width, initial-scale=1.0">'), nl,
+    ( Title == '' -> true ; format('<title>~w</title>~n', [Title]) ),
+    navtheme:emit_css_link('../').
+
+
+%! navtheme:emit_head_close is det.
+%
+% Emit the closing </head> tag.
+
+navtheme:emit_head_close :-
+    write('</head>'), nl.
+
+
+%! navtheme:emit_body_open(+PageClass) is det.
+%
+% Emit the opening <body> tag carrying the given page class.
+
+navtheme:emit_body_open(PageClass) :-
+    format('<body class="~w">~n', [PageClass]).
+
+
+%! navtheme:emit_body_close is det.
+%
+% Emit the closing </body>/</html> tags.
+
+navtheme:emit_body_close :-
+    write('</body>'), nl,
+    write('</html>'), nl.
+
+
+% -----------------------------------------------------------------------------
 %  HTML: navigation bar
 % -----------------------------------------------------------------------------
 

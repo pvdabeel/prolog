@@ -499,10 +499,10 @@ gantt:emit_html(Target, Grid, Deps, NumSteps, HasPre) :-
     length(Grid, PkgCount),
     collect_download_totals(Grid, Repo, TotalBytes, CachedBytes),
     (HasPre == true -> MinStep = 0 ; MinStep = 1),
-    emit_doctype,
-    emit_head_open,
-    emit_head_close,
-    emit_body_open,
+    navtheme:emit_doctype,
+    navtheme:emit_head_open(''),
+    navtheme:emit_head_close,
+    navtheme:emit_body_open('page-gantt'),
     emit_title(Cat, Name, Ver),
     emit_subtitle(PkgCount, NumSteps, TotalBytes, CachedBytes),
     deptree:version_neighbours(Repo, Entry, Newer, Newest, Older, Oldest),
@@ -517,53 +517,13 @@ gantt:emit_html(Target, Grid, Deps, NumSteps, HasPre) :-
     emit_table_close,
     emit_legend,
     emit_script(Grid, Deps),
-    emit_body_close.
+    navtheme:emit_theme_script('gantt-theme'),
+    navtheme:emit_body_close.
 
 
 % -----------------------------------------------------------------------------
 %  HTML emission - document structure
 % -----------------------------------------------------------------------------
-
-%! gantt:emit_doctype is det.
-%
-% Emit the HTML5 doctype declaration.
-
-gantt:emit_doctype :-
-    write('<!DOCTYPE html>'), nl.
-
-%! gantt:emit_head_open is det.
-%
-% Emit the opening head element with meta tags and CSS link.
-
-gantt:emit_head_open :-
-    write('<html lang="en" data-theme="dark">'), nl,
-    write('<head>'), nl,
-    write('<meta charset="UTF-8">'), nl,
-    write('<meta name="viewport" content="width=device-width, initial-scale=1.0">'), nl,
-    navtheme:emit_css_link('../').
-
-%! gantt:emit_head_close is det.
-%
-% Emit the closing head tag.
-
-gantt:emit_head_close :-
-    write('</head>'), nl.
-
-%! gantt:emit_body_open is det.
-%
-% Emit the opening body tag with Gantt page class.
-
-gantt:emit_body_open :-
-    write('<body class="page-gantt">'), nl.
-
-%! gantt:emit_body_close is det.
-%
-% Emit theme script and closing body/html tags.
-
-gantt:emit_body_close :-
-    navtheme:emit_theme_script('gantt-theme'),
-    write('</body>'), nl,
-    write('</html>'), nl.
 
 %! gantt:emit_title(+Cat, +Name, +Ver) is det.
 %
