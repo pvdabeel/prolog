@@ -291,26 +291,58 @@ llm:execute_llm_code(Src) :-
                close(Stream)).
 
 
+%! llm:llm_service(?Service) is nondet.
+%
+% Fact table of the supported chat backends. Service is the atom naming both
+% the module and its `Service/2` entry point (e.g. grok:grok/2).
+
+llm:llm_service(grok).
+llm:llm_service(gemini).
+llm:llm_service(claude).
+llm:llm_service(chatgpt).
+llm:llm_service(ollama).
+
+
+%! llm:chat(+Service, :StreamGoal, +Input, -ResponseContent) is det.
+%
+% Shared chat driver for the OpenAI-style backends (grok, gemini, chatgpt) and
+% Claude. Service names the module that owns the per-conversation history
+% (`Service:history/1`, updated via `Service:update_history/1`); StreamGoal is
+% the streaming predicate to call as
+% `StreamGoal(Endpoint, Key, Model, Messages, Response)` -- `llm:stream` for the
+% OpenAI-style services, `claude:llm_stream_claude` for Claude. Ollama is not
+% routed here: it is keyless and deliberately skips check_api_key/2.
+
+llm:chat(Service, StreamGoal, Input, ResponseContent) :-
+  ( config:llm_api_key(Service,Key) -> true ; Key = '' ),
+  ( llm:check_api_key(Service,Key)
+  -> config:llm_model(Service,Model),
+     config:llm_endpoint(Service,Endpoint),
+     Service:history(History),
+     llm:prepare_message(History,'user',Input,Messages),
+     call(StreamGoal, Endpoint, Key, Model, Messages, Response),
+     ( Response = _{contents: Contents, history: NewHistory}
+     -> atomic_list_concat(Contents, ResponseContent),
+        llm:handle_response(Key, Model, Endpoint, Service:update_history, ResponseContent, NewHistory)
+     ; Response = _{error: Error, history: _}
+     -> write('Error: '), write(Error), nl, ResponseContent = ''
+     )
+  ;  ResponseContent = ''
+  ), !.
+
+
 %! llm:execute_and_get_output(+Target-Msg,-Output)
 %
 % Based on the Target, handle the Message and return Output.
 
 % 1. Speaking to other LLM
 
-llm:execute_and_get_output("grok"-Msg, Output) :-
-  grok(Msg,Output).
-
-llm:execute_and_get_output("gemini"-Msg, Output) :-
-  gemini(Msg,Output).
-
-llm:execute_and_get_output("claude"-Msg, Output) :-
-  claude(Msg,Output).
-
-llm:execute_and_get_output("chatgpt"-Msg, Output) :-
-  chatgpt(Msg,Output).
-
-llm:execute_and_get_output("ollama"-Msg, Output) :-
-  ollama(Msg,Output).
+llm:execute_and_get_output(ServiceStr-Msg, Output) :-
+  atom_string(Service, ServiceStr),
+  llm:llm_service(Service),
+  !,
+  Goal =.. [Service, Msg, Output],
+  call(Service:Goal).
 
 
 % 2. Execute SWI-Prolog code safely and capture output
