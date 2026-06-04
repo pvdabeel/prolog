@@ -254,10 +254,11 @@ emit_html(Target, InstallTree, RunTree, BothTree) :-
     Target = Repo://Entry,
     cache:ordered_entry(Repo, Entry, Cat, Name, Version),
     gantt:version_str(Version, Ver),
-    emit_doctype,
-    emit_head_open(Cat, Name, Ver),
-    emit_head_close,
-    emit_body_open,
+    format(atom(Title), '~w/~w-~w &mdash; Detail Graph', [Cat, Name, Ver]),
+    navtheme:emit_doctype,
+    navtheme:emit_head_open(Title),
+    navtheme:emit_head_close,
+    navtheme:emit_body_open('page-detail'),
     emit_title_row(Cat, Name, Ver),
     emit_subtitle,
     deptree:version_neighbours(Repo, Entry, Newer, Newest, Older, Oldest),
@@ -270,33 +271,7 @@ emit_html(Target, InstallTree, RunTree, BothTree) :-
     emit_legend,
     emit_script(Repo, Entry, Cat, Name, Ver, InstallTree, RunTree, BothTree),
     navtheme:emit_theme_script('detail-theme'),
-    emit_body_close.
-
-
-% -----------------------------------------------------------------------------
-%  HTML emission - document structure
-% -----------------------------------------------------------------------------
-
-emit_doctype :-
-    write('<!DOCTYPE html>'), nl.
-
-emit_head_open(Cat, Name, Ver) :-
-    write('<html lang="en" data-theme="dark">'), nl,
-    write('<head>'), nl,
-    write('<meta charset="UTF-8">'), nl,
-    write('<meta name="viewport" content="width=device-width, initial-scale=1.0">'), nl,
-    format('<title>~w/~w-~w &mdash; Detail Graph</title>~n', [Cat, Name, Ver]),
-    navtheme:emit_css_link('../').
-
-emit_head_close :-
-    write('</head>'), nl.
-
-emit_body_open :-
-    write('<body class="page-detail">'), nl.
-
-emit_body_close :-
-    write('</body>'), nl,
-    write('</html>'), nl.
+    navtheme:emit_body_close.
 
 
 % -----------------------------------------------------------------------------

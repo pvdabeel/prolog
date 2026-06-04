@@ -505,47 +505,22 @@ terminal:emit_html(Type, Target, HtmlContent, TimingStats) :-
     cache:ordered_entry(Repo, Entry, Cat, Name, Version),
     gantt:version_str(Version, Ver),
     type_label(Type, Label),
-    emit_doctype,
-    emit_head_open(Cat, Name, Ver, Label),
-    emit_head_close,
-    emit_body_open,
+    format(atom(Title), '~w/~w-~w &mdash; ~w', [Cat, Name, Ver, Label]),
+    navtheme:emit_doctype,
+    navtheme:emit_head_open(Title),
+    navtheme:emit_head_close,
+    navtheme:emit_body_open('page-terminal'),
     emit_title_row(Cat, Name, Ver, Label),
     deptree:version_neighbours(Repo, Entry, Newer, Newest, Older, Oldest),
     navtheme:emit_nav_bar(Repo, Entry, Cat, Name, Type, Newer, Newest, Older, Oldest),
     write('</div>'), nl,
     emit_content(Type, HtmlContent, TimingStats),
-    emit_body_close.
+    navtheme:emit_body_close.
 
 terminal:type_label(merge, 'Merge Plan').
 terminal:type_label(fetchonly, 'Fetch Plan').
 terminal:type_label(info, 'Package Info').
 terminal:type_label(emerge, 'Emerge Output').
-
-
-% -----------------------------------------------------------------------------
-%  HTML emission - document structure
-% -----------------------------------------------------------------------------
-
-terminal:emit_doctype :-
-    write('<!DOCTYPE html>'), nl.
-
-terminal:emit_head_open(Cat, Name, Ver, Label) :-
-    write('<html lang="en" data-theme="dark">'), nl,
-    write('<head>'), nl,
-    write('<meta charset="UTF-8">'), nl,
-    write('<meta name="viewport" content="width=device-width, initial-scale=1.0">'), nl,
-    format('<title>~w/~w-~w &mdash; ~w</title>~n', [Cat, Name, Ver, Label]),
-    navtheme:emit_css_link('../').
-
-terminal:emit_head_close :-
-    write('</head>'), nl.
-
-terminal:emit_body_open :-
-    write('<body class="page-terminal">'), nl.
-
-terminal:emit_body_close :-
-    write('</body>'), nl,
-    write('</html>'), nl.
 
 
 % -----------------------------------------------------------------------------
