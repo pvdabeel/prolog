@@ -49,7 +49,6 @@ load_common_modules :-
    ensure_loaded(library('sort')),
    ensure_loaded(library('pairs')),
    ensure_loaded(library('uri')),
-   ensure_loaded(library('pengines')),
    ensure_loaded(library('solution_sequences')),
 
    ensure_loaded(portage('Source/Logic/context.pl')),
@@ -116,6 +115,7 @@ load_client_modules :-
 
    ensure_loaded(library('socket')),
    ensure_loaded(library('broadcast')),
+   ensure_loaded(library('pengines')),
    ensure_loaded(library('http/http_path')),
    ensure_loaded(library('http/http_open')),
    ensure_loaded(library('http/http_ssl_plugin')),
@@ -164,6 +164,7 @@ load_standalone_modules :-
    ensure_loaded(library('apply_macros')),
    ensure_loaded(library('crypto')),
    ensure_loaded(library('socket')),
+   ensure_loaded(library('pengines')),
 
    ensure_loaded(portage('Source/Application/Mode/stubs.pl')),
    ensure_loaded(portage('Source/Logic/context.pl')),
@@ -269,6 +270,7 @@ load_worker_modules :-
    ensure_loaded(library('crypto')),
    ensure_loaded(library('socket')),
    ensure_loaded(library('broadcast')),
+   ensure_loaded(library('pengines')),
    ensure_loaded(library('http/http_path')),
    ensure_loaded(library('http/http_open')),
    ensure_loaded(library('http/http_ssl_plugin')),
