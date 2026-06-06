@@ -24,7 +24,7 @@ action:process_bugs([], _Options) :-
   message:inform('Need more arguments').
 
 action:process_bugs(ArgsSets, Options) :-
-  interface:process_mode(Mode),
+  interface:get_mode(Mode),
   interface:process_server(Host,Port),
   eapi:substitute_sets(ArgsSets,Args),
   findall(R://E:run?{[]}, ( member(Arg,Args),
