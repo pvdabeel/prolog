@@ -251,34 +251,13 @@ builder:print_pre_actions([Action|Rest]) :-
 
 
 %! builder:print_pre_action(+PreAction) is det.
+%
+% Delegates to the shared plan:print_pre_action_core/2 with ShowUseFlags
+% false, so use_change flags are not wrapped inline (the build display has
+% a fixed right-edge layout).
 
-builder:print_pre_action(unmask(R, E, _C, _N)) :-
-  message:bubble(orange, unmask),
-  message:color(green),
-  message:column(24, R://E),
-  message:color(normal).
-
-builder:print_pre_action(accept_license(R, E, _C, _N)) :-
-  message:bubble(orange, license),
-  message:color(green),
-  message:column(24, R://E),
-  message:color(normal).
-
-builder:print_pre_action(accept_keyword(R, E, _C, _N, K)) :-
-  warning:keyword_atom(K, KAtom),
-  message:bubble(orange, keyword),
-  message:color(green),
-  message:column(24, R://E),
-  message:color(darkgray),
-  format(atom(Msg), ' (~w)', [KAtom]),
-  message:print(Msg),
-  message:color(normal).
-
-builder:print_pre_action(use_change(R, E, _C, _N, _Changes)) :-
-  message:bubble(orange, useflag),
-  message:color(green),
-  message:column(24, R://E),
-  message:color(normal).
+builder:print_pre_action(Action) :-
+  plan:print_pre_action_core(Action, false).
 
 
 % =============================================================================
@@ -857,7 +836,7 @@ builder:phase_callback(TotalLines, ExecLine, LogsLine, Action, PhaseList, LogPat
   builder:collect_phase_states(ExecLine, PhaseList, PhaseStates),
   with_mutex(build_display,
     build:update_exec_line(ExecLine, TotalLines, Action, PhaseStates)),
-  ( builder:is_failure_status(Status), LogsLine >= 0
+  ( build:is_failed_status(Status), LogsLine >= 0
   -> with_mutex(build_display,
        build:update_logs_line(LogsLine, TotalLines, LogPath, failed))
   ;  true
@@ -897,11 +876,6 @@ builder:init_exec_phase_state(ExecLine, [Phase|Rest]) :-
 
 builder:clear_exec_phase_state(ExecLine) :-
   retractall(builder:exec_phase_state(ExecLine, _, _)).
-
-
-builder:is_failure_status(failed).
-builder:is_failure_status(failed(_)).
-builder:is_failure_status(failed(_, _)).
 
 
 %! builder:stub_all_phases(+Action, +PhaseList, +TotalLines, +ExecLine, +LogsLine, +LogPath) is det.

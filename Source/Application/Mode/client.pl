@@ -206,35 +206,4 @@ client:stream_flush_cr(Stream) :-
 % Fail with a clear message if TLS material is missing.
 % We keep certificate generation out of runtime: use `make certs HOST=<hostname>`.
 client:require_tls_files(LocalHostname, CaCert, ClientCert, ClientKey) :-
-  findall(File,
-          ( member(File, [CaCert, ClientCert, ClientKey]),
-            \+ exists_file(File)
-          ),
-          Missing),
-  ( Missing == []
-  -> true
-  ;  message:failure(['Missing TLS files for client mode: ', Missing, '\n',
-                      'Expected CA cert:      ', CaCert, '\n',
-                      'Expected client cert:  ', ClientCert, '\n',
-                      'Expected client key:   ', ClientKey, '\n\n',
-                      'To generate them locally, run:\n',
-                      '  make certs HOST=', LocalHostname, '\n',
-                      'If your hostname includes a .local suffix, ensure HOST matches `config:hostname/1`.\n'
-                     ])
-  ).
-
-
-% -----------------------------------------------------------------------------
-%  Server reachability
-% -----------------------------------------------------------------------------
-
-%! client:reachable(+Host, +Port) is semidet.
-%
-% Succeeds if a TCP connection to Host:Port can be established.
-
-client:reachable(Host, Port) :-
-  catch(
-    ( tcp_socket(Socket),
-      tcp_connect(Socket, Host:Port),
-      tcp_close_socket(Socket) ),
-    _, fail).
+  interface:require_tls_files(client, LocalHostname, CaCert, ClientCert, ClientKey).

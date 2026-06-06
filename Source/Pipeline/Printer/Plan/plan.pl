@@ -2154,19 +2154,31 @@ plan:print_pre_action_first([Action|Rest]) :-
            plan:print_pre_action(A)
          )).
 
-plan:print_pre_action(unmask(R, E, _C, _N)) :-
+plan:print_pre_action(Action) :-
+  plan:print_pre_action_core(Action, true).
+
+
+%! plan:print_pre_action_core(+PreAction, +ShowUseFlags) is det.
+%
+% Render a single pre-action (unmask / accept_license / accept_keyword /
+% use_change) as a coloured bubble + target column. Shared by the plan
+% printer and the build display (builder:print_pre_action/1). When
+% ShowUseFlags is true the use_change flags are wrapped inline (plan
+% output); the build display passes false to keep its right-edge layout.
+
+plan:print_pre_action_core(unmask(R, E, _C, _N), _ShowUseFlags) :-
   message:bubble(orange, unmask),
   message:color(green),
   message:column(24, R://E),
   message:color(normal).
 
-plan:print_pre_action(accept_license(R, E, _C, _N)) :-
+plan:print_pre_action_core(accept_license(R, E, _C, _N), _ShowUseFlags) :-
   message:bubble(orange, license),
   message:color(green),
   message:column(24, R://E),
   message:color(normal).
 
-plan:print_pre_action(accept_keyword(R, E, _C, _N, K)) :-
+plan:print_pre_action_core(accept_keyword(R, E, _C, _N, K), _ShowUseFlags) :-
   warning:keyword_atom(K, KAtom),
   message:bubble(orange, keyword),
   message:color(green),
@@ -2176,13 +2188,16 @@ plan:print_pre_action(accept_keyword(R, E, _C, _N, K)) :-
   message:print(Msg),
   message:color(normal).
 
-plan:print_pre_action(use_change(R, E, _C, _N, Changes)) :-
+plan:print_pre_action_core(use_change(R, E, _C, _N, Changes), ShowUseFlags) :-
   message:bubble(orange, useflag),
   message:color(green),
   message:column(24, R://E),
-  message:color(darkgray),
-  plan:print_use_change_flags_wrapped(Changes),
-  message:color(normal).
+  ( ShowUseFlags == true
+  -> message:color(darkgray),
+     plan:print_use_change_flags_wrapped(Changes),
+     message:color(normal)
+  ;  message:color(normal)
+  ).
 
 plan:format_use_change_flags(Changes, FlagsStr) :-
   findall(A, ( member(use_change(F, enable), Changes), atom_string(F, A) ), PosAtoms),
