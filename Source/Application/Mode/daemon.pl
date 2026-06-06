@@ -9,29 +9,34 @@
 
 
 /** <module> DAEMON
-Implements a persistent local daemon for ipc mode. The daemon keeps the
-full standalone state (modules + Knowledge/kb.qlf + preferences) resident in memory and
-serves requests over a Unix domain socket.
+Server side of the persistent local daemon for ipc mode. The daemon keeps the
+full standalone state (modules + Knowledge/kb.qlf + preferences) resident in
+memory and serves requests over a Unix domain socket: it creates the socket,
+enters an accept loop, handles each request by redirecting output to the socket
+stream, and auto-shuts down after a configurable inactivity period
+(`daemon:start/0`).
 
-Two roles:
-
-  - Server (`daemon:start/0`): creates a Unix domain socket, enters an accept
-    loop, handles requests by redirecting output to the socket stream, and
-    auto-shuts down after a configurable inactivity period.
-
-  - Client (`daemon:connect/1`): connects to the daemon socket, sends CLI
-    arguments plus terminal dimensions, streams the output back to stdout,
-    and returns the daemon's exit code.
+The client side -- connecting to the socket, forwarding CLI arguments and
+environment, and daemon lifecycle control -- lives in ipc.pl. The bridge
+dynamics populated here per request (`client_env/2`, `client_is_tty/0`,
+`client_tty_size/2`) and `running/0` are read by interface.pl/config.pl in
+every mode; their declarations are mirrored in stubs.pl so non-daemon modes
+resolve them without loading this module.
 
 Authentication relies on Unix file permissions (socket created with mode 0600).
 Only processes running as the same OS user can connect.
 
+@see ipc.pl
 @see config:daemon_socket_path/1
 @see config:daemon_pid_path/1
 @see config:daemon_inactivity_timeout/1
 */
 
 :- module(daemon, []).
+
+% =============================================================================
+%  DAEMON declarations
+% =============================================================================
 
 % -----------------------------------------------------------------------------
 %  Daemon server
@@ -279,307 +284,3 @@ daemon:handle_error(_Out, halt(Code), ExitCodeTerm) :-
 daemon:handle_error(Out, Error, ExitCodeTerm) :-
   format(Out, 'Daemon error: ~w~n', [Error]),
   nb_setarg(1, ExitCodeTerm, 1).
-
-
-% -----------------------------------------------------------------------------
-%  Daemon client
-% -----------------------------------------------------------------------------
-
-%! daemon:connect(-ExitCode) is semidet.
-%
-% Connects to the daemon, sends the current CLI arguments and terminal
-% dimensions, streams the output to current_output, and unifies ExitCode
-% with the daemon's exit code. Fails if no daemon is running.
-
-daemon:connect(ExitCode) :-
-  config:daemon_socket_path(SocketPath),
-  ( \+ access_file(SocketPath, exist)
-  -> no_daemon_error,
-     ExitCode = 1
-  ;  catch(
-       do_connect(SocketPath, ExitCode),
-       _Error,
-       ( no_daemon_error,
-         ExitCode = 1 )
-     )
-  ).
-
-
-%! daemon:do_connect(+SocketPath, -ExitCode) is det.
-%
-% Performs the actual connection and I/O with the daemon.
-
-daemon:do_connect(SocketPath, ExitCode) :-
-  unix_domain_socket(Socket),
-  tcp_connect(Socket, SocketPath),
-  tcp_open_socket(Socket, StreamPair),
-  stream_pair(StreamPair, In, Out),
-  set_stream(Out, encoding(utf8)),
-  set_stream(In, encoding(utf8)),
-  send_request(Out),
-  flush_output(Out),
-  stream_response(In, ExitCode),
-  catch(close(In), _, true),
-  catch(close(Out), _, true).
-
-
-%! daemon:send_request(+Out) is det.
-%
-% Sends the current CLI arguments, terminal dimensions, and
-% portage-relevant environment variables to the daemon.
-
-daemon:send_request(Out) :-
-  current_prolog_flag(argv, RawArgs),
-  config:printing_tty_size(Rows, Cols),
-  collect_env(Env0),
-  ( stream_property(user_output, tty(true))
-  -> Env = ['_CLIENT_IS_TTY'-true | Env0]
-  ;  Env = Env0
-  ),
-  format(Out, 'request(~q, ~w, ~w, ~q).~n', [RawArgs, Cols, Rows, Env]).
-
-
-%! daemon:collect_env(-Env:list) is det.
-%
-% Collects portage-relevant environment variables that are set in the
-% client process, as Name-Value pairs.
-
-daemon:collect_env(Env) :-
-  findall(Name-Value,
-    ( forwarded_env_var(Name),
-      system:getenv(Name, Value)
-    ),
-    Env).
-
-
-%! daemon:forwarded_env_var(?Name) is nondet.
-%
-% Environment variables forwarded from IPC client to daemon.
-
-daemon:forwarded_env_var('USE').
-daemon:forwarded_env_var('ACCEPT_KEYWORDS').
-daemon:forwarded_env_var('PYTHON_TARGETS').
-daemon:forwarded_env_var('PYTHON_SINGLE_TARGET').
-daemon:forwarded_env_var('RUBY_TARGETS').
-daemon:forwarded_env_var('RUBY_SINGLE_TARGET').
-daemon:forwarded_env_var('LUA_SINGLE_TARGET').
-daemon:forwarded_env_var('PERL_FEATURES').
-daemon:forwarded_env_var('LLVM_SLOT').
-daemon:forwarded_env_var('VIDEO_CARDS').
-daemon:forwarded_env_var('INPUT_DEVICES').
-daemon:forwarded_env_var('CPU_FLAGS_X86').
-daemon:forwarded_env_var('APACHE2_MODULES').
-daemon:forwarded_env_var('APACHE2_MPMS').
-
-
-%! daemon:stream_response(+In, -ExitCode) is det.
-%
-% Reads the daemon's output byte by byte, writing to current_output,
-% until the EXIT terminator is encountered.
-
-daemon:stream_response(In, ExitCode) :-
-  read_string(In, _, FullOutput),
-  parse_output(FullOutput, ExitCode).
-
-
-%! daemon:parse_output(+Output, -ExitCode) is det.
-%
-% Splits the output at the EXIT terminator, prints the main output,
-% and extracts the exit code.
-
-daemon:parse_output(Output, ExitCode) :-
-  atom_codes(Sentinel, [0, 0'E, 0'X, 0'I, 0'T, 0':]),
-  ( sub_string(Output, Before, _, _, Sentinel)
-  -> sub_string(Output, 0, Before, _, MainOutput),
-     write(MainOutput),
-     flush_output,
-     SentLen = 6,
-     TermStart is Before + SentLen,
-     sub_string(Output, TermStart, _, 0, Tail),
-     ( sub_string(Tail, NL, _, _, "\n")
-     -> sub_string(Tail, 0, NL, _, CodeStr)
-     ;  CodeStr = Tail
-     ),
-     ( number_string(ExitCode, CodeStr) -> true ; ExitCode = 1 )
-  ;  write(Output),
-     flush_output,
-     ExitCode = 0
-  ).
-
-
-%! daemon:no_daemon_error is det.
-%
-% Prints an error message when no daemon is running.
-
-daemon:no_daemon_error :-
-  config:daemon_socket_path(SocketPath),
-  format(user_error,
-    'Error: No daemon running (socket ~w not found).~n\c
-     Start one with: portage-ng --mode daemon~n',
-    [SocketPath]).
-
-
-% -----------------------------------------------------------------------------
-%  Lifecycle management
-% -----------------------------------------------------------------------------
-
-%! daemon:fork_background(+Mode) is det.
-%
-% Forks a new detached swipl process running the given Mode (daemon or
-% server) without --background. The parent polls for readiness then exits.
-
-daemon:fork_background(Mode) :-
-  config:installation_dir(Dir),
-  atomic_list_concat([Dir, '/portage-ng.pl'], MainFile),
-  atom_concat('portage=', Dir, PortagePath),
-  process_create(
-    path(swipl),
-    [ '-O',
-      '--stack-limit=256G', '--table-space=256G', '--shared-table-space=256G',
-      '-f', MainFile,
-      '-p', PortagePath,
-      '-Dverbose_autoload=false',
-      '-g', 'main',
-      '--',
-      '--mode', Mode
-    ],
-    [ process(Pid),
-      detached(true),
-      stdout(null),
-      stderr(null)
-    ]
-  ),
-  atom_string(Mode, ModeStr),
-  format('Starting ~w in background (PID ~w)...~n', [ModeStr, Pid]),
-  ( Mode == daemon
-  -> config:daemon_pid_path(PidPath),
-     wait_for_file(PidPath, 100),
-     ( exists_file(PidPath)
-     -> format('Daemon ready (PID ~w).~n', [Pid])
-     ;  format(user_error, 'Warning: daemon may not have started.~n', [])
-     )
-  ;  sleep(2),
-     format('Server started in background (PID ~w).~n', [Pid])
-  ).
-
-
-%! daemon:wait_for_file(+Path, +Retries) is det.
-%
-% Polls for a file to appear, sleeping 100ms between retries.
-
-daemon:wait_for_file(_, 0) :- !.
-daemon:wait_for_file(Path, N) :-
-  ( access_file(Path, exist)
-  -> true
-  ;  sleep(0.1),
-     N1 is N - 1,
-     wait_for_file(Path, N1)
-  ).
-
-
-%! daemon:status is semidet.
-%
-% Checks if a daemon is running. Prints PID if running, error if not.
-% Succeeds if daemon is running, fails otherwise.
-
-daemon:status :-
-  config:daemon_socket_path(SocketPath),
-  config:daemon_pid_path(PidPath),
-  ( access_file(SocketPath, exist)
-  -> ( exists_file(PidPath)
-     -> setup_call_cleanup(
-          open(PidPath, read, S),
-          read_string(S, _, PidStr),
-          close(S)),
-        normalize_space(atom(Pid), PidStr),
-        format('Daemon running (PID ~w, socket ~w)~n', [Pid, SocketPath])
-     ;  format('Daemon socket exists (~w) but no PID file.~n', [SocketPath])
-     )
-  ;  format('No daemon running.~n', []),
-     fail
-  ).
-
-
-%! daemon:send_command(+Cmd) is det.
-%
-% Sends a command term to the daemon over the Unix socket.
-% Cmd is one of: halt, relaunch.
-
-daemon:send_command(halt) :-
-  !,
-  config:daemon_socket_path(SocketPath),
-  ( \+ access_file(SocketPath, exist)
-  -> format(user_error, 'No daemon running.~n', [])
-  ;  send_term(SocketPath, shutdown),
-     format('Daemon stopped.~n', [])
-  ).
-
-daemon:send_command(relaunch) :-
-  !,
-  daemon:send_command(halt),
-  sleep(1),
-  config:daemon_socket_path(SocketPath),
-  wait_for_socket_gone(SocketPath, 50),
-  daemon:fork_background(daemon).
-
-daemon:send_command(Cmd) :-
-  format(user_error, 'Unknown command: ~w. Use halt or relaunch.~n', [Cmd]).
-
-
-%! daemon:autostart is det.
-%
-% If no daemon socket exists and autostart is configured, fork a
-% background daemon. Otherwise succeed silently.
-
-daemon:autostart :-
-  config:daemon_socket_path(SocketPath),
-  \+ access_file(SocketPath, exist),
-  config:daemon_autostart(true),
-  !,
-  daemon:fork_background(daemon).
-daemon:autostart.
-
-
-%! daemon:relaunch is det.
-%
-% Convenience: stops the current daemon and starts a new one in background.
-
-daemon:relaunch :-
-  daemon:send_command(relaunch).
-
-
-%! daemon:send_term(+SocketPath, +Term) is det.
-%
-% Connects to the daemon socket and sends a Prolog term.
-
-daemon:send_term(SocketPath, Term) :-
-  catch(
-    ( unix_domain_socket(Socket),
-      tcp_connect(Socket, SocketPath),
-      tcp_open_socket(Socket, StreamPair),
-      stream_pair(StreamPair, In, Out),
-      set_stream(Out, encoding(utf8)),
-      set_stream(In, encoding(utf8)),
-      format(Out, '~q.~n', [Term]),
-      flush_output(Out),
-      catch(read_string(In, _, _Response), _, true),
-      catch(close(In), _, true),
-      catch(close(Out), _, true)
-    ),
-    Error,
-    format(user_error, 'Connection error: ~w~n', [Error])
-  ).
-
-
-%! daemon:wait_for_socket_gone(+Path, +Retries) is det.
-%
-% Polls until the socket file disappears, sleeping 100ms between retries.
-
-daemon:wait_for_socket_gone(_, 0) :- !.
-daemon:wait_for_socket_gone(Path, N) :-
-  ( \+ access_file(Path, exist)
-  -> true
-  ;  sleep(0.1),
-     N1 is N - 1,
-     wait_for_socket_gone(Path, N1)
-  ).

@@ -53,23 +53,55 @@ load_common_modules :-
    ensure_loaded(library('solution_sequences')),
 
    ensure_loaded(portage('Source/Logic/context.pl')),
+   ensure_loaded(portage('Source/Logic/unify.pl')),
    ensure_loaded(portage('Source/config')),
    ensure_loaded(portage('Source/Application/System/os.pl')),
    ensure_loaded(portage('Source/Application/System/lock.pl')),
    ensure_loaded(portage('Source/Application/Security/sanitize.pl')),
-   ensure_loaded(portage('Source/Domain/Gentoo/Preference/profile.pl')),
    ensure_loaded(portage('Source/Application/Output/message.pl')),
    ensure_loaded(portage('Source/Application/interface.pl')),
    ensure_loaded(portage('Source/Application/Interface/action.pl')),
+   ensure_loaded(portage('Source/Application/System/subprocess.pl')),
+   ensure_loaded(portage('Source/Application/System/bonjour.pl')),
+   ensure_loaded(portage('Source/Domain/Gentoo/Preference/profile.pl')),
    ensure_loaded(portage('Source/Domain/Gentoo/eapi.pl')),
    ensure_loaded(portage('Source/Pipeline/reader.pl')),
    ensure_loaded(portage('Source/Domain/Gentoo/set.pl')),
-   ensure_loaded(portage('Source/Application/System/subprocess.pl')),
-   ensure_loaded(portage('Source/Application/System/bonjour.pl')),
-   ensure_loaded(portage('Source/Logic/unify.pl')),
-   ensure_loaded(portage('Source/Application/Mode/daemon.pl')),
 
    message:log('Loaded common modules...').
+
+
+% -----------------------------------------------------------------------------
+%  IPC client modules
+% -----------------------------------------------------------------------------
+
+%! load_ipc_modules is det.
+%
+% Loads the ipc client/control module (connect, status, send_command,
+% fork_background, autostart). Needed by ipc mode and by the early-exit
+% --background launch path of daemon and server modes.
+
+load_ipc_modules :-
+
+   ensure_loaded(portage('Source/Application/Mode/ipc.pl')),
+
+   message:log('Loaded ipc modules...').
+
+
+% -----------------------------------------------------------------------------
+%  Daemon server modules
+% -----------------------------------------------------------------------------
+
+%! load_daemon_modules is det.
+%
+% Loads the daemon server loop module (accept loop, request dispatch,
+% per-request state isolation). Only needed in daemon mode.
+
+load_daemon_modules :-
+
+   ensure_loaded(portage('Source/Application/Mode/daemon.pl')),
+
+   message:log('Loaded daemon modules...').
 
 
 % -----------------------------------------------------------------------------

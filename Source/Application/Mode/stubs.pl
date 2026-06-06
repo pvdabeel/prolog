@@ -100,3 +100,18 @@ semantic:build_index :-
     print_message(error, "Semantic search module not loaded, cannot build index").
 
 :- endif.
+
+
+% -----------------------------------------------------------------------------
+%  Daemon bridge dynamics.
+% -----------------------------------------------------------------------------
+
+% These are populated per request on the daemon server side (daemon.pl) and
+% read from interface.pl/config.pl in every mode. Declaring them here lets
+% non-daemon modes (standalone, client, worker, server) resolve the reads
+% without loading daemon.pl. daemon.pl declares the same dynamics itself.
+
+:- dynamic daemon:client_env/2.
+:- dynamic daemon:client_is_tty/0.
+:- dynamic daemon:client_tty_size/2.
+:- dynamic daemon:running/0.
