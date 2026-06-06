@@ -730,8 +730,7 @@ prover:prove_model(Full, Model0, Model, Constraints0, Constraints, InProg0) :-
       sampler:rule_call,
       rule(Full, Body),
       prover:prove_model(Body, Model0, BodyModel, Constraints0, BodyConstraints, InProg1),
-      del_assoc(Lit, InProg1, _Old, InProg2),
-      ( InProg2 = _ -> true ), % keep var used (avoid singleton warnings)
+      del_assoc(Lit, InProg1, _Old, _InProg2),
       put_assoc(Lit, BodyModel, Ctx, Model),
       Constraints = BodyConstraints
   ).

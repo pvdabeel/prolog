@@ -39,8 +39,9 @@ graphs.  For a given ebuild, the following output is produced:
  - emerge:     Styled HTML page embedding the traditional emerge output file.
                Delegates to the terminal submodule.
 
-Legacy DOT graph generation is available via dot:graph/2 in Source/Grapher/dot.pl
-and can be invoked manually through grapher:graph_dot/2.
+Legacy DOT graph generation is available via dot:graph/2 in
+Source/Application/Output/Grapher/dot.pl and can be invoked manually through
+grapher:graph_dot/2.
 */
 
 :- module(grapher, []).
