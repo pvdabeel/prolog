@@ -900,7 +900,10 @@ config:printing_style(Style) :-
 
 %! config:printing_tty_size(?H,?W)
 %
-% Retrieves the tty_size to use for printing
+% Retrieves the tty_size to use for printing, applying client-server
+% "context routing": in pengines (server) mode the connected client's
+% terminal is used, in ipc mode the daemon uses the size forwarded by the
+% ipc client, and otherwise the local terminal is used.
 %
 % 1. Running as a server, use client tty_size
 
@@ -915,15 +918,23 @@ config:printing_tty_size(H,W) :-
   catch(daemon:client_tty_size(H,W), _, fail),
   !.
 
-% 2. Otherwise use actual tty_size
+% 2. Otherwise use the local terminal size
 
 config:printing_tty_size(H,W) :-
-  catch(tty_size(H,W), _, fail),
-  !.
+  config:local_tty_size(H,W).
 
-% 3. Fallback in case actual tty_size cannot be retrieved
 
-config:printing_tty_size(80,160).
+%! config:local_tty_size(-H,-W) is det.
+%
+% The local process terminal size, falling back to a sane default when
+% stdout is not a tty (tty_size/2 may throw outside a real terminal).
+%
+% This performs no client-server context routing, so it is safe for the
+% lightweight ipc client to call without pulling in library(pengines). It
+% also backs the local fallback clause of config:printing_tty_size/2.
+
+config:local_tty_size(H,W) :-
+  ( catch(tty_size(H,W), _, fail) -> true ; H = 80, W = 160 ).
 
 
 %! config:print_expand_use(?Bool)

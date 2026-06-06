@@ -81,7 +81,7 @@ ipc:do_connect(SocketPath, ExitCode) :-
 
 ipc:send_request(Out) :-
   current_prolog_flag(argv, RawArgs),
-  config:printing_tty_size(Rows, Cols),
+  config:local_tty_size(Rows, Cols),
   collect_env(Env0),
   ( stream_property(user_output, tty(true))
   -> Env = ['_CLIENT_IS_TTY'-true | Env0]
