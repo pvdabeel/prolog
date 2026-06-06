@@ -726,7 +726,7 @@ update_metadata(Entry,Contents) ::-
   told.
 
 
-%! repository:update_cace
+%! repository:update_cache
 %
 % Private predicate
 %
@@ -931,8 +931,7 @@ query(Query,Result) ::-
 % Public predicate
 %
 % Location is an atom, representing a full absolute path
-% to a portage tree i%! repository:count(+Query,-Count)
-% installed on your local system.
+% to a portage tree installed on your local system.
 
 get_location(Location) ::-
   ::location(Location).
