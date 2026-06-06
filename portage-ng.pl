@@ -64,13 +64,16 @@ main(standalone) :-
   interface:process_requests(standalone).
 
 main(ipc) :-
+  load_ipc_modules,
   interface:verify(ipc),
-  daemon:autostart,
-  daemon:connect(ExitCode),
+  ipc:autostart,
+  ipc:connect(ExitCode),
   halt(ExitCode).
 
 main(daemon) :-
+  load_ipc_modules,
   interface:verify(daemon),
+  load_daemon_modules,
   load_standalone_modules,
   load_llm_modules,
   init_knowledgebase,
@@ -95,6 +98,7 @@ main(worker) :-
   interface:process_requests(worker).
 
 main(server) :-
+  load_ipc_modules,
   interface:verify(server),
   main(standalone),
   load_server_modules,

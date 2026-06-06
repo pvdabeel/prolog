@@ -703,16 +703,16 @@ interface:early_exit(ipc, Options) :-
 
 interface:early_exit(ipc, Options) :-
   memberchk(status(true), Options), !,
-  ( daemon:status -> halt(0) ; halt(1) ).
+  ( ipc:status -> halt(0) ; halt(1) ).
 
 interface:early_exit(ipc, Options) :-
   memberchk(cmd(Cmd), Options), Cmd \= none, !,
-  daemon:send_command(Cmd),
+  ipc:send_command(Cmd),
   halt(0).
 
 interface:early_exit(daemon, Options) :-
   memberchk(background(true), Options), !,
-  daemon:fork_background(daemon),
+  ipc:fork_background(daemon),
   halt(0).
 
 interface:early_exit(client, Options) :-
@@ -733,7 +733,7 @@ interface:early_exit(client, Options) :-
 
 interface:early_exit(server, Options) :-
   memberchk(background(true), Options), !,
-  daemon:fork_background(server),
+  ipc:fork_background(server),
   halt(0).
 
 
