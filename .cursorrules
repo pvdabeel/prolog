@@ -53,6 +53,37 @@ Assumption taxonomy (do not mix these up):
 - Domain assumptions (rules-level): proof key `rule(assumed(X))`
 - Prover cycle-break assumptions: proof key `assumed(rule(X))`
 
+### Domain assumption polarity (how to talk about them)
+
+"Plan has domain assumptions" is NOT inherently bad. When reporting or
+summarising a run (in chat or in commit/PR text), always split domain
+assumptions by polarity and say which kind you mean — never lump them into a
+single scary count:
+
+- POSITIVE / actionable — the plan IS satisfiable once the user makes a
+  config change; the assumption itself is the suggested action:
+    - `masked`             → add to package.unmask / adjust package.mask
+    - `keyword_filtered`   → accept ~arch (package.accept_keywords)
+    - license acceptance   → accept license (package.license)
+    - `blocker_assumption` → resolve a blocker (unmerge / pick alternative)
+  Phrase these as "here is what to change", not "this is broken".
+
+- NEGATIVE / blocking — no simple config action resolves it; the request is
+  structurally unsatisfiable as stated:
+    - `non_existent_dependency`                     → package/version not in tree
+    - `missing_dependency`                          → dependency not found
+    - `required_use_violation`                      → impossible USE requirement
+    - `slot_conflict`                               → conflicting slots
+    - `version_no_candidate` / `version_conflict`   → no version satisfies
+    - `unsatisfied_constraints`                     → constraints cannot be met
+    - `issue_with_model`                            → no consistent model found
+  These are the ones that indicate a genuine problem.
+
+Classification lives in `Source/Pipeline/Printer/Plan/assumption.pl`
+(`assumption:assumption_type/2`, `assumption:assumption_reason_type/2`).
+Prover cycle-breaks (`*_cycle`, `naf_cycle`) are a separate, benign axis
+(exit 1), not domain assumptions.
+
 ## "Context" disambiguation (do not conflate these)
 
 The word "context" has three distinct meanings in this codebase:
@@ -258,10 +289,37 @@ module:predicate_name(Arg1, Arg2) :-
   - `./Source/Application/Wrapper/portage-ng-dev --mode standalone --pretend <target>`
   - `./Source/Application/Wrapper/portage-ng-dev --mode standalone --shell`
   - Non-interactive / CI-style: `./Source/Application/Wrapper/portage-ng-dev --mode standalone --ci --pretend <target>`
-    Exit codes:
+    Exit codes (current — see `interface:ci_exit_code/3`):
       - 0 = no assumptions
       - 1 = only prover cycle-break assumptions
       - 2 = any domain assumptions (e.g. missing/non-existent deps)
+
+    Exit codes (PLANNED extension — NOT yet implemented). Goal: let
+    tinderbox-ng infer the *reason* from the exit code alone, distinguishing
+    actionable (positive) from blocking (negative) outcomes, and separating
+    resolver outcomes from build failures. See "Domain assumption polarity"
+    above for the positive/negative split.
+      Resolver / plan (`--pretend`) outcomes:
+        - 0 = clean plan, no assumptions
+        - 1 = prover cycle-break assumptions only (benign)
+        - 2 = POSITIVE / actionable domain assumptions only
+              (unmask / keyword / license / blocker)
+        - 3 = NEGATIVE / blocking domain assumptions
+              (non-existent, unsatisfiable USE, no version, no model)
+      Build (`--merge`) failures — distinct higher range so a failed *build*
+      is never confused with a resolver outcome:
+        - 10 = restricted / manual download required (RESTRICT=fetch)
+        - 11 = download / network failure
+        - 12 = configuration / dependency issue at build time
+        - 13 = upstream compile failure
+        - 14 = file collision
+        - 15 = test-phase failure
+        - 16 = sandbox / permission violation
+      Numbers above are a PROPOSAL — confirm before implementing. Avoid
+      124 (wrapper hard-timeout) and 126/127/128+ (shell/signal). When
+      implemented, update `interface:ci_exit_code/3`, the builder failure
+      paths (`Source/Pipeline/builder.pl`, `ebuild_exec.pl`, `download.pl`),
+      this list, and `tinderbox-ng analyze` together.
 
 - For resolver/debug target runs in this workflow, always include `--pretend` to avoid
   mutating local state (for example `Source/Knowledge/Sets/world/*.local`).
