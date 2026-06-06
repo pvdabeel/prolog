@@ -631,6 +631,31 @@ interface:server_reachable(Host, Port) :-
     _, fail).
 
 
+%! interface:require_tls_files(+Role, +Hostname, +CaCert, +Cert, +Key) is det.
+%
+% Fail with a clear message if TLS material is missing for the given Role
+% (client or server). Certificate generation is kept out of runtime: use
+% `make certs HOST=<hostname>`. Shared by client.pl and server.pl.
+
+interface:require_tls_files(Role, Hostname, CaCert, Cert, Key) :-
+  findall(File,
+          ( member(File, [CaCert, Cert, Key]),
+            \+ exists_file(File)
+          ),
+          Missing),
+  ( Missing == []
+  -> true
+  ;  message:failure(['Missing TLS files for ', Role, ' mode: ', Missing, '\n',
+                      'Expected CA cert:      ', CaCert, '\n',
+                      'Expected ', Role, ' cert:  ', Cert, '\n',
+                      'Expected ', Role, ' key:   ', Key, '\n\n',
+                      'To generate them locally, run:\n',
+                      '  make certs HOST=', Hostname, '\n',
+                      'If your hostname includes a .local suffix, ensure HOST matches `config:hostname/1`.\n'
+                     ])
+  ).
+
+
 %! interface:init_tty
 %
 % Initialize TTY-related features (editline, history). Safe to call when

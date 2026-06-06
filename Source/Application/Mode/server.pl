@@ -95,22 +95,7 @@ server:stop_server :-
 % -----------------------------------------------------------------------------
 
 server:require_tls_files(Hostname, CaCert, ServerCert, ServerKey) :-
-  findall(File,
-          ( member(File, [CaCert, ServerCert, ServerKey]),
-            \+ exists_file(File)
-          ),
-          Missing),
-  ( Missing == []
-  -> true
-  ;  message:failure(['Missing TLS files for server mode: ', Missing, '\n',
-                      'Expected CA cert:      ', CaCert, '\n',
-                      'Expected server cert:  ', ServerCert, '\n',
-                      'Expected server key:   ', ServerKey, '\n\n',
-                      'To generate them locally, run:\n',
-                      '  make certs HOST=', Hostname, '\n',
-                      'If your hostname includes a .local suffix, ensure HOST matches `config:hostname/1`.\n'
-                     ])
-  ).
+  interface:require_tls_files(server, Hostname, CaCert, ServerCert, ServerKey).
 
 
 % =============================================================================
