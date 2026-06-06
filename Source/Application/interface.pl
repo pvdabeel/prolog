@@ -562,12 +562,12 @@ interface:process_snapshot_flag :-
   ).
 
 
-%! interface:process_mode(-Mode) is det.
+%! interface:get_mode(-Mode) is det.
 %
 % Unifies Mode with the --mode value from the command line
 % (standalone, client, server, or worker).
 
-interface:process_mode(Mode) :-
+interface:get_mode(Mode) :-
   interface:argv(Options,_),
   lists:memberchk(mode(Mode),Options).
 
@@ -674,14 +674,14 @@ interface:init_tty :-
 %  Mode flag verification
 % -----------------------------------------------------------------------------
 
-%! interface:verify(+Mode) is det.
+%! interface:verify_mode(+Mode) is det.
 %
 % Verify CLI flags for the given mode. If an early-exit flag is set
 % (--background, --status, --cmd, --shell), performs the requested
 % action and halts. Succeeds silently when no early-exit flag matches,
 % allowing main/1 to continue.
 
-interface:verify(Mode) :-
+interface:verify_mode(Mode) :-
   interface:argv(Options, _),
   interface:check_flags(Mode, Options).
 
@@ -703,15 +703,18 @@ interface:early_exit(ipc, Options) :-
 
 interface:early_exit(ipc, Options) :-
   memberchk(status(true), Options), !,
+  user:load_ipc_modules,
   ( ipc:status -> halt(0) ; halt(1) ).
 
 interface:early_exit(ipc, Options) :-
   memberchk(cmd(Cmd), Options), Cmd \= none, !,
+  user:load_ipc_modules,
   ipc:send_command(Cmd),
   halt(0).
 
 interface:early_exit(daemon, Options) :-
   memberchk(background(true), Options), !,
+  user:load_ipc_modules,
   ipc:fork_background(daemon),
   halt(0).
 
@@ -733,6 +736,7 @@ interface:early_exit(client, Options) :-
 
 interface:early_exit(server, Options) :-
   memberchk(background(true), Options), !,
+  user:load_ipc_modules,
   ipc:fork_background(server),
   halt(0).
 

@@ -317,8 +317,8 @@ preference:profile_use_terms(Terms) :-
 % and a profile cache file (Knowledge/profile.qlf) is available.
 
 preference:use_cached_profile :-
-  current_predicate(interface:process_mode/1),
-  catch(interface:process_mode(Mode), _, fail),
+  current_predicate(interface:get_mode/1),
+  catch(interface:get_mode(Mode), _, fail),
   current_predicate(config:profile_loading/2),
   config:profile_loading(Mode, cached),
   current_predicate(profile:cache_available/0),
@@ -1869,8 +1869,8 @@ preference:stamp_file(File) :-
 
 
 preference:cache_enabled :-
-  current_predicate(interface:process_mode/1),
-  catch(interface:process_mode(Mode), _, fail),
+  current_predicate(interface:get_mode/1),
+  catch(interface:get_mode(Mode), _, fail),
   current_predicate(config:preference_cache/2),
   config:preference_cache(Mode, cached).
 

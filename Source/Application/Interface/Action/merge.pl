@@ -23,7 +23,7 @@ action:process_action(_Action,[],Options) :-
   action:exit_on_invalid_targets(Options).
 
 action:process_action(Action,ArgsSets,Options) :-
-  interface:process_mode(Mode),
+  interface:get_mode(Mode),
   interface:process_server(Host,Port),
   ( memberchk(pretend(true), Options) -> PretendMode = true ; PretendMode = false ),
   eapi:substitute_sets(ArgsSets,Args),

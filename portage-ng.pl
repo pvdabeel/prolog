@@ -65,14 +65,11 @@ main(standalone) :-
 
 main(ipc) :-
   load_ipc_modules,
-  interface:verify(ipc),
   ipc:autostart,
   ipc:connect(ExitCode),
   halt(ExitCode).
 
 main(daemon) :-
-  load_ipc_modules,
-  interface:verify(daemon),
   load_daemon_modules,
   load_standalone_modules,
   load_llm_modules,
@@ -81,7 +78,6 @@ main(daemon) :-
   interface:process_requests(daemon).
 
 main(client) :-
-  interface:verify(client),
   load_client_modules,
   load_llm_modules,
   interface:process_server(Host, Port),
@@ -98,8 +94,6 @@ main(worker) :-
   interface:process_requests(worker).
 
 main(server) :-
-  load_ipc_modules,
-  interface:verify(server),
   main(standalone),
   load_server_modules,
   server:start_server,
@@ -133,15 +127,16 @@ init_knowledgebase :-
 % initialization and request processing.
 %
 % @see Source/loader.pl for module loading
-% @see interface:verify/1 for CLI flag verification
+% @see interface:verify_mode/1 for CLI flag verification
 
 main :-
   load_common_modules,
-  interface:process_mode(Mode),
+  interface:get_mode(Mode),
+  interface:init_tty,
+  interface:verify_mode(Mode),
   config:working_dir(Dir),
   cd(Dir),
   config:world_file(File),
   world:newinstance(set(File)),
   world:load,
-  interface:init_tty,
   main(Mode).
