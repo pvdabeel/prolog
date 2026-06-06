@@ -758,11 +758,11 @@ rule(blocking(Use),[assumed(conflict(blocking,Use))]) :-
   \+Use =.. [minus,_],
   preference:global_use(Use),!.
 
-rule(blocking(minus(Use)),[assumed(conflict(blocking,minus(Use)))]) :- % test needed
+rule(blocking(minus(Use)),[assumed(conflict(blocking,minus(Use)))]) :-
   \+Use =.. [minus,_],
   preference:global_use(minus(Use)),!.
 
-rule(blocking(minus(Use)),[assumed(minus(Use)),naf(required(Use))]) :- % this doesnet make sense I think)
+rule(blocking(minus(Use)),[assumed(Use),naf(blocking(Use))]) :-
   \+Use =.. [minus,_],
   \+preference:global_use(Use),
   \+preference:global_use(minus(Use)),!.
