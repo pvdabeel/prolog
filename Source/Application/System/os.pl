@@ -114,51 +114,38 @@ os:find_files(Dir, Pattern, File) :-
 %! os:current_load_average(-Load) is det.
 %
 % Reads the 1-minute system load average. Uses sysctl on macOS,
-% /proc/loadavg on Linux. Returns 0.0 on failure.
+% /proc/loadavg on Linux. Returns 0.0 on failure (or when the raw value
+% cannot be parsed).
 
 os:current_load_average(Load) :-
-  ( current_prolog_flag(apple, true)
-  -> os:load_average_darwin(Load)
-  ;  os:load_average_linux(Load)
-  ).
-
-
-%! os:load_average_darwin(-Load) is det.
-%
-% Reads the 1-minute load average on macOS via sysctl.
-
-os:load_average_darwin(Load) :-
   catch(
-    ( setup_call_cleanup(
-        process_create(path(sysctl), ['-n', 'vm.loadavg'],
-                       [stdout(pipe(Out))]),
-        read_string(Out, _, S),
-        close(Out)
-      ),
-      split_string(S, " ", "{ }\n", Parts),
-      Parts = [LoadStr|_],
-      number_codes(Load, LoadStr)
+    ( os:load_average_raw(S),
+      split_string(S, " ", "{ }\n", [LoadStr|_]),
+      number_string(Load, LoadStr)
     ),
     _,
     Load = 0.0
   ).
 
 
-%! os:load_average_linux(-Load) is det.
+%! os:load_average_raw(-String) is det.
 %
-% Reads the 1-minute load average on Linux from /proc/loadavg.
+% Fetches the raw load-average line from the platform source: sysctl
+% vm.loadavg on macOS, /proc/loadavg on Linux. The 1-minute average is
+% the first whitespace-delimited field of the returned string.
 
-os:load_average_linux(Load) :-
-  catch(
-    ( setup_call_cleanup(
-        open('/proc/loadavg', read, In),
-        read_string(In, _, S),
-        close(In)
-      ),
-      split_string(S, " ", "\n", Parts),
-      Parts = [LoadStr|_],
-      number_codes(Load, LoadStr)
-    ),
-    _,
-    Load = 0.0
+os:load_average_raw(S) :-
+  current_prolog_flag(apple, true),
+  !,
+  setup_call_cleanup(
+    process_create(path(sysctl), ['-n', 'vm.loadavg'], [stdout(pipe(Out))]),
+    read_string(Out, _, S),
+    close(Out)
+  ).
+
+os:load_average_raw(S) :-
+  setup_call_cleanup(
+    open('/proc/loadavg', read, In),
+    read_string(In, _, S),
+    close(In)
   ).
