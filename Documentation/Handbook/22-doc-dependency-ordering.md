@@ -168,14 +168,22 @@ PDEPEND closure is installed, its build can fail (e.g. a Ruby extension's
 because a toolchain component is not yet on `PATH`).
 
 The scheduler closes this gap in `scheduler:repair_ordering_violations`,
-keyed only on the generic `order_after` marker (no package-specific logic):
+keyed only on the generic `order_after` marker (no package-specific logic).
+The repair pass builds an effective dependency graph over all planned rule
+heads (direct body deps, assumed-dep aliases, RDEPEND configure deps and
+PDEPEND completion edges), condenses it with Kosaraju's SCC algorithm and
+assigns waves by longest path over the acyclic condensation.  Members of a
+true cycle share a wave; everything acyclic is strictly ordered.  Because
+the condensation is a DAG, the pass always converges — a cycle anywhere in
+the plan can never collapse the ordering of an unrelated acyclic chain
+(portage-ng#26).
 
 - `build_pdepend_anchor_map` maps each provider `(C,N)` to its PDEPEND-target
   heads, and `build_pdepend_closure_map` computes the forward closure of those
   targets.
-- A consumer outside that closure is ordered after the **maximum install wave**
-  of `P`'s PDEPEND targets — i.e. after `P`'s whole post-install group, matching
-  emerge's behaviour.
+- A consumer outside that closure gets edges to the **install heads** of `P`'s
+  PDEPEND targets — i.e. it is ordered after `P`'s whole post-install group,
+  matching emerge's behaviour.
 
 This bump is made **cycle-safe per target** so it does not collapse densely
 cyclic toolchain closures (e.g. LLVM):
