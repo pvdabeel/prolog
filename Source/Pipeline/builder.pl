@@ -143,31 +143,38 @@ builder:alert :-
 
 %! builder:prepare_binpkg_index is det.
 %
-% Ensure the in-memory binpkg cache is populated from the on-disk
-% `Packages` index before a build starts (portage-ng#12).
+% Ensure the in-memory binpkg cache reflects the on-disk `Packages`
+% index before a build starts (portage-ng#12, portage-ng#24).
 %
 % `kb:register(binpkg)` only records the repository fact; it does NOT
-% parse `Packages`, and `Knowledge/kb.qlf` carries no binpkg
-% `cache:ordered_entry/5` facts. On a cold process the binpkg cache is
-% therefore empty, and `binpkg_exec:maybe_refresh_index` (mtime policy)
-% only records a baseline mtime on first observation -- it never loads
-% an empty cache. The result was that `available_for/4` found no
-% candidates and every build fell through to a full source build even
-% when a USE-compatible gpkg existed.
+% parse `Packages`. The in-memory binpkg cache at build start is either
+% empty (cold process, portage-ng#12) or -- worse -- a stale snapshot
+% qcompiled into `Knowledge/kb.qlf` at the last `--sync`. With a stale
+% snapshot, `binpkg_exec:available_for/4` selects outdated BUILD_IDs:
+% in issue #24 a kb.qlf snapshot predating fresh sci-ml/onnx gpkgs made
+% the builder qmerge an onnx variant whose gencode was produced by
+% dev-libs/protobuf-33.1 into a system where the same plan had just
+% merged protobuf-34.2, and sci-ml/caffe2 then failed its compile phase
+% on the protobuf gencode/runtime cross-version #error.
 %
-% Fix: when the binpkg repository is registered but its cache is empty,
-% force a full `binpkg:sync(kb)` to parse the index. Otherwise fall back
-% to the cheap mtime refresh so a concurrent external producer's updates
-% are still picked up.
+% Fix: always re-sync the binpkg cache from the on-disk index at build
+% start, then record the index mtime baseline so the `mtime` refresh
+% policy (`binpkg_exec:maybe_refresh_index`) tracks subsequent updates
+% by concurrent external producers from a correct anchor. The mtime is
+% probed BEFORE the sync: if a producer updates the index while we
+% parse it, the next probe sees a newer mtime and re-syncs.
 
 builder:prepare_binpkg_index :-
   ( config:use_binpkg(true),
-    cache:repository(binpkg),
-    \+ cache:ordered_entry(binpkg, _, _, _, _)
-  -> catch(binpkg:sync(kb), _, true)
+    cache:repository(binpkg)
+  -> ( catch(binpkg_exec:probe_index_mtime(binpkg, Mtime), _, fail)
+     -> true
+     ;  Mtime = none
+     ),
+     catch(binpkg:sync(kb), _, true),
+     catch(binpkg_exec:record_index_baseline(binpkg, Mtime), _, true)
   ;  true
-  ),
-  catch(binpkg_exec:maybe_refresh_index, _, true).
+  ).
 
 
 %! builder:ask_confirmation is semidet.
