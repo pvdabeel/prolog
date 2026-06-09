@@ -410,8 +410,19 @@ ebuild_exec:pairs_to_assoc_dedup(Pairs, Assoc) :-
 % Validates the phase name against a known allowlist before execution.
 
 ebuild_exec:start_phase_async(EbuildPath, Phase, LogPath, UseString, Pid) :-
+  ebuild_exec:start_phase_async(EbuildPath, Phase, LogPath, UseString, [], Pid).
+
+
+%! ebuild_exec:start_phase_async(+EbuildPath, +Phase, +LogPath, +UseString, +ExtraEnv, -Pid) is det.
+%
+% As start_phase_async/5, but extends the child environment with
+% ExtraEnv (a list of Name=Value pairs). Used by the serial-make
+% retry to inject MAKEOPTS=-j1 (env overrides make.conf in Portage's
+% config stack).
+
+ebuild_exec:start_phase_async(EbuildPath, Phase, LogPath, UseString, ExtraEnv, Pid) :-
   ( sanitize:safe_phase(Phase) -> true
-  ; throw(error(permission_error(execute, phase, Phase), context(ebuild_exec:start_phase_async/5, 'Invalid phase name')))
+  ; throw(error(permission_error(execute, phase, Phase), context(ebuild_exec:start_phase_async/6, 'Invalid phase name')))
   ),
   config:ebuild_command(EbuildCmd),
   atom_string(Phase, PhaseStr),
@@ -419,7 +430,7 @@ ebuild_exec:start_phase_async(EbuildPath, Phase, LogPath, UseString, Pid) :-
     path(sh),
     ['-c', '"$1" --skip-manifest "$2" "$3" >>"$4" 2>&1',
      '_', EbuildCmd, EbuildPath, PhaseStr, LogPath],
-    [process(Pid), environment(['USE'=UseString])]).
+    [process(Pid), environment(['USE'=UseString|ExtraEnv])]).
 
 
 %! ebuild_exec:check_phase_done(+Pid, -ExitCode) is semidet.
@@ -467,6 +478,92 @@ ebuild_exec:dual_progress(BytesSoFar, ExpBytes, Elapsed, ExpSeconds, Pct) :-
   ;  TimePct = 0
   ),
   Pct is max(BytesPct, TimePct).
+
+
+% =============================================================================
+%  Serial-make retry (parallel-make race recovery, portage-ng#25)
+% =============================================================================
+%
+% Some ebuilds drive Makefiles whose link targets do not declare their
+% object dependencies (e.g. net-analyzer/nsat-1.5-r7). With a parallel
+% MAKEOPTS (-jN) the link step can race ahead of compilation and fail
+% with "cannot find <obj>.o". Traditional emerge hits the same race but
+% often masks it through load: its own --jobs saturation makes make's
+% -l load guard throttle toward serial execution. portage-ng can reach
+% the same package at low system load and run the full -jN, exposing
+% the race.
+%
+% Recovery: when a parallel-make-sensitive phase fails, retry it once
+% with MAKEOPTS=-j1 in the environment. Portage gives environment
+% variables priority over make.conf, so this forces a serial make for
+% the retry only, without touching the user's configuration. Make
+% resumes incrementally from the already-built objects, so the retry
+% is cheap; deterministic build failures simply fail again and keep
+% their original semantics. Gated by config:build_serial_retry/1.
+
+%! ebuild_exec:serial_retry_phase(+Phase) is semidet.
+%
+% Phases whose failure can plausibly be a parallel-make race. Other
+% phases (setup, unpack, configure, merge, ...) never run make in
+% parallel, so retrying them serially would only waste time.
+
+ebuild_exec:serial_retry_phase(compile).
+ebuild_exec:serial_retry_phase(test).
+ebuild_exec:serial_retry_phase(install).
+
+
+%! ebuild_exec:serial_env(-Env) is det.
+%
+% Environment overrides forcing a serial build for the retry attempt.
+% MAKEOPTS covers emake; eninja (ninja-utils.eclass) falls back to
+% MAKEOPTS job parsing when NINJAOPTS is unset, so one variable
+% suffices.
+
+ebuild_exec:serial_env(['MAKEOPTS'='-j1']).
+
+
+%! ebuild_exec:serial_retry_enabled is semidet.
+
+ebuild_exec:serial_retry_enabled :-
+  catch(config:build_serial_retry(true), _, fail).
+
+
+%! ebuild_exec:log_serial_retry(+LogPath, +Phase, +ExitCode) is det.
+%
+% Writes a marker line to the build log so the retry is visible when
+% inspecting failures.
+
+ebuild_exec:log_serial_retry(LogPath, Phase, ExitCode) :-
+  catch(
+    ( open(LogPath, append, S),
+      format(S, '~n=== ~w failed (exit ~w); retrying with MAKEOPTS=-j1 (parallel-make race recovery) ===~n',
+             [Phase, ExitCode]),
+      close(S)
+    ), _, true).
+
+
+%! ebuild_exec:maybe_serial_retry(+EbuildPath, +Phase, +LogPath, +UseString, :Callback, +ExitCode0, -ExitCode) is det.
+%
+% Per-phase retry hook for the sequential execution path. On a
+% non-zero exit of a serial-retry-eligible phase, re-runs that single
+% phase with the serial environment and returns the retry's exit code;
+% otherwise passes ExitCode0 through unchanged. The retry is polled
+% with the spinner callback (no byte/time estimate is meaningful for
+% a resumed build).
+
+:- meta_predicate ebuild_exec:maybe_serial_retry(+, +, +, +, 2, +, -).
+
+ebuild_exec:maybe_serial_retry(_, _, _, _, _, 0, 0) :- !.
+
+ebuild_exec:maybe_serial_retry(EbuildPath, Phase, LogPath, UseString, Callback, ExitCode0, ExitCode) :-
+  ( ebuild_exec:serial_retry_enabled,
+    ebuild_exec:serial_retry_phase(Phase)
+  -> ebuild_exec:log_serial_retry(LogPath, Phase, ExitCode0),
+     ebuild_exec:serial_env(Env),
+     ebuild_exec:start_phase_async(EbuildPath, Phase, LogPath, UseString, Env, Pid),
+     ebuild_exec:poll_phase_spinning(Pid, Phase, Callback, ExitCode)
+  ;  ExitCode = ExitCode0
+  ).
 
 
 % =============================================================================
@@ -558,14 +655,40 @@ ebuild_exec:run_phases(EbuildPath, Phases, UseString, ExitCode) :-
 
 
 %! ebuild_exec:run_phases_unlocked(+EbuildPath, +Phases, +UseString, -ExitCode) is det.
+%
+% On failure of a phase list that includes a parallel-make-sensitive
+% phase, retries once with MAKEOPTS=-j1 (see "Serial-make retry"
+% section above). The retry drops `clean` so ebuild's phase markers
+% skip already-completed phases and make resumes incrementally from
+% the failure point.
 
 ebuild_exec:run_phases_unlocked(EbuildPath, Phases, UseString, ExitCode) :-
+  ebuild_exec:run_phases_once(EbuildPath, Phases, UseString, [], ExitCode0),
+  ( ExitCode0 =:= 0
+  -> ExitCode = 0
+  ;  ( ebuild_exec:serial_retry_enabled,
+       member(P, Phases),
+       ebuild_exec:serial_retry_phase(P)
+     -> subtract(Phases, [clean], RetryPhases),
+        ebuild_exec:serial_env(Env),
+        ebuild_exec:run_phases_once(EbuildPath, RetryPhases, UseString, Env, ExitCode)
+     ;  ExitCode = ExitCode0
+     )
+  ).
+
+
+%! ebuild_exec:run_phases_once(+EbuildPath, +Phases, +UseString, +ExtraEnv, -ExitCode) is det.
+%
+% Single ebuild invocation covering all Phases, with optional extra
+% environment bindings (e.g. the serial-retry MAKEOPTS override).
+
+ebuild_exec:run_phases_once(EbuildPath, Phases, UseString, ExtraEnv, ExitCode) :-
   config:ebuild_command(EbuildCmd),
   maplist(atom_string, Phases, PhaseStrs),
   process_create(
     path(EbuildCmd),
     ['--skip-manifest', EbuildPath | PhaseStrs],
-    [stdout(null), stderr(null), process(Pid), environment(['USE'=UseString])]),
+    [stdout(null), stderr(null), process(Pid), environment(['USE'=UseString|ExtraEnv])]),
   process_wait(Pid, exit(ExitCode)).
 
 
@@ -645,7 +768,8 @@ ebuild_exec:run_phases_sequential(EbuildPath, Entry, [Phase|Rest], DisplayPhases
   ebuild_exec:expected_phase_stats(Entry, Phase, ExpBytes, ExpSecs),
   !,
   ebuild_exec:start_phase_async(EbuildPath, Phase, LogPath, UseString, Pid),
-  ebuild_exec:poll_phase_progress(Pid, Phase, LogPath, SizeBefore, T0, ExpBytes, ExpSecs, Callback, ExitCode),
+  ebuild_exec:poll_phase_progress(Pid, Phase, LogPath, SizeBefore, T0, ExpBytes, ExpSecs, Callback, ExitCode0),
+  ebuild_exec:maybe_serial_retry(EbuildPath, Phase, LogPath, UseString, Callback, ExitCode0, ExitCode),
   get_time(T1),
   TotalSecs is T1 - T0,
   ebuild_exec:log_file_size(LogPath, SizeAfter),
@@ -677,7 +801,8 @@ ebuild_exec:run_phases_sequential(EbuildPath, Entry, [Phase|Rest], DisplayPhases
   ebuild_exec:log_file_size(LogPath, SizeBefore),
   get_time(T0),
   ebuild_exec:start_phase_async(EbuildPath, Phase, LogPath, UseString, Pid),
-  ebuild_exec:poll_phase_spinning(Pid, Phase, Callback, ExitCode),
+  ebuild_exec:poll_phase_spinning(Pid, Phase, Callback, ExitCode0),
+  ebuild_exec:maybe_serial_retry(EbuildPath, Phase, LogPath, UseString, Callback, ExitCode0, ExitCode),
   get_time(T1),
   TotalSecs is T1 - T0,
   ebuild_exec:log_file_size(LogPath, SizeAfter),

@@ -1108,6 +1108,21 @@ config:failsilenton(version).
 config:build_live_phases([clean, setup, unpack, prepare, configure, compile, test, install, merge]).
 
 
+%! config:build_serial_retry(?Bool)
+%
+% When true, a failed parallel-make-sensitive phase (compile, test,
+% install) is retried once with MAKEOPTS=-j1 before the build is
+% declared failed (portage-ng#25). Environment variables override
+% make.conf in Portage's config stack, so the retry forces a serial
+% make without touching the user's configuration. Make resumes
+% incrementally, so the retry is cheap: it only changes the outcome
+% when the original failure was a parallel-make scheduling race
+% (e.g. net-analyzer/nsat's link step running before its objects are
+% compiled). Deterministic failures fail again immediately.
+
+config:build_serial_retry(true).
+
+
 %! config:features_test_enabled is semidet.
 %
 % True iff FEATURES (env > make.conf > fallback) contains 'test' with
