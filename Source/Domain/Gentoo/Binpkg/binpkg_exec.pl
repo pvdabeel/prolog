@@ -158,9 +158,14 @@ binpkg_exec:apply_refresh_policy(_).
 %
 % Compare the index file's current mtime against the recorded baseline:
 %
-%   - First observation: record the baseline and do NOT re-sync. The
-%     initial load was already performed by `kb:register(Repository)` at
-%     startup, so the in-memory cache is already current.
+%   - First observation: record the baseline AND re-sync. We cannot
+%     assume the in-memory cache matches the on-disk index here:
+%     `kb:register/1` does not parse `Packages`, and a `Knowledge/kb.qlf`
+%     generated at the last `--sync` may carry a stale binpkg snapshot
+%     (portage-ng#24). Build flows normally anchor the baseline earlier
+%     via `builder:prepare_binpkg_index` (which performs the initial
+%     sync), so this branch only pays the parse cost when a probe
+%     arrives outside a prepared build.
 %   - Newer mtime than baseline: update the baseline and call
 %     `Repository:sync(kb)` to re-load the in-memory cache from disk.
 %   - Same or older mtime: no-op.
@@ -178,10 +183,27 @@ binpkg_exec:refresh_if_stale(Repository) :-
         catch(Repository:sync(kb), _, true)
      ;  true
      )
-  ;  assertz(binpkg_exec:last_index_mtime(Repository, Disk))
+  ;  assertz(binpkg_exec:last_index_mtime(Repository, Disk)),
+     catch(Repository:sync(kb), _, true)
   ).
 
 binpkg_exec:refresh_if_stale(_).
+
+
+%! binpkg_exec:record_index_baseline(+Repository, +Mtime) is det.
+%
+% Anchor the `mtime` refresh policy after an externally-performed sync
+% (see `builder:prepare_binpkg_index`). Mtime is the index file's mtime
+% probed BEFORE that sync (or the atom `none` when the index was
+% missing); recording the pre-sync value guarantees that an index
+% update racing the sync is still picked up by the next probe.
+
+binpkg_exec:record_index_baseline(Repository, none) :- !,
+  retractall(binpkg_exec:last_index_mtime(Repository, _)).
+
+binpkg_exec:record_index_baseline(Repository, Mtime) :-
+  retractall(binpkg_exec:last_index_mtime(Repository, _)),
+  assertz(binpkg_exec:last_index_mtime(Repository, Mtime)).
 
 
 %! binpkg_exec:probe_index_mtime(+Repository, -Mtime) is semidet.
@@ -595,16 +617,87 @@ binpkg_exec:check_atom_subslot_pin(Cat, Name, Slot) :-
 % otherwise the first installed (Category, Name) is considered.
 % Succeeds (accept) when there is no install or the install records
 % no subslot; otherwise requires `RecSub` to equal the live subslot.
+%
+% The lookup consults the on-disk VDB first (portage-ng#24): the
+% in-memory `pkg://` cache is a snapshot loaded at startup, so it does
+% NOT see packages merged earlier in the *current* plan. In issue #24
+% the plan merged dev-libs/protobuf-34.2 in an early wave; the startup
+% snapshot (taken from a baseline without protobuf) made this check
+% accept a stale sci-ml/onnx binpkg pinned to `protobuf:0/33.1.0=`,
+% and sci-ml/caffe2 then failed compiling against the mismatched
+% gencode. Reading `<vdb>/<cat>/<pf>/SLOT` from disk sees the freshly
+% merged install and rejects such candidates -- matching emerge, which
+% validates binpkg `:=` pins against the live vartree. The snapshot
+% path remains as a fallback for hosts without a stat'able VDB.
 
 binpkg_exec:live_subslot_matches(Cat, Name, RecSlot, RecSub) :-
-  ( binpkg_exec:find_live_install_for_slot(Cat, Name, RecSlot, LiveEntry)
-  -> ( query:search(subslot(LiveSubRaw), pkg://LiveEntry)
-     -> candidate:canon_slot(LiveSubRaw, LiveSub),
-        LiveSub == RecSub
-     ;  true
-     )
+  ( binpkg_exec:live_install_subslot(Cat, Name, RecSlot, LiveSub)
+  -> LiveSub == RecSub
   ;  true
   ).
+
+
+%! binpkg_exec:live_install_subslot(+Category, +Name, +RecSlot, -LiveSub) is semidet.
+%
+% Resolves the canonicalised subslot of the live install of
+% (Category, Name) in slot RecSlot (`(-)` means any slot). Fails when
+% there is no such install or it records no concrete subslot -- the
+% caller treats failure as "nothing confirmable, accept". On-disk VDB
+% wins; the in-memory `pkg://` snapshot is only consulted when no VDB
+% root is available on this host.
+
+binpkg_exec:live_install_subslot(Cat, Name, RecSlot, LiveSub) :-
+  binpkg_exec:vdb_disk_root(Root), !,
+  binpkg_exec:vdb_disk_install_subslot(Root, Cat, Name, RecSlot, LiveSub).
+
+binpkg_exec:live_install_subslot(Cat, Name, RecSlot, LiveSub) :-
+  binpkg_exec:find_live_install_for_slot(Cat, Name, RecSlot, LiveEntry),
+  query:search(subslot(LiveSubRaw), pkg://LiveEntry),
+  candidate:canon_slot(LiveSubRaw, LiveSub).
+
+
+%! binpkg_exec:vdb_disk_root(-Root) is semidet.
+%
+% The on-disk VDB root (`/var/db/pkg` layout) of the registered `pkg`
+% repository, when it exists as a directory.
+
+binpkg_exec:vdb_disk_root(Root) :-
+  current_predicate(pkg:get_location/1),
+  catch(pkg:get_location(Root), _, fail),
+  exists_directory(Root).
+
+
+%! binpkg_exec:vdb_disk_install_subslot(+Root, +Category, +Name, +RecSlot, -Sub) is semidet.
+%
+% Reads `<Root>/<Category>/<pf>/SLOT` for the installed (Category, Name)
+% whose canonicalised slot matches RecSlot (`(-)` = any), and returns
+% its canonicalised subslot. Fails when no matching install exists or
+% the SLOT file carries no `/subslot` part. `eapi:packageversion/3`
+% guards against name-prefix collisions (e.g. `protobuf-java-*` dirs
+% while looking for `protobuf`) and skips transient `-MERGING-*` dirs.
+
+binpkg_exec:vdb_disk_install_subslot(Root, Cat, Name, RecSlot, Sub) :-
+  os:compose_path(Root, Cat, CatDir),
+  exists_directory(CatDir),
+  os:directory_content(CatDir, PF),
+  % Parse with a fresh variable and compare afterwards: calling
+  % packageversion/3 with the name pre-bound makes a unification miss
+  % fall through to its message:failure/1 clause for every unrelated
+  % sibling dir.
+  catch(eapi:packageversion(PF, PkgName, _Version), _, fail),
+  PkgName == Name,
+  os:compose_path([CatDir, PF, 'SLOT'], SlotFile),
+  exists_file(SlotFile),
+  catch(read_file_to_string(SlotFile, SlotStr0, []), _, fail),
+  split_string(SlotStr0, "", " \t\r\n", [SlotStr]),
+  SlotStr \== "",
+  atom_string(SlotAtom, SlotStr),
+  binpkg_exec:split_slot(SlotAtom, LiveSlotRaw, LiveSubRaw),
+  LiveSubRaw \== '',
+  candidate:canon_slot(LiveSlotRaw, LiveSlot),
+  ( RecSlot == (-) -> true ; LiveSlot == RecSlot ),
+  candidate:canon_slot(LiveSubRaw, Sub),
+  !.
 
 
 %! binpkg_exec:find_live_install_for_slot(+Cat, +Name, +RecSlot, -Entry) is semidet.
