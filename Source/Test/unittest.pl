@@ -1590,9 +1590,19 @@ test(build_assumption_emits_requse_violation_with_tag) :-
 
 :- begin_tests(scheduler_install_configure_deps).
 
-% KB-independent: `build_pkg_wave_map/2` needs `cache:ordered_entry/5`, which
-% CI lacks. Exercise `sweep_repair/7` with synthetic heads and a hand-built
-% PkgWaveMap (grouped RDEPEND aliasing via run_phase-C-N).
+% KB-independent: `build_pkg_head_map/2` needs `cache:ordered_entry/5`, which
+% CI lacks. Exercise the repair graph + wave assignment with synthetic heads
+% and a hand-built PkgHeadMap (grouped RDEPEND aliasing via run_phase-C-N).
+
+% Repair the wave map for a synthetic rule set: builds the effective repair
+% graph, condenses it (Kosaraju) and assigns longest-path waves.
+repair_waves(AllRules, Map0, PkgHeadMap, Pd, CfgMap, Map1) :-
+  scheduler:build_repair_graph(AllRules, Map0, PkgHeadMap, Pd, CfgMap,
+                               Heads, Forward, Reverse),
+  scheduler:kosaraju_scc(Heads, Forward, Reverse, SCCs),
+  scheduler:repair_comp_map(SCCs, CompMap, CompIds, MembersMap),
+  scheduler:comp_edges(Forward, CompMap, CompEdges),
+  scheduler:assign_repair_waves(CompIds, CompEdges, MembersMap, Map0, Map1).
 
 test(install_promoted_past_run_rdepend) :-
   BifRun = grouped_package_dependency(no, 'dev-haskell', bifunctors, []):run,
@@ -1603,21 +1613,52 @@ test(install_promoted_past_run_rdepend) :-
   list_to_assoc([ (portage://'fake/sg-1':install)-1,
                   (portage://'fake/sg-1':run)-2,
                   (portage://'fake/bif-1':run)-2 ], Map0),
-  list_to_assoc([ ('run_phase'-'dev-haskell'-bifunctors)-2 ], PkgMap),
+  list_to_assoc([ ('run_phase'-'dev-haskell'-bifunctors)-(portage://'fake/bif-1':run) ],
+                 PkgHeadMap),
   scheduler:build_install_configure_dep_map([SgRun], CfgMap),
-  scheduler:sweep_repair(strict, AllRules, Map0, PkgMap, pd(t, t), CfgMap, 20, Map1),
+  repair_waves(AllRules, Map0, PkgHeadMap, pd(t, t), CfgMap, Map1),
   get_assoc(portage://'fake/sg-1':install, Map1, WInstall),
   WInstall >= 3.
 
-test(configure_deps_wave_from_run_body) :-
+test(configure_deps_alias_edge_from_run_body) :-
   BifRun = grouped_package_dependency(no, 'dev-haskell', bifunctors, []):run,
   RunRule = rule(portage://'fake/sg-1':run, [BifRun]),
-  list_to_assoc([ ('run_phase'-'dev-haskell'-bifunctors)-3 ], PkgMap),
-  empty_assoc(Map),
+  list_to_assoc([ ('run_phase'-'dev-haskell'-bifunctors)-(portage://'fake/bif-1':run) ],
+                 PkgHeadMap),
+  list_to_assoc([ (portage://'fake/sg-1':install)-1,
+                  (portage://'fake/bif-1':run)-1 ], Map),
   scheduler:build_install_configure_dep_map([RunRule], CfgMap),
-  scheduler:configure_deps_wave(portage://'fake/sg-1':install,
-                                Map, PkgMap, pd(t,t), CfgMap, W),
-  W =:= 3.
+  empty_assoc(F0),
+  scheduler:add_repair_edges(Map, PkgHeadMap, pd(t,t), CfgMap,
+                             rule(portage://'fake/sg-1':install, []), F0, F1),
+  get_assoc(portage://'fake/sg-1':install, F1, Deps),
+  memberchk(portage://'fake/bif-1':run, Deps).
+
+% Regression for portage-ng#26: a dependency cycle elsewhere in the plan
+% must not collapse an acyclic downstream chain into a single wave. The
+% earlier fixpoint-sweep repair diverged on the a<->b cycle, hit its
+% iteration cap, and then merged c (BDEPEND consumer) into the same wave
+% as its dependency.
+test(cycle_does_not_collapse_downstream_chain) :-
+  ARun = portage://'fake/a-1':run,
+  BRun = portage://'fake/b-1':run,
+  CInstall = portage://'fake/c-1':install,
+  DInstall = portage://'fake/d-1':install,
+  AllRules = [ rule(ARun, [BRun]),
+               rule(BRun, [ARun]),
+               rule(CInstall, [BRun]),
+               rule(DInstall, [CInstall]) ],
+  list_to_assoc([ARun-1, BRun-1, CInstall-1, DInstall-1], Map0),
+  empty_assoc(PkgHeadMap),
+  empty_assoc(CfgMap),
+  repair_waves(AllRules, Map0, PkgHeadMap, pd(t, t), CfgMap, Map1),
+  get_assoc(ARun, Map1, WA),
+  get_assoc(BRun, Map1, WB),
+  get_assoc(CInstall, Map1, WC),
+  get_assoc(DInstall, Map1, WD),
+  WA =:= WB,
+  WC > WB,
+  WD > WC.
 
 :- end_tests(scheduler_install_configure_deps).
 
@@ -1650,30 +1691,30 @@ pdepend_fixture(Map, pd(AnchorMap, ClosureMap)) :-
   list_to_assoc([ (portage://'fake/rubygems-1':run)-TargetCns ], ClosureMap).
 
 % A leaf consumer (outside the target's closure) is ordered after the
-% target's INSTALL wave (9), not its cyclic :run wave (10). This is the
-% ruby-gem case (portage-ng#18).
-test(consumer_completes_after_pdepend_install_wave) :-
+% target's INSTALL head (wave 9), not its cyclic :run head (wave 10). This
+% is the ruby-gem case (portage-ng#18).
+test(consumer_completes_after_pdepend_install_head) :-
   pdepend_fixture(Map, Pd),
-  scheduler:pdepend_complete_wave(grouped_package_dependency(no,'dev-lang',ruby,[]):install,
-                                  grouped_package_dependency(no,'dev-ruby','mecab-ruby',[]):install,
-                                  Map, Pd, W),
-  W =:= 9.
+  scheduler:pdepend_completion_heads(grouped_package_dependency(no,'dev-lang',ruby,[]):install,
+                                     grouped_package_dependency(no,'dev-ruby','mecab-ruby',[]):install,
+                                     Map, Pd, Heads),
+  Heads == [portage://'fake/rubygems-1':install].
 
 % A consumer whose package lies in the target's closure must NOT be bumped
 % (cycle safety, at (C,N) granularity): the target transitively depends on
 % it. This is the LLVM clang/compiler-rt cycle (portage-ng#19).
 test(cyclic_consumer_not_bumped, [fail]) :-
   pdepend_fixture(Map, Pd),
-  scheduler:pdepend_complete_wave(grouped_package_dependency(no,'dev-lang',ruby,[]):install,
-                                  grouped_package_dependency(no,'dev-ruby',rubygems,[]):install,
-                                  Map, Pd, _).
+  scheduler:pdepend_completion_heads(grouped_package_dependency(no,'dev-lang',ruby,[]):install,
+                                     grouped_package_dependency(no,'dev-ruby',rubygems,[]):install,
+                                     Map, Pd, _).
 
 % Per-target filtering: a provider with two PDEPEND targets, one acyclic
-% (clang-toolchain-symlinks, install wave 10) and one cyclic w.r.t. the
-% consumer (clang-runtime, install wave 16, RDEPENDs the consumer). The
-% consumer (compiler-rt) is ordered after the acyclic target's install wave
-% (10) and never after the cyclic one (portage-ng#19).
-test(per_target_cycle_filter_uses_acyclic_max) :-
+% (clang-toolchain-symlinks) and one cyclic w.r.t. the consumer
+% (clang-runtime, RDEPENDs the consumer). The consumer (compiler-rt) is
+% ordered after the acyclic target's install head and never after the
+% cyclic one (portage-ng#19).
+test(per_target_cycle_filter_uses_acyclic_targets) :-
   list_to_assoc([ (portage://'fake/symlinks-1':install)-10,
                   (portage://'fake/symlinks-1':run)-11,
                   (portage://'fake/runtime-1':install)-16,
@@ -1684,10 +1725,10 @@ test(per_target_cycle_filter_uses_acyclic_max) :-
   list_to_assoc([ ('llvm-runtimes'-'compiler-rt')-true ], RunCns),
   list_to_assoc([ (portage://'fake/symlinks-1':run)-SymCns,
                   (portage://'fake/runtime-1':run)-RunCns ], ClosureMap),
-  scheduler:pdepend_complete_wave(grouped_package_dependency(no,'llvm-core',clang,[]):install,
-                                  grouped_package_dependency(no,'llvm-runtimes','compiler-rt',[]):install,
-                                  Map, pd(AnchorMap, ClosureMap), W),
-  W =:= 10.
+  scheduler:pdepend_completion_heads(grouped_package_dependency(no,'llvm-core',clang,[]):install,
+                                     grouped_package_dependency(no,'llvm-runtimes','compiler-rt',[]):install,
+                                     Map, pd(AnchorMap, ClosureMap), Heads),
+  Heads == [portage://'fake/symlinks-1':install].
 
 % A consumer that is ITSELF one of the provider's PDEPEND targets is never
 % ordered after the group (e.g. clang-toolchain-symlinks must not wait for
@@ -1698,39 +1739,39 @@ test(pdepend_target_member_not_bumped, [fail]) :-
   list_to_assoc([ ('llvm-core'-clang)-[GH] ], AnchorMap),
   empty_assoc(EmptyCns),
   list_to_assoc([ GH-EmptyCns ], ClosureMap),
-  scheduler:pdepend_complete_wave(grouped_package_dependency(no,'llvm-core',clang,[]):install,
-                                  grouped_package_dependency(no,'llvm-core','clang-toolchain-symlinks',[]):install,
-                                  Map, pd(AnchorMap, ClosureMap), _).
+  scheduler:pdepend_completion_heads(grouped_package_dependency(no,'llvm-core',clang,[]):install,
+                                     grouped_package_dependency(no,'llvm-core','clang-toolchain-symlinks',[]):install,
+                                     Map, pd(AnchorMap, ClosureMap), _).
 
 % No PDEPEND provider in plan (empty AnchorMap): fast no-op failure.
 test(empty_anchor_map_is_noop, [fail]) :-
   pdepend_fixture(Map, _),
-  scheduler:pdepend_complete_wave(grouped_package_dependency(no,'dev-lang',ruby,[]):install,
-                                  grouped_package_dependency(no,'dev-ruby','mecab-ruby',[]):install,
-                                  Map, pd(t,t), _).
+  scheduler:pdepend_completion_heads(grouped_package_dependency(no,'dev-lang',ruby,[]):install,
+                                     grouped_package_dependency(no,'dev-ruby','mecab-ruby',[]):install,
+                                     Map, pd(t,t), _).
 
 % A non-grouped (concrete) dep literal never triggers completion: consumer
 % edges are always grouped deps, and the concrete provider-install node is
 % shared with the post-install group.
 test(concrete_dep_does_not_complete, [fail]) :-
   pdepend_fixture(Map, Pd),
-  scheduler:pdepend_complete_wave(portage://'fake/ruby-1':install,
-                                  grouped_package_dependency(no,'dev-ruby','mecab-ruby',[]):install,
-                                  Map, Pd, _).
+  scheduler:pdepend_completion_heads(portage://'fake/ruby-1':install,
+                                     grouped_package_dependency(no,'dev-ruby','mecab-ruby',[]):install,
+                                     Map, Pd, _).
 
 % A dep on a provider without PDEPEND (absent from AnchorMap) fails.
 test(provider_without_pdepend_fails, [fail]) :-
   pdepend_fixture(Map, Pd),
-  scheduler:pdepend_complete_wave(grouped_package_dependency(no,'dev-libs',glib,[]):install,
-                                  grouped_package_dependency(no,'dev-libs',consumer,[]):install,
-                                  Map, Pd, _).
+  scheduler:pdepend_completion_heads(grouped_package_dependency(no,'dev-libs',glib,[]):install,
+                                     grouped_package_dependency(no,'dev-libs',consumer,[]):install,
+                                     Map, Pd, _).
 
-% max_pd_install_wave prefers the package's :install wave over a :run head.
-test(install_wave_preferred_over_run) :-
+% pdepend_effective_head prefers the package's :install head over a :run head.
+test(install_head_preferred_over_run) :-
   list_to_assoc([ (portage://'fake/x-1':install)-3,
                   (portage://'fake/x-1':run)-5 ], M),
-  scheduler:max_pd_install_wave(M, portage://'fake/x-1':run, -1, Out),
-  Out =:= 3.
+  scheduler:pdepend_effective_head(M, portage://'fake/x-1':run, EH),
+  EH == portage://'fake/x-1':install.
 
 % Forward closure reaches every transitively-depended head (seeds included).
 test(forward_closure_reaches_transitive_deps) :-

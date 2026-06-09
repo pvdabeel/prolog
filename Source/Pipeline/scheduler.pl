@@ -206,7 +206,7 @@ scheduler:enforce_order_after_constraints(PlanIn, PlanOut) :-
   % wave list (typical case: a soft-blocker cycle forced the prover into
   % a domain assumption while another path resolved the same package
   % concretely with a USE mutation). The repair pass is alias-aware (see
-  % `max_dep_wave_/4`) and promotes the parent so it lands after the
+  % `repair_dep_head/6`) and promotes the parent so it lands after the
   % concrete action it actually depends on.
   scheduler:repair_ordering_violations(PlanMid, PlanOut),
   !.
@@ -304,24 +304,29 @@ scheduler:rechunk_by_lengths_(Rules, [N|Ns], [Step|Rest]) :-
 % rules may end up in a wave that precedes one of their non-constraint body
 % dependencies. This pass moves such rules to the correct later wave.
 %
-% Uses a map-based forward-sweep approach: the head-to-wave map is built
-% once, then updated in-place by sweeping through all rules. Each sweep
-% promotes rules whose latest dep is in the same or later wave. The plan
-% is reconstructed once from the final map.
+% The repair is computed on the SCC condensation of the effective repair
+% dependency graph (body deps + PDEPEND completion edges + configure-closure
+% deps + assumed-dep aliases). The condensation is a DAG, so a single
+% longest-path computation yields the least wave assignment that
+%
+%   - never demotes a rule below its incoming wave, and
+%   - places every rule strictly after all of its cross-SCC dependencies.
+%
+% Members of a genuine dependency cycle (one SCC) share a wave -- a strict
+% order does not exist for them (Portage merge-set semantics). Crucially,
+% rules *downstream* of a cycle still get strictly later waves: an earlier
+% fixpoint-sweep implementation diverged on cycles, hit its iteration cap,
+% and then collapsed acyclic chains (e.g. a BDEPEND provider and its
+% consumer) into a single wave, losing hard build-time ordering
+% (portage-ng#26, cvs-fast-export vs dev-ruby/asciidoctor).
 
 %! scheduler:repair_ordering_violations(+PlanIn, -PlanOut)
 %
-% Two-phase map-based repair for ordering violations.
-%
-% Phase 1 (strict): promotes violated rules to MaxDepWave + 1. Correct
-% for one-way deps (e.g. install before run). Bounded iteration.
-%
-% Phase 2 (merge): moves remaining violated rules to MaxDepWave (same
-% wave). Handles cyclic deps that phase 1 cannot resolve.
+% SCC-condensation longest-path repair for ordering violations.
 
 scheduler:repair_ordering_violations(PlanIn, PlanOut) :-
   scheduler:build_head_wave_map(PlanIn, 1, t, Map0),
-  scheduler:build_pkg_wave_map(PlanIn, PkgMap),
+  scheduler:build_pkg_head_map(PlanIn, PkgHeadMap),
   append(PlanIn, AllRules),
   scheduler:build_pdepend_anchor_map(AllRules, AnchorMap),
   ( AnchorMap == t
@@ -330,119 +335,184 @@ scheduler:repair_ordering_violations(PlanIn, PlanOut) :-
      Pd = pd(AnchorMap, ClosureMap)
   ),
   scheduler:build_install_configure_dep_map(AllRules, CfgMap),
-  scheduler:sweep_repair(strict, AllRules, Map0, PkgMap, Pd, CfgMap, 20, Map1),
-  scheduler:sweep_repair(merge,  AllRules, Map1, PkgMap, Pd, CfgMap, 20, Map2),
-  scheduler:rebuild_plan_from_map(AllRules, Map2, PlanOut).
+  scheduler:build_repair_graph(AllRules, Map0, PkgHeadMap, Pd, CfgMap,
+                               Heads, Forward, Reverse),
+  scheduler:kosaraju_scc(Heads, Forward, Reverse, SCCs),
+  scheduler:repair_comp_map(SCCs, CompMap, CompIds, MembersMap),
+  scheduler:comp_edges(Forward, CompMap, CompEdges),
+  scheduler:assign_repair_waves(CompIds, CompEdges, MembersMap, Map0, Map1),
+  scheduler:rebuild_plan_from_map(AllRules, Map1, PlanOut).
 
 
-%! scheduler:sweep_repair(+Mode, +AllRules, +MapIn, +PkgMap, +Pd, +CfgMap, +MaxIter, -MapOut)
+%! scheduler:build_repair_graph(+AllRules, +Map, +PkgHeadMap, +Pd, +CfgMap,
+%!                              -Heads, -Forward, -Reverse)
 %
-% Sweep through all rules, promoting those whose deps violate ordering.
-% Repeat until stable or MaxIter reached. `PkgMap` is the (PhaseClass-C-N)
-% wave map used by `max_dep_wave_/6` for assumed-dep aliasing; `Pd` is the
-% `pd(AnchorMap, ClosureMap)` bundle used for PDEPEND completion ordering
-% (portage-ng#18); `CfgMap` supplies RDEPEND configure deps for install-phase
-% heads (portage-ng#21).
-
-scheduler:sweep_repair(_, _, Map, _PkgMap, _Pd, _CfgMap, 0, Map) :- !.
-scheduler:sweep_repair(Mode, AllRules, Map0, PkgMap, Pd, CfgMap, N, MapOut) :-
-  scheduler:sweep_once(Mode, AllRules, Map0, PkgMap, Pd, CfgMap, Map1, false, Changed),
-  ( Changed == false ->
-      MapOut = Map1
-  ;
-      N1 is N - 1,
-      scheduler:sweep_repair(Mode, AllRules, Map1, PkgMap, Pd, CfgMap, N1, MapOut)
-  ).
-
-
-%! scheduler:sweep_once(+Mode, +Rules, +MapIn, +PkgMap, +Pd, +CfgMap, -MapOut, +ChIn, -ChOut)
+% Builds the effective repair dependency graph over all planned rule heads.
+% `Forward` maps each head to the sorted list of in-plan heads it must be
+% scheduled after. A rule head depends on another head in four ways:
 %
-% Single forward pass over all rules, updating the map for any violations.
-
-scheduler:sweep_once(_, [], Map, _PkgMap, _Pd, _CfgMap, Map, Ch, Ch).
-scheduler:sweep_once(Mode, [Rule|Rules], Map0, PkgMap, Pd, CfgMap, MapOut, Ch0, ChOut) :-
-  ( scheduler:rule_head(Rule, Head),
-    get_assoc(Head, Map0, CurWave),
-    scheduler:max_dep_wave(Rule, Head, Map0, PkgMap, Pd, CfgMap, MaxDep),
-    MaxDep >= 0,
-    scheduler:needs_promotion(Mode, MaxDep, CurWave)
-  ->
-    scheduler:promotion_target(Mode, MaxDep, Target),
-    put_assoc(Head, Map0, Target, Map1),
-    scheduler:sweep_once(Mode, Rules, Map1, PkgMap, Pd, CfgMap, MapOut, true, ChOut)
-  ;
-    scheduler:sweep_once(Mode, Rules, Map0, PkgMap, Pd, CfgMap, MapOut, Ch0, ChOut)
-  ).
-
-scheduler:needs_promotion(strict, MaxDep, CurWave) :- MaxDep >= CurWave.
-scheduler:needs_promotion(merge,  MaxDep, CurWave) :- MaxDep > CurWave.
-
-scheduler:promotion_target(strict, MaxDep, Target) :- Target is MaxDep + 1.
-scheduler:promotion_target(merge,  MaxDep, MaxDep).
-
-
-%! scheduler:max_dep_wave(+Rule, +RuleHead, +Map, +PkgMap, +Pd, -MaxDepWave)
-%
-% Compute the maximum wave among non-constraint body deps present in
-% the map. Returns -1 if no in-plan deps exist.
-%
-% A body dep contributes a wave in three ways:
-%
-%  1. Direct head match: the canonicalised dep literal is a key in `Map`.
-%     This is the normal "B depends on A and A's rule was scheduled at
-%     wave W" case.
+%  1. Direct head match: the canonicalised body dep literal is a key in
+%     `Map`. This is the normal "B depends on A and A's rule was scheduled"
+%     case.
 %
 %  2. PDEPEND completion: if a body dep resolves to a provider P that
 %     declares PDEPEND, P is only functionally complete once its post-deps
 %     are merged. The consumer must therefore land after P's full PDEPEND
-%     closure, not merely after P:install. `AnchorMap` maps a provider base
-%     (`Repo://Entry`) to the heads of its PDEPEND targets (those carrying
-%     `constraint(order_after(P:Action))`); the contributed wave is the max
-%     wave of those targets. This also pushes P's own `:run` past its
-%     post-deps, because the `:run` rule body depends on `:install` (general
-%     PDEPEND ordering, portage-ng#18).
+%     closure, not merely after P:install (general PDEPEND ordering,
+%     portage-ng#18). See `pdepend_completion_heads/5`.
 %
 %  3. Assumed-dep alias: the dep is an `assumed(grouped_package_dependency
 %     (C,N,_):Action?{_})` (or the legacy `assumed(package_dependency(_,_,
-%     C,N,_,_,_,_):Action?{_})`) AND `PkgMap` has a concrete planned action
-%     in the same `PhaseClass` for (C,N). This recovers the dependency edge
-%     that was severed when the prover fell back to a domain assumption for
-%     (C,N) on one path while another path resolved the same package
-%     concretely. Without this aliasing the parent would be scheduled in
-%     wave 1 alongside the empty-body `rule(assumed(...), [])` verify rule
-%     and run before the concrete install (Qt6 cmake-find ordering bug).
+%     C,N,_,_,_,_):Action?{_})`) AND `PkgHeadMap` has a concrete planned
+%     action in the same `PhaseClass` for (C,N). This recovers the
+%     dependency edge that was severed when the prover fell back to a domain
+%     assumption for (C,N) on one path while another path resolved the same
+%     package concretely. Without this aliasing the parent would be
+%     scheduled in wave 1 alongside the empty-body `rule(assumed(...), [])`
+%     verify rule and run before the concrete install (Qt6 cmake-find
+%     ordering bug).
+%
+%  4. Configure closure: install-phase heads additionally depend on their
+%     sibling `:run` rule's `:run`-phase body deps (RDEPEND providers must
+%     be functionally complete before configure starts, portage-ng#21).
 
-scheduler:max_dep_wave(Rule, RuleHead, Map, PkgMap, Pd, CfgMap, MaxDepWave) :-
-  scheduler:rule_body(Rule, Body),
-  scheduler:max_dep_wave_(Body, RuleHead, Map, PkgMap, Pd, -1, MaxBody),
-  scheduler:configure_deps_wave(RuleHead, Map, PkgMap, Pd, CfgMap, MaxCfg),
-  MaxDepWave is max(MaxBody, MaxCfg).
+scheduler:build_repair_graph(AllRules, Map, PkgHeadMap, Pd, CfgMap,
+                             Heads, Forward, Reverse) :-
+  assoc_to_keys(Map, Heads),
+  empty_assoc(F0),
+  foldl(scheduler:init_empty_neighbors, Heads, F0, F1),
+  foldl(scheduler:add_repair_edges(Map, PkgHeadMap, Pd, CfgMap),
+        AllRules, F1, Forward),
+  scheduler:invert_graph(Heads, Forward, Reverse).
 
-scheduler:max_dep_wave_([], _RuleHead, _Map, _PkgMap, _Pd, Max, Max).
-scheduler:max_dep_wave_([Dep|Rest], RuleHead, Map, PkgMap, Pd, CurMax, MaxOut) :-
-  ( constraint:is_constraint(Dep)
-  -> CurMax1 = CurMax
-  ;
-      ( prover:canon_literal(Dep, DepHead, _),
-        get_assoc(DepHead, Map, DepWave)
-      -> ( DepWave > CurMax -> CurMaxA0 = DepWave ; CurMaxA0 = CurMax ),
-         ( scheduler:pdepend_complete_wave(DepHead, RuleHead, Map, Pd, PdWave),
-           PdWave > CurMaxA0
-         -> CurMaxA = PdWave
-         ;  CurMaxA = CurMaxA0
-         )
-      ;  CurMaxA = CurMax
-      ),
-      ( ( scheduler:assumed_dep_alias_key(Dep, AliasKey)
-        ; scheduler:grouped_run_dep_pkg_key(Dep, AliasKey)
-        ),
-        get_assoc(AliasKey, PkgMap, AliasWave),
-        AliasWave > CurMaxA
-      -> CurMax1 = AliasWave
-      ;  CurMax1 = CurMaxA
-      )
+
+%! scheduler:add_repair_edges(+Map, +PkgHeadMap, +Pd, +CfgMap, +Rule, +In, -Out)
+%
+% Folds the repair dependency heads of one rule into the forward map.
+
+scheduler:add_repair_edges(Map, PkgHeadMap, Pd, CfgMap, Rule, In, Out) :-
+  ( scheduler:rule_head(Rule, Head),
+    scheduler:rule_body(Rule, Body)
+  ->
+    scheduler:repair_dep_heads(Body, Head, Map, PkgHeadMap, Pd, BodyDeps),
+    ( scheduler:install_phase_key(Head, InstallKey),
+      get_assoc(InstallKey, CfgMap, RunDeps)
+    -> scheduler:repair_dep_heads(RunDeps, InstallKey, Map, PkgHeadMap, Pd, CfgDeps)
+    ;  CfgDeps = []
+    ),
+    ord_union(BodyDeps, CfgDeps, Deps),
+    ( get_assoc(Head, In, Old) -> true ; Old = [] ),
+    ord_union(Old, Deps, New),
+    put_assoc(Head, In, New, Out)
+  ; Out = In
+  ).
+
+
+%! scheduler:repair_dep_heads(+Deps, +RuleHead, +Map, +PkgHeadMap, +Pd, -DepHeads)
+%
+% Sorted list of in-plan heads that the given dep literals resolve to
+% (direct heads, PDEPEND completion heads, and assumed-dep aliases).
+
+scheduler:repair_dep_heads(Deps, RuleHead, Map, PkgHeadMap, Pd, DepHeads) :-
+  findall(DH,
+          ( member(Dep, Deps),
+            \+ constraint:is_constraint(Dep),
+            scheduler:repair_dep_head(Dep, RuleHead, Map, PkgHeadMap, Pd, DH)
+          ),
+          DepHeads0),
+  sort(DepHeads0, DepHeads).
+
+
+%! scheduler:repair_dep_head(+Dep, +RuleHead, +Map, +PkgHeadMap, +Pd, -DepHead)
+%
+% Enumerates the in-plan heads a single body dep contributes an edge to.
+
+scheduler:repair_dep_head(Dep, RuleHead, Map, _PkgHeadMap, Pd, DH) :-
+  prover:canon_literal(Dep, DepHead, _),
+  get_assoc(DepHead, Map, _),
+  ( DH = DepHead
+  ; scheduler:pdepend_completion_heads(DepHead, RuleHead, Map, Pd, EHeads),
+    member(DH, EHeads)
+  ).
+scheduler:repair_dep_head(Dep, _RuleHead, _Map, PkgHeadMap, _Pd, DH) :-
+  ( scheduler:assumed_dep_alias_key(Dep, AliasKey)
+  ; scheduler:grouped_run_dep_pkg_key(Dep, AliasKey)
   ),
-  scheduler:max_dep_wave_(Rest, RuleHead, Map, PkgMap, Pd, CurMax1, MaxOut).
+  get_assoc(AliasKey, PkgHeadMap, DH).
+
+
+%! scheduler:repair_comp_map(+SCCs, -CompMap, -CompIds, -MembersMap)
+%
+% Numbers the SCCs and builds the head->component and component->members maps.
+
+scheduler:repair_comp_map(SCCs, CompMap, CompIds, MembersMap) :-
+  empty_assoc(M0),
+  empty_assoc(Mm0),
+  scheduler:repair_comp_map_(SCCs, 1, M0, CompMap, Mm0, MembersMap, [], Ids0),
+  reverse(Ids0, CompIds).
+
+scheduler:repair_comp_map_([], _I, M, M, Mm, Mm, Ids, Ids).
+scheduler:repair_comp_map_([Members|Rest], I, M0, M, Mm0, Mm, Ids0, Ids) :-
+  foldl(scheduler:compmap_put(I), Members, M0, M1),
+  put_assoc(I, Mm0, Members, Mm1),
+  I1 is I + 1,
+  scheduler:repair_comp_map_(Rest, I1, M1, M, Mm1, Mm, [I|Ids0], Ids).
+
+
+%! scheduler:assign_repair_waves(+CompIds, +CompEdges, +MembersMap, +InitMap, -MapOut)
+%
+% Longest-path wave assignment over the SCC condensation:
+%
+%   wave(C) = max(max initial wave of C's members,
+%                 max over dep components C' of wave(C') + 1)
+%
+% Computed by memoized DFS (the condensation is acyclic). All members of a
+% component share its wave; cross-component edges strictly increase waves.
+
+scheduler:assign_repair_waves(CompIds, CompEdges, MembersMap, InitMap, MapOut) :-
+  empty_assoc(A0),
+  foldl(scheduler:add_comp_adj, CompEdges, A0, CompAdj),
+  empty_assoc(CW0),
+  foldl(scheduler:assign_comp_members(CompAdj, MembersMap, InitMap),
+        CompIds, s(CW0, InitMap), s(_, MapOut)).
+
+scheduler:add_comp_adj(edge(CU, CV), In, Out) :-
+  ( get_assoc(CU, In, L0) -> true ; L0 = [] ),
+  put_assoc(CU, In, [CV|L0], Out).
+
+scheduler:assign_comp_members(CompAdj, MembersMap, InitMap, CompId,
+                              s(CW0, HM0), s(CW, HM)) :-
+  scheduler:comp_wave(CompId, CompAdj, MembersMap, InitMap, CW0, CW, Wave),
+  get_assoc(CompId, MembersMap, Members),
+  foldl(scheduler:put_head_wave(Wave), Members, HM0, HM).
+
+scheduler:put_head_wave(Wave, Head, In, Out) :-
+  put_assoc(Head, In, Wave, Out).
+
+
+%! scheduler:comp_wave(+CompId, +CompAdj, +MembersMap, +InitMap, +CWIn, -CWOut, -Wave)
+%
+% Memoized longest-path wave of one component.
+
+scheduler:comp_wave(CompId, CompAdj, MembersMap, InitMap, CW0, CW, Wave) :-
+  ( get_assoc(CompId, CW0, Cached)
+  -> Wave = Cached,
+     CW = CW0
+  ;  get_assoc(CompId, MembersMap, Members),
+     foldl(scheduler:max_init_wave(InitMap), Members, 1, Base),
+     ( get_assoc(CompId, CompAdj, DepComps) -> true ; DepComps = [] ),
+     foldl(scheduler:comp_wave_dep(CompAdj, MembersMap, InitMap),
+           DepComps, s(CW0, 0), s(CW1, MaxDep)),
+     Wave is max(Base, MaxDep + 1),
+     put_assoc(CompId, CW1, Wave, CW)
+  ).
+
+scheduler:comp_wave_dep(CompAdj, MembersMap, InitMap, DepId, s(CW0, Max0), s(CW, Max)) :-
+  scheduler:comp_wave(DepId, CompAdj, MembersMap, InitMap, CW0, CW, W),
+  ( W > Max0 -> Max = W ; Max = Max0 ).
+
+scheduler:max_init_wave(InitMap, Head, In, Out) :-
+  ( get_assoc(Head, InitMap, W), W > In -> Out = W ; Out = In ).
 
 
 % -----------------------------------------------------------------------------
@@ -453,7 +523,8 @@ scheduler:max_dep_wave_([Dep|Rest], RuleHead, Map, PkgMap, Pd, CurMax, MaxOut) :
 % live on the sibling `:run` rule. Gentoo configure (notably Haskell/cabal
 % via ghc-pkg) still needs RDEPEND providers functionally complete before
 % configure starts. Map each install-phase head to its `:run` rule's
-% `:run`-action body deps and fold them into `max_dep_wave/7`.
+% `:run`-action body deps and fold them into the repair graph
+% (`add_repair_edges/7`).
 
 %! scheduler:build_install_configure_dep_map(+AllRules, -CfgMap)
 %
@@ -490,19 +561,6 @@ scheduler:dep_is_run_phase(grouped_package_dependency(_, _, _, _):run?_) :- !.
 scheduler:install_phase_key(Repo://Entry:run, Repo://Entry:install) :- !.
 scheduler:install_phase_key(Repo://Entry:Action, Repo://Entry:install) :-
   memberchk(Action, [install, update, downgrade, reinstall]).
-
-%! scheduler:configure_deps_wave(+RuleHead, +Map, +PkgMap, +Pd, +CfgMap, -MaxWave)
-%
-% For install-phase rule heads, return the max dependency wave among the
-% sibling `:run` rule's RDEPEND (`:run`) body literals. Returns -1 when
-% the head is not install-phase or no configure deps were recorded.
-
-scheduler:configure_deps_wave(RuleHead, Map, PkgMap, Pd, CfgMap, MaxWave) :-
-  ( scheduler:install_phase_key(RuleHead, InstallKey),
-    get_assoc(InstallKey, CfgMap, RunDeps)
-  -> scheduler:max_dep_wave_(RunDeps, InstallKey, Map, PkgMap, Pd, -1, MaxWave)
-  ;  MaxWave = -1
-  ).
 
 
 % -----------------------------------------------------------------------------
@@ -662,24 +720,44 @@ scheduler:forward_closure([H|Hs], FwdMap, V0, V) :-
   ).
 
 
-%! scheduler:pdepend_complete_wave(+DepHead, +RuleHead, +Map, +Pd, -MaxWave)
+%! scheduler:pdepend_completion_heads(+DepHead, +RuleHead, +Map, +Pd, -EHeads)
 %
 % If a body dep `DepHead` is a `grouped_package_dependency(_,C,N,_):Action`
-% on a provider (C,N) that declares PDEPEND, return the maximum *install*
-% wave among that provider's PDEPEND targets, so the consumer is ordered
-% after the provider's post-install group (matching emerge, which merges the
-% whole interpreter stack before a consuming extension builds; portage-ng#18).
+% on a provider (C,N) that declares PDEPEND, return the *install*-phase heads
+% of that provider's PDEPEND targets, so the consumer is ordered after the
+% provider's post-install group (matching emerge, which merges the whole
+% interpreter stack before a consuming extension builds; portage-ng#18).
 % Matching the consumer's grouped dep literal (rather than a concrete
 % `Repo://Entry` head) is essential: the concrete provider-install node is
 % shared with the post-install group and would be excluded by the cycle
 % filter.
 %
+% Fails (handled by the caller) when no safe targets exist (see
+% `pdepend_safe_targets/4`) or none of the safe targets resolves to an
+% in-plan head.
+
+scheduler:pdepend_completion_heads(DepHead, RuleHead, Map, Pd, EHeads) :-
+  scheduler:pdepend_safe_targets(DepHead, RuleHead, Pd, SafeDHeads),
+  findall(EH,
+          ( member(DH, SafeDHeads),
+            scheduler:pdepend_effective_head(Map, DH, EH)
+          ),
+          EHeads0),
+  sort(EHeads0, EHeads),
+  EHeads \== [].
+
+
+%! scheduler:pdepend_safe_targets(+DepHead, +RuleHead, +Pd, -SafeDHeads)
+%
+% The PDEPEND targets of the provider named by grouped dep `DepHead` that
+% are safe to order consumer `RuleHead` after.
+%
 % Cycle-safety (portage-ng#19): PDEPEND targets whose forward closure depends
-% back on the consumer's package are filtered out *per target* before taking
-% the max. A consumer is thus ordered after the provider's non-cyclic
-% post-deps (e.g. `compiler-rt` after `clang-toolchain-symlinks`) while never
-% being pushed after a post-dep that requires it (e.g. `clang-runtime`, which
-% RDEPENDs `compiler-rt`). Fails (handled by the caller's if-then) when:
+% back on the consumer's package are filtered out *per target*. A consumer is
+% thus ordered after the provider's non-cyclic post-deps (e.g. `compiler-rt`
+% after `clang-toolchain-symlinks`) while never being pushed after a post-dep
+% that requires it (e.g. `clang-runtime`, which RDEPENDs `compiler-rt`).
+% Fails when:
 %
 %  - no PDEPEND provider exists in the plan (`AnchorMap == t`), or
 %  - the dep is not a grouped dep on a PDEPEND provider, or
@@ -687,10 +765,9 @@ scheduler:forward_closure([H|Hs], FwdMap, V0, V) :-
 %    of the post-install group is never ordered after the whole group --
 %    e.g. `clang-toolchain-symlinks` must not wait for its sibling
 %    `clang-runtime`; portage-ng#19), or
-%  - every PDEPEND target cycles back to the consumer's package, or
-%  - none of the remaining targets has a known install wave yet.
+%  - every PDEPEND target cycles back to the consumer's package.
 
-scheduler:pdepend_complete_wave(DepHead, RuleHead, Map, pd(AnchorMap, ClosureMap), MaxWave) :-
+scheduler:pdepend_safe_targets(DepHead, RuleHead, pd(AnchorMap, ClosureMap), SafeDHeads) :-
   AnchorMap \== t,
   DepHead = grouped_package_dependency(_G, C, N, _Deps):_Action,
   get_assoc(C-N, AnchorMap, DHeads),
@@ -699,9 +776,7 @@ scheduler:pdepend_complete_wave(DepHead, RuleHead, Map, pd(AnchorMap, ClosureMap
      include(scheduler:pdepend_target_acyclic(ClosureMap, RC-RN), DHeads, SafeDHeads)
   ;  SafeDHeads = DHeads
   ),
-  SafeDHeads \== [],
-  foldl(scheduler:max_pd_install_wave(Map), SafeDHeads, -1, MaxWave),
-  MaxWave >= 0.
+  SafeDHeads \== [].
 
 %! scheduler:pdepend_target_acyclic(+ClosureMap, +ConsumerCN, +DHead)
 %
@@ -714,26 +789,25 @@ scheduler:pdepend_target_acyclic(ClosureMap, ConsumerCN, DHead) :-
        get_assoc(ConsumerCN, CnSet, _)
      ).
 
-%! scheduler:max_pd_install_wave(+Map, +DHead, +In, -Out)
+%! scheduler:pdepend_effective_head(+Map, +DHead, -EHead)
 %
-% Fold the install-phase wave of a PDEPEND target into the running max. The
+% The in-plan head a PDEPEND target contributes an ordering edge to. The
 % target head may be a `:run` literal (PDEPEND deps resolve to `:run`); use
-% the package's `:install` wave when present (post-deps are *installed*
-% before the consumer builds), falling back to the target head's own wave.
+% the package's `:install` head when planned (post-deps are *installed*
+% before the consumer builds), falling back to the target head itself.
+% Fails when neither is in the plan.
 
-scheduler:max_pd_install_wave(Map, DHead, In, Out) :-
+scheduler:pdepend_effective_head(Map, DHead, EHead) :-
   ( DHead = R://E:_Action,
-    get_assoc(R://E:install, Map, W)
-  -> true
-  ; get_assoc(DHead, Map, W)
-  -> true
-  ; W = -1
-  ),
-  ( W > In -> Out = W ; Out = In ).
+    get_assoc(R://E:install, Map, _)
+  -> EHead = R://E:install
+  ;  get_assoc(DHead, Map, _)
+  -> EHead = DHead
+  ).
 
 
 % -----------------------------------------------------------------------------
-%  Assumed-dep → concrete-action wave aliasing
+%  Assumed-dep → concrete-action aliasing
 % -----------------------------------------------------------------------------
 %
 % When the prover cannot strictly satisfy a `package_dep on C/N`, it emits
@@ -741,10 +815,10 @@ scheduler:max_pd_install_wave(Map, DHead, In, Out) :-
 % conditions for the dep (see `candidate:grouped_dep_build_assumption/7`).
 % The matching `rules:rule(assumed(_), [])` has an empty body, so the
 % planner ranks the verify rule at wave 1 and the parent never sees the
-% real concrete action's wave.
+% real concrete action.
 %
 % These helpers let the repair pass recover that lost ordering edge by
-% maintaining a (PhaseClass-C-N) -> Wave map of every concrete planned
+% maintaining a (PhaseClass-C-N) -> Head map of every concrete planned
 % install / update / downgrade / reinstall / run rule and looking each
 % assumed dep up against it.
 
@@ -762,25 +836,19 @@ scheduler:phase_class(reinstall, install_phase).
 scheduler:phase_class(run,       run_phase).
 
 
-%! scheduler:build_pkg_wave_map(+Plan, -PkgWaveMap)
+%! scheduler:build_pkg_head_map(+Plan, -PkgHeadMap)
 %
-% Builds a (PhaseClass-C-N) -> Wave map from the concrete planned rule
-% heads in `Plan`. Earlier waves win when the same package shows up in
-% multiple waves (e.g. install precedes run): we keep the FIRST wave we
-% see for a given key, which is the install/update wave, while a later
-% `run` wave is recorded against the `run_phase` key.
+% Builds a (PhaseClass-C-N) -> Head map from the concrete planned rule
+% heads in `Plan`. The first sighting wins when the same package shows up
+% multiple times in a phase class (PlanIn is wave-ordered, so the first
+% sighting is the canonical install/run head for this package).
 
-scheduler:build_pkg_wave_map(Plan, PkgMap) :-
+scheduler:build_pkg_head_map(Plan, PkgHeadMap) :-
   empty_assoc(M0),
-  scheduler:build_pkg_wave_map_(Plan, 1, M0, PkgMap).
+  foldl([Wave, In, Out]>>foldl(scheduler:add_pkg_head, Wave, In, Out),
+        Plan, M0, PkgHeadMap).
 
-scheduler:build_pkg_wave_map_([], _Idx, M, M).
-scheduler:build_pkg_wave_map_([Wave|Ws], Idx, M0, M) :-
-  foldl(scheduler:add_pkg_for_wave(Idx), Wave, M0, M1),
-  Idx1 is Idx + 1,
-  scheduler:build_pkg_wave_map_(Ws, Idx1, M1, M).
-
-scheduler:add_pkg_for_wave(Idx, Rule, In, Out) :-
+scheduler:add_pkg_head(Rule, In, Out) :-
   ( scheduler:rule_head(Rule, Head),
     Head = Repo://Entry:Action,
     scheduler:phase_class(Action, PhaseClass),
@@ -788,11 +856,8 @@ scheduler:add_pkg_for_wave(Idx, Rule, In, Out) :-
   ->
     Key = PhaseClass-C-N,
     ( get_assoc(Key, In, _Old) ->
-        % Keep the earliest wave we already recorded for this key
-        % (PlanIn is wave-ordered, so the first sighting is the
-        % canonical install/run wave for this package).
         Out = In
-    ;   put_assoc(Key, In, Idx, Out)
+    ;   put_assoc(Key, In, Head, Out)
     )
   ; Out = In
   ).
