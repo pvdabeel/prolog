@@ -196,6 +196,17 @@ sync(metadata) ::-
     )).
 
 
+% Binpkg sync(metadata): no-op. Portage's $PKGDIR/Packages file IS the
+% metadata for a binpkg repository -- there is no per-entry metadata
+% directory to regenerate. The on-disk Packages index is maintained
+% incrementally by `emerge` (or whatever produced the binpkgs) via
+% bintree.inject(). Must precede the generic ::type(Type) clause below,
+% which would otherwise match 'binpkg' and cut (clause order is dispatch
+% order in the OO context system).
+sync(metadata) ::-
+  ::type('binpkg'),!.
+
+
 sync(metadata) ::-
   ::type(Type),!,
   ::location(Local),
@@ -215,15 +226,6 @@ sync(metadata) ::-
 % Public predicate
 %
 % Regenerates prolog facts from the local repository cache
-
-% Binpkg sync(metadata): no-op. Portage's $PKGDIR/Packages file IS the
-% metadata for a binpkg repository -- there is no per-entry metadata
-% directory to regenerate. The on-disk Packages index is maintained
-% incrementally by `emerge` (or whatever produced the binpkgs) via
-% bintree.inject().
-sync(metadata) ::-
-  ::type('binpkg'),!.
-
 
 % Binpkg sync(kb): build cache facts directly from a $PKGDIR/Packages
 % RFC822 index. One cache:ordered_entry per BUILD_ID variant; metadata
