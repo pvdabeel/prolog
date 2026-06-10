@@ -320,13 +320,39 @@ version_domain:normalize_bound_op(_Other, none).
 % Computes the exclusive upper bound for a wildcard version constraint.
 % =pkg-0.6* matches [0.6, 0.7), so the upper bound is 0.7.
 % The bound is constructed by incrementing the last component of the
-% version number list.
+% version number list. Accepts version/7 terms as well as legacy atom
+% ('0.6*') and [N,W,A,S] list forms. Fails for bare wildcards ('*'),
+% which carry no numeric components and are therefore unbounded.
+% Canonical entry point for wildcard-to-bound derivation; callers
+% (e.g. candidate:wildcard_upper_bound_domain) must not re-implement it.
 
 version_domain:wildcard_upper_bound(Ver0, version(UpperNums, '', 4, 0, [], 0, UpperFull)) :-
-  normalize_version_term(Ver0, version(Nums, _, _, _, _, _, _)),
+  wildcard_base_nums(Ver0, Nums),
   Nums \== [],
   increment_last(Nums, UpperNums),
   atomic_list_concat(UpperNums, '.', UpperFull).
+
+
+%! version_domain:wildcard_base_nums(+Ver, -Nums) is semidet.
+%
+% Extracts the numeric components of a wildcard version spec. version/7
+% terms carry them directly; legacy atom and [N,W,A,S] list forms are
+% re-parsed after stripping a trailing '*'. Empty components (as left
+% by a bare wildcard, e.g. '1.*' or '*') are skipped, so a pure
+% wildcard yields [].
+
+version_domain:wildcard_base_nums(version(Nums, _, _, _, _, _, _), Nums) :- !.
+version_domain:wildcard_base_nums(V0, Nums) :-
+  ( atom(V0) -> A = V0
+  ; V0 = [_, _, _, A], atom(A)
+  ),
+  ( sub_atom(A, _, 1, 0, '*') ->
+      sub_atom(A, 0, _, 1, Base)
+  ; Base = A
+  ),
+  atomic_list_concat(Parts0, '.', Base),
+  exclude(==(''), Parts0, Parts),
+  maplist(atom_number, Parts, Nums).
 
 
 %! version_domain:tilde_upper_bound(+Ver, -UpperVer) is semidet.

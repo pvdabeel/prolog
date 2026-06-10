@@ -2221,7 +2221,12 @@ eapi:version2atom(N, W, A, S, version(NumsNorm, Alpha, SuffixRank, SuffixNum, Su
   maplist(atom_codes, Na, N),
   maplist(atom_codes, Aa, A),
   maplist(atom_codes, Sa, S),
-  maplist(atom_number, Na, NumsRaw),
+  % Bare-wildcard components ('*' or a trailing '.*') parse as empty atoms
+  % carrying no numeric value; atom_number('', _) would fail, so exclude
+  % them before conversion. The wildcard marker W still ends up in Full.
+  % A pure wildcard spec thus yields NumsNorm == [] (unbounded).
+  exclude(==(''), Na, NaNumeric),
+  maplist(atom_number, NaNumeric, NumsRaw),
   eapi:nums_normalize(NumsRaw, NumsNorm),
   atomic_list_concat(Na, '.', Numberpart),
   atomic_list_concat(Aa, Alpha),

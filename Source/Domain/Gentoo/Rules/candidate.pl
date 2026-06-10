@@ -1806,44 +1806,18 @@ candidate:wildcard_cn_domain_constraints_([C-N-PackageDeps|Rest], Cons) :-
 % lower bounds. The domain is used by cn_domain_constraints to populate
 % the constraint store, enabling selected_cn_unique_or_reprove to
 % resolve conflicts when a sibling's transitive dep selects a version
-% outside the wildcard range.
+% outside the wildcard range. Bound derivation is delegated to
+% version_domain:wildcard_upper_bound/2 (bare wildcards yield no bound).
 
 candidate:wildcard_upper_bound_domain(C, N, PackageDeps, version_domain(any, Bounds)) :-
   findall(bound(smaller, UpperVer),
           ( member(package_dependency(_, no, C, N, Op, V0, _, _), PackageDeps),
             ( Op == wildcard -> true ; Op == equal, version_term_has_wildcard_(V0) ),
-            wildcard_to_upper(V0, UpperVer)
+            version_domain:wildcard_upper_bound(V0, UpperVer)
           ),
           Bounds0),
   Bounds0 \== [],
   sort(Bounds0, Bounds).
-
-
-%! candidate:wildcard_to_upper(+Ver0, -UpperVer) is semidet.
-%
-% Converts a wildcard version to its exclusive upper bound by
-% incrementing the last numeric component. Handles both version/7
-% terms (current format) and atom/list legacy formats.
-% =0.6* -> <0.7,  =1.2.3* -> <1.2.4
-
-candidate:wildcard_to_upper(version(Nums, _, _, _, _, _, _), version(UpperNums, '', 4, 0, [], 0, UpperFull)) :-
-  !,
-  Nums = [_|_],
-  version_domain:increment_last(Nums, UpperNums),
-  atomic_list_concat(UpperNums, '.', UpperFull).
-candidate:wildcard_to_upper(V0, version(UpperNums, '', 4, 0, [], 0, UpperFull)) :-
-  ( atom(V0) -> A = V0
-  ; V0 = [_,_,_,A], atom(A)
-  ),
-  ( sub_atom(A, _, 1, 0, '*') ->
-      sub_atom(A, 0, _, 1, Base)
-  ; Base = A
-  ),
-  atomic_list_concat(Parts, '.', Base),
-  maplist(atom_number, Parts, Nums),
-  Nums = [_|_],
-  version_domain:increment_last(Nums, UpperNums),
-  atomic_list_concat(UpperNums, '.', UpperFull).
 
 
 % =============================================================================
