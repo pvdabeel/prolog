@@ -428,19 +428,27 @@ profile:profile_read_atoms_file(File, Atoms) :-
 %
 % Fold over the profile directory chain (root-first) and accumulate
 % the enabled/disabled USE flags plus use.force and use.mask sets into
-% a st(Enabled, Disabled, Force, Mask) term.
+% a st(Enabled, Disabled, Force, Mask) term. The set of declared
+% USE_EXPAND variable names is threaded alongside the state so a
+% USE_EXPAND variable declared in a root profile (e.g. CPU_FLAGS_X86
+% in profiles/base) is recognized when a descendant profile assigns
+% its value (e.g. CPU_FLAGS_X86="mmx mmxext sse sse2" in arch/amd64).
 
 profile:profile_collect(Dirs, st(Enabled, Disabled, Force, Mask)) :-
-  foldl(profile:profile_collect_dir, Dirs, st([], [], [], []), st(Enabled, Disabled, Force, Mask)).
+  foldl(profile:profile_collect_dir, Dirs,
+        st([], [], [], [])-[],
+        st(Enabled, Disabled, Force, Mask)-_ExpandVars).
 
 
 %! profile:profile_collect_dir(+Dir, +State0, -State) is det
 %
 % Process a single profile directory: parse make.defaults for USE ops,
 % then parse use.force and use.mask, threading the accumulator state.
+% State is a `st(E, D, F, M)-ExpandVars` pair; ExpandVars accumulates
+% the USE_EXPAND declaration across the chain (incremental variable).
 
-profile:profile_collect_dir(Dir, st(E0, D0, F0, M0), st(E, D, F, M)) :-
-  profile:parse_make_defaults_ops(Dir, UseOps),
+profile:profile_collect_dir(Dir, st(E0, D0, F0, M0)-X0, st(E, D, F, M)-X) :-
+  profile:parse_make_defaults_ops(Dir, X0, X, UseOps),
   profile:apply_default_use_ops(UseOps, E0, D0, E1, D1),
   profile:parse_use_op_file(Dir, 'use.force', ForceOps),
   profile:apply_set_ops(ForceOps, F0, F),
@@ -449,40 +457,69 @@ profile:profile_collect_dir(Dir, st(E0, D0, F0, M0), st(E, D, F, M)) :-
   E = E1, D = D1.
 
 
-%! profile:parse_make_defaults_ops(+Dir, -Ops:list) is det
+%! profile:parse_make_defaults_ops(+Dir, +ExpandVars0, -ExpandVars, -Ops:list) is det
 %
 % Parse make.defaults in Dir and return a list of op(add,Flag) /
 % op(del,Flag) terms for USE and USE_EXPAND variables.
+%
+% ExpandVars0/ExpandVars thread the accumulated USE_EXPAND declaration
+% (uppercase variable-name atoms) through the profile chain. Per PMS,
+% USE_EXPAND is incremental across profiles and any variable listed in
+% it is itself treated incrementally — so a value assigned in this
+% directory's make.defaults is expanded even when USE_EXPAND was
+% declared by an ancestor profile, and `-token` entries remove flags
+% accumulated by ancestors.
 
-profile:parse_make_defaults_ops(Dir, Ops) :-
+profile:parse_make_defaults_ops(Dir, ExpandVars0, ExpandVars, Ops) :-
   os:compose_path(Dir, 'make.defaults', File),
   ( exists_file(File) ->
       read_file_to_string(File, S, []),
       profile:make_defaults_kv(S, KV),
+      % USE_EXPAND declaration (incremental across the chain)
+      ( profile:kv_get_join(KV, 'USE_EXPAND', ExpandStr) ->
+          profile:apply_expand_decl(ExpandStr, ExpandVars0, ExpandVars)
+      ; ExpandVars = ExpandVars0
+      ),
       % USE
       ( profile:kv_get_join(KV, 'USE', UseStr) ->
           profile:parse_default_use_ops(UseStr, Ops1)
       ; Ops1 = []
       ),
-      % USE_EXPAND and corresponding vars
-      ( profile:kv_get_join(KV, 'USE_EXPAND', ExpandStr) ->
-          split_string(ExpandStr, " ", "\t\r\n ", ExpandVars0),
-          exclude(=(""), ExpandVars0, ExpandVars),
-          findall(op(add, Flag),
-                  ( member(VarS, ExpandVars),
-                    string_upper(VarS, VarU0),
-                    atom_string(VarA, VarU0),
-                    ( profile:kv_get_join(KV, VarA, ValStr) ->
-                        profile:use_expand_flag(VarA, ValStr, Flag)
-                    ; fail
-                    )
-                  ),
-                  ExpandOps0),
-          append(Ops1, ExpandOps0, Ops2),
-          Ops = Ops2
-      ; Ops = Ops1
+      % Values assigned to declared USE_EXPAND vars in THIS make.defaults
+      findall(VarOps,
+              ( member(VarA, ExpandVars),
+                profile:kv_get_join(KV, VarA, ValStr),
+                profile:use_expand_value_ops(VarA, ValStr, VarOps)
+              ),
+              ExpandOpsLists),
+      append([Ops1|ExpandOpsLists], Ops)
+  ; ExpandVars = ExpandVars0,
+    Ops = []
+  ).
+
+
+%! profile:apply_expand_decl(+ExpandStr, +Vars0, -Vars) is det
+%
+% Apply one USE_EXPAND declaration string to the accumulated list of
+% declared variable names. Tokens add a variable; `-VAR` tokens remove
+% a previously declared variable (incremental semantics).
+
+profile:apply_expand_decl(ExpandStr, Vars0, Vars) :-
+  split_string(ExpandStr, " ", "\t\r\n ", Parts0),
+  exclude(=(""), Parts0, Parts),
+  foldl(profile:apply_expand_decl_token, Parts, Vars0, Vars).
+
+profile:apply_expand_decl_token(P, Vars0, Vars) :-
+  string_upper(P, PU),
+  ( sub_string(PU, 0, 1, _, "-") ->
+      sub_string(PU, 1, _, 0, NameS),
+      ( NameS == "" ->
+          Vars = Vars0
+      ; atom_string(VarA, NameS),
+        subtract(Vars0, [VarA], Vars)
       )
-  ; Ops = []
+  ; atom_string(VarA, PU),
+    ( memberchk(VarA, Vars0) -> Vars = Vars0 ; append(Vars0, [VarA], Vars) )
   ).
 
 
@@ -687,22 +724,36 @@ profile:strip_leading_dashes(P0, Name) :-
   ).
 
 
-%! profile:use_expand_flag(+VarU, +ValStr, -Flag) is nondet
+%! profile:use_expand_value_ops(+VarU, +ValStr, -Ops:list) is det
 %
-% For a USE_EXPAND variable VarU (e.g. 'VIDEO_CARDS') and its value
-% string, unify Flag with each expanded flag atom (e.g. video_cards_vmware).
+% For a USE_EXPAND variable VarU (e.g. 'CPU_FLAGS_X86') and its value
+% string, return op(add,Flag) / op(del,Flag) terms over the expanded
+% flag atoms (e.g. cpu_flags_x86_sse2). Per PMS, variables listed in
+% USE_EXPAND are incremental, so `-token` entries become del ops.
 
-profile:use_expand_flag(VarU, ValStr, Flag) :-
+profile:use_expand_value_ops(VarU, ValStr, Ops) :-
   atom(VarU),
   atom_string(VarU, VarUStr),
-  split_string(ValStr, " ", "\t\r\n ", Parts0),
-  member(P, Parts0),
-  P \== "",
   string_lower(VarUStr, VarLower0),
-  % Portage uses lowercased prefix with '_' (e.g. video_cards_vmware)
+  % Portage uses lowercased prefix with '_' (e.g. cpu_flags_x86_sse2)
   atom_string(VarLower, VarLower0),
-  atom_string(Token, P),
-  atomic_list_concat([VarLower, Token], '_', Flag).
+  split_string(ValStr, " ", "\t\r\n ", Parts0),
+  exclude(=(""), Parts0, Parts),
+  findall(Op,
+          ( member(P, Parts),
+            profile:valid_use_token(P),
+            ( sub_string(P, 0, 1, _, "-") ->
+                profile:strip_leading_dashes(P, NameS),
+                NameS \== "",
+                atom_string(Token, NameS),
+                atomic_list_concat([VarLower, Token], '_', Flag),
+                Op = op(del, Flag)
+            ; atom_string(Token, P),
+              atomic_list_concat([VarLower, Token], '_', Flag),
+              Op = op(add, Flag)
+            )
+          ),
+          Ops).
 
 
 % -----------------------------------------------------------------------------
@@ -899,13 +950,22 @@ profile:apply_entry(package_use, Spec, use(Flag, State)) :-
   !,
   assertz(preference:local_profile_use_soft(Spec, Flag, State)).
 
+% package_use_mask / package_use_force entries are routed through the
+% live-path flag parser so cached and live loading behave identically.
+% This also tolerates stale profile caches generated before incremental
+% `-flag` unmask entries were resolved at collection time (issue
+% portage-ng#28): a literal `-flag` entry retracts the parent profile's
+% mask/force instead of being asserted verbatim.
+
 profile:apply_entry(package_use_mask, Spec, Flag) :-
   !,
-  assertz(preference:local_profile_use_masked(Spec, Flag)).
+  atom_string(Flag, FlagS),
+  catch(preference:apply_profile_package_use_flag(masked, Spec, FlagS), _, true).
 
 profile:apply_entry(package_use_force, Spec, Flag) :-
   !,
-  assertz(preference:local_profile_use_forced(Spec, Flag)).
+  atom_string(Flag, FlagS),
+  catch(preference:apply_profile_package_use_flag(forced, Spec, FlagS), _, true).
 
 profile:apply_entry(license_group, Name, Members) :-
   !,
@@ -1007,7 +1067,7 @@ profile:collect_profile_package_use_force(ProfileRel, Entries) :-
 profile:collect_profile_package_use_file(ProfileRel, Basename, Entries) :-
   ( current_predicate(profile:profile_dirs/2),
     catch(profile:profile_dirs(ProfileRel, Dirs), _, fail) ->
-      findall(Entry,
+      findall(op(Spec, Flag, State),
               ( member(Dir, Dirs),
                 os:compose_path(Dir, Basename, File),
                 exists_file(File),
@@ -1024,15 +1084,48 @@ profile:collect_profile_package_use_file(ProfileRel, Basename, Entries) :-
                 atom_string(AtomA, AtomS),
                 preference:profile_package_use_spec(AtomA, Spec),
                 member(FlagS0, FlagSs),
-                atom_string(FlagAtom, FlagS0),
-                ( Basename == 'package.use.mask' ->
-                    Entry = pkg_use_mask(Spec, FlagAtom)
-                ; Entry = pkg_use_force(Spec, FlagAtom)
-                )
+                profile:parse_use_flag(FlagS0, Flag, State)
               ),
-              Entries)
+              Ops),
+      profile:package_use_net_entries(Ops, Basename, Entries)
   ; Entries = []
   ).
+
+
+%! profile:package_use_net_entries(+Ops, +Basename, -Entries) is det.
+%
+% Resolve an ordered list of op(Spec, Flag, positive|negative) terms
+% (root profile first) into the net set of masked/forced entries.
+% Portage treats package.use.mask / package.use.force incrementally:
+% a `-flag` entry in a descendant profile removes the mask/force a
+% parent profile placed on that flag (issue portage-ng#28 — e.g.
+% arch/base masks flashrom's `internal`, arch/amd64 unmasks it with
+% `-internal`). Removal matches any spec with the same category/name,
+% mirroring the live path in preference:apply_profile_package_use_op/4.
+
+profile:package_use_net_entries(Ops, Basename, Entries) :-
+  ( Basename == 'package.use.mask' -> Functor = pkg_use_mask ; Functor = pkg_use_force ),
+  foldl(profile:package_use_net_op, Ops, [], NetRev),
+  reverse(NetRev, Net),
+  findall(Entry,
+          ( member(Spec-Flag, Net),
+            Entry =.. [Functor, Spec, Flag]
+          ),
+          Entries).
+
+profile:package_use_net_op(op(Spec, Flag, positive), Acc0, Acc) :-
+  ( memberchk(Spec-Flag, Acc0) -> Acc = Acc0 ; Acc = [Spec-Flag|Acc0] ).
+profile:package_use_net_op(op(Spec, Flag, negative), Acc0, Acc) :-
+  ( preference:profile_package_use_cp_from_spec_(Spec, C, N) ->
+      exclude(profile:package_use_net_same_cn(C, N, Flag), Acc0, Acc)
+  ; exclude(==(Spec-Flag), Acc0, Acc)
+  ).
+
+profile:package_use_net_same_cn(C, N, Flag, Spec0-Flag0) :-
+  Flag0 == Flag,
+  preference:profile_package_use_cp_from_spec_(Spec0, C0, N0),
+  C0 == C,
+  N0 == N.
 
 
 %! profile:collect_license_groups(-Groups) is det.
