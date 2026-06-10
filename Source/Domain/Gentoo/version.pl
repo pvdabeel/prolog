@@ -322,7 +322,7 @@ version_domain:normalize_bound_op(_Other, none).
 % The bound is constructed by incrementing the last component of the
 % version number list.
 
-version_domain:wildcard_upper_bound(Ver0, version(UpperNums, '', 4, 0, '', 0, UpperFull)) :-
+version_domain:wildcard_upper_bound(Ver0, version(UpperNums, '', 4, 0, [], 0, UpperFull)) :-
   normalize_version_term(Ver0, version(Nums, _, _, _, _, _, _)),
   Nums \== [],
   increment_last(Nums, UpperNums),
@@ -335,7 +335,7 @@ version_domain:wildcard_upper_bound(Ver0, version(UpperNums, '', 4, 0, '', 0, Up
 % ~pkg-8.1.1 matches [8.1.1, 8.1.2) (same base version, any revision),
 % so the upper bound is 8.1.2.
 
-version_domain:tilde_upper_bound(Ver0, version(UpperNums, '', 4, 0, '', 0, UpperFull)) :-
+version_domain:tilde_upper_bound(Ver0, version(UpperNums, '', 4, 0, [], 0, UpperFull)) :-
   normalize_version_term(Ver0, version(Nums, _, _, _, _, _, _)),
   Nums \== [],
   increment_last(Nums, UpperNums),
@@ -358,11 +358,11 @@ version_domain:normalize_version_term(V, R) :-
 
 
 version_domain:normalize_version_term_other(version(_,_,_,_,_,_,_)=Ver, Ver) :- !.
-version_domain:normalize_version_term_other(Full, version([0], '', 4, 0, '', 0, Full)) :-
+version_domain:normalize_version_term_other(Full, version([0], '', 4, 0, [], 0, Full)) :-
   atom(Full),
   sub_atom(Full, _, 1, 0, '*'),
   !.
-version_domain:normalize_version_term_other(Full, version(Nums, '', 4, 0, '', 0, Full)) :-
+version_domain:normalize_version_term_other(Full, version(Nums, '', 4, 0, [], 0, Full)) :-
   atom(Full),
   eapi:version2numberlist(Full, Nums),
   Nums \== [],

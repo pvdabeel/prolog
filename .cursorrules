@@ -40,7 +40,7 @@ Key files:
 - `Source/Domain/Gentoo/version.pl`: version domain model (`version_domain(Slots, Bounds)`), domain meet/intersection, consistency checks.
 
 Version representation:
-- Versions are stored as `version/7` compound terms: `version(NumsNorm, Alpha, SuffixRank, SuffixNum, SuffixRest, Rev, Full)`.
+- Versions are stored as `version/7` compound terms: `version(NumsNorm, Alpha, SuffixRank, SuffixNum, SuffixTail, Rev, Full)`. SuffixTail holds the remaining suffixes as `s(Rank, Num)` pairs closed by the `s(4,0)` "(final)" terminator (`[]` when the version has no suffix), so multi-suffix versions compare pairwise per PMS.
 - Empty/absent versions use the atom `version_none`.
 - Comparison uses standard `compare/3` directly on the compound term (no runtime key conversion).
 

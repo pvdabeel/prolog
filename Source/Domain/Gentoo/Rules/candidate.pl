@@ -1826,12 +1826,12 @@ candidate:wildcard_upper_bound_domain(C, N, PackageDeps, version_domain(any, Bou
 % terms (current format) and atom/list legacy formats.
 % =0.6* -> <0.7,  =1.2.3* -> <1.2.4
 
-candidate:wildcard_to_upper(version(Nums, _, _, _, _, _, _), version(UpperNums, '', 4, 0, '', 0, UpperFull)) :-
+candidate:wildcard_to_upper(version(Nums, _, _, _, _, _, _), version(UpperNums, '', 4, 0, [], 0, UpperFull)) :-
   !,
   Nums = [_|_],
   version_domain:increment_last(Nums, UpperNums),
   atomic_list_concat(UpperNums, '.', UpperFull).
-candidate:wildcard_to_upper(V0, version(UpperNums, '', 4, 0, '', 0, UpperFull)) :-
+candidate:wildcard_to_upper(V0, version(UpperNums, '', 4, 0, [], 0, UpperFull)) :-
   ( atom(V0) -> A = V0
   ; V0 = [_,_,_,A], atom(A)
   ),

@@ -29,16 +29,16 @@ stored, compared, and merged in code.
 Versions are stored as `version/7` compound terms:
 
 ```prolog
-version(NumsNorm, Alpha, SuffixRank, SuffixNum, SuffixRest, Rev, Full)
+version(NumsNorm, Alpha, SuffixRank, SuffixNum, SuffixTail, Rev, Full)
 ```
 
 | **Field** | **Example** | **Meaning** |
 | :--- | :--- | :--- |
 | `NumsNorm` | `[3,0,77]` | Normalized numeric components |
 | `Alpha` | `''` or `'a'` | Alpha suffix (empty atom if none) |
-| `SuffixRank` | `4` | Numeric rank of version suffix (`_alpha`=1, `_beta`=2, `_pre`=3, `_rc`=4, (none)=5, `_p`=6) |
-| `SuffixNum` | `0` | Suffix number (e.g. `3` in `_rc3`) |
-| `SuffixRest` | `''` | Additional suffix components |
+| `SuffixRank` | `4` | Numeric rank of first version suffix (`_alpha`=0, `_beta`=1, `_pre`=2, `_rc`=3, (final)=4, `_p`=5) |
+| `SuffixNum` | `0` | First suffix number (e.g. `3` in `_rc3`) |
+| `SuffixTail` | `[]` or `[s(5,2),s(4,0)]` | Remaining suffixes as `s(Rank, Num)` pairs, closed by the `s(4,0)` "(final)" terminator (`[]` if the version has no suffix) |
 | `Rev` | `3` | Revision number (from `-r3`) |
 | `Full` | `'3.0.77-r3'` | Original version string |
 
@@ -60,6 +60,9 @@ compare(Order, version([3,0,77],...), version([3,1,0],...))
 This works because:
 - `NumsNorm` is a list of integers (lexicographic list comparison)
 - `SuffixRank` maps suffixes to integers in PMS order
+- `SuffixTail` lists remaining suffixes as `s(Rank, Num)` pairs ending in the
+  `s(4,0)` "(final)" terminator, so multi-suffix versions compare pairwise per
+  PMS (e.g. `1_rc1_p2 > 1_rc1_pre1` and `1_rc1 > 1_rc1_pre1`)
 - `Rev` is a plain integer
 
 
