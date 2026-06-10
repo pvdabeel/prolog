@@ -253,7 +253,6 @@ plan:action_phase(_Other, other).
 plan:printable_element(rule(uri(_,_,_),_)) :- !.
 plan:printable_element(rule(uri(_),_)) :- !.
 plan:printable_element(rule(_Repository://_Entry:run?_,_)) :- !.
-plan:printable_element(rule(_Repository://_Entry:run?_,_)) :- !.
 plan:printable_element(rule(_Repository://_Entry:download?_,_)) :- !.
 plan:printable_element(rule(_Repository://_Entry:install?_,_)) :- !.
 plan:printable_element(rule(_Repository://_Entry:reinstall?_,_)) :- !.
@@ -273,28 +272,10 @@ plan:printable_element(rule(_Repository://_Entry:downgrade?{_Context},Body)) :-
 plan:printable_element(rule(_Repository://_Entry:update?_,_)) :- !.
 plan:printable_element(rule(_Repository://_Entry:downgrade?_,_)) :- !.
 plan:printable_element(rule(_Repository://_Entry:upgrade?_,_)) :- !.
-% Domain assumptions (rule(assumed(X))) — printable as verify steps.
-plan:printable_element(rule(assumed(_Repository://_Entry:_?_,_))) :- !.
-plan:printable_element(rule(assumed(package_dependency(_,_,_,_,_,_,_,_):install?_,_))) :- !.
-plan:printable_element(rule(assumed(package_dependency(_,_,_,_,_,_,_,_):run?_,_))) :- !.
-plan:printable_element(rule(assumed(grouped_package_dependency(_,_,_):install?_),_)) :- !.
-plan:printable_element(rule(assumed(grouped_package_dependency(_,_,_):run?_),_)) :- !.
-% Prover cycle-break assumptions (assumed(rule(X))) — entry-rule and
-% dependency-level cycle-breaks show as verify steps in the plan.
-plan:printable_element(assumed(rule(_Repository://_Entry:install?_,_))) :- !.
-plan:printable_element(assumed(rule(_Repository://_Entry:run?_,_))) :- !.
-plan:printable_element(assumed(rule(_Repository://_Entry:fetchonly?_,_))) :- !.
-plan:printable_element(assumed(rule(package_dependency(_,_,_,_,_,_,_,_):install?_,_))) :- !.
-plan:printable_element(assumed(rule(package_dependency(_,_,_,_,_,_,_,_):run?_,_))) :- !.
-plan:printable_element(assumed(rule(grouped_package_dependency(_,_,_,_):install?_,_))) :- !. % todo: phase out
-plan:printable_element(assumed(rule(grouped_package_dependency(_,_,_,_):run?_,_))) :- !. % todo: phase out
-plan:printable_element(assumed(rule(grouped_package_dependency(_,_,_):install?_,_))) :- !.
-plan:printable_element(assumed(rule(grouped_package_dependency(_,_,_):run?_,_))) :- !.
-% Suppress any remaining cycle-break types from plan display.
-plan:printable_element(assumed(rule(_,_))) :- !, fail.
 
 % Suppress assumed dependency verifies when a concrete ebuild for the same
-% package is already scheduled in the plan.
+% package is already scheduled in the plan. These clauses must precede the
+% domain assumption accept clauses below (which cut), or they never fire.
 plan:printable_element(rule(assumed(grouped_package_dependency(C,N,_Deps):install?{_Context}),[])) :-
   plan:planned_pkg(install, C, N),
   !,
@@ -311,6 +292,25 @@ plan:printable_element(rule(assumed(package_dependency(run,no,C,N,_,_,_,_):run?{
   plan:planned_pkg(run, C, N),
   !,
   fail.
+% Domain assumptions (rule(assumed(X))) — printable as verify steps.
+plan:printable_element(rule(assumed(_Repository://_Entry:_?_),_)) :- !.
+plan:printable_element(rule(assumed(package_dependency(install,no,_,_,_,_,_,_):install?_),_)) :- !. % legacy form
+plan:printable_element(rule(assumed(package_dependency(run,no,_,_,_,_,_,_):run?_),_)) :- !. % legacy form
+plan:printable_element(rule(assumed(grouped_package_dependency(_,_,_):install?_),_)) :- !.
+plan:printable_element(rule(assumed(grouped_package_dependency(_,_,_):run?_),_)) :- !.
+% Prover cycle-break assumptions (assumed(rule(X))) — entry-rule and
+% dependency-level cycle-breaks show as verify steps in the plan.
+plan:printable_element(assumed(rule(_Repository://_Entry:install?_,_))) :- !.
+plan:printable_element(assumed(rule(_Repository://_Entry:run?_,_))) :- !.
+plan:printable_element(assumed(rule(_Repository://_Entry:fetchonly?_,_))) :- !.
+plan:printable_element(assumed(rule(package_dependency(_,_,_,_,_,_,_,_):install?_,_))) :- !.
+plan:printable_element(assumed(rule(package_dependency(_,_,_,_,_,_,_,_):run?_,_))) :- !.
+plan:printable_element(assumed(rule(grouped_package_dependency(_,_,_,_):install?_,_))) :- !. % todo: phase out
+plan:printable_element(assumed(rule(grouped_package_dependency(_,_,_,_):run?_,_))) :- !. % todo: phase out
+plan:printable_element(assumed(rule(grouped_package_dependency(_,_,_):install?_,_))) :- !.
+plan:printable_element(assumed(rule(grouped_package_dependency(_,_,_):run?_,_))) :- !.
+% Suppress any remaining cycle-break types from plan display.
+plan:printable_element(assumed(rule(_,_))) :- !, fail.
 
 
 % Uncomment if you want 'confirm' steps shown in the plan:
@@ -858,6 +858,43 @@ plan:print_element(_,rule(assumed(Repository://Entry:unmask?{_Context}),_Body)) 
   message:color(red),
   message:column(24,Repository://Entry),
   message:print(' (masked, assumed unmasked)'),
+  message:color(normal).
+
+
+% --------------------------------------------------------
+% CASE: an assumed installed package (domain assumption)
+% --------------------------------------------------------
+
+plan:print_element(_,rule(assumed(Repository://Entry:install?{_Context}),_Body)) :-
+  message:bubble(red,'verify'),
+  message:color(red),
+  message:column(24,Repository://Entry),
+  message:print(' (assumed installed)'),
+  message:color(normal).
+
+
+% ------------------------------------------------------
+% CASE: an assumed running package (domain assumption)
+% ------------------------------------------------------
+
+plan:print_element(_,rule(assumed(Repository://Entry:run?{_Context}),_Body)) :-
+  message:bubble(red,'verify'),
+  message:color(red),
+  message:column(24,Repository://Entry),
+  message:print(' (assumed running)'),
+  message:color(normal).
+
+
+% ------------------------------------------------------------------
+% CASE: any other assumed entry-level action (domain assumption)
+% ------------------------------------------------------------------
+
+plan:print_element(_,rule(assumed(Repository://Entry:Action?{_Context}),_Body)) :-
+  message:bubble(red,'verify'),
+  message:color(red),
+  message:column(24,Repository://Entry),
+  format(atom(Msg), ' (assumed ~w)', [Action]),
+  message:print(Msg),
   message:color(normal).
 
 
