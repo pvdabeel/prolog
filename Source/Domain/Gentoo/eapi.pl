@@ -2714,12 +2714,6 @@ eapi:vdb_kv_file(Dir, File, Key, Line) :-
   Value \== "",
   format(string(Line), "~w=~s", [Key, Value]).
 
-eapi:vdb_kv_file(Dir, File, Key, Line) :-
-  os:compose_path(Dir, File, Path),
-  reader:invoke(Path, [Value|_]),
-  Value \== "",
-  format(string(Line), "~w=~s", [Key, Value]).
-
 
 %! eapi:vdb_kv_file_joined(+Dir, +File, +Key, -Line)
 %
