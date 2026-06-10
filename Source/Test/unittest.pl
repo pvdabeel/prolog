@@ -57,11 +57,11 @@ Regenerate the golden snapshot after an intentional mask-logic change:
 
 :- begin_tests(eapi_version_parsing).
 
-test(simple_version, [true(V == version([1,0], '', 4, 0, '', 0, '1.0')), nondet]) :-
+test(simple_version, [true(V == version([1,0], '', 4, 0, [], 0, '1.0')), nondet]) :-
   atom_codes('1.0', Codes),
   phrase(eapi:version(V), Codes, []).
 
-test(three_part_version, [true(V == version([1,2,3], '', 4, 0, '', 0, '1.2.3')), nondet]) :-
+test(three_part_version, [true(V == version([1,2,3], '', 4, 0, [], 0, '1.2.3')), nondet]) :-
   atom_codes('1.2.3', Codes),
   phrase(eapi:version(V), Codes, []).
 
@@ -156,6 +156,41 @@ test(pms_suffix_chain, [true(Order == [VA,VB,VC,VD,VE,VF]), nondet]) :-
   atom_codes('1.0_p1', CF), phrase(eapi:version(VF), CF, []),
   msort([VF, VD, VB, VE, VC, VA], Order).
 
+% PMS algorithm 3.5/3.6: multi-suffix versions compare pairwise by suffix
+% type then number, not lexicographically on the rest string (issue #30).
+test(multi_suffix_p_beats_pre, [nondet]) :-
+  atom_codes('1.0_rc1_p2', C1), phrase(eapi:version(V1), C1, []),
+  atom_codes('1.0_rc1_pre1', C2), phrase(eapi:version(V2), C2, []),
+  eapi:version_compare(>, V1, V2).
+
+test(multi_suffix_numeric_not_lexicographic, [nondet]) :-
+  atom_codes('1.0_rc1_p10', C1), phrase(eapi:version(V1), C1, []),
+  atom_codes('1.0_rc1_p9', C2), phrase(eapi:version(V2), C2, []),
+  eapi:version_compare(>, V1, V2).
+
+test(multi_suffix_shorter_below_p, [nondet]) :-
+  atom_codes('1.0_rc1', C1), phrase(eapi:version(V1), C1, []),
+  atom_codes('1.0_rc1_p1', C2), phrase(eapi:version(V2), C2, []),
+  eapi:version_compare(<, V1, V2).
+
+test(multi_suffix_shorter_above_pre, [nondet]) :-
+  atom_codes('1.0_rc1', C1), phrase(eapi:version(V1), C1, []),
+  atom_codes('1.0_rc1_pre1', C2), phrase(eapi:version(V2), C2, []),
+  eapi:version_compare(>, V1, V2).
+
+test(multi_suffix_pms_chain, [true(Order == [VA,VB,VC,VD,VE]), nondet]) :-
+  atom_codes('1.0_rc1_pre1', CA), phrase(eapi:version(VA), CA, []),
+  atom_codes('1.0_rc1', CB), phrase(eapi:version(VB), CB, []),
+  atom_codes('1.0_rc1_p2', CC), phrase(eapi:version(VC), CC, []),
+  atom_codes('1.0_rc1_p10', CD), phrase(eapi:version(VD), CD, []),
+  atom_codes('1.0', CE), phrase(eapi:version(VE), CE, []),
+  msort([VE, VC, VA, VD, VB], Order).
+
+test(multi_suffix_equal_versions, [nondet]) :-
+  atom_codes('1.0_rc1_p2', C1), phrase(eapi:version(V1), C1, []),
+  atom_codes('1.0_rc1_p2', C2), phrase(eapi:version(V2), C2, []),
+  eapi:version_compare(=, V1, V2).
+
 :- end_tests(eapi_version_compare).
 
 
@@ -185,6 +220,30 @@ test(tilde, [true(Op == tilde)]) :-
 
 test(none, [true(Op == none)]) :-
   phrase(eapi:operator(Op), [], []).
+
+% Strict PMS-only grammar: non-PMS synonyms and the ':=' slot operator
+% must not be consumed as version operators (issue #31).
+test(strict_rejects_arrow_ge, [fail]) :-
+  phrase(eapi:operator(_), [61,62], []).                 % =>
+
+test(strict_rejects_arrow_le, [fail]) :-
+  phrase(eapi:operator(_), [61,60], []).                 % =<
+
+test(strict_rejects_slot_operator, [fail]) :-
+  phrase(eapi:operator(_), [58,61], []).                 % :=
+
+% Lenient CLI grammar: accepts => and =< synonyms, still rejects ':='.
+test(query_arrow_ge, [true(Op == greaterequal)]) :-
+  phrase(eapi:query_operator(Op), [61,62], []).          % =>
+
+test(query_arrow_le, [true(Op == smallerequal)]) :-
+  phrase(eapi:query_operator(Op), [61,60], []).          % =<
+
+test(query_greater_equal, [true(Op == greaterequal)]) :-
+  phrase(eapi:query_operator(Op), [62,61], []).          % >=
+
+test(query_rejects_slot_operator, [fail]) :-
+  phrase(eapi:query_operator(_), [58,61], []).           % :=
 
 :- end_tests(eapi_operator_parsing).
 
@@ -350,6 +409,27 @@ test(strong_blocked_dep, [true(D == [package_dependency(install, strong, 'dev-li
 test(multiple_deps, [true(length(D, 2))]) :-
   atom_codes('dev-libs/openssl dev-libs/glib', Codes),
   phrase(eapi:depend(repo://entry, D), Codes, []).
+
+% Metadata parsing must fail hard on non-PMS operator spellings (issue #31):
+% ':=' is the slot operator, never a version operator; => and =< are
+% CLI-only synonyms.
+test(metadata_rejects_slot_operator_prefix, [fail]) :-
+  atom_codes(':=dev-libs/openssl', Codes),
+  phrase(eapi:depend(repo://entry, _), Codes, []).
+
+test(metadata_rejects_arrow_ge, [fail]) :-
+  atom_codes('=>dev-libs/openssl-1.1.0', Codes),
+  phrase(eapi:depend(repo://entry, _), Codes, []).
+
+test(metadata_rejects_arrow_le, [fail]) :-
+  atom_codes('=<dev-libs/openssl-1.1.0', Codes),
+  phrase(eapi:depend(repo://entry, _), Codes, []).
+
+% Slot operator in its legal position (after the package name) still parses.
+test(metadata_slot_operator_legal_position, [true(S == [any_same_slot]), nondet]) :-
+  atom_codes('dev-libs/glib:=', Codes),
+  phrase(eapi:depend(repo://entry,
+    [package_dependency(install, no, 'dev-libs', glib, none, version_none, S, [])]), Codes, []).
 
 test(use_conditional_dep, [nondet]) :-
   atom_codes('ssl? ( dev-libs/openssl )', Codes),
@@ -1379,7 +1459,7 @@ test(var_passthrough) :-
   var(Y),
   X == Y.
 
-test(wildcard_atom, [true(Ver == version([0],'',4,0,'',0,'1.0.*'))]) :-
+test(wildcard_atom, [true(Ver == version([0],'',4,0,[],0,'1.0.*'))]) :-
   version_domain:normalize_version_term('1.0.*', Ver).
 
 test(compound_passthrough, [true(Ver == foo(bar))]) :-

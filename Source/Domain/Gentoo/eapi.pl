@@ -591,7 +591,7 @@ eapi:qualified_target(path(Qa)) -->                      % absolute path, either
   { atom_codes(Qa,[47|Q]),! }.
 
 eapi:qualified_target(Q) -->
-  eapi:operator(O),
+  eapi:query_operator(O),
   eapi:repository(R),                                    % required
   eapi:repositoryseparator,!,                            % required
   eapi:category(C),eapi:separator,eapi:package(P),       % required
@@ -602,7 +602,7 @@ eapi:qualified_target(Q) -->
     Q = qualified_target(FO,R,C,P,V,[S,U]) }.
 
 eapi:qualified_target(Q) -->
-  eapi:operator(O),                                      % optional
+  eapi:query_operator(O),                                % optional
   eapi:category(C),eapi:separator,!,                     % required
   eapi:package(P),!,                                     % required
   eapi:version0(V, W),                                   % optional
@@ -612,7 +612,7 @@ eapi:qualified_target(Q) -->
     Q = qualified_target(FO,_,C,P,V,[S,U]) }.
 
 eapi:qualified_target(Q) -->
-  eapi:operator(O),                                      % optional
+  eapi:query_operator(O),                                % optional
   eapi:package(P),!,                                     % required
   eapi:version0(V, W),                                   % optional
   eapi:slot_restriction(S),                              % optional
@@ -773,18 +773,19 @@ eapi:blocking(no) -->
 %! DCG operator
 %
 % PMS 9, Section 8.3.1: operators for package dependencies.
+%
+% Strict PMS-only grammar, used for tree/VDB metadata parsing
+% (package_dependency//3). Non-PMS synonyms (=>, =<) are only accepted
+% for interactive CLI targets via query_operator//1. The ':=' slot
+% operator is never a version operator and must not be consumed here;
+% in --search queries ':=' is handled by chars_to_comparator//2
+% (wildcard search), a separate code path.
 
 eapi:operator(greaterequal) -->
   [62,61], !.                                            % char: >=
 
-eapi:operator(greaterequal) -->
-  [61,62], !.                                            % char: =>
-
 eapi:operator(smallerequal) -->
   [60,61], !.                                            % char: <=
-
-eapi:operator(smallerequal) -->
-  [61,60], !.                                            % char: =<
 
 eapi:operator(greater) -->
   [62], !.                                               % char: >
@@ -795,14 +796,28 @@ eapi:operator(smaller) -->
 eapi:operator(tilde) -->
   [126], !.                                              % char: ~
 
-eapi:operator(tilde) -->
-  [58,61], !.                                            % char: :=
-
 eapi:operator(equal) -->
   [61], !.                                               % char: =
 
 eapi:operator(none) -->
   [], !.
+
+
+%! DCG query_operator
+%
+% Lenient operator grammar for interactive CLI targets
+% (qualified_target//1): accepts the non-PMS synonyms => and =< in
+% addition to the strict PMS operators. Never used for tree/VDB
+% metadata, which must fail hard on non-PMS operators.
+
+eapi:query_operator(greaterequal) -->
+  [61,62], !.                                            % char: =>
+
+eapi:query_operator(smallerequal) -->
+  [61,60], !.                                            % char: =<
+
+eapi:query_operator(O) -->
+  eapi:operator(O).
 
 
 %! eapi:comparator_symbol(+Op, -Symbol)
@@ -1841,13 +1856,18 @@ eapi:chars_to_dash([C|R]) -->
 
 %! DCG chars_to_comparator
 %
-% Reads chars until a comparator is found (PMS 9, Section 8.3).
+% Reads chars until a comparator is found. Used for --search CLI queries
+% only (key<op>value), not for metadata. Deliberately lenient: in
+% addition to the PMS operators (PMS 9, Section 8.3) it accepts the
+% synonyms => and =<, plus '!=' (not-equal search) and ':=' (wildcard
+% search on the value). The ':=' mapping here is intentional CLI search
+% syntax and unrelated to the PMS slot operator.
 
 eapi:chars_to_comparator([],smallerequal) -->
   [61],[60],!.                                           % chars: '=<'
 
 eapi:chars_to_comparator([],greaterequal) -->
-  [61],[62],!.                                          % chars: '=<'
+  [61],[62],!.                                           % chars: '=>'
 
 eapi:chars_to_comparator([],smallerequal) -->
   [60],[61],!.                                           % chars: '<='
@@ -2197,7 +2217,7 @@ eapi:select_operator(Op, _, Op).
 % Converts raw DCG-parsed version components into a version/7 term whose
 % argument order doubles as a Gentoo-correct sort key for compare/3.
 
-eapi:version2atom(N, W, A, S, version(NumsNorm, Alpha, SuffixRank, SuffixNum, SuffixRest, Rev, Full)) :-
+eapi:version2atom(N, W, A, S, version(NumsNorm, Alpha, SuffixRank, SuffixNum, SuffixTail, Rev, Full)) :-
   maplist(atom_codes, Na, N),
   maplist(atom_codes, Aa, A),
   maplist(atom_codes, Sa, S),
@@ -2209,8 +2229,7 @@ eapi:version2atom(N, W, A, S, version(NumsNorm, Alpha, SuffixRank, SuffixNum, Su
   atomic_list_concat([Numberpart, W, Alpha, Suffix], Full),
   atom_string(Suffix, SuffixS),
   eapi:split_revision(SuffixS, BaseS, Rev),
-  eapi:suffix_key(BaseS, SuffixRank, SuffixNum, SuffixRestS),
-  ( SuffixRestS == "" -> SuffixRest = '' ; atom_string(SuffixRest, SuffixRestS) ).
+  eapi:suffix_key(BaseS, SuffixRank, SuffixNum, SuffixTail).
 
 eapi:version2numberlist('', []) :- !.
 
@@ -2368,12 +2387,14 @@ eapi:normalize_slot_value_(S0, S) :-
 % -----------------------------------------------------------------------------
 %
 % Version terms are version/7 compounds produced by `eapi:version2atom/5`:
-%   version(NumsNorm, Alpha, SuffixRank, SuffixNum, SuffixRest, Rev, Full)
+%   version(NumsNorm, Alpha, SuffixRank, SuffixNum, SuffixTail, Rev, Full)
 %
 % The argument order is chosen so that standard `compare/3` gives correct
 % Gentoo PMS version ordering: numeric segments, alpha letter, suffix
-% precedence (_alpha < _beta < _pre < _rc < (none) < _p), revision, then
-% the display string (which is only reached for identical versions).
+% precedence (_alpha < _beta < _pre < _rc < (final) < _p), remaining
+% suffixes pairwise (SuffixTail, a list of s(Rank, Num) pairs ending in
+% the s(4, 0) "(final)" terminator), revision, then the display string
+% (which is only reached for identical versions).
 
 eapi:version_compare(Op, Proposed, Required) :-
   compare(Op, Proposed, Required).
@@ -2517,10 +2538,10 @@ eapi:split_revision_at([_|Rest], Suffix, Base, Rev) :-
   eapi:split_revision_at(Rest, Suffix, Base, Rev).
 
 
-%! eapi:suffix_key(+Suffix0, -Rank, -Num, -Rest)
+%! eapi:suffix_key(+Suffix0, -Rank, -Num, -Tail)
 %
-% Calculates the key for a suffix.
-% Gentoo suffix precedence:
+% Calculates the comparison key for a (possibly multi-) suffix string.
+% Gentoo suffix precedence (PMS 9, Algorithms 3.5/3.6):
 %   _alpha < _beta < _pre < _rc < (final) < _p
 %
 % Rank explanation:
@@ -2528,15 +2549,38 @@ eapi:split_revision_at([_|Rest], Suffix, Base, Rev) :-
 %   1: _beta
 %   2: _pre
 %   3: _rc
-%   4: (final)
+%   4: (final) -- also the suffix-list terminator rank
 %   5: _p
-%   6: (none)
+%   6: (unparseable rest)
+%
+% PMS requires pairwise comparison of multi-suffix versions (e.g.
+% 1_rc1_p2 > 1_rc1_pre1 because _p > _pre), so the suffixes are
+% represented as a list of s(Rank, Num) pairs closed by an explicit
+% s(4, 0) terminator carrying the "(final)" semantics: a version that
+% runs out of suffixes compares via the terminator against the other
+% version's next suffix, exactly as PMS prescribes. Rank/Num are the
+% first element's fields (4/0 when the version has no suffix) and Tail
+% holds the remaining elements including the terminator ([] when the
+% version has no suffix at all), so standard compare/3 over version/7
+% coincides with PMS order.
 
-eapi:suffix_key(Suffix0, Rank, Num, Rest) :-
+eapi:suffix_key(Suffix0, Rank, Num, Tail) :-
   eapi:to_string(Suffix0, Suffix),
-  ( Suffix == "" ->
-      Rank = 4, Num = 0, Rest = ""
-  ; eapi:suffix_with_prefix("_alpha", Suffix, Num, Rest) ->
+  eapi:suffix_keys(Suffix, Keys),
+  append(Keys, [s(4, 0)], [s(Rank, Num)|Tail]),
+  !.
+
+
+%! eapi:suffix_keys(+Suffix, -Keys)
+%
+% Parses a suffix string into a list of s(Rank, Num) pairs, one per
+% suffix, in source order. An unparseable rest yields a single s(6, Rest)
+% element (rank 6 sorts last, mirroring the old "(none)" fallback).
+
+eapi:suffix_keys("", []) :- !.
+
+eapi:suffix_keys(Suffix, [s(Rank, Num)|Keys]) :-
+  ( eapi:suffix_with_prefix("_alpha", Suffix, Num, Rest) ->
       Rank = 0
   ; eapi:suffix_with_prefix("_beta", Suffix, Num, Rest) ->
       Rank = 1
@@ -2546,9 +2590,12 @@ eapi:suffix_key(Suffix0, Rank, Num, Rest) :-
       Rank = 3
   ; eapi:suffix_with_prefix("_p", Suffix, Num, Rest) ->
       Rank = 5
-  ; Rank = 6, Num = 0, Rest = Suffix
   ),
-  !.
+  !,
+  eapi:suffix_keys(Rest, Keys).
+
+eapi:suffix_keys(Suffix, [s(6, Rest)]) :-
+  atom_string(Rest, Suffix).
 
 
 %! eapi:suffix_with_prefix(+Prefix, +Suffix, -Num, -Rest)
