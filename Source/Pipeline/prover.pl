@@ -535,10 +535,9 @@ prover:prove_recursive(Full, Proof, NewProof, Model, NewModel, Constraints, NewC
           Model       = NewModel,
           Triggers    = NewTriggers,
           Constraints = NewConstraints
-      ; ( get_assoc(rule(Lit),Proof,dep(_OldCount,OldBody)?ModelCtx) ->
-            true
-        ; get_assoc(rule(Lit),Proof,dep(_OldCount,OldBody)?_OldProofCtx)
-        ),
+      ; % The Proof AVL holds exactly one value per key, so a single
+        % lookup suffices to retrieve the previously derived body.
+        get_assoc(rule(Lit),Proof,dep(_OldCount,OldBody)?_OldProofCtx),
 
         prover:canon_literal(NewFull, Lit, NewCtx),
 
@@ -546,7 +545,11 @@ prover:prove_recursive(Full, Proof, NewProof, Model, NewModel, Constraints, NewC
         sampler:maybe_timeout_trace(Lit),
         rule(NewFull,NewBody),
 
-        subtract(NewBody,OldBody,DiffBody),
+        % ==-based diff (NOT subtract/3): body literals may contain
+        % unbound variables (e.g. constraints with fresh slot vars),
+        % and unification-based membership would spuriously match and
+        % silently drop a re-derived obligation.
+        prover:body_diff(NewBody,OldBody,DiffBody),
         length(NewBody,NewCount),
         put_assoc(rule(Lit), Proof, dep(NewCount, NewBody)?NewCtx,Proof1),
         prover:add_triggers(NewFull, NewBody, Triggers, Triggers1),
@@ -1146,6 +1149,32 @@ prover:add_trigger(Head, Dep, InTriggers, OutTriggers) :-
 prover:proving(rule(Lit, Body), Proof) :- get_assoc(rule(Lit),Proof,dep(_, Body)?_).
 
 
+%! prover:body_diff(+NewBody, +OldBody, -DiffBody) is det
+%
+% DiffBody contains the literals of NewBody (original order preserved)
+% that are not ==-identical to any literal of OldBody.
+%
+% Used by the ctx-union re-derive branch of prove_recursive/9 instead
+% of subtract/3: subtract/3 tests membership by unification, so a body
+% literal containing an unbound variable could spuriously match an old
+% literal and be dropped, silently skipping a re-derived obligation.
+% OldBody is msort-ed once so membership is checked with ord_memberchk/2
+% (compare/3-based, i.e. == semantics, with early termination) rather
+% than a unifying memberchk/2 over the unsorted list.
+
+prover:body_diff(NewBody, OldBody, DiffBody) :-
+  msort(OldBody, OldSorted),
+  prover:body_diff_(NewBody, OldSorted, DiffBody).
+
+prover:body_diff_([], _, []).
+prover:body_diff_([Lit|Lits], OldSorted, Diff) :-
+  ( ord_memberchk(Lit, OldSorted)
+  -> Diff = Rest
+  ;  Diff = [Lit|Rest]
+  ),
+  prover:body_diff_(Lits, OldSorted, Rest).
+
+
 %! prover:assumed_proving(+Lit, +Proof) is semidet
 %
 % Succeeds when Lit has a prover-level cycle-break marker in Proof
@@ -1295,6 +1324,38 @@ prover:canon_rule(assumed(rule(L,B)),           assumed(rule(L)),     dep(_,B)?{
 prover:canon_rule(assumed(rule(L?{Ctx},B)),     assumed(rule(L)),     dep(_,B)?Ctx)  :- !.
 prover:canon_rule(rule(L,B),                    rule(L),              dep(_,B)?{})   :- !.
 prover:canon_rule(rule(L?{Ctx},B),              rule(L),              dep(_,B)?Ctx)  :- !.
+
+
+%! prover:rule_head(+Rule, -Head) is det
+%
+% Extract the canonical head from a full-format proof rule. Deterministic:
+% clauses are ordered most-specific first and committed with a cut, so a
+% rule never yields two different heads on backtracking (issue #36).
+%
+% Canonical head forms:
+%   - assumed(rule(X, Body))  (prover cycle-break)  -> ctx-stripped X
+%   - rule(assumed(X), Body)  (domain assumption)   -> the whole assumed(X)
+%     term, inner ?{Ctx} retained. This is deliberate: it must match both
+%     the proof key rule(assumed(X)) and the trigger key assumed(X), which
+%     both retain the inner proof context.
+%   - rule(X, Body)           (regular rule)        -> ctx-stripped X
+
+prover:rule_head(assumed(rule(HeadWithCtx, _Body)), Head) :-
+  !,
+  prover:canon_literal(HeadWithCtx, Head, _).
+prover:rule_head(rule(assumed(HeadWithCtx), _Body), assumed(HeadWithCtx)) :- !.
+prover:rule_head(rule(HeadWithCtx, _Body), Head) :-
+  prover:canon_literal(HeadWithCtx, Head, _).
+
+
+%! prover:rule_body(+Rule, -Body) is det
+%
+% Extract the body from a full-format proof rule. Deterministic companion
+% to prover:rule_head/2; rule(assumed(X), Body) is covered by the rule/2
+% clause.
+
+prover:rule_body(assumed(rule(_HeadWithCtx, Body)), Body) :- !.
+prover:rule_body(rule(_HeadWithCtx, Body), Body).
 
 
 % -----------------------------------------------------------------------------
