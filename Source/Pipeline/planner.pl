@@ -69,8 +69,7 @@ planner:update_planned_set(Rules, SetIn, SetOut) :-
 % Adds the head of a rule to the set.
 
 planner:add_rule_head_to_set(Rule, SetIn, SetOut) :-
-    ( Rule = rule(HeadWithCtx, _) ; Rule = assumed(rule(HeadWithCtx, _)) ; Rule = rule(assumed(HeadWithCtx), _) ),
-    prover:canon_literal(HeadWithCtx, Head, _),
+    prover:rule_head(Rule, Head),
     put_assoc(Head, SetIn, true, SetOut).
 
 
@@ -96,11 +95,8 @@ planner:plan_init_from_proof(ProofAVL, PlannedHeadsAVL, DepCounts, ReadyQueue) :
 
 planner:build_depcounts_and_ready([], _, _ProofAVL, DepCounts, DepCounts, ReadyQueue, ReadyQueue).
 planner:build_depcounts_and_ready([Rule|Rest], PlannedHeads, ProofAVL, InCounts, OutCounts, InReady, OutReady) :-
-    ( Rule = rule(HeadWithCtx, Body)
-    ; Rule = assumed(rule(HeadWithCtx, Body))
-    ; Rule = rule(assumed(HeadWithCtx), Body)
-    ),
-    prover:canon_literal(HeadWithCtx, Head, _),
+    prover:rule_head(Rule, Head),
+    prover:rule_body(Rule, Body),
     % If the prover inserted a cycle-break marker for this Head, we must treat
     % the head as blocked in the planner (otherwise assoc traversal order can
     % overwrite the "blocked" count and accidentally enqueue it).
@@ -147,9 +143,8 @@ planner:plan_loop([ReadyQueue|RestQueues], InCounts, Triggers, ProofAVL, InPlann
         length(InPlan, WaveIdx), W is WaveIdx + 1,
         format(user_error, '~n=== planner wave ~w (size ~w) ===~n', [W, length(ReadyQueue)]),
         forall(member(R, ReadyQueue),
-               ( ( R = rule(H, _) ; R = assumed(rule(H, _)) ; R = rule(assumed(H), _) )
-               -> ( prover:canon_literal(H, CH, _),
-                    format(user_error, '  ~q~n', [CH]) )
+               ( prover:rule_head(R, CH)
+               -> format(user_error, '  ~q~n', [CH])
                ;  format(user_error, '  ~q~n', [R]) ))
     ; true ),
     process_wave(ReadyQueue, InCounts, Triggers, ProofAVL, InPlanned, OutPlanned, OutCounts, NextReadyQueue),
@@ -194,8 +189,7 @@ process_wave(ReadyQueue, InCounts, Triggers, ProofAVL, InPlanned, OutPlanned, Ou
 % Processes a proven rule.
 
 planner:process_proven_rule(Triggers, ProofAVL, ProvenRule, InState, OutState) :-
-    (   ProvenRule = rule(HeadWithCtx, _) ; ProvenRule = assumed(rule(HeadWithCtx, _)) ),
-    prover:canon_literal(HeadWithCtx, Head, _),
+    prover:rule_head(ProvenRule, Head),
     (   get_assoc(Head, Triggers, Dependents)
     ->  foldl(decrement_and_enqueue(ProofAVL), Dependents, InState, OutState)
     ;   OutState = InState

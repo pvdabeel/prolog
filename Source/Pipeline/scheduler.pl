@@ -137,7 +137,7 @@ scheduler:build_refcount_map(AllRules, TriggersAVL, RefCountMap) :-
   foldl(scheduler:compute_refcount(TriggersAVL, HeadSet), AllHeads, M0, RefCountMap).
 
 scheduler:add_rule_to_head_set_(Rule, In, Out) :-
-  ( scheduler:rule_head(Rule, Head) ->
+  ( prover:rule_head(Rule, Head) ->
       put_assoc(Head, In, true, Out)
   ; Out = In
   ).
@@ -171,7 +171,7 @@ scheduler:reorder_waves_by_refcount([], _, []) :- !.
 scheduler:reorder_waves_by_refcount([Wave|Ws], RefCountMap, [Sorted|Rs]) :-
   findall(NegCount-Rule,
           ( member(Rule, Wave),
-            ( scheduler:rule_head(Rule, Head),
+            ( prover:rule_head(Rule, Head),
               get_assoc(Head, RefCountMap, Count)
             -> NegCount is -Count
             ; NegCount = 0
@@ -222,7 +222,7 @@ scheduler:plan_step_lengths(Plan, Lens) :-
 
 scheduler:flat_order_after_constraints(Rules0, Rules) :-
   % Build a set of heads present in the plan.
-  findall(H, (member(R, Rules0), scheduler:rule_head(R, H)), Heads0),
+  findall(H, (member(R, Rules0), prover:rule_head(R, H)), Heads0),
   sort(Heads0, Heads),
   empty_assoc(Empty),
   foldl(scheduler:assoc_set_put, Heads, Empty, HeadSet),
@@ -250,7 +250,7 @@ scheduler:assoc_set_put(K, A0, A) :-
 
 scheduler:order_after_loop([], _HeadSet, Waiting, Waiting, Acc, Acc) :- !.
 scheduler:order_after_loop([Rule|Rest], HeadSet, Waiting0, Waiting, Acc0, Acc) :-
-  scheduler:rule_head(Rule, H),
+  prover:rule_head(Rule, H),
   ( scheduler:rule_order_after_anchor(Rule, Anchor),
     get_assoc(Anchor, HeadSet, true)
   ->
@@ -274,15 +274,12 @@ scheduler:flush_waiting(H, HeadSet, Waiting0, Waiting, Acc0, Acc) :-
 
 scheduler:flush_waiting_list([], _HeadSet, Waiting, Waiting, Acc, Acc) :- !.
 scheduler:flush_waiting_list([R|Rs], HeadSet, Waiting0, Waiting, Acc0, Acc) :-
-  scheduler:rule_head(R, H),
+  prover:rule_head(R, H),
   scheduler:flush_waiting(H, HeadSet, Waiting0, Waiting1, [R|Acc0], Acc1),
   scheduler:flush_waiting_list(Rs, HeadSet, Waiting1, Waiting, Acc1, Acc).
 
 scheduler:rule_order_after_anchor(Rule, Anchor) :-
-  ( Rule = rule(_HeadWithCtx, Body)
-  ; Rule = assumed(rule(_HeadWithCtx, Body))
-  ; Rule = rule(assumed(_HeadWithCtx), Body)
-  ),
+  prover:rule_body(Rule, Body),
   member(constraint(order_after(Anchor):{_}), Body),
   !.
 
@@ -391,8 +388,8 @@ scheduler:build_repair_graph(AllRules, Map, PkgHeadMap, Pd, CfgMap,
 % Folds the repair dependency heads of one rule into the forward map.
 
 scheduler:add_repair_edges(Map, PkgHeadMap, Pd, CfgMap, Rule, In, Out) :-
-  ( scheduler:rule_head(Rule, Head),
-    scheduler:rule_body(Rule, Body)
+  ( prover:rule_head(Rule, Head),
+    prover:rule_body(Rule, Body)
   ->
     scheduler:repair_dep_heads(Body, Head, Map, PkgHeadMap, Pd, BodyDeps),
     ( scheduler:install_phase_key(Head, InstallKey),
@@ -536,9 +533,9 @@ scheduler:build_install_configure_dep_map(AllRules, CfgMap) :-
   foldl(scheduler:add_install_configure_deps, AllRules, M0, CfgMap).
 
 scheduler:add_install_configure_deps(Rule, In, Out) :-
-  ( scheduler:rule_head(Rule, RunHead),
+  ( prover:rule_head(Rule, RunHead),
     RunHead = _Repo://_Entry:run,
-    scheduler:rule_body(Rule, Body)
+    prover:rule_body(Rule, Body)
   -> findall(Dep,
              ( member(Dep, Body),
                \+ constraint:is_constraint(Dep),
@@ -591,8 +588,8 @@ scheduler:build_pdepend_anchor_map(AllRules, AnchorMap) :-
   foldl(scheduler:add_pdepend_anchor, AllRules, M0, AnchorMap).
 
 scheduler:add_pdepend_anchor(Rule, In, Out) :-
-  ( scheduler:rule_body(Rule, Body),
-    scheduler:rule_head(Rule, DHead),
+  ( prover:rule_body(Rule, Body),
+    prover:rule_head(Rule, DHead),
     findall(C-N,
             ( member(constraint(order_after(Anchor):{_}), Body),
               % `Repo://Entry:Action` parses as `://(Repo, Entry:Action)`
@@ -691,8 +688,8 @@ scheduler:build_forward_dep_map(AllRules, FwdMap) :-
   foldl(scheduler:add_forward_dep, AllRules, M0, FwdMap).
 
 scheduler:add_forward_dep(Rule, In, Out) :-
-  ( scheduler:rule_head(Rule, Head),
-    scheduler:rule_body(Rule, Body)
+  ( prover:rule_head(Rule, Head),
+    prover:rule_body(Rule, Body)
   -> findall(DepHead,
              ( member(Dep, Body),
                \+ constraint:is_constraint(Dep),
@@ -849,7 +846,7 @@ scheduler:build_pkg_head_map(Plan, PkgHeadMap) :-
         Plan, M0, PkgHeadMap).
 
 scheduler:add_pkg_head(Rule, In, Out) :-
-  ( scheduler:rule_head(Rule, Head),
+  ( prover:rule_head(Rule, Head),
     Head = Repo://Entry:Action,
     scheduler:phase_class(Action, PhaseClass),
     cache:ordered_entry(Repo, Entry, C, N, _)
@@ -930,7 +927,7 @@ scheduler:rebuild_plan_from_map(AllRules, Map, Plan) :-
 
 scheduler:assign_waves([], _, _, []).
 scheduler:assign_waves([Rule|Rules], Map, FallbackWave, [Wave-Rule|Rest]) :-
-  ( scheduler:rule_head(Rule, Head),
+  ( prover:rule_head(Rule, Head),
     get_assoc(Head, Map, Wave0)
   -> Wave = Wave0
   ; Wave = FallbackWave
@@ -949,7 +946,7 @@ scheduler:build_head_wave_map([Wave|Waves], Idx, MapIn, MapOut) :-
   scheduler:build_head_wave_map(Waves, Idx1, MapMid, MapOut).
 
 scheduler:add_head_wave(Idx, Rule, MapIn, MapOut) :-
-  ( scheduler:rule_head(Rule, Head) ->
+  ( prover:rule_head(Rule, Head) ->
       put_assoc(Head, MapIn, Idx, MapOut)
   ; MapOut = MapIn
   ).
@@ -1043,7 +1040,7 @@ scheduler:plan_heads(Plan, Heads) :-
   findall(H,
           ( member(Step, Plan),
             member(Rule, Step),
-            scheduler:rule_head(Rule, H)
+            prover:rule_head(Rule, H)
           ),
           Hs0),
   sort(Hs0, Heads).
@@ -1074,10 +1071,7 @@ scheduler:closure_queue([H|Hs], PlanHeads, ProofAVL, V0, V, Acc0, Acc) :-
 
 scheduler:deps_in_plan_run(Head, PlanHeads, ProofAVL, Deps) :-
   ( scheduler:get_full_rule_from_proof(Head, ProofAVL, Rule) ->
-      ( Rule = rule(_HeadWithCtx, Body)
-      ; Rule = assumed(rule(_HeadWithCtx, Body))
-      ; Rule = rule(assumed(_HeadWithCtx), Body)
-      ),
+      prover:rule_body(Rule, Body),
       findall(DepHead0,
               ( member(Dep, Body),
                 \+ constraint:is_constraint(Dep),
@@ -1098,7 +1092,7 @@ scheduler:remove_heads_from_plan(RemoveHeads, PlanIn, PlanOut) :-
 scheduler:remove_heads_from_step(RemoveHeads, StepIn, StepOut) :-
   findall(Rule,
           ( member(Rule, StepIn),
-            scheduler:rule_head(Rule, H),
+            prover:rule_head(Rule, H),
             \+ memberchk(H, RemoveHeads)
           ),
           StepOut).
@@ -1183,17 +1177,10 @@ scheduler:test_stats(Repository, Style) :-
 scheduler:remainder_heads(RemainderRules, Heads) :-
   findall(Head,
           ( member(Rule, RemainderRules),
-            scheduler:rule_head(Rule, Head)
+            prover:rule_head(Rule, Head)
           ),
           Heads0),
   sort(Heads0, Heads).
-
-scheduler:rule_head(Rule, Head) :-
-  ( Rule = rule(HeadWithCtx, _Body)
-  ; Rule = assumed(rule(HeadWithCtx, _Body))
-  ; Rule = rule(assumed(HeadWithCtx), _Body)
-  ),
-  prover:canon_literal(HeadWithCtx, Head, _).
 
 
 % -----------------------------------------------------------------------------
@@ -1209,10 +1196,7 @@ scheduler:build_forward_reverse(Heads, ProofAVL, Forward, Reverse) :-
 
 scheduler:forward_put(Heads, ProofAVL, Head, In, Out) :-
   scheduler:get_full_rule_from_proof(Head, ProofAVL, Rule),
-  ( Rule = rule(_HeadWithCtx, Body)
-  ; Rule = assumed(rule(_HeadWithCtx, Body))
-  ; Rule = rule(assumed(_HeadWithCtx), Body)
-  ),
+  prover:rule_body(Rule, Body),
   findall(DepHead,
           ( member(Dep, Body),
             \+ constraint:is_constraint(Dep),
@@ -1231,7 +1215,7 @@ scheduler:remainder_head_rule_map(RemainderRules, Map) :-
   !.
 
 scheduler:remainder_head_rule_put(Rule, In, Out) :-
-  scheduler:rule_head(Rule, Head),
+  prover:rule_head(Rule, Head),
   % If duplicates exist, keep the first encountered rule (stable).
   ( get_assoc(Head, In, _) ->
       Out = In
@@ -1254,7 +1238,7 @@ scheduler:heads_set_assoc(Heads, Set) :-
 
 scheduler:forward_put_from_map(HeadRuleMap, HeadSet, Head, In, Out) :-
   ( get_assoc(Head, HeadRuleMap, Rule) ->
-      scheduler:rule_body(Rule, Body),
+      prover:rule_body(Rule, Body),
       findall(DepHead,
               ( member(Dep, Body),
                 \+ constraint:is_constraint(Dep),
@@ -1267,13 +1251,6 @@ scheduler:forward_put_from_map(HeadRuleMap, HeadSet, Head, In, Out) :-
   ; % Should not happen, but keep scheduler total.
     put_assoc(Head, In, [], Out)
   ).
-
-scheduler:rule_body(Rule, Body) :-
-  ( Rule = rule(_HeadWithCtx, Body)
-  ; Rule = assumed(rule(_HeadWithCtx, Body))
-  ; Rule = rule(assumed(_HeadWithCtx), Body)
-  ),
-  !.
 
 scheduler:invert_graph(Heads, Forward, Reverse) :-
   empty_assoc(Empty),
