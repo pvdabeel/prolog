@@ -63,7 +63,6 @@ module for PDEPEND goal filtering.
 % True when Q is a category/name-only target (no version constraint).
 
 target:is_cn_target(qualified_target(none, _, _, _, version_none, _)).
-target:is_cn_target(qualified_target(none, _, _, _, [[],'','','',''], _)).
 
 
 %! target:resolve_candidate(+Q, -Repository://Ebuild) is nondet.

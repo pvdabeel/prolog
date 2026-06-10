@@ -2072,6 +2072,120 @@ test(multimodel_flag_off_by_default, [fail]) :-
 
 
 % =============================================================================
+%  Query macro layer (portage-ng#32)
+% =============================================================================
+
+% Regression tests for the compile_query_compound macro table: tilde targets,
+% select(keyword/keywords) metadata key, maintainer clause arity, and slot
+% filters on operator-less (none) targets. Each query form is exercised
+% through both paths:
+%   - expanded:  the query is a literal in the test source, so
+%                user:goal_expansion/2 inlines the cache goals at compile time
+%   - runtime:   the query is constructed at runtime (parsed or =..-built),
+%                so query:search/2 compiles it via the same macro table at
+%                call time
+% Uses synthetic cache facts under a private 'qtest' repository; no KB needed.
+
+query_macros_setup :-
+  query_macros_cleanup,
+  assertz(cache:ordered_entry(qtest, 'dev-test/foo-2.0', 'dev-test', foo,
+                              version([2,0],'',4,0,[],0,'2.0'))),
+  assertz(cache:ordered_entry(qtest, 'dev-test/foo-1.0-r1', 'dev-test', foo,
+                              version([1,0],'',4,0,[],1,'1.0-r1'))),
+  assertz(cache:ordered_entry(qtest, 'dev-test/foo-1.0', 'dev-test', foo,
+                              version([1,0],'',4,0,[],0,'1.0'))),
+  assertz(cache:entry_metadata(qtest, 'dev-test/foo-1.0',    slot, slot('1'))),
+  assertz(cache:entry_metadata(qtest, 'dev-test/foo-1.0-r1', slot, slot('1'))),
+  assertz(cache:entry_metadata(qtest, 'dev-test/foo-2.0',    slot, slot('2'))),
+  assertz(cache:entry_metadata(qtest, 'dev-test/foo-1.0', keywords, stable(amd64))),
+  assertz(cache:entry_metadata(qtest, 'dev-test/foo-2.0', keywords, unstable(amd64))),
+  assertz(cache:entry_metadata(qtest, 'dev-test/foo-1.0', maintainer,
+                               ['dev@example.org','other@example.org'])).
+
+query_macros_cleanup :-
+  retractall(cache:ordered_entry(qtest,_,_,_,_)),
+  retractall(cache:entry_metadata(qtest,_,_,_)).
+
+:- begin_tests(query_macros, [setup(query_macros_setup),
+                              cleanup(query_macros_cleanup)]).
+
+% The arity-typo class (body goals written as extra head arguments) must not
+% silently define compile_query_compound/4 or /5; query.pl also fails loudly
+% at load time via a directive when this happens.
+test(no_wrong_arity_macro_clauses) :-
+  \+ current_predicate(query:compile_query_compound/4),
+  \+ current_predicate(query:compile_query_compound/5).
+
+% Tilde targets must match any revision of the given version (runtime path,
+% parsed exactly like a CLI target).
+test(tilde_target_runtime, [true(Ids == ['dev-test/foo-1.0','dev-test/foo-1.0-r1']), nondet]) :-
+  atom_codes('~dev-test/foo-1.0', Codes),
+  phrase(eapi:qualified_target(Q), Codes),
+  findall(I, query:search(Q, qtest://I), Ids0),
+  msort(Ids0, Ids).
+
+% Same query as a source literal (goal-expanded path).
+test(tilde_target_expanded, [true(Ids == ['dev-test/foo-1.0','dev-test/foo-1.0-r1'])]) :-
+  findall(I,
+          query:search(qualified_target(tilde, qtest, 'dev-test', foo,
+                                        version([1,0],'',4,0,[],0,'1.0'),
+                                        [[],[]]),
+                       qtest://I),
+          Ids0),
+  msort(Ids0, Ids).
+
+% Slot restrictions on operator-less targets must filter candidates
+% (previously dropped at query level).
+test(cn_target_slot_filter_runtime, [true(Ids == ['dev-test/foo-2.0'])]) :-
+  atom_codes('dev-test/foo:2', Codes),
+  phrase(eapi:qualified_target(Q), Codes),
+  findall(I, query:search(Q, qtest://I), Ids0),
+  msort(Ids0, Ids).
+
+% Operator-less target without restrictions still returns all versions
+% (goal-expanded path, empty filters).
+test(cn_target_expanded_all, [true(N == 3)]) :-
+  findall(I,
+          query:search(qualified_target(none, qtest, 'dev-test', foo,
+                                        version_none, [[],[]]),
+                       qtest://I),
+          Ids),
+  length(Ids, N).
+
+% select(keyword/keywords) must query the 'keywords' metadata key.
+test(select_keyword_expanded, [true(Ids == ['dev-test/foo-1.0'])]) :-
+  findall(I, query:search(select(keyword,equal,stable(amd64)), qtest://I), Ids0),
+  msort(Ids0, Ids).
+
+test(select_keywords_runtime, [true(Ids == ['dev-test/foo-1.0'])]) :-
+  Q =.. [select, keywords, equal, stable(amd64)],
+  findall(I, query:search(Q, qtest://I), Ids0),
+  msort(Ids0, Ids).
+
+% maintainer(M) enumerates list members (previously a wrong-arity clause, so
+% the inlining never happened).
+test(maintainer_expanded, [true(Ms == ['dev@example.org','other@example.org'])]) :-
+  findall(M, query:search(maintainer(M), qtest://'dev-test/foo-1.0'), Ms0),
+  msort(Ms0, Ms).
+
+test(select_maintainer_runtime, [true(Ids == ['dev-test/foo-1.0'])]) :-
+  Q =.. [select, maintainer, equal, 'dev@example.org'],
+  findall(I, query:search(Q, qtest://I), Ids0),
+  msort(Ids0, Ids).
+
+% is_cn_target/1 only recognises the version_none form (the stale
+% pre-version/7 list form is gone).
+test(is_cn_target_version_none) :-
+  target:is_cn_target(qualified_target(none, _, 'dev-test', foo, version_none, [[],[]])).
+
+test(is_cn_target_rejects_versioned, [fail]) :-
+  target:is_cn_target(qualified_target(none, _, 'dev-test', foo,
+                                       version([1,0],'',4,0,[],0,'1.0'), [[],[]])).
+
+:- end_tests(query_macros).
+
+
+% =============================================================================
 %  md5-cache validation harness
 % =============================================================================
 
