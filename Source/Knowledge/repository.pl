@@ -416,8 +416,10 @@ sync(kb) ::-
   concurrent_forall((:find_ebuild(E,TE,C,N,V),cache:entry_metadata(Repository,E,timestamp,TC), TE > TC + 60), % time writing to disk
           (:read_ebuild(E,Cd,M),
            with_mutex(mutex,message:scroll(['Ebuild (changed): ',E])),
+           retractall(cache:entry(Repository,E,_,_,_)),
+           retractall(cache:entry_metadata(Repository,E,_,_)),
            assertz(cache:entry(Repository,E,C,N,V)),
-           assertz(cache:entry_metadata(Repository,E,timestamp,T)),
+           assertz(cache:entry_metadata(Repository,E,timestamp,TE)),
            assertz(cache:entry_metadata(Repository,E,changed,true)),
            forall(member(L,M),
                   (L=..[Key,Value],
