@@ -181,8 +181,10 @@ userconfig:apply_package_keyword_line(Line) :-
   ( Tokens = [AtomS|KeywordSs] ->
       atom_string(Atom, AtomS),
       ( KeywordSs == [] ->
-          % Bare atom means accept ~ARCH (Portage convention)
-          assertz(userconfig:package_keyword(Atom, '~*'))
+          % Bare atom means accept ~ARCH for the current arch only
+          % (Portage convention), not testing keywords of any arch.
+          userconfig:bare_atom_keyword(KW),
+          assertz(userconfig:package_keyword(Atom, KW))
       ; forall(member(KS, KeywordSs),
                ( atom_string(KW, KS),
                  assertz(userconfig:package_keyword(Atom, KW))
@@ -190,6 +192,42 @@ userconfig:apply_package_keyword_line(Line) :-
       )
   ; true
   ).
+
+
+%! userconfig:bare_atom_keyword(-KW) is det.
+%
+% Keyword implied by a bare atom in package.accept_keywords: ~ARCH for
+% the current architecture (Portage convention). The arch is resolved
+% from ACCEPT_KEYWORDS (env > make.conf > fallback; make.conf has
+% already been read by userconfig:load_make_conf at this point) or from
+% the ARCH variable. When no arch can be determined, falls back to
+% '~*' (testing keyword of any arch) as a last resort.
+
+userconfig:bare_atom_keyword(KW) :-
+  ( userconfig:current_arch(Arch) ->
+      atom_concat('~', Arch, KW)
+  ; KW = '~*'
+  ).
+
+
+%! userconfig:current_arch(-Arch) is semidet.
+%
+% Resolves the current architecture from ACCEPT_KEYWORDS (preferring a
+% stable arch over a testing one, skipping '*'/'**' wildcards) or, when
+% ACCEPT_KEYWORDS is unavailable, from the ARCH variable.
+
+userconfig:current_arch(Arch) :-
+  catch(findall(K, preference:env_accept_keywords(K), Ks), _, Ks = []),
+  ( member(stable(Arch), Ks)
+  ; member(unstable(Arch), Ks)
+  ),
+  Arch \== '*',
+  Arch \== '**',
+  !.
+userconfig:current_arch(Arch) :-
+  catch(preference:getenv('ARCH', Arch), _, fail),
+  Arch \== '',
+  !.
 
 
 % -----------------------------------------------------------------------------
