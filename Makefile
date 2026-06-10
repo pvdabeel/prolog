@@ -57,17 +57,17 @@ install:  ## Install the application.
 	  $(SUDO) cp $(TARGET) /usr/local/bin
 
 test:     ## Run PLUnit tests.
-	  ./Source/Application/Wrapper/portage-ng-dev --mode standalone --shell <<'PL'
-	load_files(portage('Source/Test/unittest'), [if(true)]).
-	run_tests.
-	halt.
-	PL
+	  printf '%s\n' \
+	    "load_files(portage('Source/Test/unittest'), [if(true)])." \
+	    "run_tests." \
+	    "halt." | \
+	    ./Source/Application/Wrapper/portage-ng-dev --mode standalone --shell
 
 test-overlay: ## Run overlay regression tests (requires loaded overlay repository).
-	  ./Source/Application/Wrapper/portage-ng-dev --mode standalone --shell <<'PL'
-	test:run(cases).
-	halt.
-	PL
+	  printf '%s\n' \
+	    "test:run(cases)." \
+	    "halt." | \
+	    ./Source/Application/Wrapper/portage-ng-dev --mode standalone --shell
 
 clean:    ## Remove the built binary.
 	  rm -f $(TARGET)
