@@ -82,6 +82,15 @@ profile:profile_use_force(ProfileRel, Force) :-
 
 profile:profile_package_mask_atoms(ProfileRel, Atoms) :-
   profile:profile_dirs(ProfileRel, Dirs),
+  % IMPORTANT: keep order.
+  %
+  % Gentoo profiles use incremental semantics for package.mask, including
+  % unmasking with '-cat/pkg' in child profiles. Order is therefore significant:
+  % later entries (closer to the leaf profile) override earlier ones.
+  %
+  % Do NOT sort/dedupe here; consumers (preference:init) apply the operations
+  % sequentially. Empty lines are filtered at read time by
+  % profile_read_atoms_file/2.
   findall(A,
           ( % Global masks (apply to all profiles)
             profile:global_package_mask_file(File),
@@ -107,18 +116,7 @@ profile:profile_package_mask_atoms(ProfileRel, Atoms) :-
               atom_concat('-', A0, A)
             )
           ),
-          Atoms0),
-  % IMPORTANT: keep order.
-  %
-  % Gentoo profiles use incremental semantics for package.mask, including
-  % unmasking with '-cat/pkg' in child profiles. Order is therefore significant:
-  % later entries (closer to the leaf profile) override earlier ones.
-  %
-  % Do NOT sort/dedupe here; consumers (preference:init) apply the operations
-  % sequentially.
-  %
-  % Exclude empty atoms (can occur from malformed or empty lines in mask files).
-  exclude(==(''), Atoms0, Atoms).
+          Atoms).
 
 
 % =============================================================================
@@ -276,12 +274,17 @@ profile:profile_dirs_from_dir(Dir, Seen, Seen) :-
   !.
 profile:profile_dirs_from_dir(Dir, Seen0, Seen) :-
   profile:parent_file(Dir, ParentFile),
+  % Cycle guard: register Dir as seen *before* recursing into its parents so
+  % a parent chain that loops back here terminates. Seen doubles as the
+  % ordered result (reversed by profile_dirs/2), so afterwards Dir is moved
+  % back to the head to keep the leaf-last (root-first after reverse) order.
   ( exists_file(ParentFile) ->
       read_file_to_string(ParentFile, S, []),
       split_string(S, "\n", "\r\n\t ", Lines0),
       exclude(profile:profile_comment_or_empty, Lines0, Lines),
-      foldl(profile:profile_parent_dir(Dir), Lines, Seen0, Seen1),
-      Seen = [Dir|Seen1]
+      foldl(profile:profile_parent_dir(Dir), Lines, [Dir|Seen0], Seen1),
+      selectchk(Dir, Seen1, Seen2),
+      Seen = [Dir|Seen2]
   ; % Gentoo profile trees contain some subprofiles without an explicit `parent`
     % file (notably `profiles/arch/<arch>/no-multilib/`). In Portage these
     % directories still inherit from their containing directory.
@@ -289,8 +292,9 @@ profile:profile_dirs_from_dir(Dir, Seen0, Seen) :-
     % Emulate this by implicitly inheriting from the filesystem parent *if* that
     % parent looks like a real profile directory (has make.defaults or parent).
     ( profile:profile_implicit_parent_dir(Dir, ParentDir) ->
-        profile:profile_dirs_from_dir(ParentDir, Seen0, Seen1),
-        Seen = [Dir|Seen1]
+        profile:profile_dirs_from_dir(ParentDir, [Dir|Seen0], Seen1),
+        selectchk(Dir, Seen1, Seen2),
+        Seen = [Dir|Seen2]
     ; Seen = [Dir|Seen0]
     )
   ).
@@ -382,7 +386,7 @@ profile:profile_strip_comment(S0, S) :-
 % Succeeds when Line is empty or starts with '#'.
 
 profile:profile_comment_or_empty(Line) :-
-  Line == '' ;
+  Line == "" ;
   sub_string(Line, 0, 1, _, "#").
 
 
@@ -393,7 +397,7 @@ profile:profile_comment_or_empty(Line) :-
 
 profile:profile_parent_dir(ChildDir, ParentRel0, Seen0, Seen) :-
   normalize_space(string(ParentRel), ParentRel0),
-  ( ParentRel == '' ->
+  ( ParentRel == "" ->
       Seen = Seen0
   ; directory_file_path(ChildDir, ParentRel, ParentDir0),
     absolute_file_name(ParentDir0, ParentDir, [file_type(directory), access(read)]),
@@ -417,7 +421,6 @@ profile:profile_read_atoms_file(File, Atoms) :-
           ( member(L0, Lines0),
             profile:profile_strip_comment(L0, L1),
             normalize_space(string(L), L1),
-            L \== '',
             \+ profile:profile_comment_or_empty(L),
             atom_string(A, L)
           ),
