@@ -3316,9 +3316,17 @@ candidate:grouped_dep_slot_lock(_, _, _, _, _).
 %! candidate:grouped_dep_find_candidate(+Action, +C, +N, +SlotReq, +SsLock, +PackageDeps, +Context, -Entry, -PreVerified) is nondet.
 %
 % Enumerates candidate entries respecting slot constraints and CN-consistency.
+%
+% For explicit slot/subslot deps (cat/pkg:0/0.16, :=0/0.16, etc.), we must
+% NOT blindly reuse an existing selected_cn(C,N) choice that may point at a
+% different slot/subslot (otherwise the dep degrades into a bogus
+% "non-existent, assumed ..." domain assumption). Such deps therefore skip
+% selected_cn reuse and enumerate fresh candidates; full version/domain
+% verification still happens downstream (PreVerified = false).
 
-candidate:grouped_dep_find_candidate(Action, C, N, [slot(_)|_] = SlotReq, _SsLock, _PackageDeps1, Context,
+candidate:grouped_dep_find_candidate(Action, C, N, SlotReq, _SsLock, _PackageDeps1, Context,
                                      FoundRepo://Candidate, false) :-
+  SlotReq = [slot(_)|_],
   !,
   candidate:accepted_keyword_candidate(Action, C, N, SlotReq, _Ss0, Context, FoundRepo://Candidate).
 candidate:grouped_dep_find_candidate(Action, C, N, SlotReq, _SsLock, PackageDeps1, Context,
