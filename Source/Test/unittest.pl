@@ -1744,6 +1744,109 @@ test(cycle_does_not_collapse_downstream_chain) :-
 
 
 % =============================================================================
+%  Scheduler: ordering-violation pre-check (portage-ng#54)
+% =============================================================================
+%
+% `repair_ordering_violations/3` only runs the full SCC-condensation repair
+% when the cheap single-pass scan (`plan_has_ordering_violation/3`) finds a
+% wave-ordering violation. These tests exercise the scan against the same
+% synthetic rule sets used by the repair tests above (KB-independent,
+% hand-built wave map + PkgHeadMap).
+
+:- begin_tests(scheduler_ordering_precheck).
+
+% Every body dep sits in a strictly earlier wave: no violation, the repair
+% fast path returns the plan unchanged.
+test(violation_free_plan_passes_scan, [fail]) :-
+  AInstall = portage://'fake/a-1':install,
+  ARun = portage://'fake/a-1':run,
+  BInstall = portage://'fake/b-1':install,
+  AllRules = [ rule(AInstall, []),
+               rule(ARun, [AInstall]),
+               rule(BInstall, [ARun]) ],
+  list_to_assoc([AInstall-1, ARun-2, BInstall-3], Map),
+  empty_assoc(PkgHeadMap),
+  scheduler:plan_has_ordering_violation(AllRules, Map, PkgHeadMap).
+
+% A rule planned before its direct body dep is a violation.
+test(direct_dep_violation_detected) :-
+  AInstall = portage://'fake/a-1':install,
+  BInstall = portage://'fake/b-1':install,
+  AllRules = [ rule(AInstall, []),
+               rule(BInstall, [AInstall]) ],
+  list_to_assoc([AInstall-2, BInstall-1], Map),
+  empty_assoc(PkgHeadMap),
+  scheduler:plan_has_ordering_violation(AllRules, Map, PkgHeadMap).
+
+% Sharing a wave with a dependency is a violation too (the longest-path
+% repair places a rule STRICTLY after its cross-SCC dependencies).
+test(same_wave_dep_violation_detected) :-
+  AInstall = portage://'fake/a-1':install,
+  BInstall = portage://'fake/b-1':install,
+  AllRules = [ rule(AInstall, []),
+               rule(BInstall, [AInstall]) ],
+  list_to_assoc([AInstall-1, BInstall-1], Map),
+  empty_assoc(PkgHeadMap),
+  scheduler:plan_has_ordering_violation(AllRules, Map, PkgHeadMap).
+
+% Grouped-RDEPEND alias: the grouped head is not a plan head, but the
+% concrete provider (via PkgHeadMap) lands in a later wave.
+test(grouped_rdepend_alias_violation_detected) :-
+  BifRun = grouped_package_dependency(no, 'dev-haskell', bifunctors, []):run,
+  AllRules = [ rule(portage://'fake/sg-1':run, [BifRun]),
+               rule(portage://'fake/bif-1':run, []) ],
+  list_to_assoc([ (portage://'fake/sg-1':run)-1,
+                  (portage://'fake/bif-1':run)-2 ], Map),
+  list_to_assoc([ ('run_phase'-'dev-haskell'-bifunctors)-(portage://'fake/bif-1':run) ],
+                 PkgHeadMap),
+  scheduler:plan_has_ordering_violation(AllRules, Map, PkgHeadMap).
+
+% Assumed-dep alias (Qt6 cmake-find ordering bug): the assumed grouped dep
+% aliases to a concrete planned install in a later wave.
+test(assumed_dep_alias_violation_detected) :-
+  Assumed = assumed(grouped_package_dependency('dev-qt', qtbase, []):install?{[]}),
+  AllRules = [ rule(portage://'fake/consumer-1':install, [Assumed]),
+               rule(portage://'fake/qtbase-1':install, []) ],
+  list_to_assoc([ (portage://'fake/consumer-1':install)-1,
+                  (portage://'fake/qtbase-1':install)-2 ], Map),
+  list_to_assoc([ ('install_phase'-'dev-qt'-qtbase)-(portage://'fake/qtbase-1':install) ],
+                 PkgHeadMap),
+  scheduler:plan_has_ordering_violation(AllRules, Map, PkgHeadMap).
+
+% Configure closure (portage-ng#21): the install sibling of a :run rule is
+% planned before the run rule's RDEPEND provider. The run rule's own body
+% edges are satisfied (provider wave 2 < run wave 3), so only the configure
+% closure check catches this.
+test(configure_closure_violation_detected) :-
+  BifRun = grouped_package_dependency(no, 'dev-haskell', bifunctors, []):run,
+  AllRules = [ rule(portage://'fake/sg-1':install, []),
+               rule(portage://'fake/sg-1':run, [BifRun]),
+               rule(portage://'fake/bif-1':run, []) ],
+  list_to_assoc([ (portage://'fake/sg-1':install)-1,
+                  (portage://'fake/sg-1':run)-3,
+                  (portage://'fake/bif-1':run)-2 ], Map),
+  list_to_assoc([ ('run_phase'-'dev-haskell'-bifunctors)-(portage://'fake/bif-1':run) ],
+                 PkgHeadMap),
+  scheduler:plan_has_ordering_violation(AllRules, Map, PkgHeadMap).
+
+% Same shape but with the install sibling correctly placed after the
+% provider: the scan stays quiet.
+test(configure_closure_satisfied_passes_scan, [fail]) :-
+  BifRun = grouped_package_dependency(no, 'dev-haskell', bifunctors, []):run,
+  AllRules = [ rule(portage://'fake/bif-1':run, []),
+               rule(portage://'fake/sg-1':install, []),
+               rule(portage://'fake/sg-1':run, [BifRun]) ],
+  list_to_assoc([ (portage://'fake/bif-1':run)-1,
+                  (portage://'fake/sg-1':install)-2,
+                  (portage://'fake/sg-1':run)-3 ], Map),
+  list_to_assoc([ ('run_phase'-'dev-haskell'-bifunctors)-(portage://'fake/bif-1':run) ],
+                 PkgHeadMap),
+  scheduler:plan_has_ordering_violation(AllRules, Map, PkgHeadMap).
+
+:- end_tests(scheduler_ordering_precheck).
+
+
+% =============================================================================
 %  Scheduler: PDEPEND completion ordering (portage-ng#18)
 % =============================================================================
 %

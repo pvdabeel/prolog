@@ -54,7 +54,11 @@ user:goal_expansion(perf_report, true) :-
 
 %! scheduler:schedule(+ProofAVL,+TriggersAVL,+PlanIn,+RemainderIn,-PlanOut,-RemainderOut)
 %
-% If RemainderIn is empty, passes PlanIn through unchanged (O(1)).
+% If RemainderIn is empty, skips remainder SCC extraction; the plan still
+% passes through merge-order biasing and the ordering check. The ordering
+% check is a cheap single-pass violation scan that only escalates to the
+% full SCC-condensation repair when a violation is found (the uncommon
+% case), so the empty-remainder path stays near-linear in plan size.
 % Otherwise schedules the schedulable portion of the remainder by collapsing
 % :run SCCs (merge sets) and returns a new remainder for the unschedulable part.
 %
@@ -80,9 +84,12 @@ schedule(ProofAVL, TriggersAVL, PlanIn, RemainderIn, PlanOut, RemainderOut) :-
   scheduler:build_components(SCCs, Forward, CompMap, Comps),
   length(Comps, CompsN),
   scheduler:record_scc_info(Comps),
-  scheduler:blocked_components(Comps, Forward, CompMap, BlockedCompIds),
+  % Compute the condensation edges once; both the blocked-component closure
+  % and the Kahn wave ordering consume the same edge set.
+  scheduler:comp_edges(Forward, CompMap, CompEdges),
+  scheduler:blocked_components(Comps, CompEdges, BlockedCompIds),
   length(BlockedCompIds, BlockedN),
-  scheduler:schedulable_component_waves(Comps, Forward, CompMap, BlockedCompIds, WavesCompIds),
+  scheduler:schedulable_component_waves(Comps, CompEdges, BlockedCompIds, WavesCompIds),
   length(WavesCompIds, WavesN),
   scheduler:count_wave_components(WavesCompIds, WavesCompTotalN),
   scheduler:expand_component_waves_from_map(WavesCompIds, Comps, Forward, HeadRuleMap, WavesRules),
@@ -195,10 +202,12 @@ scheduler:reorder_waves_by_refcount([Wave|Ws], RefCountMap, [Sorted|Rs]) :-
 scheduler:enforce_order_after_constraints(PlanIn, PlanOut) :-
   append(PlanIn, Flat0),
   ( scheduler:flat_has_order_after_constraints(Flat0) ->
+      HasOrderAfter = true,
       scheduler:plan_step_lengths(PlanIn, Lens),
       scheduler:flat_order_after_constraints(Flat0, Flat),
       scheduler:rechunk_by_lengths(Flat, Lens, PlanMid)
-  ; PlanMid = PlanIn
+  ; HasOrderAfter = false,
+    PlanMid = PlanIn
   ),
   % Always run repair_ordering_violations: even without order_after
   % constraints, a rule body may carry an `assumed(grouped_package_dep…)`
@@ -207,8 +216,9 @@ scheduler:enforce_order_after_constraints(PlanIn, PlanOut) :-
   % a domain assumption while another path resolved the same package
   % concretely with a USE mutation). The repair pass is alias-aware (see
   % `repair_dep_head/6`) and promotes the parent so it lands after the
-  % concrete action it actually depends on.
-  scheduler:repair_ordering_violations(PlanMid, PlanOut),
+  % concrete action it actually depends on. HasOrderAfter is passed down
+  % so the repair pass knows whether PDEPEND anchors can exist at all.
+  scheduler:repair_ordering_violations(PlanMid, HasOrderAfter, PlanOut),
   !.
 
 scheduler:flat_has_order_after_constraints(Rules) :-
@@ -317,14 +327,38 @@ scheduler:rechunk_by_lengths_(Rules, [N|Ns], [Step|Rest]) :-
 % consumer) into a single wave, losing hard build-time ordering
 % (portage-ng#26, cvs-fast-export vs dev-ruby/asciidoctor).
 
-%! scheduler:repair_ordering_violations(+PlanIn, -PlanOut)
+%! scheduler:repair_ordering_violations(+PlanIn, +HasOrderAfter, -PlanOut)
 %
 % SCC-condensation longest-path repair for ordering violations.
+%
+% Cheap pre-check first (portage-ng#54): most plans are already violation
+% free, so we scan the plan once against the head->wave map (direct body
+% deps, assumed-dep aliases, grouped-RDEPEND aliases and the configure
+% closure of :run siblings) and return PlanIn unchanged when every edge
+% already increases strictly in wave order. Only when a violation is found
+% (or when order_after constraints are present, which can introduce PDEPEND
+% completion edges the cheap scan does not resolve) do we build the full
+% repair graph and recompute waves via the SCC condensation.
 
-scheduler:repair_ordering_violations(PlanIn, PlanOut) :-
+scheduler:repair_ordering_violations(PlanIn, HasOrderAfter, PlanOut) :-
   scheduler:build_head_wave_map(PlanIn, 1, t, Map0),
   scheduler:build_pkg_head_map(PlanIn, PkgHeadMap),
   append(PlanIn, AllRules),
+  ( HasOrderAfter == false,
+    \+ scheduler:plan_has_ordering_violation(AllRules, Map0, PkgHeadMap)
+  -> PlanOut = PlanIn
+  ;  scheduler:repair_ordering_violations_full(AllRules, Map0, PkgHeadMap, PlanOut)
+  ).
+
+
+%! scheduler:repair_ordering_violations_full(+AllRules, +Map0, +PkgHeadMap, -PlanOut)
+%
+% The full SCC-condensation repair (see section comment above). Builds the
+% PDEPEND anchor/closure maps and the configure-dep map, extracts the
+% effective repair graph, condenses it (Kosaraju) and assigns longest-path
+% waves.
+
+scheduler:repair_ordering_violations_full(AllRules, Map0, PkgHeadMap, PlanOut) :-
   scheduler:build_pdepend_anchor_map(AllRules, AnchorMap),
   ( AnchorMap == t
   -> Pd = pd(t, t)                       % no PDEPEND provider in plan: no-op
@@ -339,6 +373,92 @@ scheduler:repair_ordering_violations(PlanIn, PlanOut) :-
   scheduler:comp_edges(Forward, CompMap, CompEdges),
   scheduler:assign_repair_waves(CompIds, CompEdges, MembersMap, Map0, Map1),
   scheduler:rebuild_plan_from_map(AllRules, Map1, PlanOut).
+
+
+%! scheduler:plan_has_ordering_violation(+AllRules, +Map, +PkgHeadMap) is semidet
+%
+% True when at least one planned rule sits in a wave that does not strictly
+% follow all of its repair dependencies. Mirrors the edge enumeration of
+% `add_repair_edges/7` minus the PDEPEND completion edges (the caller only
+% takes this path when no order_after constraints exist, in which case the
+% anchor map is empty and no PDEPEND edges arise). Conservative: any rule
+% the scan cannot resolve cheaply counts as a violation, triggering the
+% full repair, so skipping is always sound.
+
+scheduler:plan_has_ordering_violation(AllRules, Map, PkgHeadMap) :-
+  member(Rule, AllRules),
+  scheduler:rule_ordering_violation(Rule, Map, PkgHeadMap),
+  !.
+
+
+%! scheduler:rule_ordering_violation(+Rule, +Map, +PkgHeadMap) is semidet
+%
+% True when one rule violates wave ordering: a body dep (direct or aliased)
+% resolves to an in-plan head whose wave is not strictly earlier, or -- for
+% `:run` rules -- a run-phase body dep lands at or after the wave of a
+% planned install-phase sibling (the configure closure, portage-ng#21).
+
+scheduler:rule_ordering_violation(Rule, Map, PkgHeadMap) :-
+  ( prover:rule_head(Rule, Head),
+    get_assoc(Head, Map, Wave)
+  ->
+    prover:rule_body(Rule, Body),
+    ( member(Dep, Body),
+      \+ constraint:is_constraint(Dep),
+      scheduler:dep_violates_wave(Dep, Head, Wave, Map, PkgHeadMap)
+    -> true
+    ;  Head = _Repo://_Entry:run,
+       scheduler:configure_closure_violation(Head, Body, Map, PkgHeadMap)
+    )
+  ; % Headless rule or head missing from the wave map: cannot verify
+    % cheaply, treat as a violation so the full repair handles it.
+    true
+  ).
+
+
+%! scheduler:dep_violates_wave(+Dep, +Head, +Wave, +Map, +PkgHeadMap) is semidet
+%
+% True when body dep `Dep` of the rule for `Head` (planned at `Wave`)
+% resolves to a different in-plan head whose wave is >= Wave. Checks the
+% same two resolution paths as `repair_dep_head/6`: the canonical dep head
+% in the wave map, and the assumed-dep / grouped-RDEPEND alias against the
+% concrete planned action in PkgHeadMap.
+
+scheduler:dep_violates_wave(Dep, Head, Wave, Map, _PkgHeadMap) :-
+  prover:canon_literal(Dep, DepHead, _),
+  DepHead \= Head,
+  get_assoc(DepHead, Map, DepWave),
+  DepWave >= Wave,
+  !.
+scheduler:dep_violates_wave(Dep, Head, Wave, Map, PkgHeadMap) :-
+  ( scheduler:assumed_dep_alias_key(Dep, Key)
+  ; scheduler:grouped_run_dep_pkg_key(Dep, Key)
+  ),
+  get_assoc(Key, PkgHeadMap, AliasHead),
+  AliasHead \= Head,
+  get_assoc(AliasHead, Map, AliasWave),
+  AliasWave >= Wave,
+  !.
+
+
+%! scheduler:configure_closure_violation(+RunHead, +RunBody, +Map, +PkgHeadMap) is semidet
+%
+% True when a run-phase body dep of the `:run` rule for an entry resolves
+% to a wave at or after a planned install-phase sibling of that entry
+% (install/update/downgrade/reinstall). These are exactly the configure
+% closure edges `build_install_configure_dep_map/2` + `add_repair_edges/7`
+% would add: RDEPEND providers must be functionally complete before the
+% consumer's configure phase starts (portage-ng#21).
+
+scheduler:configure_closure_violation(Repo://Entry:run, RunBody, Map, PkgHeadMap) :-
+  member(Action, [install, update, downgrade, reinstall]),
+  CHead = Repo://Entry:Action,
+  get_assoc(CHead, Map, CWave),
+  member(Dep, RunBody),
+  \+ constraint:is_constraint(Dep),
+  scheduler:dep_is_run_phase(Dep),
+  scheduler:dep_violates_wave(Dep, CHead, CWave, Map, PkgHeadMap),
+  !.
 
 
 %! scheduler:build_repair_graph(+AllRules, +Map, +PkgHeadMap, +Pd, +CfgMap,
@@ -1032,73 +1152,6 @@ scheduler:count_rules_in_plan(Plan, Count) :-
 
 
 % -----------------------------------------------------------------------------
-%  Plan / closure helpers
-% -----------------------------------------------------------------------------
-
-% Collect all heads present in a plan.
-scheduler:plan_heads(Plan, Heads) :-
-  findall(H,
-          ( member(Step, Plan),
-            member(Rule, Step),
-            prover:rule_head(Rule, H)
-          ),
-          Hs0),
-  sort(Hs0, Heads).
-
-% Compute the dependency closure starting from SeedHeads, but only:
-% - include :run heads
-% - include heads that are already present in the plan (to keep this bounded)
-scheduler:run_closure_in_plan(SeedHeads, PlanHeads, ProofAVL, ClosureHeads) :-
-  empty_assoc(V0),
-  include(scheduler:is_run_head, SeedHeads, SeedsRun0),
-  sort(SeedsRun0, SeedsRun),
-  scheduler:closure_queue(SeedsRun, PlanHeads, ProofAVL, V0, _V, [], Closure0),
-  sort(Closure0, ClosureHeads).
-
-scheduler:is_run_head(Head) :-
-  compound(Head),
-  Head =.. [':', _Target, run].
-
-scheduler:closure_queue([], _PlanHeads, _ProofAVL, V, V, Acc, Acc).
-scheduler:closure_queue([H|Hs], PlanHeads, ProofAVL, V0, V, Acc0, Acc) :-
-  ( get_assoc(H, V0, true) ->
-      scheduler:closure_queue(Hs, PlanHeads, ProofAVL, V0, V, Acc0, Acc)
-  ; put_assoc(H, V0, true, V1),
-    scheduler:deps_in_plan_run(H, PlanHeads, ProofAVL, Deps),
-    append(Deps, Hs, Q1),
-    scheduler:closure_queue(Q1, PlanHeads, ProofAVL, V1, V, [H|Acc0], Acc)
-  ).
-
-scheduler:deps_in_plan_run(Head, PlanHeads, ProofAVL, Deps) :-
-  ( scheduler:get_full_rule_from_proof(Head, ProofAVL, Rule) ->
-      prover:rule_body(Rule, Body),
-      findall(DepHead0,
-              ( member(Dep, Body),
-                \+ constraint:is_constraint(Dep),
-                prover:canon_literal(Dep, DepHead0, _),
-                scheduler:is_run_head(DepHead0),
-                memberchk(DepHead0, PlanHeads)
-              ),
-              Deps0),
-      sort(Deps0, Deps)
-  ; Deps = []
-  ).
-
-% Remove rules whose heads are in RemoveHeads from a plan.
-scheduler:remove_heads_from_plan(RemoveHeads, PlanIn, PlanOut) :-
-  maplist(scheduler:remove_heads_from_step(RemoveHeads), PlanIn, Plan1),
-  exclude(==( [] ), Plan1, PlanOut).
-
-scheduler:remove_heads_from_step(RemoveHeads, StepIn, StepOut) :-
-  findall(Rule,
-          ( member(Rule, StepIn),
-            prover:rule_head(Rule, H),
-            \+ memberchk(H, RemoveHeads)
-          ),
-          StepOut).
-
-
-% -----------------------------------------------------------------------------
 %  Test helpers (mirror planner.pl)
 % -----------------------------------------------------------------------------
 
@@ -1186,26 +1239,6 @@ scheduler:remainder_heads(RemainderRules, Heads) :-
 % -----------------------------------------------------------------------------
 %  Graph extraction (remainder-induced)
 % -----------------------------------------------------------------------------
-
-scheduler:build_forward_reverse(Heads, ProofAVL, Forward, Reverse) :-
-  empty_assoc(EmptyF),
-  foldl(scheduler:forward_put(Heads, ProofAVL), Heads, EmptyF, Forward0),
-  scheduler:invert_graph(Heads, Forward0, Reverse0),
-  Forward = Forward0,
-  Reverse = Reverse0.
-
-scheduler:forward_put(Heads, ProofAVL, Head, In, Out) :-
-  scheduler:get_full_rule_from_proof(Head, ProofAVL, Rule),
-  prover:rule_body(Rule, Body),
-  findall(DepHead,
-          ( member(Dep, Body),
-            \+ constraint:is_constraint(Dep),
-            prover:canon_literal(Dep, DepHead, _),
-            memberchk(DepHead, Heads)
-          ),
-          Deps0),
-  sort(Deps0, Deps),
-  put_assoc(Head, In, Deps, Out).
 
 % Build a head->rule assoc from the remainder rules list (planner already fetched
 % full rules from the proof).
@@ -1404,13 +1437,17 @@ scheduler:is_mergeable_literal(H) :-
 % Compute the set of components that are blocked (unschedulable):
 % - all 'bad' cyclic components
 % - all components that (transitively) depend on a bad component
-scheduler:blocked_components(Comps, Forward, CompMap, BlockedIds) :-
+% Takes the precomputed condensation edges (see schedule/6), shared with
+% schedulable_component_waves/4.
+scheduler:blocked_components(Comps, Edges, BlockedIds) :-
   findall(Id, member(comp(Id, bad, _), Comps), BadIds0),
   sort(BadIds0, BadIds),
-  scheduler:comp_edges(Forward, CompMap, Edges),
-  scheduler:reverse_comp_edges(Edges, RevEdges),
-  scheduler:closure_from(BadIds, RevEdges, BadClosure),
-  sort(BadClosure, BlockedIds).
+  ( BadIds == []
+  -> BlockedIds = []
+  ;  scheduler:reverse_edge_adjacency(Edges, RevAdj),
+     scheduler:closure_from(BadIds, RevAdj, BadClosure),
+     sort(BadClosure, BlockedIds)
+  ).
 
 scheduler:comp_edges(Forward, CompMap, Edges) :-
   assoc:assoc_to_list(Forward, Pairs),
@@ -1424,26 +1461,34 @@ scheduler:comp_edges(Forward, CompMap, Edges) :-
           Edges0),
   sort(Edges0, Edges).
 
-scheduler:reverse_comp_edges(Edges, RevEdges) :-
-  findall(edge(To, From), member(edge(From, To), Edges), Rev0),
-  sort(Rev0, RevEdges).
+% Build a reverse adjacency assoc (node -> list of dependers) from the
+% condensation edges, so the blocked-component closure walks neighbors via
+% O(log V) lookups instead of scanning a flat edge list per node (O(V*E)).
+scheduler:reverse_edge_adjacency(Edges, RevAdj) :-
+  empty_assoc(A0),
+  foldl(scheduler:add_reverse_edge, Edges, A0, RevAdj).
 
-scheduler:closure_from(Seeds, RevEdges, Closure) :-
+scheduler:add_reverse_edge(edge(From, To), In, Out) :-
+  ( get_assoc(To, In, L0) -> true ; L0 = [] ),
+  put_assoc(To, In, [From|L0], Out).
+
+scheduler:closure_from(Seeds, RevAdj, Closure) :-
   empty_assoc(V0),
-  scheduler:closure_queue(Seeds, RevEdges, V0, _V, [], Closure).
+  scheduler:closure_queue(Seeds, RevAdj, V0, _V, [], Closure).
 
-scheduler:closure_queue([], _RevEdges, V, V, Acc, Acc).
-scheduler:closure_queue([X|Xs], RevEdges, V0, V, Acc0, Acc) :-
+scheduler:closure_queue([], _RevAdj, V, V, Acc, Acc).
+scheduler:closure_queue([X|Xs], RevAdj, V0, V, Acc0, Acc) :-
   ( get_assoc(X, V0, true) ->
-      scheduler:closure_queue(Xs, RevEdges, V0, V, Acc0, Acc)
+      scheduler:closure_queue(Xs, RevAdj, V0, V, Acc0, Acc)
   ; put_assoc(X, V0, true, V1),
-    findall(N, member(edge(X, N), RevEdges), Ns),
+    ( get_assoc(X, RevAdj, Ns) -> true ; Ns = [] ),
     append(Ns, Xs, Q1),
-    scheduler:closure_queue(Q1, RevEdges, V1, V, [X|Acc0], Acc)
+    scheduler:closure_queue(Q1, RevAdj, V1, V, [X|Acc0], Acc)
   ).
 
-scheduler:schedulable_component_waves(Comps, Forward, CompMap, BlockedIds, Waves) :-
-  scheduler:comp_edges(Forward, CompMap, Edges),
+% Takes the precomputed condensation edges (see schedule/6), shared with
+% blocked_components/3.
+scheduler:schedulable_component_waves(Comps, Edges, BlockedIds, Waves) :-
   findall(Id, (member(comp(Id, Kind, _), Comps), Kind \= bad, \+ memberchk(Id, BlockedIds)), Sched0),
   sort(Sched0, Sched),
   % The SCC condensation is a DAG; order it into parallel waves via the shared
@@ -1652,19 +1697,3 @@ scheduler:remainder_from_blocked_from_map(BlockedIds, Comps, HeadRuleMap, Remain
           ),
           RemainderOut0),
   sort(RemainderOut0, RemainderOut).
-
-
-% -----------------------------------------------------------------------------
-%  Proof access (same logic as planner:get_full_rule_from_proof/3)
-% -----------------------------------------------------------------------------
-
-scheduler:get_full_rule_from_proof(Literal, ProofAVL, FullRule) :-
-  (   ProofKey = rule(Literal),
-      get_assoc(ProofKey, ProofAVL, ProofValue)
-  ;   ProofKey = assumed(rule(Literal)),
-      get_assoc(ProofKey, ProofAVL, ProofValue)
-  ;   ProofKey = rule(assumed(Literal)),
-      get_assoc(ProofKey, ProofAVL, ProofValue)
-  ),
-  !,
-  prover:canon_rule(FullRule, ProofKey, ProofValue).
