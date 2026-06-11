@@ -54,7 +54,8 @@ client:remote_predicate_template(preference:local_profile_use_masked(_,_)).
 client:remote_predicate_template(preference:local_profile_use_forced(_,_)).
 
 % Package masking (profiles + /etc/portage/package.mask)
-client:remote_predicate_template(preference:local_masked(_)).
+% Stored as local_masked(Id, Repo) — entry id first for indexing.
+client:remote_predicate_template(preference:local_masked(_,_)).
 
 % License acceptance
 client:remote_predicate_template(preference:local_accepted_license(_)).

@@ -42,8 +42,12 @@ Materialized preference state is written to `Knowledge/preference.qlf` via
 
 % -- Package masking (profiles + /etc/portage/package.mask) --
 %    Storage predicate; query via preference:masked/1 dispatcher.
+%    Stored as local_masked(Id, Repo) — entry id first so first-argument
+%    indexing applies on the hot "is this entry masked" check.  (A plain
+%    local_masked(Repo://Id) representation indexes only on the '://'
+%    functor and degrades to a linear scan.)
 
-:- dynamic preference:local_masked/1.
+:- dynamic preference:local_masked/2.
 
 % -- Global USE / keywords / flags --
 
@@ -127,7 +131,7 @@ preference:init_reset_indexes :-
 
 preference:init_fresh :-
 
-  retractall(preference:local_masked(_)),
+  retractall(preference:local_masked(_,_)),
   retractall(preference:local_userconfig_use(_,_,_,_)),
   retractall(preference:local_profile_masked_use_flag(_)),
   retractall(preference:local_profile_forced_use_flag(_)),
@@ -481,6 +485,33 @@ preference:maybe_derive_single_target(_, _, _).
 
 
 % -----------------------------------------------------------------------------
+%  Pengines dispatch
+% -----------------------------------------------------------------------------
+
+%! preference:pengine_module(-Module) is semidet.
+%
+% Unifies Module with the Pengines sandbox module when executing inside a
+% pengine (client-server mode); fails in standalone mode.  The result of
+% pengine_self/1 is memoized in a per-thread global variable, so the
+% preference accessors — called millions of times per proof via
+% effective_use_* — pay a single cheap nb_current/2 lookup instead of a
+% pengine_self/1 dispatch test on every call.  Memoization is safe because
+% a thread is either a pengine thread or a regular thread for its entire
+% lifetime, and per-thread global variables die with the thread.
+
+preference:pengine_module(M) :-
+  ( nb_current(pref_pengine_module, M0) ->
+      M0 \== none,
+      M = M0
+  ; pengine_self(M1) ->
+      nb_setval(pref_pengine_module, M1),
+      M = M1
+  ; nb_setval(pref_pengine_module, none),
+    fail
+  ).
+
+
+% -----------------------------------------------------------------------------
 %  Query predicates
 % -----------------------------------------------------------------------------
 
@@ -491,7 +522,7 @@ preference:maybe_derive_single_target(_, _, _).
 % injected as thread-local clauses by the Pengines sandbox.
 
 preference:global_use(X) :-
-  ( pengine_self(M) ->
+  ( preference:pengine_module(M) ->
       M:local_use(X)
   ; preference:local_use(X)
   ).
@@ -504,7 +535,7 @@ preference:global_use(X) :-
 %   - `other` : all active flags (delegates to preference:global_use/1)
 
 preference:global_use(X,env) :-
-  ( pengine_self(M) ->
+  ( preference:pengine_module(M) ->
       M:local_env_use(X)
   ; preference:local_env_use(X)
   ).
@@ -520,7 +551,7 @@ preference:global_use(X,other) :-
 % they are injected as thread-local clauses by the Pengines sandbox.
 
 preference:accept_keywords(X) :-
-  ( pengine_self(M) ->
+  ( preference:pengine_module(M) ->
       M:local_accept_keywords(X)
   ; preference:local_accept_keywords(X)
   ).
@@ -555,7 +586,7 @@ preference:raw_keyword_matches_(RawKW, K) :-
 % injected as thread-local clauses by the Pengines sandbox.
 
 preference:flag(Flag) :-
-  ( pengine_self(M) ->
+  ( preference:pengine_module(M) ->
       M:local_flag(Flag)
   ; preference:local_flag(Flag)
   ).
@@ -563,14 +594,16 @@ preference:flag(Flag) :-
 
 %! preference:masked(?Entry) is nondet.
 %
-% Returns masked entries.  In standalone mode, the masks are asserted
-% by preference:init/0.  In client-server mode, they are injected as
-% thread-local clauses by the Pengines sandbox.
+% Returns masked entries (Repo://Id).  In standalone mode, the masks are
+% asserted by preference:init/0.  In client-server mode, they are
+% injected as thread-local clauses by the Pengines sandbox.  Storage is
+% keyed on the entry id (local_masked/2) so the bound check is an
+% indexed lookup rather than a scan over all mask facts.
 
-preference:masked(X) :-
-  ( pengine_self(M) ->
-      M:local_masked(X)
-  ; preference:local_masked(X)
+preference:masked(Repo://Id) :-
+  ( preference:pengine_module(M) ->
+      M:local_masked(Id, Repo)
+  ; preference:local_masked(Id, Repo)
   ).
 
 
@@ -580,7 +613,7 @@ preference:masked(X) :-
 % Dispatches to the Pengine module in client-server mode.
 
 preference:userconfig_use(C, N, Use, State) :-
-  ( pengine_self(M) ->
+  ( preference:pengine_module(M) ->
       M:local_userconfig_use(C, N, Use, State)
   ; preference:local_userconfig_use(C, N, Use, State)
   ).
@@ -592,7 +625,7 @@ preference:userconfig_use(C, N, Use, State) :-
 % Dispatches to the Pengine module in client-server mode.
 
 preference:userconfig_use_versioned(Spec, Use, State) :-
-  ( pengine_self(M) ->
+  ( preference:pengine_module(M) ->
       M:local_userconfig_use_versioned(Spec, Use, State)
   ; preference:local_userconfig_use_versioned(Spec, Use, State)
   ).
@@ -604,7 +637,7 @@ preference:userconfig_use_versioned(Spec, Use, State) :-
 % Dispatches to the Pengine module in client-server mode.
 
 preference:profile_use_soft(Spec, Use, State) :-
-  ( pengine_self(M) ->
+  ( preference:pengine_module(M) ->
       M:local_profile_use_soft(Spec, Use, State)
   ; preference:local_profile_use_soft(Spec, Use, State)
   ).
@@ -616,7 +649,7 @@ preference:profile_use_soft(Spec, Use, State) :-
 % Dispatches to the Pengine module in client-server mode.
 
 preference:profile_use_masked(Spec, Use) :-
-  ( pengine_self(M) ->
+  ( preference:pengine_module(M) ->
       M:local_profile_use_masked(Spec, Use)
   ; preference:local_profile_use_masked(Spec, Use)
   ).
@@ -628,7 +661,7 @@ preference:profile_use_masked(Spec, Use) :-
 % Dispatches to the Pengine module in client-server mode.
 
 preference:profile_use_forced(Spec, Use) :-
-  ( pengine_self(M) ->
+  ( preference:pengine_module(M) ->
       M:local_profile_use_forced(Spec, Use)
   ; preference:local_profile_use_forced(Spec, Use)
   ).
@@ -640,7 +673,7 @@ preference:profile_use_forced(Spec, Use) :-
 % Dispatches to the Pengine module in client-server mode.
 
 preference:profile_masked_use_flag(U) :-
-  ( pengine_self(M) ->
+  ( preference:pengine_module(M) ->
       M:local_profile_masked_use_flag(U)
   ; preference:local_profile_masked_use_flag(U)
   ).
@@ -652,7 +685,7 @@ preference:profile_masked_use_flag(U) :-
 % Dispatches to the Pengine module in client-server mode.
 
 preference:profile_forced_use_flag(U) :-
-  ( pengine_self(M) ->
+  ( preference:pengine_module(M) ->
       M:local_profile_forced_use_flag(U)
   ; preference:local_profile_forced_use_flag(U)
   ).
@@ -664,7 +697,7 @@ preference:profile_forced_use_flag(U) :-
 % Dispatches to the Pengine module in client-server mode.
 
 preference:set(Name, List) :-
-  ( pengine_self(M) ->
+  ( preference:pengine_module(M) ->
       M:local_set(Name, List)
   ; preference:local_set(Name, List)
   ).
@@ -676,7 +709,7 @@ preference:set(Name, List) :-
 % Dispatches to the Pengine module in client-server mode.
 
 preference:world_entry(E) :-
-  ( pengine_self(M) ->
+  ( preference:pengine_module(M) ->
       M:local_world_entry(E)
   ; preference:local_world_entry(E)
   ).
@@ -688,7 +721,7 @@ preference:world_entry(E) :-
 % Dispatches to the Pengine module in client-server mode.
 
 preference:license_group_raw(Name, Members) :-
-  ( pengine_self(M) ->
+  ( preference:pengine_module(M) ->
       M:local_license_group_raw(Name, Members)
   ; preference:local_license_group_raw(Name, Members)
   ).
@@ -700,7 +733,7 @@ preference:license_group_raw(Name, Members) :-
 % Dispatches to the Pengine module in client-server mode.
 
 preference:accept_license_wildcard :-
-  ( pengine_self(M) ->
+  ( preference:pengine_module(M) ->
       M:local_accept_license_wildcard
   ; preference:local_accept_license_wildcard
   ).
@@ -712,7 +745,7 @@ preference:accept_license_wildcard :-
 % Dispatches to the Pengine module in client-server mode.
 
 preference:accepted_license(L) :-
-  ( pengine_self(M) ->
+  ( preference:pengine_module(M) ->
       M:local_accepted_license(L)
   ; preference:local_accepted_license(L)
   ).
@@ -724,7 +757,7 @@ preference:accepted_license(L) :-
 % Dispatches to the Pengine module in client-server mode.
 
 preference:denied_license(L) :-
-  ( pengine_self(M) ->
+  ( preference:pengine_module(M) ->
       M:local_denied_license(L)
   ; preference:local_denied_license(L)
   ).
@@ -1378,7 +1411,7 @@ preference:mask_catpkg_atom(Atom) :-
   atom(Atom),
   atomic_list_concat([C,N], '/', Atom),
   forall(cache:ordered_entry(portage, Id, C, N, _),
-         assertz(preference:local_masked(portage://Id))).
+         assertz(preference:local_masked(Id, portage))).
 
 
 %! preference:unmask_catpkg_atom(+Atom) is det.
@@ -1389,7 +1422,7 @@ preference:unmask_catpkg_atom(Atom) :-
   atom(Atom),
   atomic_list_concat([C,N], '/', Atom),
   forall(cache:ordered_entry(portage, Id, C, N, _),
-         retractall(preference:local_masked(portage://Id))).
+         retractall(preference:local_masked(Id, portage))).
 
 
 %! preference:mask_profile_atom(+Atom) is det.
@@ -1419,7 +1452,7 @@ preference:mask_profile_atom(Atom) :-
       forall(cache:ordered_entry(portage, Id, C, N, ProposedVersion),
              ( preference:version_match(Op, ProposedVersion, Ver),
                preference:slot_req_match_(SlotReq, portage, Id) ->
-               assertz(preference:local_masked(portage://Id))
+               assertz(preference:local_masked(Id, portage))
              ; true
              ))
   ; true.
@@ -1449,7 +1482,7 @@ preference:unmask_profile_atom(Atom) :-
       forall(cache:ordered_entry(portage, Id, C, N, ProposedVersion),
              ( preference:version_match(Op, ProposedVersion, Ver),
                preference:slot_req_match_(SlotReq, portage, Id) ->
-               retractall(preference:local_masked(portage://Id))
+               retractall(preference:local_masked(Id, portage))
              ; true
              ))
   ; true.
@@ -1882,6 +1915,11 @@ preference:cache_current_stamp(Stamp) :-
   sort(Inputs0, Stamp).
 
 
+% Serialization format version.  Bump whenever the shape of a cached
+% entry changes (e.g. local_masked/1 -> local_masked/2), so stale
+% preference.qlf files are rebuilt instead of silently misapplied.
+preference:cache_stamp_input(format(2)).
+
 preference:cache_stamp_input(src(Path, Mtime)) :-
   preference:cache_tracked_path(Path),
   preference:cache_path_mtime(Path, Mtime).
@@ -1975,7 +2013,7 @@ preference:cache_clear_loaded_state :-
 
 
 preference:cache_retract_preference_facts :-
-  retractall(preference:local_masked(_)),
+  retractall(preference:local_masked(_,_)),
   retractall(preference:local_use(_)),
   retractall(preference:local_env_use(_)),
   retractall(preference:local_accept_keywords(_)),
@@ -1996,8 +2034,8 @@ preference:cache_retract_preference_facts :-
   retractall(preference:system_pkg(_,_)).
 
 
-preference:cache_apply_entry(local_masked, [Atom]) :-
-  assertz(preference:local_masked(Atom)).
+preference:cache_apply_entry(local_masked, [Id, Repo]) :-
+  assertz(preference:local_masked(Id, Repo)).
 preference:cache_apply_entry(local_use, [Use]) :-
   assertz(preference:local_use(Use)).
 preference:cache_apply_entry(local_env_use, [Use]) :-
@@ -2069,8 +2107,8 @@ preference:cache_collect_entries(Entries) :-
   findall(entry(Type, Args), preference:cache_collect_entry(Type, Args), Entries).
 
 
-preference:cache_collect_entry(local_masked, [Atom]) :-
-  preference:local_masked(Atom).
+preference:cache_collect_entry(local_masked, [Id, Repo]) :-
+  preference:local_masked(Id, Repo).
 preference:cache_collect_entry(local_use, [Use]) :-
   preference:local_use(Use).
 preference:cache_collect_entry(local_env_use, [Use]) :-

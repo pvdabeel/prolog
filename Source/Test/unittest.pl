@@ -3413,7 +3413,7 @@ md5cache_write_report(OutFile, Total, NBatch, Skipped, Missing,
 %
 % Applies every `package.mask` atom from `Knowledge/profile.qlf` through the
 % same `profile:apply_entry/3` path used at startup, collects the resulting
-% `preference:local_masked/1` entry ids, and compares them to the checked-in
+% `preference:local_masked/2` entry ids, and compares them to the checked-in
 % snapshot in `profile_mask_golden_ids/1` below.
 %
 % Usage:
@@ -4074,20 +4074,11 @@ profile_mask_golden_require_inputs :-
 % Apply profile `package.mask` entries in cache order and return sorted ids.
 
 profile_mask_golden_masked_ids(Ids) :-
-  retractall(preference:local_masked(_)),
+  retractall(preference:local_masked(_,_)),
   forall(profiledata:entry(package_mask, Atom, true),
          profile:apply_entry(package_mask, Atom, true)),
-  findall(Id,
-          ( preference:local_masked(Masked),
-            profile_mask_golden_entry_id(Masked, Id)
-          ),
-          Ids0),
+  findall(Id, preference:local_masked(Id, portage), Ids0),
   sort(Ids0, Ids).
-
-
-profile_mask_golden_entry_id(Masked, Id) :-
-  compound_name_arguments(Masked, Sep, [portage, Id]),
-  Sep = '://'.
 
 
 %! profile_mask_golden_print_sample(+Label, +Ids) is det.

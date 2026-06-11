@@ -237,6 +237,9 @@ sandbox:safe_primitive(message:print_bytes(_)).
 %  Preference
 % -----------------------------------------------------------------------------
 
+% pengine_module/1 only reads/writes a per-thread global variable
+% (pref_pengine_module) memoizing the pengine_self/1 dispatch result.
+sandbox:safe_primitive(preference:pengine_module(_)).
 sandbox:safe_primitive(preference:global_use(_)).
 sandbox:safe_primitive(preference:accept_keywords(_)).
 sandbox:safe_primitive(preference:package_keyword_accepted(_,_,_)).
