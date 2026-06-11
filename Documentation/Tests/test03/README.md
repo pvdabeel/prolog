@@ -4,13 +4,12 @@
 
 This test case checks the prover's handling of a direct self-dependency in the
 compile-time scope. The 'os-1.0' package lists itself as a compile-time dependency,
-creating an immediate cycle. The prover classifies this as a benign cycle (the
-dependency-level literal refers to a package already being resolved by an ancestor)
-and silently resolves it without a cycle-break assumption.
+creating an immediate cycle: building os requires os to already be installed. The
+prover breaks this with a single benign cycle-break assumption on os:install.
 
-**Expected:** The prover should produce a clean plan with all four packages and no cycle-break
-assumptions or verify steps. This matches Portage's behavior for self-referential
-dependency-level cycles.
+**Expected:** The prover should produce a plan with all four packages and one benign
+cycle-break assumption on os:install. Emerge handles the same case silently;
+cycle-break assumptions are benign (exit 1, not a domain assumption).
 
 ![test03](test03.svg)
 

@@ -4,7 +4,7 @@
 
 This test case examines the prover's handling of package keywords and stability. The latest (2.0) versions of the packages are marked as unstable. Without a specific configuration to accept these unstable keywords, the package manager should not select them.
 
-**Expected:** Assuming a default configuration that only allows stable packages, the prover should reject the 2.0 versions and instead resolve the dependencies using the stable 1.0 versions. The final proof should be for app-1.0, db-1.0, and os-1.0.
+**Expected:** Version selection follows the active ACCEPT_KEYWORDS. With a stable-only configuration the prover should reject the 2.0 versions and resolve the dependencies using the stable 1.0 versions (app-1.0, db-1.0, os-1.0). With ~arch accepted (e.g. the fallback developer profile used when no /etc/portage is present) the unstable 2.0 versions are legitimately selected instead; the test expectation checks the active keyword acceptance and validates the matching outcome.
 
 ![test12](test12.svg)
 

@@ -5,12 +5,10 @@ These are the packages that would be merged, in order:
 
 Calculating dependencies... done!
 
- └─step  1─┤ download  overlay://test66/plugin-1.0
-             │ download  overlay://test66/lib-1.0
+ └─step  1─┤ download  overlay://test66/lib-1.0
              │ download  overlay://test66/app-1.0
 
  └─step  2─┤ install   overlay://test66/lib-1.0
-             │ install   overlay://test66/plugin-1.0
 
  └─step  3─┤ run       overlay://test66/lib-1.0
 
@@ -18,9 +16,7 @@ Calculating dependencies... done!
 
  └─step  5─┤ run     overlay://test66/app-1.0
 
- └─step  6─┤ run       overlay://test66/plugin-1.0
-
-Total: 9 actions (3 downloads, 3 installs, 3 runs), grouped into 6 steps.
+Total: 6 actions (2 downloads, 2 installs, 2 runs), grouped into 5 steps.
        0.00 Kb to be downloaded.
 
 

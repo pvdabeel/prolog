@@ -16,14 +16,35 @@
 <path fill="none" stroke="#999999" stroke-dasharray="5,2" d="M287.75,-8C287.75,-8 373.5,-8 373.5,-8 379.5,-8 385.5,-14 385.5,-20 385.5,-20 385.5,-138 385.5,-138 385.5,-144 379.5,-150 373.5,-150 373.5,-150 287.75,-150 287.75,-150 281.75,-150 275.75,-144 275.75,-138 275.75,-138 275.75,-20 275.75,-20 275.75,-14 281.75,-8 287.75,-8"/>
 <text text-anchor="start" x="283.75" y="-138.45" font-family="Helvetica,sans-Serif" font-style="italic" font-size="9.00" fill="#666666">test48/libmatrix &#160;(slot 1)</text>
 </g>
-<!-- app -->
+<!-- libmatrix10 -->
 <g id="node1" class="node">
+<title>libmatrix10</title>
+<path fill="lightyellow" stroke="black" d="M352.75,-124C352.75,-124 307.5,-124 307.5,-124 301.5,-124 295.5,-118 295.5,-112 295.5,-112 295.5,-100 295.5,-100 295.5,-94 301.5,-88 307.5,-88 307.5,-88 352.75,-88 352.75,-88 358.75,-88 364.75,-94 364.75,-100 364.75,-100 364.75,-112 364.75,-112 364.75,-118 358.75,-124 352.75,-124"/>
+<text text-anchor="middle" x="330.12" y="-107.75" font-family="Helvetica,sans-Serif" font-size="10.00">libmatrix&#45;1.0</text>
+<text text-anchor="middle" x="330.12" y="-96.5" font-family="Helvetica,sans-Serif" font-size="10.00">:1/A</text>
+</g>
+<!-- libmatrix11 -->
+<g id="node2" class="node">
+<title>libmatrix11</title>
+<path fill="lightyellow" stroke="black" d="M352.75,-52C352.75,-52 307.5,-52 307.5,-52 301.5,-52 295.5,-46 295.5,-40 295.5,-40 295.5,-28 295.5,-28 295.5,-22 301.5,-16 307.5,-16 307.5,-16 352.75,-16 352.75,-16 358.75,-16 364.75,-22 364.75,-28 364.75,-28 364.75,-40 364.75,-40 364.75,-46 358.75,-52 352.75,-52"/>
+<text text-anchor="middle" x="330.12" y="-35.75" font-family="Helvetica,sans-Serif" font-size="10.00">libmatrix&#45;1.1</text>
+<text text-anchor="middle" x="330.12" y="-24.5" font-family="Helvetica,sans-Serif" font-size="10.00">:1/B</text>
+</g>
+<!-- libmatrix10&#45;&gt;libmatrix11 -->
+<g id="edge5" class="edge">
+<title>libmatrix10&#45;&gt;libmatrix11</title>
+<path fill="none" stroke="red" stroke-dasharray="5,2" d="M330.12,-87.59C330.12,-80.28 330.12,-71.69 330.12,-63.56"/>
+<polygon fill="red" stroke="red" points="333.63,-63.68 330.13,-53.68 326.63,-63.68 333.63,-63.68"/>
+<text text-anchor="middle" x="322.25" y="-66.33" font-family="Helvetica,sans-Serif" font-size="9.00" fill="red">slot conflict</text>
+</g>
+<!-- app -->
+<g id="node3" class="node">
 <title>app</title>
 <path fill="lightcoral" stroke="black" d="M42,-91C42,-91 12,-91 12,-91 6,-91 0,-85 0,-79 0,-79 0,-67 0,-67 0,-61 6,-55 12,-55 12,-55 42,-55 42,-55 48,-55 54,-61 54,-67 54,-67 54,-79 54,-79 54,-85 48,-91 42,-91"/>
 <text text-anchor="middle" x="27" y="-69.12" font-family="Helvetica,sans-Serif" font-size="10.00" fill="white">app&#45;1.0</text>
 </g>
 <!-- libgraphics -->
-<g id="node2" class="node">
+<g id="node4" class="node">
 <title>libgraphics</title>
 <path fill="lightyellow" stroke="black" d="M202,-121C202,-121 147,-121 147,-121 141,-121 135,-115 135,-109 135,-109 135,-97 135,-97 135,-91 141,-85 147,-85 147,-85 202,-85 202,-85 208,-85 214,-91 214,-97 214,-97 214,-109 214,-109 214,-115 208,-121 202,-121"/>
 <text text-anchor="middle" x="174.5" y="-99.12" font-family="Helvetica,sans-Serif" font-size="10.00">libgraphics&#45;1.0</text>
@@ -36,7 +57,7 @@
 <text text-anchor="middle" x="94.5" y="-91.89" font-family="Helvetica,sans-Serif" font-size="9.00">RDEPEND</text>
 </g>
 <!-- libphysics -->
-<g id="node3" class="node">
+<g id="node5" class="node">
 <title>libphysics</title>
 <path fill="lightyellow" stroke="black" d="M200.5,-65C200.5,-65 148.5,-65 148.5,-65 142.5,-65 136.5,-59 136.5,-53 136.5,-53 136.5,-41 136.5,-41 136.5,-35 142.5,-29 148.5,-29 148.5,-29 200.5,-29 200.5,-29 206.5,-29 212.5,-35 212.5,-41 212.5,-41 212.5,-53 212.5,-53 212.5,-59 206.5,-65 200.5,-65"/>
 <text text-anchor="middle" x="174.5" y="-43.12" font-family="Helvetica,sans-Serif" font-size="10.00">libphysics&#45;1.0</text>
@@ -48,13 +69,6 @@
 <polygon fill="black" stroke="black" points="125.45,-57.64 134.79,-52.65 124.37,-50.72 125.45,-57.64"/>
 <text text-anchor="middle" x="94.5" y="-64.45" font-family="Helvetica,sans-Serif" font-size="9.00">RDEPEND</text>
 </g>
-<!-- libmatrix10 -->
-<g id="node4" class="node">
-<title>libmatrix10</title>
-<path fill="lightyellow" stroke="black" d="M352.75,-124C352.75,-124 307.5,-124 307.5,-124 301.5,-124 295.5,-118 295.5,-112 295.5,-112 295.5,-100 295.5,-100 295.5,-94 301.5,-88 307.5,-88 307.5,-88 352.75,-88 352.75,-88 358.75,-88 364.75,-94 364.75,-100 364.75,-100 364.75,-112 364.75,-112 364.75,-118 358.75,-124 352.75,-124"/>
-<text text-anchor="middle" x="330.12" y="-107.75" font-family="Helvetica,sans-Serif" font-size="10.00">libmatrix&#45;1.0</text>
-<text text-anchor="middle" x="330.12" y="-96.5" font-family="Helvetica,sans-Serif" font-size="10.00">:1/A</text>
-</g>
 <!-- libgraphics&#45;&gt;libmatrix10 -->
 <g id="edge3" class="edge">
 <title>libgraphics&#45;&gt;libmatrix10</title>
@@ -62,26 +76,12 @@
 <polygon fill="black" stroke="black" points="283.5,-108.61 293.57,-105.31 283.64,-101.61 283.5,-108.61"/>
 <text text-anchor="middle" x="248.88" y="-105.88" font-family="Helvetica,sans-Serif" font-size="9.00">=1.0:1/A</text>
 </g>
-<!-- libmatrix11 -->
-<g id="node5" class="node">
-<title>libmatrix11</title>
-<path fill="lightyellow" stroke="black" d="M352.75,-52C352.75,-52 307.5,-52 307.5,-52 301.5,-52 295.5,-46 295.5,-40 295.5,-40 295.5,-28 295.5,-28 295.5,-22 301.5,-16 307.5,-16 307.5,-16 352.75,-16 352.75,-16 358.75,-16 364.75,-22 364.75,-28 364.75,-28 364.75,-40 364.75,-40 364.75,-46 358.75,-52 352.75,-52"/>
-<text text-anchor="middle" x="330.12" y="-35.75" font-family="Helvetica,sans-Serif" font-size="10.00">libmatrix&#45;1.1</text>
-<text text-anchor="middle" x="330.12" y="-24.5" font-family="Helvetica,sans-Serif" font-size="10.00">:1/B</text>
-</g>
 <!-- libphysics&#45;&gt;libmatrix11 -->
 <g id="edge4" class="edge">
 <title>libphysics&#45;&gt;libmatrix11</title>
 <path fill="none" stroke="black" d="M212.69,-43.85C234.09,-42.04 261.14,-39.75 283.78,-37.84"/>
 <polygon fill="black" stroke="black" points="283.99,-41.33 293.66,-37 283.4,-34.36 283.99,-41.33"/>
 <text text-anchor="middle" x="248.88" y="-43.25" font-family="Helvetica,sans-Serif" font-size="9.00">=1.1:1/B</text>
-</g>
-<!-- libmatrix10&#45;&gt;libmatrix11 -->
-<g id="edge5" class="edge">
-<title>libmatrix10&#45;&gt;libmatrix11</title>
-<path fill="none" stroke="red" stroke-dasharray="5,2" d="M330.12,-87.59C330.12,-80.28 330.12,-71.69 330.12,-63.56"/>
-<polygon fill="red" stroke="red" points="333.63,-63.68 330.13,-53.68 326.63,-63.68 333.63,-63.68"/>
-<text text-anchor="middle" x="322.25" y="-66.33" font-family="Helvetica,sans-Serif" font-size="9.00" fill="red">slot conflict</text>
 </g>
 </g>
 </svg>

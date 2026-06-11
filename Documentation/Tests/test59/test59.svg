@@ -9,8 +9,8 @@
 <g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 133.75)">
 <title>test59</title>
 <polygon fill="white" stroke="none" points="-4,4 -4,-133.75 512.67,-133.75 512.67,4 -4,4"/>
-<text text-anchor="start" x="155.71" y="-115.35" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="12.00">test59</text>
-<text text-anchor="start" x="190.21" y="-115.35" font-family="Helvetica,sans-Serif" font-size="12.00"> — Any&#45;of || regression (XFAIL)</text>
+<text text-anchor="start" x="159.08" y="-115.35" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="12.00">test59</text>
+<text text-anchor="start" x="193.58" y="-115.35" font-family="Helvetica,sans-Serif" font-size="12.00"> — Any&#45;of || regression (fixed)</text>
 <!-- web -->
 <g id="node1" class="node">
 <title>web</title>

@@ -1,18 +1,14 @@
-# test59 — Any-of || selection regression (XFAIL)
+# test59 — Any-of || selection regression (fixed)
 
 **Category:** Regression
 
-> **XFAIL** — expected to fail.
-
-This is an XFAIL regression test for a known bug where the any-of group (||) does
+This is a regression test for a (now fixed) bug where the any-of group (||) did
 not force the solver to select at least one alternative. Structurally similar to
 test21 (any-of in RDEPEND), but this test uses different package names and exists
-specifically to track the regression where any-of members can all be dropped from
-the model.
+specifically to guard against any-of members all being dropped from the model.
 
-**Expected:** Currently expected to fail (XFAIL): the solver does not force selecting one
-alternative from the any-of group. When the bug is fixed, the model should contain
-either data_fast-1.0 or data_best-1.0.
+**Expected:** The solver must select one alternative from the any-of group: the model
+should contain either data_fast-1.0 or data_best-1.0.
 
 ![test59](test59.svg)
 

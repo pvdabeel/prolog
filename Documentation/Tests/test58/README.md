@@ -10,9 +10,10 @@ resolver must recognize that 'linux-1.0' satisfies the virtual dependency throug
 its PROVIDE declaration. This is a deprecated PMS mechanism but still appears in
 the wild.
 
-**Expected:** Currently expected to fail (XFAIL) until PROVIDE/provider resolution is
-implemented. Eventually, proving web-1.0 should pull in linux-1.0 to satisfy the
-test58/virtualsdk dependency.
+**Expected:** Expected to fail (XFAIL): PROVIDE-based virtuals are deprecated in PMS
+and not supported by portage-ng. The unresolvable deps surface as
+unsatisfied-constraint assumptions instead of pulling in linux-1.0. Modern trees
+use virtual/* ebuilds (see test57) for this purpose.
 
 ![test58](test58.svg)
 

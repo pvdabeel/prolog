@@ -2,16 +2,18 @@
 
 **Category:** Installed
 
-This test case is a regression test for rules:installed_entry_satisfies_build_with_use/2.
-It ensures that an installed VDB entry cannot be treated as satisfying a dependency
-if incoming build_with_use requires a flag that the installed package was not built
-with. The test uses an always-false flag requirement (__portage_ng_test_flag__)
-against an arbitrary installed package.
+This test case is a regression test for use:installed_entry_satisfies_build_with_use/2,
+the check the rebuild paths key on (the rules:rule install/run short-circuit and
+candidate:update_requires_use_rebuild). It finds an installed VDB entry with an
+IUSE flag that was disabled at build time and verifies the check in both
+directions. Flags outside a package's IUSE are ignored by design (they cannot
+influence the build), so a synthetic always-false flag cannot trigger a mismatch.
 
-**Expected:** The test validation checks that the rule correctly identifies unsatisfied
-build_with_use requirements on installed packages. The prover should find that no
-installed entry satisfies the synthetic flag requirement, and the rule should
-produce non-empty conditions.
+**Expected:** For an installed entry with a disabled IUSE flag, the satisfies-check
+must accept the entry when no bracketed USE is requested, and reject it when the
+disabled flag is required via build_with_use. End-to-end bracketed-USE rebuilds
+are covered by test51 and test76. Requires a populated pkg (VDB) repository; the
+batch runner skips this case on hosts without one (e.g. CI).
 
 ![test65](test65.svg)
 

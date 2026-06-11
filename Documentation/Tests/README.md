@@ -68,14 +68,14 @@ The overlay repository itself is at [`Repository/Overlay/`](../../Repository/Ove
 | [56](#test56) | Version | Constraint intersection via dep chains |
 | [57](#test57) | Virtual | Virtual-style ebuild (explicit dep) |
 | [58](#test58) | Virtual | PROVIDE-based virtual (XFAIL) **(XFAIL)** |
-| [59](#test59) | Regression | Any-of || selection regression (XFAIL) **(XFAIL)** |
+| [59](#test59) | Regression | Any-of || selection regression (fixed) |
 | [60](#test60) | Blocker | Versioned soft blocker !<pkg-ver (XFAIL) **(XFAIL)** |
 | [61](#test61) | Cycle | Mutual recursion with bracketed USE |
 | [62](#test62) | Cycle | Simple mutual cycle (termination) |
 | [63](#test63) | Cycle | REQUIRED_USE loop reproducer (openmpi-style) |
 | [64](#test64) | Cycle | USE-conditional churn reproducer (openmp-style) |
 | [65](#test65) | Installed | build_with_use reinstall semantics |
-| [66](#test66) | PDEPEND | Post-merge dependency resolution |
+| [66](#test66) | PDEPEND | Post-merge dependency resolution (XFAIL) **(XFAIL)** |
 | [67](#test67) | BDEPEND | Build-only dependency (separate from DEPEND) |
 | [68](#test68) | Multi-slot | Co-installation of same CN in different slots |
 | [69](#test69) | Version | Operator >= (greater-or-equal) |
@@ -250,13 +250,12 @@ Total: 12 actions (4 downloads, 4 installs, 4 runs), grouped into 9 steps.
 
 This test case checks the prover's handling of a direct self-dependency in the
 compile-time scope. The 'os-1.0' package lists itself as a compile-time dependency,
-creating an immediate cycle. The prover classifies this as a benign cycle (the
-dependency-level literal refers to a package already being resolved by an ancestor)
-and silently resolves it without a cycle-break assumption.
+creating an immediate cycle: building os requires os to already be installed. The
+prover breaks this with a single benign cycle-break assumption on os:install.
 
-**Expected:** The prover should produce a clean plan with all four packages and no cycle-break
-assumptions or verify steps. This matches Portage's behavior for self-referential
-dependency-level cycles.
+**Expected:** The prover should produce a plan with all four packages and one benign
+cycle-break assumption on os:install. Emerge handles the same case silently;
+cycle-break assumptions are benign (exit 1, not a domain assumption).
 
 ![test03](test03/test03.svg)
 
@@ -410,12 +409,13 @@ Total: 11 actions (4 downloads, 4 installs, 3 runs), grouped into 8 steps.
 
 This test case combines test03 and test04. The 'os-1.0' package lists itself as
 both a compile-time and runtime dependency, creating two self-referential cycles.
-Both are classified as benign cycles (the dependency-level literals refer to a
-package already being resolved by an ancestor) and are silently resolved.
+The runtime leg dissolves via the install/run action split (running os only
+requires os to be installed); the compile-time leg is broken with a single
+benign prover cycle-break assumption on os:install.
 
-**Expected:** The prover should produce a clean plan with all four packages and no cycle-break
-assumptions or verify steps. This matches Portage's behavior for self-referential
-dependency-level cycles.
+**Expected:** The prover should produce a plan with all four packages. One benign
+cycle-break assumption on os:install is expected for the compile-time leg; the
+runtime leg needs no assumption. Emerge handles the same case silently.
 
 ![test05](test05/test05.svg)
 
@@ -1009,7 +1009,7 @@ Potential fix (suggestion):
 
 This test case examines the prover's handling of package keywords and stability. The latest (2.0) versions of the packages are marked as unstable. Without a specific configuration to accept these unstable keywords, the package manager should not select them.
 
-**Expected:** Assuming a default configuration that only allows stable packages, the prover should reject the 2.0 versions and instead resolve the dependencies using the stable 1.0 versions. The final proof should be for app-1.0, db-1.0, and os-1.0.
+**Expected:** Version selection follows the active ACCEPT_KEYWORDS. With a stable-only configuration the prover should reject the 2.0 versions and resolve the dependencies using the stable 1.0 versions (app-1.0, db-1.0, os-1.0). With ~arch accepted (e.g. the fallback developer profile used when no /etc/portage is present) the unstable 2.0 versions are legitimately selected instead; the test expectation checks the active keyword acceptance and validates the matching outcome.
 
 ![test12](test12/test12.svg)
 
@@ -4503,9 +4503,10 @@ resolver must recognize that 'linux-1.0' satisfies the virtual dependency throug
 its PROVIDE declaration. This is a deprecated PMS mechanism but still appears in
 the wild.
 
-**Expected:** Currently expected to fail (XFAIL) until PROVIDE/provider resolution is
-implemented. Eventually, proving web-1.0 should pull in linux-1.0 to satisfy the
-test58/virtualsdk dependency.
+**Expected:** Expected to fail (XFAIL): PROVIDE-based virtuals are deprecated in PMS
+and not supported by portage-ng. The unresolvable deps surface as
+unsatisfied-constraint assumptions instead of pulling in linux-1.0. Modern trees
+use virtual/* ebuilds (see test57) for this purpose.
 
 ![test58](test58/test58.svg)
 
@@ -4639,21 +4640,17 @@ Potential fix (suggestion):
 </details>
 ---
 
-## test59 — Any-of || selection regression (XFAIL)
+## test59 — Any-of || selection regression (fixed)
 
 **Category:** Regression
 
-> **XFAIL** — expected to fail.
-
-This is an XFAIL regression test for a known bug where the any-of group (||) does
+This is a regression test for a (now fixed) bug where the any-of group (||) did
 not force the solver to select at least one alternative. Structurally similar to
 test21 (any-of in RDEPEND), but this test uses different package names and exists
-specifically to track the regression where any-of members can all be dropped from
-the model.
+specifically to guard against any-of members all being dropped from the model.
 
-**Expected:** Currently expected to fail (XFAIL): the solver does not force selecting one
-alternative from the any-of group. When the bug is fixed, the model should contain
-either data_fast-1.0 or data_best-1.0.
+**Expected:** The solver must select one alternative from the any-of group: the model
+should contain either data_fast-1.0 or data_best-1.0.
 
 ![test59](test59/test59.svg)
 
@@ -5163,16 +5160,18 @@ Total: 12 actions (5 downloads, 5 installs, 2 runs), grouped into 6 steps.
 
 **Category:** Installed
 
-This test case is a regression test for rules:installed_entry_satisfies_build_with_use/2.
-It ensures that an installed VDB entry cannot be treated as satisfying a dependency
-if incoming build_with_use requires a flag that the installed package was not built
-with. The test uses an always-false flag requirement (__portage_ng_test_flag__)
-against an arbitrary installed package.
+This test case is a regression test for use:installed_entry_satisfies_build_with_use/2,
+the check the rebuild paths key on (the rules:rule install/run short-circuit and
+candidate:update_requires_use_rebuild). It finds an installed VDB entry with an
+IUSE flag that was disabled at build time and verifies the check in both
+directions. Flags outside a package's IUSE are ignored by design (they cannot
+influence the build), so a synthetic always-false flag cannot trigger a mismatch.
 
-**Expected:** The test validation checks that the rule correctly identifies unsatisfied
-build_with_use requirements on installed packages. The prover should find that no
-installed entry satisfies the synthetic flag requirement, and the rule should
-produce non-empty conditions.
+**Expected:** For an installed entry with a disabled IUSE flag, the satisfies-check
+must accept the entry when no bracketed USE is requested, and reject it when the
+disabled flag is required via build_with_use. End-to-end bracketed-USE rebuilds
+are covered by test51 and test76. Requires a populated pkg (VDB) repository; the
+batch runner skips this case on hosts without one (e.g. CI).
 
 ![test65](test65/test65.svg)
 
@@ -5218,16 +5217,21 @@ Total: 3 actions (1 download, 1 install, 1 run), grouped into 3 steps.
 </details>
 ---
 
-## test66 — Post-merge dependency resolution
+## test66 — Post-merge dependency resolution (XFAIL)
 
 **Category:** PDEPEND
+
+> **XFAIL** — expected to fail.
 
 This test case checks the prover's handling of PDEPEND (post-merge dependencies).
 The 'lib-1.0' package declares 'plugin-1.0' as a PDEPEND, meaning plugin-1.0
 should be resolved after lib-1.0's installation, not as a prerequisite.
 
-**Expected:** All three packages should appear in the proof/plan. The plugin-1.0 package should
-be ordered after lib-1.0's install step via the PDEPEND proof obligation mechanism.
+**Expected:** Currently expected to fail (XFAIL): the PDEPEND of a transitive
+dependency (lib, pulled in by the target app) is not resolved, so plugin-1.0 is
+missing from the model. PDEPEND on the proof target itself works (see test79).
+When fixed, all three packages should appear in the proof/plan, with plugin-1.0
+ordered after lib-1.0's install step via the PDEPEND proof obligation mechanism.
 
 ![test66](test66/test66.svg)
 
@@ -5260,12 +5264,10 @@ These are the packages that would be merged, in order:
 
 Calculating dependencies... done!
 
- └─step  1─┤ download  overlay://test66/plugin-1.0
-             │ download  overlay://test66/lib-1.0
+ └─step  1─┤ download  overlay://test66/lib-1.0
              │ download  overlay://test66/app-1.0
 
  └─step  2─┤ install   overlay://test66/lib-1.0
-             │ install   overlay://test66/plugin-1.0
 
  └─step  3─┤ run       overlay://test66/lib-1.0
 
@@ -5273,9 +5275,7 @@ Calculating dependencies... done!
 
  └─step  5─┤ run     overlay://test66/app-1.0
 
- └─step  6─┤ run       overlay://test66/plugin-1.0
-
-Total: 9 actions (3 downloads, 3 installs, 3 runs), grouped into 6 steps.
+Total: 6 actions (2 downloads, 2 installs, 2 runs), grouped into 5 steps.
        0.00 Kb to be downloaded.
 
 

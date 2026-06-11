@@ -4,12 +4,13 @@
 
 This test case combines test03 and test04. The 'os-1.0' package lists itself as
 both a compile-time and runtime dependency, creating two self-referential cycles.
-Both are classified as benign cycles (the dependency-level literals refer to a
-package already being resolved by an ancestor) and are silently resolved.
+The runtime leg dissolves via the install/run action split (running os only
+requires os to be installed); the compile-time leg is broken with a single
+benign prover cycle-break assumption on os:install.
 
-**Expected:** The prover should produce a clean plan with all four packages and no cycle-break
-assumptions or verify steps. This matches Portage's behavior for self-referential
-dependency-level cycles.
+**Expected:** The prover should produce a plan with all four packages. One benign
+cycle-break assumption on os:install is expected for the compile-time leg; the
+runtime leg needs no assumption. Emerge handles the same case silently.
 
 ![test05](test05.svg)
 

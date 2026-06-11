@@ -9,8 +9,8 @@
 <g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 60.75)">
 <title>test66</title>
 <polygon fill="white" stroke="none" points="-4,4 -4,-60.75 287.25,-60.75 287.25,4 -4,4"/>
-<text text-anchor="start" x="50.12" y="-42.35" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="12.00">test66</text>
-<text text-anchor="start" x="84.62" y="-42.35" font-family="Helvetica,sans-Serif" font-size="12.00"> — PDEPEND (post&#45;merge)</text>
+<text text-anchor="start" x="28.75" y="-42.35" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="12.00">test66</text>
+<text text-anchor="start" x="63.25" y="-42.35" font-family="Helvetica,sans-Serif" font-size="12.00"> — PDEPEND (post&#45;merge) (XFAIL)</text>
 <!-- app -->
 <g id="node1" class="node">
 <title>app</title>

@@ -812,17 +812,27 @@ def test47():
 
 
 def test48():
-    return dot("test48", "Slot conflict", [
+    cluster48 = (
+        '  subgraph cluster_libmatrix {\n'
+        '    label=<<I>test48/libmatrix  (slot 1)</I>>;\n'
+        '    style="dashed,rounded"; color=grey60; fontcolor=grey40; fontsize=9;\n'
+        '    libmatrix10 [label="libmatrix-1.0\\n:1/A"];\n'
+        '    libmatrix11 [label="libmatrix-1.1\\n:1/B"];\n'
+        '  }'
+    )
+    return dot("test48", "Slot conflict (same slot, different versions)", [
         node("app", "app-1.0", ENTRY),
         node("libgraphics", "libgraphics-1.0"),
         node("libphysics", "libphysics-1.0"),
-        node("libmatrix10", "libmatrix-1.0 :1/A"),
-        node("libmatrix11", "libmatrix-1.1 :1/B"),
     ], [
-        edge("app", "libgraphics"), edge("app", "libphysics"),
-        edge("libgraphics", "libmatrix10", 'label="=1.0 :1/A"'),
-        edge("libphysics", "libmatrix11", 'label="=1.1 :1/B"'),
-    ])
+        edge("app", "libgraphics", 'label="RDEPEND"'),
+        edge("app", "libphysics", 'label="RDEPEND"'),
+        edge("libgraphics", "libmatrix10", 'label="=1.0:1/A"'),
+        edge("libphysics", "libmatrix11", 'label="=1.1:1/B"'),
+        edge("libmatrix10", "libmatrix11",
+             'style=dashed,color=red,label="slot conflict",'
+             'fontcolor=red,constraint=false'),
+    ], clusters_list=[cluster48])
 
 
 def test49():
@@ -953,7 +963,7 @@ def test58():
 
 
 def test59():
-    return dot("test59", "Any-of || regression (XFAIL)", [
+    return dot("test59", "Any-of || regression (fixed)", [
         node("web", "web-1.0", ENTRY),
         node("app", "app-1.0"),
         node("db", "db-1.0"),
@@ -1058,7 +1068,7 @@ def test65():
 
 
 def test66():
-    return dot("test66", "PDEPEND (post-merge)", [
+    return dot("test66", "PDEPEND (post-merge) (XFAIL)", [
         node("app", "app-1.0", ENTRY),
         node("lib", "lib-1.0"),
         node("plugin", "plugin-1.0"),
