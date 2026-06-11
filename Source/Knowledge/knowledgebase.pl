@@ -56,7 +56,6 @@ Query module. The knowledge base is typically initialized as a singleton instanc
 % private interface
 
 :- dprivate(repository/1).
-:- dprivate(state/1).
 :- dprivate(host/1).
 :- dprivate(port/1).
 
@@ -187,19 +186,26 @@ save ::-
 
 save ::-
   \+ proxy,!,
-  working_directory(Cwd, Cwd),
-  lock:with_system_lock(kb_save(Cwd),
+  config:working_dir(Dir),
+  directory_file_path(Dir,'Knowledge/kb.raw',Raw),
+  lock:with_system_lock(kb_save(Dir),
     with_mutex(save,
-      (tell('Knowledge/kb.raw'),
-       format(':- module(cache,[]).\n'),
-       forall(current_predicate(cache:N/A),
-              (functor(H,N,A),
-               format(':- dynamic ~w/~w.\n',[N,A]),
-               forall(clause(cache:H,_),
-                     ( write_canonical(H),
-		       format('.\n'))))),
-       told,
-       qcompile('Knowledge/kb.raw')))),!.
+      (setup_call_cleanup(
+         open(Raw,write,Stream),
+         (format(Stream,':- module(cache,[]).\n',[]),
+          forall(current_predicate(cache:N/A),
+                 (functor(H,N,A),
+                  format(Stream,':- dynamic ~w/~w.\n',[N,A]),
+                  forall(clause(cache:H,_),
+                        ( ( ground(H)
+                            -> true
+                            ;  throw(error(instantiation_error,
+                                           context(knowledgebase:save/0,
+                                                   nonground_cache_fact(H)))) ),
+                          write_canonical(Stream,H),
+                          format(Stream,'.\n',[])))))),
+         close(Stream)),
+       qcompile(Raw)))),!.
 
 
 %! knowledgebase:load
@@ -216,8 +222,10 @@ load ::-
 
 load ::-
   \+ proxy,
-  exists_file('Knowledge/kb.qlf'),!,
-  ensure_loaded('Knowledge/kb.qlf'),
+  config:working_dir(Dir),
+  directory_file_path(Dir,'Knowledge/kb.qlf',Qlf),
+  exists_file(Qlf),!,
+  ensure_loaded(Qlf),
   knowledgebase:kb_warm_metadata_index.
 
 load ::-
@@ -341,7 +349,9 @@ proxy ::-
 %
 % Wrap predicates into a remote procedure call if host,
 % port and proxy are set. Module is the target module atom
-% (e.g. cache, query).
+% (e.g. cache, query). In the local case the query macro
+% (goal_expansion) is applied when one exists; otherwise the
+% goal is executed directly.
 
 rpc_wrapper(Module:Term) ::-
   ::host(Host),!,
@@ -350,8 +360,9 @@ rpc_wrapper(Module:Term) ::-
 
 rpc_wrapper(Module:Term) ::-
   \+ proxy,!,
-  once(goal_expansion(Term,Expanded)),
-  Module:Expanded.
+  ( goal_expansion(Term,Expanded)
+    -> Module:Expanded
+    ;  Module:Term ).
 
 
 %! knowledgebase:repository(?Repository)
@@ -362,17 +373,6 @@ rpc_wrapper(Module:Term) ::-
 
 repository(_Repository) ::-
   true.
-
-
-%! knowledgebase:state(+File)
-%
-% Private predicate
-%
-% State file
-
-state(File) ::-
-  :this(Context),
-  atomic_list_concat([Context,'.raw'],File).
 
 
 %! knowledgebase:host(+Host)
