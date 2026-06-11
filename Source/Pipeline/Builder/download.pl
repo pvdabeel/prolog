@@ -287,7 +287,7 @@ download:resolve_mirror_uri(Base, _Filename, URL) :-
   % bug that left P and B unbound on `->`-renamed distfiles), fail
   % cleanly rather than throwing `instantiation_error` from
   % atom_string/2 -- the surrounding findall/3 in
-  % builder:try_upstream_fallback/11 will then simply move on to the
+  % fetch:try_upstream_fallback/11 will then simply move on to the
   % next candidate URL, which is the right behaviour even when the
   % parser is misbehaving.
   nonvar(Base),

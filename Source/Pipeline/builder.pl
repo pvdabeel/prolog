@@ -7,7 +7,6 @@
   project.
 */
 
-
 /** <module> BUILDER
 Build execution orchestrator.
 
@@ -21,25 +20,35 @@ The full plan is printed first (normal colors, via printer:print/5), then
 a progress area below shows slot-based live updates as workers execute
 jobs. Within each plan step, all executable rules run in parallel; steps
 are sequential (the next step starts only after the previous completes).
+
+Both entry points (build/1 for a fresh build, build_resume/0 for
+continuing an interrupted one) share the run_plan/6 lifecycle. The
+supporting concerns are split into sibling modules:
+
+  - Builder/display.pl : slot layout math + slot-info registry
+  - Builder/fetch.pl   : download orchestration (curl/git/RESTRICT=fetch)
+  - Builder/resume.pl  : resume-state persistence + done marks
 */
 
 :- module(builder, []).
-
-:- dynamic builder:slot_info/6.
-:- dynamic builder:slot_outcome/2.
-:- dynamic builder:exec_phase_state/3.
-:- dynamic builder:resume_done/2.
-:- dynamic builder:last_build_status/3.
 
 % =============================================================================
 %  BUILDER declarations
 % =============================================================================
 
+:- dynamic builder:slot_outcome/2.
+:- dynamic builder:exec_phase_state/3.
+:- dynamic builder:last_build_status/3.
+
+% -----------------------------------------------------------------------------
+%  Entry points
+% -----------------------------------------------------------------------------
 
 %! builder:build(+Goals) is det.
 %
-% Top-level entry point. Proves goals, prints the plan, then executes
-% each step in parallel via the jobserver with live progress.
+% Top-level entry point. Proves goals, prints the plan, asks for
+% confirmation, persists the resume state, then hands off to the
+% shared run_plan/6 lifecycle.
 
 builder:build(Goals) :-
   pipeline:prove_plan_with_fallback(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL),
@@ -52,20 +61,87 @@ builder:build(Goals) :-
      fail
   ),
   builder:maybe_create_snapshot(Plan),
-  retractall(builder:resume_done(_, _)),
-  builder:prepare_binpkg_index,
-  builder:save_resume_state(Goals, Plan),
+  resume:save_state(Goals, Plan),
   annotation:collect(ProofAVL, Annotations),
   annotation:pre_actions(Annotations, PreActions),
-  builder:count_actions(Plan, 0, PlanActions),
   length(PreActions, PreCount),
   ( PreCount > 0 -> PreSteps = 1 ; PreSteps = 0 ),
+  StartStep is PreSteps + 1,
+  builder:run_plan(Plan, StartStep, [pre_actions(PreActions)],
+                   _Completed, _Failed, _Stubs).
+
+
+%! builder:build_resume is det.
+%
+% Resumes a previously interrupted build. Loads the saved plan from
+% Knowledge/resume.pl, filters out completed packages, and re-executes
+% the remainder via the shared run_plan/6 lifecycle. Skips the clean
+% phase so ebuild can pick up from the preserved work directory.
+
+builder:build_resume :-
+  ( resume:load_state(_Goals, Plan, DoneList)
+  -> true
+  ;  message:failure('No saved build state found. Run --build first.'),
+     !,
+     fail
+  ),
+  resume:collect_skip_entries(Plan, SkipDone),
+  append(DoneList, SkipDone, AllDone),
+  resume:filter_completed_plan(Plan, AllDone, FilteredPlan),
+  builder:count_actions(FilteredPlan, 0, RemainingActions),
+  ( RemainingActions =:= 0
+  -> message:inform('Nothing to resume — all packages completed successfully.'),
+     resume:clear_state
+  ;  length(DoneList, CompletedCount),
+     format(atom(ResumeMsg), '>>> Resuming: ~d completed, ~d remaining', [CompletedCount, RemainingActions]),
+     message:color(green),
+     message:print(ResumeMsg),
+     message:reset,
+     nl, nl,
+     setup_call_cleanup(
+       assertz(ebuild_exec:resuming),
+       builder:run_plan(FilteredPlan, 1, [], _Completed, _Failed, _Stubs),
+       retractall(ebuild_exec:resuming))
+  ).
+
+
+% -----------------------------------------------------------------------------
+%  Shared plan lifecycle
+% -----------------------------------------------------------------------------
+
+%! builder:run_plan(+Plan, +StartStep, +Opts, -Completed, -Failed, -Stubs) is det.
+%
+% Shared build lifecycle used by both build/1 and build_resume/0:
+% binpkg index refresh, header, jobserver init, step-at-a-time plan
+% execution, jobserver shutdown, snapshot finalization, VDB
+% reconciliation backstop, resume-state cleanup on success, summary,
+% last_build_status/3 bookkeeping, and the optional terminal alert.
+% Any fix to this sequence (e.g. the planned build exit codes 10-16)
+% lands here exactly once.
+%
+% Opts is a list of options:
+%   pre_actions(PreActions) : annotation pre-actions (keyword
+%     acceptance, unmask, use changes) rendered as a completed step 1
+%     before the plan steps. Defaults to [].
+%
+% StartStep is the 1-based number of the first plan step in the build
+% display (2 when a pre-action step is shown, 1 otherwise).
+%
+% snapshot:finalize only clears snapshot:active_id/1 and is a no-op
+% when --snapshot is not active (always the case on the resume path).
+
+builder:run_plan(Plan, StartStep, Opts, Completed, Failed, Stubs) :-
+  ( memberchk(pre_actions(PreActions), Opts) -> true ; PreActions = [] ),
+  length(PreActions, PreCount),
+  ( PreCount > 0 -> PreSteps = 1 ; PreSteps = 0 ),
+  resume:clear_done_marks,
+  builder:prepare_binpkg_index,
+  builder:count_actions(Plan, 0, PlanActions),
   TotalActions is PlanActions + PreCount,
   builder:count_nonempty_steps(Plan, 0, PlanSteps),
   NumSteps is PlanSteps + PreSteps,
   build:header(NumSteps, TotalActions),
-  builder:print_pre_action_step(PreActions, PreSteps),
-  StartStep is PreSteps + 1,
+  display:print_pre_action_step(PreActions, PreSteps),
   builder:num_workers(NumWorkers),
   jobserver:init(NumWorkers, builder:execute_build_job),
   builder:execute_plan(Plan, StartStep, NumSteps, 0, 0, 0, Completed, Failed0, Stubs),
@@ -73,62 +149,13 @@ builder:build(Goals) :-
   snapshot:finalize,
   builder:apply_vdb_reconciliation(Plan, Failed0, Failed, _Missing),
   ( Failed =:= 0
-  -> builder:clear_resume_state
+  -> resume:clear_state
   ;  true
   ),
   build:summary(Completed, Failed, Stubs),
   retractall(builder:last_build_status(_, _, _)),
   assertz(builder:last_build_status(Completed, Failed, Stubs)),
   builder:alert.
-
-
-%! builder:build_resume is det.
-%
-% Resumes a previously interrupted build. Loads the saved plan from
-% Knowledge/resume.pl, filters out completed packages, and re-executes
-% the remainder. Skips the clean phase so ebuild can pick up from the
-% preserved work directory.
-
-builder:build_resume :-
-  ( builder:load_resume_state(_Goals, Plan, DoneList)
-  -> true
-  ;  message:failure('No saved build state found. Run --build first.'),
-     !,
-     fail
-  ),
-  builder:collect_skip_entries(Plan, SkipDone),
-  append(DoneList, SkipDone, AllDone),
-  builder:filter_completed_plan(Plan, AllDone, FilteredPlan),
-  builder:count_actions(FilteredPlan, 0, RemainingActions),
-  ( RemainingActions =:= 0
-  -> message:inform('Nothing to resume — all packages completed successfully.'),
-     builder:clear_resume_state
-  ;  length(DoneList, CompletedCount),
-     format(atom(ResumeMsg), '>>> Resuming: ~d completed, ~d remaining', [CompletedCount, RemainingActions]),
-     message:color(green),
-     message:print(ResumeMsg),
-     message:reset,
-     nl, nl,
-     assertz(ebuild_exec:resuming),
-     retractall(builder:resume_done(_, _)),
-     builder:prepare_binpkg_index,
-     builder:count_nonempty_steps(FilteredPlan, 0, NumSteps),
-     build:header(NumSteps, RemainingActions),
-     builder:num_workers(NumWorkers),
-     jobserver:init(NumWorkers, builder:execute_build_job),
-     builder:execute_plan(FilteredPlan, 1, NumSteps, 0, 0, 0, Completed, Failed0, Stubs),
-     jobserver:shutdown(NumWorkers),
-     builder:apply_vdb_reconciliation(FilteredPlan, Failed0, Failed, _Missing),
-     ( Failed =:= 0
-     -> builder:clear_resume_state
-     ;  true
-     ),
-     build:summary(Completed, Failed, Stubs),
-     retractall(builder:last_build_status(_, _, _)),
-     assertz(builder:last_build_status(Completed, Failed, Stubs)),
-     builder:alert,
-     retractall(ebuild_exec:resuming)
-  ).
 
 
 %! builder:alert is det.
@@ -218,59 +245,9 @@ builder:num_workers(N) :-
   ).
 
 
-% =============================================================================
-%  Pre-action steps (keyword/unmask/use_change)
-% =============================================================================
-
-%! builder:print_pre_action_step(+PreActions, +PreSteps) is det.
-%
-% Renders pre-actions (keyword acceptance, unmask, use flag changes) as
-% a completed step in the build display, matching the plan printer's
-% format. These are informational — the prover already assumed them.
-
-builder:print_pre_action_step([], _) :- !.
-
-builder:print_pre_action_step(PreActions, _PreSteps) :-
-  format(atom(AtomStepNum), '~t~0f~2|', [1]),
-  format(atom(StepLabel), 'step ~a', [AtomStepNum]),
-  write(' \u2514\u2500'),
-  message:bubble(darkgray, StepLabel),
-  write('\u2500\u2524 '),
-  builder:print_pre_actions(PreActions),
-  nl, nl.
-
-
-%! builder:print_pre_actions(+PreActions) is det.
-
-builder:print_pre_actions([Action]) :-
-  !,
-  builder:print_pre_action(Action),
-  build:right_edge_ok.
-
-builder:print_pre_actions([Action|Rest]) :-
-  builder:print_pre_action(Action),
-  build:right_edge_ok,
-  forall(member(A, Rest),
-         ( nl,
-           write('             \u2502 '),
-           builder:print_pre_action(A),
-           build:right_edge_ok
-         )).
-
-
-%! builder:print_pre_action(+PreAction) is det.
-%
-% Delegates to the shared plan:print_pre_action_core/2 with ShowUseFlags
-% false, so use_change flags are not wrapped inline (the build display has
-% a fixed right-edge layout).
-
-builder:print_pre_action(Action) :-
-  plan:print_pre_action_core(Action, false).
-
-
-% =============================================================================
+% -----------------------------------------------------------------------------
 %  Step counting
-% =============================================================================
+% -----------------------------------------------------------------------------
 
 %! builder:count_actions(+Plan, +Acc, -Total) is det.
 
@@ -303,9 +280,9 @@ builder:is_executable_rule(rule(world(_Atom):_Action?{_Ctx}, _Body)) :- !.
 builder:is_executable_rule(_) :- fail.
 
 
-% =============================================================================
+% -----------------------------------------------------------------------------
 %  VDB reconciliation (defensive backstop)
-% =============================================================================
+% -----------------------------------------------------------------------------
 %
 % Even with correct per-step failure counting, the engine has historically
 % leaked silent-success regressions: a sub-dependency's install fails,
@@ -351,7 +328,7 @@ builder:apply_vdb_reconciliation(Plan, F0, F, Missing) :-
 %! builder:reconcile_install_actions(+Plan, -Missing, -Active) is det.
 %
 % Walk Plan and collect install-shaped rules that completed with
-% outcome `done` (see `builder:resume_done/2`) but whose target has no
+% outcome `done` (see `resume:done/2`) but whose target has no
 % corresponding directory under the VDB root. Failed or skipped installs
 % are excluded so reconciliation does not inflate the failure tally
 % (portage-ng#11). Active is `true` when the check actually ran,
@@ -365,7 +342,7 @@ builder:reconcile_install_actions(Plan, Missing, Active) :-
              ( member(Step, Plan),
                member(Rule, Step),
                builder:is_install_rule(Rule, Repo, Entry, Action),
-               builder:resume_done(Entry, Action),
+               resume:done(Entry, Action),
                \+ builder:vdb_entry_present(VdbRoot, Entry)
              ),
              Missing)
@@ -435,9 +412,9 @@ builder:print_reconciliation_warning(Missing, N) :-
   message:warning(['See builder:apply_vdb_reconciliation/4 for the backstop logic.']).
 
 
-% =============================================================================
+% -----------------------------------------------------------------------------
 %  Plan execution (step-at-a-time via jobserver)
-% =============================================================================
+% -----------------------------------------------------------------------------
 
 %! builder:execute_plan(+Plan, +PlanStep, +NumSteps, +C0, +F0, +S0, -C, -F, -S) is det.
 
@@ -446,7 +423,7 @@ builder:execute_plan([], _PlanStep, _NumSteps, C, F, S, C, F, S).
 builder:execute_plan([Step|Rest], PlanStep, NumSteps, C0, F0, S0, C, F, S) :-
   builder:execute_step(Step, PlanStep, NumSteps, C0, F0, S0, C1, F1, S1, HasJobs),
   ( HasJobs == true -> PlanStep1 is PlanStep + 1 ; PlanStep1 = PlanStep ),
-  builder:flush_resume_done_to_disk,
+  resume:flush_done_to_disk,
   ( F1 > F0
   -> ( builder:should_continue_on_failure ->
        builder:execute_plan(Rest, PlanStep1, NumSteps, C1, F1, S1, C, F, S)
@@ -477,9 +454,9 @@ builder:skip_remaining([Step|Rest], PlanStep, NumSteps, C0, F0, S0, C, F, S) :-
   include(builder:is_executable_rule, Step, Executable),
   length(Executable, NumJobs),
   ( NumJobs > 0
-  -> builder:assign_slots(Executable, PlanStep, NumSteps, SlottedJobs, TotalLines),
+  -> display:assign_slots(Executable, PlanStep, NumSteps, SlottedJobs, TotalLines),
      build:print_skipped_slots(SlottedJobs, NumSteps),
-     builder:mark_skipped(SlottedJobs, TotalLines),
+     display:mark_skipped(SlottedJobs, TotalLines),
      nl,
      F1 is F0 + NumJobs,
      PlanStep1 is PlanStep + 1
@@ -487,28 +464,6 @@ builder:skip_remaining([Step|Rest], PlanStep, NumSteps, C0, F0, S0, C, F, S) :-
      PlanStep1 = PlanStep
   ),
   builder:skip_remaining(Rest, PlanStep1, NumSteps, C0, F1, S0, C, F, S).
-
-
-%! builder:mark_skipped(+SlottedJobs, +TotalLines) is det.
-%
-% Mark all slots in a skipped step as failed (dependency not met).
-
-builder:mark_skipped([], _).
-
-builder:mark_skipped([slotted(LineOff, TotalLines, PlanStep, NumSteps, ActionIdx, rule(Repo://Entry:Action?{_Ctx}, _Body), _FileInfo)|Rest], _) :-
-  !,
-  with_mutex(build_display,
-    build:update_slot(LineOff, TotalLines, skipped, PlanStep, NumSteps, ActionIdx, Action, Repo://Entry)),
-  builder:mark_skipped(Rest, TotalLines).
-
-builder:mark_skipped([slotted(LineOff, TotalLines, PlanStep, NumSteps, ActionIdx, rule(world(Atom):Action?{_Ctx}, _Body), _FileInfo)|Rest], _) :-
-  !,
-  with_mutex(build_display,
-    build:update_slot(LineOff, TotalLines, skipped, PlanStep, NumSteps, ActionIdx, Action, Atom)),
-  builder:mark_skipped(Rest, TotalLines).
-
-builder:mark_skipped([_|Rest], TotalLines) :-
-  builder:mark_skipped(Rest, TotalLines).
 
 
 %! builder:execute_step(+Step, +PlanStep, +NumSteps, +C0, +F0, +S0, -C, -F, -S, -HasJobs) is det.
@@ -527,176 +482,35 @@ builder:execute_step(Step, PlanStep, NumSteps, C0, F0, S0, C, F, S, HasJobs) :-
   length(Executable, NumJobs),
   ( NumJobs > 0
   -> HasJobs = true,
-     builder:assign_slots(Executable, PlanStep, NumSteps, SlottedJobs, TotalLines),
-     builder:register_slot_info(SlottedJobs),
+     display:assign_slots(Executable, PlanStep, NumSteps, SlottedJobs, TotalLines),
+     display:register_slot_info(SlottedJobs),
      build:print_job_slots(SlottedJobs, NumSteps),
      jobserver:submit(SlottedJobs),
      jobserver:collect(NumJobs, builder:handle_result(TotalLines)),
      nl,
      builder:tally_outcomes(C0, F0, S0, C, F, S),
-     builder:clear_slot_info
+     builder:clear_step_state
   ;  HasJobs = false,
      C = C0, F = F0, S = S0
   ).
 
 
-%! builder:assign_slots(+Rules, +PlanStep, +NumSteps, -SlottedJobs, -TotalLines) is det.
+%! builder:clear_step_state is det.
 %
-% Pre-allocate the display layout. For download/fetchonly rules, queries
-% distfile specs to determine file sub-line count. Each slotted/7 term
-% carries its absolute LineOffset, plan step number, within-step action
-% index (0-based), and a shared TotalLines variable (bound when the
-% last rule is processed).
+% Tear down all per-step dynamic state: the display slot registry,
+% recorded slot outcomes, per-file download speed snapshots, and any
+% leftover exec phase states.
 
-builder:assign_slots(Rules, PlanStep, NumSteps, SlottedJobs, TotalLines) :-
-  distfiles:get_location(Distdir),
-  builder:assign_slots_(Rules, PlanStep, NumSteps, Distdir, 0, 0, TotalLines, SlottedJobs).
-
-builder:assign_slots_([], _PlanStep, _NumSteps, _Distdir, LineOff, _ActionIdx, LineOff, []).
-
-builder:assign_slots_([Rule|Rest], PlanStep, NumSteps, Distdir, LineOff, ActionIdx, TotalLines, [Slotted|More]) :-
-  builder:rule_file_info(Rule, Distdir, LineOff, FileInfo, LinesForRule),
-  NextLineOff is LineOff + LinesForRule,
-  Slotted = slotted(LineOff, TotalLines, PlanStep, NumSteps, ActionIdx, Rule, FileInfo),
-  ActionIdx1 is ActionIdx + 1,
-  builder:assign_slots_(Rest, PlanStep, NumSteps, Distdir, NextLineOff, ActionIdx1, TotalLines, More).
-
-
-%! builder:rule_file_info(+Rule, +Distdir, +LineOff, -FileInfo, -Lines) is det.
-%
-% Determine file metadata for a rule. Downloads with distfiles get
-% files(FileStartLine, NumFiles, DistFiles, Distdir); others get no_files.
-
-builder:rule_file_info(rule(Repo://Entry:Action?{_Ctx}, _Body), _Distdir, LineOff, FileInfo, Lines) :-
-  memberchk(Action, [download, fetchonly]),
-  Repo:get_type(eapi),
-  predicate_property(ebuild:is_live(_), defined),
-  ebuild:is_live(Repo://Entry),
-  !,
-  LiveStartLine is LineOff + 1,
-  FileInfo = live_source(LiveStartLine),
-  Lines = 2.
-
-builder:rule_file_info(rule(Repo://Entry:Action?{_Ctx}, _Body), Distdir, LineOff, FileInfo, Lines) :-
-  memberchk(Action, [download, fetchonly]),
-  Repo:get_type(eapi),
-  !,
-  download:collect_distfile_specs(Repo, Entry, DistFiles),
-  length(DistFiles, NumFiles),
-  ( NumFiles > 0
-  -> FileStartLine is LineOff + 1,
-     FileInfo = files(FileStartLine, NumFiles, DistFiles, Distdir),
-     Lines is 1 + NumFiles
-  ;  FileInfo = no_files,
-     Lines = 1
-  ).
-
-builder:rule_file_info(rule(Repo://Entry:Action?{Ctx}, _Body), _Distdir, LineOff, SubInfo, Lines) :-
-  \+ memberchk(Action, [download, fetchonly]),
-  Repo:get_type(eapi),
-  predicate_property(ebuild_exec:display_phases(_,_,_,_,_), defined),
-  catch(ebuild_exec:display_phases(Action, Repo, Entry, Ctx, PhaseList), _, fail),
-  PhaseList \= [],
-  !,
-  ExecLine is LineOff + 1,
-  build:exec_phase_line_count(PhaseList, ExecLineCount),
-  builder:count_conf_lines(Repo, Entry, Action, Ctx, ConfCount),
-  ( predicate_property(ebuild_exec:build_log_path(_,_), defined)
-  -> catch(ebuild_exec:build_log_path(Entry, LogPath), _, LogPath = '')
-  ;  LogPath = ''
-  ),
-  ( catch(config:show_build_logs(true), _, fail)
-  -> LogsLine is ExecLine + ExecLineCount,
-     SubInfo = phases(ExecLine, ExecLineCount, LogsLine, PhaseList, LogPath),
-     Lines is 1 + ConfCount + ExecLineCount + 1
-  ;  SubInfo = phases(ExecLine, ExecLineCount, -1, PhaseList, LogPath),
-     Lines is 1 + ConfCount + ExecLineCount
-  ).
-
-builder:rule_file_info(_, _, _, no_files, 1).
-
-
-%! builder:count_conf_lines(+Repo, +Entry, +Action, +Ctx, -Count) is det.
-%
-% Count how many display lines plan:print_config would produce for
-% this rule (USE flags, USE_EXPAND variables, slot info). Captures
-% the output and counts newlines to stay consistent with the plan printer.
-
-builder:count_conf_lines(Repo, Entry, Action, Ctx, Count) :-
-  memberchk(Action, [install, update, downgrade, reinstall]),
-  !,
-  builder:count_conf_lines_as_short(Repo, Entry, Action, Ctx, Count).
-builder:count_conf_lines(_, _, _, _, 0).
-
-
-builder:count_conf_lines_as_short(Repo, Entry, Action, Ctx, Count) :-
-  config:printing_style('column'), !,
-  setup_call_cleanup(
-    ( retract(config:interface_printing_style('column')),
-      assertz(config:interface_printing_style('short')) ),
-    ( with_output_to(string(S),
-        catch(plan:print_config(Repo://Entry:Action?{Ctx}), _, true)),
-      split_string(S, "\n", "", Parts),
-      length(Parts, N),
-      Count is max(0, N - 1) ),
-    ( retract(config:interface_printing_style('short')),
-      assertz(config:interface_printing_style('column')) )
-  ).
-
-builder:count_conf_lines_as_short(Repo, Entry, Action, Ctx, Count) :-
-  with_output_to(string(S),
-    catch(plan:print_config(Repo://Entry:Action?{Ctx}), _, true)),
-  split_string(S, "\n", "", Parts),
-  length(Parts, N),
-  Count is max(0, N - 1).
-
-
-% =============================================================================
-%  Slot info registry
-% =============================================================================
-
-%! builder:register_slot_info(+SlottedJobs) is det.
-%
-% Store slot metadata so the result handler can look up step/action/entry
-% for display without needing the original job term.
-
-builder:register_slot_info([]).
-
-builder:register_slot_info([slotted(LineOff, _TotalLines, PlanStep, NumSteps, ActionIdx, rule(Repo://Entry:Action?{_Ctx}, _Body), _FileInfo)|Rest]) :-
-  !,
-  assertz(builder:slot_info(LineOff, PlanStep, NumSteps, ActionIdx, Action, Repo://Entry)),
-  builder:register_slot_info(Rest).
-
-builder:register_slot_info([slotted(LineOff, _TotalLines, PlanStep, NumSteps, ActionIdx, rule(world(Atom):Action?{_Ctx}, _Body), _FileInfo)|Rest]) :-
-  !,
-  assertz(builder:slot_info(LineOff, PlanStep, NumSteps, ActionIdx, Action, Atom)),
-  builder:register_slot_info(Rest).
-
-builder:register_slot_info([_|Rest]) :-
-  builder:register_slot_info(Rest).
-
-
-%! builder:clear_slot_info is det.
-
-builder:clear_slot_info :-
-  retractall(builder:slot_info(_, _, _, _, _, _)),
+builder:clear_step_state :-
+  display:clear_slot_info,
   retractall(builder:slot_outcome(_, _)),
-  retractall(builder:dl_prev_snapshot(_, _, _)),
+  fetch:clear_speed_tracking,
   retractall(builder:exec_phase_state(_, _, _)).
 
 
-%! builder:get_slot_info(+Slot, -PlanStep, -NumSteps, -ActionIdx, -Action, -Entry) is det.
-
-builder:get_slot_info(Slot, PlanStep, NumSteps, ActionIdx, Action, Entry) :-
-  builder:slot_info(Slot, PlanStep, NumSteps, ActionIdx, Action, Entry), !.
-
-builder:get_slot_info(_Slot, 0, 0, 0, unknown, unknown).
-
-
-
-% =============================================================================
+% -----------------------------------------------------------------------------
 %  Job execution (called by worker threads)
-% =============================================================================
+% -----------------------------------------------------------------------------
 
 %! builder:execute_build_job(+SlottedJob, +WorkerSlot, -Result) is det.
 %
@@ -713,12 +527,12 @@ builder:execute_build_job(
     build:update_slot(LineOff, TotalLines, active, PlanStep, NumSteps, ActionIdx, Action, Repo://Entry)),
   builder:maybe_quickpkg_old(Action, Ctx),
   ( FileInfo = live_source(LiveStartLine)
-  -> builder:run_git_download(Repo, Entry, LiveStartLine, TotalLines,
-                               LineOff, PlanStep, NumSteps, ActionIdx, Action, Outcome),
+  -> fetch:run_git_download(Repo, Entry, LiveStartLine, TotalLines,
+                            LineOff, PlanStep, NumSteps, ActionIdx, Action, Outcome),
      ResultOutcome = display_handled(Outcome)
   ;  FileInfo = files(FileStartLine, _NumFiles, DistFiles, Distdir)
-  -> builder:run_download_parallel(Repo, Entry, Ctx, LineOff, TotalLines, PlanStep, NumSteps, ActionIdx, Action,
-                                    FileStartLine, DistFiles, Distdir, Outcome),
+  -> fetch:run_download_parallel(Repo, Entry, Ctx, LineOff, TotalLines, PlanStep, NumSteps, ActionIdx, Action,
+                                 FileStartLine, DistFiles, Distdir, Outcome),
      ResultOutcome = display_handled(Outcome)
   ;  memberchk(Action, [download, fetchonly])
   -> with_mutex(build_display,
@@ -757,7 +571,7 @@ builder:execute_build_job(Job, _WorkerSlot, result(unknown, failed(unrecognised_
 %! builder:run_action(+Action, +Repo, +Entry, +Ctx, -Outcome) is det.
 %
 % Execute a non-download action. Downloads are handled by
-% run_download_parallel via execute_build_job.
+% fetch:run_download_parallel via execute_build_job.
 %
 % Dispatches to ebuild_exec for real builds when config:build_live_phases
 % is non-empty. Falls back to stub when fully stubbed or ebuild_exec
@@ -901,428 +715,9 @@ builder:stub_all_phases(Action, PhaseList, TotalLines, ExecLine, LogsLine, LogPa
   ).
 
 
-%! builder:run_git_download(+Repo, +Entry, +LiveStartLine, +TotalLines, +LineOff, +PlanStep, +NumSteps, +ActionIdx, +Action, -Outcome) is det.
-%
-% Clones or fetches a live ebuild's git repository with progress tracking.
-% Extracts EGIT_REPO_URI from the ebuild, uses the distdir/git3-src cache
-% (matching Portage's git-r3.eclass convention), and polls for progress.
-
-builder:run_git_download(Repo, Entry, LiveStartLine, TotalLines,
-                          LineOff, PlanStep, NumSteps, ActionIdx, Action, Outcome) :-
-  ( download:extract_git_uri(Repo, Entry, URI)
-  -> distfiles:get_location(Distdir),
-     download:git_cache_dir(Distdir, GitCacheDir),
-     ( \+ exists_directory(GitCacheDir) -> make_directory_path(GitCacheDir) ; true ),
-     download:git_repo_cache_path(GitCacheDir, URI, RepoPath),
-     ebuild_exec:build_log_path(Entry, LogPath),
-     ebuild_exec:ensure_log_dir,
-     Callback = builder:git_progress_callback(LiveStartLine, TotalLines),
-     download:start_git_clone_async(URI, RepoPath, LogPath, Pid),
-     download:poll_git_progress(Pid, LogPath, Callback, ExitCode),
-     ( ExitCode =:= 0
-     -> with_mutex(build_display,
-          build:update_live_subslot(0, LiveStartLine, TotalLines, done)),
-        with_mutex(build_display,
-          build:update_slot(LineOff, TotalLines, done, PlanStep, NumSteps, ActionIdx, Action, Repo://Entry)),
-        Outcome = done
-     ;  with_mutex(build_display,
-          build:update_live_subslot(0, LiveStartLine, TotalLines, failed)),
-        with_mutex(build_display,
-          build:update_slot(LineOff, TotalLines, failed(git), PlanStep, NumSteps, ActionIdx, Action, Repo://Entry)),
-        Outcome = failed(git)
-     )
-  ;  with_mutex(build_display,
-       build:update_live_subslot(0, LiveStartLine, TotalLines, done)),
-     with_mutex(build_display,
-       build:update_slot(LineOff, TotalLines, done, PlanStep, NumSteps, ActionIdx, Action, Repo://Entry)),
-     Outcome = done
-  ).
-
-
-%! builder:git_progress_callback(+LiveStartLine, +TotalLines, +Phase, +Status) is det.
-%
-% Updates the live sub-slot display with git clone/fetch progress.
-
-builder:git_progress_callback(LiveStartLine, TotalLines, _Phase, progress(Pct)) :-
-  with_mutex(build_display,
-    build:update_live_subslot(0, LiveStartLine, TotalLines, progress(Pct))).
-
-builder:git_progress_callback(_, _, _, _).
-
-
-%! builder:run_download_parallel(+Repo, +Entry, +Ctx, +LineOff, +TotalLines, +PlanStep, +NumSteps, +ActionIdx, +Action, +FileStartLine, +DistFiles, +Distdir, -Outcome) is det.
-%
-% Parallel download with per-file progress using pre-allocated layout.
-% File sub-lines are already printed by print_job_slots; this predicate
-% only starts async curls, polls progress in-place, and updates the
-% header slot on completion.
-%
-% Binpkg rescue (portage-ng#28): when the source fetch fails (manual
-% fetch required, dead URL, mirror outage) but a USE-compatible binpkg
-% exists for this entry, the failure is downgraded to `done` so the
-% plan proceeds to the install step, where the binpkg fast path merges
-% the gpkg without needing the distfiles. The source fetch is still
-% always attempted first -- binpkgs accelerate the source pipeline,
-% they never replace it pre-emptively.
-
-builder:run_download_parallel(Repo, Entry, Ctx, LineOff, TotalLines, PlanStep, NumSteps, ActionIdx, Action,
-                               FileStartLine, DistFiles, Distdir, Outcome) :-
-  ( \+ exists_directory(Distdir) -> make_directory_path(Distdir) ; true ),
-  ( download:is_fetch_restricted(Repo, Entry)
-  -> builder:handle_restricted_files(DistFiles, 0, TotalLines, FileStartLine, Distdir, MissingCount),
-     ( MissingCount =:= 0
-     -> FinalStatus = done, Outcome = done
-     ;  builder:binpkg_rescues_download(Action, Repo, Entry, Ctx)
-     -> FinalStatus = done, Outcome = done
-     ;  FinalStatus = failed('manual fetch required'), Outcome = failed('manual fetch required')
-     )
-  ;  builder:safe_mirror_layout(Layout),
-     builder:prepare_download_jobs(Layout, Distdir, DistFiles, 0, Repo, Entry, DlJobs),
-     get_time(T0),
-     builder:init_speed_tracking(DlJobs, T0, FileStartLine),
-     builder:poll_download_loop(DlJobs, TotalLines, FileStartLine, Distdir, FailCount),
-     ( FailCount =:= 0
-     -> FinalStatus = done, Outcome = done
-     ;  builder:binpkg_rescues_download(Action, Repo, Entry, Ctx)
-     -> FinalStatus = done, Outcome = done
-     ;  FinalStatus = failed('download errors'), Outcome = failed('download errors')
-     )
-  ),
-  with_mutex(build_display,
-    build:update_slot(LineOff, TotalLines, FinalStatus, PlanStep, NumSteps, ActionIdx, Action, Repo://Entry)).
-
-
-%! builder:binpkg_rescues_download(+Action, +Repo, +Entry, +Ctx) is semidet.
-%
-% Succeeds when a failed source fetch for Repo://Entry can be tolerated
-% because a USE-compatible binpkg exists: the later install step will
-% short-circuit through `binpkg_exec:execute/6` (qmerge) and never read
-% the distfiles. Probes `binpkg_exec:available_for/4` with the same
-% proof context the install dispatch will use, so the rescue decision
-% mirrors the actual binpkg selection (USE / SLOT / KEYWORDS / subslot
-% pins).
-%
-% Only plain `download` actions qualify: `fetchonly` exists precisely
-% to obtain the sources, so a binpkg can never substitute for it. Any
-% exception from the probe (unregistered repo, missing index) degrades
-% to failure, preserving the original download error.
-
-builder:binpkg_rescues_download(download, Repo, Entry, Ctx) :-
-  catch(binpkg_exec:available_for(Repo, Entry, Ctx, _BinpkgEntryId), _, fail).
-
-
-%! builder:safe_mirror_layout(-Layout) is det.
-%
-% Defense-in-depth wrapper around download:mirror_layout/1. The
-% downstream layout fetch is now thread-safe and tmp_file_stream-free,
-% but this catch ensures that any *future* unrelated failure (DNS hiccup,
-% mirror down at process start, parse error in layout.conf) degrades
-% gracefully to the legacy `flat` layout instead of aborting the whole
-% download job (which would propagate to a [jobserver worker error]
-% and SKIP every dependent install/run/register in the plan).
-%
-% The legacy `flat` layout is the safe fallback: it's what Portage used
-% before GLEP 75, our local mirror has always served files from the
-% flat layout, and the upstream Gentoo mirrors still expose flat-named
-% paths. So this fallback strictly preserves correctness for any
-% mirror that doesn't actively reject flat lookups.
-
-builder:safe_mirror_layout(Layout) :-
-  catch(
-    download:mirror_layout(Layout),
-    E,
-    ( print_message(warning,
-        format("mirror_layout failed (~q); falling back to flat layout", [E])),
-      Layout = flat,
-      ( download:cached_mirror_layout(_)
-      -> true
-      ;  catch(assertz(download:cached_mirror_layout(flat)), _, true)
-      )
-    )).
-
-
-% =============================================================================
-%  Parallel download helpers
-% =============================================================================
-
-%! builder:prepare_download_jobs(+Layout, +Distdir, +DistFiles, +Idx, +Repo, +Entry, -DlJobs) is det.
-%
-% Start async curl processes for files not already present. Returns
-% dl_job/8 terms for tracking. Already-present files are skipped (they
-% already show checkmarks from print_file_subslots). Each curl walks
-% every configured mirror_url in declaration order, exiting at the first
-% successful download. Upstream SRC_URI fallback is handled later by
-% builder:try_upstream_fallback/11 when the file still fails verification.
-%
-% Race-safety: curl is told to write into a per-process temp path
-% (`download:tmp_dest_path/2`), never directly into the shared DestPath.
-% builder:finalize_download/12 verifies the temp path and atomic-renames
-% to DestPath only after a successful checksum match, then falls
-% through to a race-recovery check on DestPath when our own download
-% failed (so a concurrent writer that produced a valid file is honoured
-% instead of triggering a redundant retry). See `download.pl` --
-% "Race-safe distfile staging" for the full rationale.
-
-builder:prepare_download_jobs(_, _, [], _, _, _, []).
-
-builder:prepare_download_jobs(Layout, Distdir, [dist(Filename, Size, Pairs)|Rest], Idx, Repo, Entry, Jobs) :-
-  Idx1 is Idx + 1,
-  ( mirror:flat_present(Distdir, Filename)
-  -> builder:prepare_download_jobs(Layout, Distdir, Rest, Idx1, Repo, Entry, Jobs)
-  ;  builder:mirror_urls_for_file(Layout, Filename, URLs),
-     atomic_list_concat([Distdir, '/', Filename], DestPath),
-     download:tmp_dest_path(DestPath, TmpPath),
-     catch(delete_file(TmpPath), _, true),
-     download:start_curl_async(URLs, TmpPath, Pid),
-     Jobs = [dl_job(Pid, Idx, Filename, Size, Pairs, DestPath, Repo, Entry)|MoreJobs],
-     builder:prepare_download_jobs(Layout, Distdir, Rest, Idx1, Repo, Entry, MoreJobs)
-  ).
-
-
-%! builder:mirror_urls_for_file(+Layout, +Filename, -URLs) is det.
-%
-% Build the ordered list of HTTP mirror URLs to try for Filename. One URL
-% per configured config:mirror_url/1 fact, expanded through the same GLEP
-% 75 layout. Empty list never returned: caller is only invoked when a
-% mirror_url is configured (which the rest of the build pipeline already
-% requires).
-
-builder:mirror_urls_for_file(Layout, Filename, URLs) :-
-  findall(URL,
-          ( config:mirror_url(MirrorUrl),
-            download:mirror_download_url(MirrorUrl, Layout, Filename, URL)
-          ),
-          URLs0),
-  list_to_set(URLs0, URLs).
-
-
 % -----------------------------------------------------------------------------
-%  Speed tracking (dynamic state for per-file speed calculation)
-% -----------------------------------------------------------------------------
-
-:- dynamic builder:dl_prev_snapshot/3.
-
-%! builder:init_speed_tracking(+DlJobs, +T0, +FileStartLine) is det.
-
-builder:init_speed_tracking([], _, _).
-
-builder:init_speed_tracking([dl_job(_, Idx, _, _, _, _, _, _)|Rest], T0, FileStartLine) :-
-  Key is FileStartLine + Idx,
-  retractall(builder:dl_prev_snapshot(Key, _, _)),
-  assertz(builder:dl_prev_snapshot(Key, 0, T0)),
-  builder:init_speed_tracking(Rest, T0, FileStartLine).
-
-
-%! builder:compute_speed(+Key, +CurrentSize, -Speed) is det.
-%
-% Compute download speed in bytes/sec using delta from last snapshot.
-% Key is FileStartLine + FileIdx (unique across concurrent downloads).
-
-builder:compute_speed(Key, CurrentSize, Speed) :-
-  get_time(Now),
-  ( builder:dl_prev_snapshot(Key, PrevSize, PrevTime)
-  -> Delta is CurrentSize - PrevSize,
-     Dt is Now - PrevTime,
-     ( Dt > 0.1, Delta > 0
-     -> Speed is round(Delta / Dt),
-        retractall(builder:dl_prev_snapshot(Key, _, _)),
-        assertz(builder:dl_prev_snapshot(Key, CurrentSize, Now))
-     ;  Speed = 0
-     )
-  ;  Speed = 0,
-     assertz(builder:dl_prev_snapshot(Key, CurrentSize, Now))
-  ).
-
-
-% -----------------------------------------------------------------------------
-%  Poll loop
-% -----------------------------------------------------------------------------
-
-%! builder:poll_download_loop(+DlJobs, +TotalLines, +FileStartLine, +Distdir, -FailCount) is det.
-%
-% Poll all active downloads until none remain. Returns the total
-% number of failed downloads. Updates file sub-slot display with
-% percentage and speed on each iteration.
-
-builder:poll_download_loop([], _, _, _, 0) :- !.
-
-builder:poll_download_loop(ActiveJobs, TotalLines, FileStartLine, Distdir, TotalFails) :-
-  builder:poll_all_jobs(ActiveJobs, TotalLines, FileStartLine, Distdir, StillActive, BatchFails),
-  ( StillActive == []
-  -> TotalFails = BatchFails
-  ;  sleep(0.25),
-     builder:poll_download_loop(StillActive, TotalLines, FileStartLine, Distdir, MoreFails),
-     TotalFails is BatchFails + MoreFails
-  ).
-
-
-%! builder:poll_all_jobs(+Jobs, +TotalLines, +FileStartLine, +Distdir, -StillActive, -Fails) is det.
-
-builder:poll_all_jobs([], _, _, _, [], 0).
-
-builder:poll_all_jobs([Job|Rest], TotalLines, FileStartLine, Distdir, StillActive, Fails) :-
-  Job = dl_job(Pid, FileIdx, Filename, ExpSize, Pairs, DestPath, Repo, Entry),
-  ( download:check_process_done(Pid, ExitCode)
-  -> builder:finalize_download(ExitCode, FileIdx, Filename, ExpSize, Pairs, DestPath, Repo, Entry,
-                                TotalLines, FileStartLine, Distdir, OK),
-     builder:poll_all_jobs(Rest, TotalLines, FileStartLine, Distdir, StillActive, RestFails),
-     ( OK == true -> Fails = RestFails ; Fails is RestFails + 1 )
-  ;  builder:update_download_progress(FileIdx, Filename, ExpSize, DestPath,
-                                       TotalLines, FileStartLine, Distdir),
-     StillActive = [Job|MoreActive],
-     builder:poll_all_jobs(Rest, TotalLines, FileStartLine, Distdir, MoreActive, Fails)
-  ).
-
-
-%! builder:finalize_download(+ExitCode, +FileIdx, +Filename, +ExpSize, +Pairs, +DestPath, +Repo, +Entry, +TotalLines, +FileStartLine, +Distdir, -OK) is det.
-%
-% Called when a curl process exits. Verifies the per-process temp
-% download (see prepare_download_jobs) and atomic-renames it onto
-% DestPath when verification succeeds. On any failure the temp path
-% is deleted but DestPath is left intact -- a parallel writer (sibling
-% external build harness session, host emerge in compare matrices,
-% etc.) may have landed a valid copy there in the meantime, in which case
-% race_recover/3 short-circuits success without retrying. If neither
-% our temp nor a peer-supplied DestPath verifies, falls through to
-% the upstream SRC_URI fallback chain.
-
-builder:finalize_download(ExitCode, FileIdx, Filename, ExpSize, Pairs, DestPath, Repo, Entry,
-                           TotalLines, FileStartLine, Distdir, OK) :-
-  download:tmp_dest_path(DestPath, TmpPath),
-  ( ExitCode =:= 0
-  -> download:finalize_temp_download(TmpPath, DestPath, ExpSize, Pairs, MirrorOK)
-  ;  catch(delete_file(TmpPath), _, true),
-     ( download:race_recover(DestPath, ExpSize, Pairs)
-     -> MirrorOK = true
-     ;  MirrorOK = false
-     )
-  ),
-  ( MirrorOK == true
-  -> OK = true,
-     with_mutex(build_display,
-       build:update_file_subslot(FileIdx, FileStartLine, TotalLines, done, Filename, ExpSize, Distdir))
-  ;  builder:try_upstream_fallback(FileIdx, Filename, ExpSize, Pairs, DestPath, Repo, Entry,
-                                    TotalLines, FileStartLine, Distdir, OK)
-  ).
-
-
-%! builder:try_upstream_fallback(+FileIdx, +Filename, +ExpSize, +Pairs, +DestPath, +Repo, +Entry, +TotalLines, +FileStartLine, +Distdir, -OK) is det.
-%
-% Attempts to download a distfile from its upstream SRC_URI peers when
-% the Gentoo distfiles mirror has failed. Walks every URL yielded by
-% download:upstream_url/4 (canonical mirror:// expansions first, then
-% direct URIs) and stops at the first success that also passes size +
-% checksum verification. This matches Portage's behaviour: when the
-% Gentoo mirror prunes a distfile, the original upstream and its
-% thirdpartymirror peers usually still serve it.
-
-builder:try_upstream_fallback(FileIdx, Filename, ExpSize, Pairs, DestPath, Repo, Entry,
-                               TotalLines, FileStartLine, Distdir, OK) :-
-  findall(U, download:upstream_url(Repo, Entry, Filename, U), URLs0),
-  list_to_set(URLs0, URLs),
-  ( URLs == []
-  -> OK = false,
-     with_mutex(build_display,
-       build:update_file_subslot(FileIdx, FileStartLine, TotalLines, failed, Filename, ExpSize, Distdir))
-  ;  with_mutex(build_display,
-       build:update_file_subslot(FileIdx, FileStartLine, TotalLines, progress(0, 0), Filename, ExpSize, Distdir)),
-     builder:try_url_chain(URLs, FileIdx, Filename, ExpSize, Pairs, DestPath,
-                           TotalLines, FileStartLine, Distdir, OK)
-  ).
-
-
-%! builder:try_url_chain(+URLs, +FileIdx, +Filename, +ExpSize, +Pairs, +DestPath, +TotalLines, +FileStartLine, +Distdir, -OK) is det.
-%
-% Walk a list of candidate download URLs in order. Each curl writes
-% into the same per-process temp path used by the mirror download
-% (see download:tmp_dest_path/2); on success the temp is atomic-
-% renamed onto DestPath. Stops at the first URL whose curl exits 0
-% AND whose temp passes size + checksum verification, OR at the
-% first race_recover/3 success (peer writer landed a valid file at
-% DestPath while we were trying). If every URL fails, the file is
-% marked as failed -- DestPath itself is never deleted.
-
-builder:try_url_chain([], FileIdx, Filename, ExpSize, _Pairs, _DestPath,
-                      TotalLines, FileStartLine, Distdir, false) :-
-  with_mutex(build_display,
-    build:update_file_subslot(FileIdx, FileStartLine, TotalLines, failed, Filename, ExpSize, Distdir)).
-
-builder:try_url_chain([URL|Rest], FileIdx, Filename, ExpSize, Pairs, DestPath,
-                      TotalLines, FileStartLine, Distdir, OK) :-
-  download:tmp_dest_path(DestPath, TmpPath),
-  catch(delete_file(TmpPath), _, true),
-  download:curl_download(URL, TmpPath, ExitCode),
-  ( ExitCode =:= 0
-  -> download:finalize_temp_download(TmpPath, DestPath, ExpSize, Pairs, AttemptOK)
-  ;  catch(delete_file(TmpPath), _, true),
-     ( download:race_recover(DestPath, ExpSize, Pairs)
-     -> AttemptOK = true
-     ;  AttemptOK = false
-     )
-  ),
-  ( AttemptOK == true
-  -> OK = true,
-     with_mutex(build_display,
-       build:update_file_subslot(FileIdx, FileStartLine, TotalLines, done, Filename, ExpSize, Distdir))
-  ;  builder:try_url_chain(Rest, FileIdx, Filename, ExpSize, Pairs, DestPath,
-                           TotalLines, FileStartLine, Distdir, OK)
-  ).
-
-
-% -----------------------------------------------------------------------------
-%  RESTRICT=fetch handling
-% -----------------------------------------------------------------------------
-
-%! builder:handle_restricted_files(+DistFiles, +Idx, +TotalLines, +FileStartLine, +Distdir, -MissingCount) is det.
-%
-% For fetch-restricted ebuilds, checks each distfile: present files get
-% a green checkmark, missing files get a yellow "manual fetch required" marker.
-
-builder:handle_restricted_files([], _, _, _, _, 0).
-
-builder:handle_restricted_files([dist(Filename, Size, _)|Rest], Idx, TotalLines, FileStartLine, Distdir, MissingCount) :-
-  Idx1 is Idx + 1,
-  ( mirror:flat_present(Distdir, Filename)
-  -> with_mutex(build_display,
-       build:update_file_subslot(Idx, FileStartLine, TotalLines, done, Filename, Size, Distdir)),
-     builder:handle_restricted_files(Rest, Idx1, TotalLines, FileStartLine, Distdir, MissingCount)
-  ;  with_mutex(build_display,
-       build:update_file_subslot(Idx, FileStartLine, TotalLines, restricted, Filename, Size, Distdir)),
-     builder:handle_restricted_files(Rest, Idx1, TotalLines, FileStartLine, Distdir, RestMissing),
-     MissingCount is RestMissing + 1
-  ).
-
-
-%! builder:update_download_progress(+FileIdx, +Filename, +ExpSize, +DestPath, +TotalLines, +FileStartLine, +Distdir) is det.
-%
-% Update a file sub-slot with current download progress (percentage + speed).
-%
-% Curl writes to the per-process temp path (see prepare_download_jobs);
-% if the temp file exists we use its size for live progress and fall
-% back to the final DestPath only after a successful atomic rename.
-
-builder:update_download_progress(FileIdx, Filename, ExpSize, DestPath,
-                                  TotalLines, FileStartLine, Distdir) :-
-  SpeedKey is FileStartLine + FileIdx,
-  download:tmp_dest_path(DestPath, TmpPath),
-  ( exists_file(TmpPath) -> SizeSrc = TmpPath
-  ; exists_file(DestPath) -> SizeSrc = DestPath
-  ; SizeSrc = none
-  ),
-  ( SizeSrc \== none
-  -> size_file(SizeSrc, CurrentSize),
-     ( atom(ExpSize) -> atom_number(ExpSize, ES) ; ES = ExpSize ),
-     ( ES > 0 -> Pct is min(99, (CurrentSize * 100) // ES) ; Pct = 0 ),
-     builder:compute_speed(SpeedKey, CurrentSize, Speed)
-  ;  Pct = 0, Speed = 0
-  ),
-  with_mutex(build_display,
-    build:update_file_subslot(FileIdx, FileStartLine, TotalLines, progress(Pct, Speed), Filename, ExpSize, Distdir)).
-
-
-% =============================================================================
 %  Result handling (main thread, display callback)
-% =============================================================================
+% -----------------------------------------------------------------------------
 
 %! builder:handle_result(+TotalLines, +LineOff, +Outcome) is det.
 %
@@ -1337,7 +732,7 @@ builder:handle_result(_TotalLines, LineOff, display_handled(Outcome)) :-
 
 builder:handle_result(TotalLines, LineOff, Outcome) :-
   assertz(builder:slot_outcome(LineOff, Outcome)),
-  builder:get_slot_info(LineOff, PlanStep, NumSteps, ActionIdx, Action, Entry),
+  display:get_slot_info(LineOff, PlanStep, NumSteps, ActionIdx, Action, Entry),
   builder:outcome_to_status(Outcome, Status),
   with_mutex(build_display,
     build:update_slot(LineOff, TotalLines, Status, PlanStep, NumSteps, ActionIdx, Action, Entry)),
@@ -1351,9 +746,9 @@ builder:handle_result(TotalLines, LineOff, Outcome) :-
 
 builder:maybe_record_resume_done(LineOff, Outcome) :-
   ( Outcome == done,
-    builder:slot_info(LineOff, _, _, _, Action, Entry),
+    display:slot_info(LineOff, _, _, _, Action, Entry),
     Entry = _://_
-  -> assertz(builder:resume_done(Entry, Action))
+  -> resume:mark_done(Entry, Action)
   ;  true
   ).
 
@@ -1368,9 +763,9 @@ builder:outcome_to_status(error(E), failed(E)) :- !.
 builder:outcome_to_status(_, failed('unknown')).
 
 
-% =============================================================================
+% -----------------------------------------------------------------------------
 %  Tally
-% =============================================================================
+% -----------------------------------------------------------------------------
 
 %! builder:tally_outcomes(+C0, +F0, +S0, -C, -F, -S) is det.
 %
@@ -1386,149 +781,9 @@ builder:tally_outcomes(C0, F0, S0, C, F, S) :-
   S is S0 + SC.
 
 
-% =============================================================================
-%  Resume state management
-% =============================================================================
-
-%! builder:resume_state_file(-Path) is det.
-%
-% Returns the path to the resume state file (Knowledge/resume.pl).
-
-builder:resume_state_file(Path) :-
-  config:installation_dir(Dir),
-  os:compose_path([Dir, 'Knowledge', 'resume.pl'], Path).
-
-
-%! builder:save_resume_state(+Goals, +Plan) is det.
-%
-% Saves the build goals and plan to Knowledge/resume.pl. This is
-% called at the start of a --build run so the plan can be loaded
-% later by --resume.
-
-builder:save_resume_state(Goals, Plan) :-
-  builder:resume_state_file(Path),
-  catch(
-    setup_call_cleanup(
-      open(Path, write, S),
-      ( write_term(S, resume_goals(Goals), [quoted(true)]),
-        format(S, '.~n', []),
-        write_term(S, resume_plan(Plan), [quoted(true)]),
-        format(S, '.~n', [])
-      ),
-      close(S)),
-    _, true).
-
-
-%! builder:flush_resume_done_to_disk is det.
-%
-% Appends any in-memory resume_done/2 facts to the resume state file,
-% then retracts them. Called after each plan step for crash safety.
-
-builder:flush_resume_done_to_disk :-
-  builder:resume_state_file(Path),
-  ( exists_file(Path)
-  -> findall(E-A, builder:resume_done(E, A), Entries),
-     ( Entries \= []
-     -> catch(
-          setup_call_cleanup(
-            open(Path, append, S),
-            forall(
-              member(E-A, Entries),
-              ( write_term(S, resume_done(E, A), [quoted(true)]),
-                format(S, '.~n', [])
-              )
-            ),
-            close(S)),
-          _, true),
-        retractall(builder:resume_done(_, _))
-     ;  true
-     )
-  ;  true
-  ).
-
-
-%! builder:load_resume_state(-Goals, -Plan, -DoneList) is semidet.
-%
-% Loads the resume state from Knowledge/resume.pl. Returns the
-% original goals, plan, and a list of done(Entry, Action) terms
-% for entries that already completed. Fails if no resume file exists.
-
-builder:load_resume_state(Goals, Plan, DoneList) :-
-  builder:resume_state_file(Path),
-  exists_file(Path),
-  catch(
-    setup_call_cleanup(
-      open(Path, read, S),
-      builder:read_all_resume_terms(S, Terms),
-      close(S)),
-    _, fail),
-  ( memberchk(resume_goals(Goals), Terms) -> true ; Goals = [] ),
-  ( memberchk(resume_plan(Plan), Terms) -> true ; Plan = [] ),
-  findall(done(E, A), member(resume_done(E, A), Terms), DoneList).
-
-
-%! builder:read_all_resume_terms(+Stream, -Terms) is det.
-%
-% Reads all Prolog terms from a stream until end_of_file.
-
-builder:read_all_resume_terms(S, Terms) :-
-  read_term(S, T, []),
-  ( T == end_of_file
-  -> Terms = []
-  ;  Terms = [T|Rest],
-     builder:read_all_resume_terms(S, Rest)
-  ).
-
-
-%! builder:clear_resume_state is det.
-%
-% Deletes the resume state file after a successful build.
-
-builder:clear_resume_state :-
-  builder:resume_state_file(Path),
-  ( exists_file(Path) -> delete_file(Path) ; true ).
-
-
-%! builder:filter_completed_plan(+Plan, +DoneList, -FilteredPlan) is det.
-%
-% Removes completed rules from each step in the plan. A rule is
-% considered completed if its Entry and Action appear in DoneList.
-
-builder:filter_completed_plan([], _, []).
-
-builder:filter_completed_plan([Step|Rest], DoneList, [Filtered|FilteredRest]) :-
-  exclude(builder:rule_is_done(DoneList), Step, Filtered),
-  builder:filter_completed_plan(Rest, DoneList, FilteredRest).
-
-
-%! builder:rule_is_done(+DoneList, +Rule) is semidet.
-%
-% True if the rule's package and action appear in the done list.
-
-builder:rule_is_done(DoneList, rule(Repo://Entry:Action?{_Ctx}, _Body)) :-
-  memberchk(done(Repo://Entry, Action), DoneList).
-
-
-%! builder:collect_skip_entries(+Plan, -SkipDone) is det.
-%
-% Collects done/2 entries for rules whose Entry matches any
-% config:skip_atom/1 fact. Matches by sub_atom so the user can
-% specify a qualified name like dev-lang/python-3.12.0 and it
-% will match the full Entry atom in the plan.
-
-builder:collect_skip_entries(Plan, SkipDone) :-
-  findall(done(Repo://Entry, Action),
-    ( member(Step, Plan),
-      member(rule(Repo://Entry:Action?{_Ctx}, _Body), Step),
-      config:skip_atom(Skip),
-      sub_atom(Entry, _, _, _, Skip)
-    ),
-    SkipDone).
-
-
-% =============================================================================
+% -----------------------------------------------------------------------------
 %  Snapshot integration
-% =============================================================================
+% -----------------------------------------------------------------------------
 
 %! builder:maybe_create_snapshot(+Plan) is det.
 %
@@ -1557,9 +812,9 @@ builder:maybe_quickpkg_old(Action, Ctx) :-
 builder:maybe_quickpkg_old(_, _).
 
 
-% =============================================================================
+% -----------------------------------------------------------------------------
 %  World action execution (stubs)
-% =============================================================================
+% -----------------------------------------------------------------------------
 
 %! builder:execute_world(+Op, +Arg) is det.
 %
@@ -1570,9 +825,9 @@ builder:execute_world(register, _Arg).
 builder:execute_world(unregister, _Arg).
 
 
-% =============================================================================
+% -----------------------------------------------------------------------------
 %  Suggestion dispatch (auto-config writers)
-% =============================================================================
+% -----------------------------------------------------------------------------
 %
 % The prover tags fully-resolved literals with three flavors of suggestion:
 %
@@ -1830,9 +1085,9 @@ builder:append_with_header(Path, SubDir, Line) :-
     close(S2)).
 
 
-% =============================================================================
+% -----------------------------------------------------------------------------
 %  Builder test stats (whole-repo and targeted)
-% =============================================================================
+% -----------------------------------------------------------------------------
 
 %! builder:test_stats(+Repository) is det.
 %
@@ -1902,9 +1157,9 @@ builder:test_stats_pkgs(Repository, Style, TopN, Pkgs) :-
   stats:test_stats_print(TopN).
 
 
-% =============================================================================
+% -----------------------------------------------------------------------------
 %  Per-entry test (prove + download + safe phases)
-% =============================================================================
+% -----------------------------------------------------------------------------
 
 %! builder:test_single(+Repository, +Entry) is det.
 %
