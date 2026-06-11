@@ -48,29 +48,26 @@ sanitize:safe_filename(Atom) :-
 
 %! sanitize:safe_portage_category(+Cat) is semidet.
 %
-% True when Cat matches a valid Gentoo category name pattern
-% (lowercase alphanumeric plus hyphens, no slashes or dots-dots).
+% True when Cat is safe to use as a single path component (no slashes,
+% no '..', no NUL bytes, non-empty). This is NOT a full PMS category
+% name check: shell metacharacters (e.g. '-rf', '$(cmd)', ';reboot')
+% pass. Callers must pass Cat as a process_create/3 argument-vector
+% element, never interpolate it into a shell command string.
 
 sanitize:safe_portage_category(Cat) :-
-  atom(Cat),
-  atom_string(Cat, S),
-  string_length(S, Len), Len > 0,
-  \+ sub_string(S, _, _, _, "/"),
-  \+ sub_string(S, _, _, _, ".."),
-  \+ sub_string(S, _, _, _, "\x00\").
+  sanitize:safe_path_component(Cat).
 
 
 %! sanitize:safe_portage_name(+Name) is semidet.
 %
-% True when Name matches a valid Gentoo package name pattern.
+% True when Name is safe to use as a single path component (no slashes,
+% no '..', no NUL bytes, non-empty). This is NOT a full PMS package
+% name check: shell metacharacters (e.g. '-rf', '$(cmd)', ';reboot')
+% pass. Callers must pass Name as a process_create/3 argument-vector
+% element, never interpolate it into a shell command string.
 
 sanitize:safe_portage_name(Name) :-
-  atom(Name),
-  atom_string(Name, S),
-  string_length(S, Len), Len > 0,
-  \+ sub_string(S, _, _, _, "/"),
-  \+ sub_string(S, _, _, _, ".."),
-  \+ sub_string(S, _, _, _, "\x00\").
+  sanitize:safe_path_component(Name).
 
 
 % -----------------------------------------------------------------------------
