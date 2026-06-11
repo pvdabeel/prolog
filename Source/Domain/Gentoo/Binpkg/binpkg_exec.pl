@@ -601,10 +601,10 @@ binpkg_exec:check_atom_subslot_pin(Cat, Name, Slot) :-
     memberchk(equal, Slot),
     memberchk(subslot(RecSubRaw), Slot)
   -> ( memberchk(slot(RecSlotRaw), Slot)
-     -> candidate:canon_slot(RecSlotRaw, RecSlot)
+     -> slotmeta:canon_slot(RecSlotRaw, RecSlot)
      ;  RecSlot = (-)
      ),
-     candidate:canon_slot(RecSubRaw, RecSub),
+     slotmeta:canon_slot(RecSubRaw, RecSub),
      binpkg_exec:live_subslot_matches(Cat, Name, RecSlot, RecSub)
   ;  true
   ).
@@ -653,7 +653,7 @@ binpkg_exec:live_install_subslot(Cat, Name, RecSlot, LiveSub) :-
 binpkg_exec:live_install_subslot(Cat, Name, RecSlot, LiveSub) :-
   binpkg_exec:find_live_install_for_slot(Cat, Name, RecSlot, LiveEntry),
   query:search(subslot(LiveSubRaw), pkg://LiveEntry),
-  candidate:canon_slot(LiveSubRaw, LiveSub).
+  slotmeta:canon_slot(LiveSubRaw, LiveSub).
 
 
 %! binpkg_exec:vdb_disk_root(-Root) is semidet.
@@ -694,9 +694,9 @@ binpkg_exec:vdb_disk_install_subslot(Root, Cat, Name, RecSlot, Sub) :-
   atom_string(SlotAtom, SlotStr),
   binpkg_exec:split_slot(SlotAtom, LiveSlotRaw, LiveSubRaw),
   LiveSubRaw \== '',
-  candidate:canon_slot(LiveSlotRaw, LiveSlot),
+  slotmeta:canon_slot(LiveSlotRaw, LiveSlot),
   ( RecSlot == (-) -> true ; LiveSlot == RecSlot ),
-  candidate:canon_slot(LiveSubRaw, Sub),
+  slotmeta:canon_slot(LiveSubRaw, Sub),
   !.
 
 
@@ -714,7 +714,7 @@ binpkg_exec:find_live_install_for_slot(Cat, Name, (-), Entry) :- !,
 binpkg_exec:find_live_install_for_slot(Cat, Name, RecSlot, Entry) :-
   query:search([name(Name), category(Cat), installed(true)], pkg://Entry),
   ( query:search(slot(LiveSlotRaw), pkg://Entry)
-  -> candidate:canon_slot(LiveSlotRaw, LiveSlot),
+  -> slotmeta:canon_slot(LiveSlotRaw, LiveSlot),
      LiveSlot == RecSlot
   ;  true
   ),

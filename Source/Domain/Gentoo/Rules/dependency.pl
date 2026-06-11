@@ -233,7 +233,7 @@ dependency:plan_merged_cn_sets(Plan, CNSet, CNSlotSet) :-
   findall(key(C,N,Slot),
           ( planner:plan_merge_anchor(Plan, Repo://Entry, _AnchorCore2, _Ctx2),
             query:search([category(C),name(N)], Repo://Entry),
-            candidate:entry_slot_default(Repo, Entry, Slot)
+            slotmeta:entry_slot_default(Repo, Entry, Slot)
           ),
           CNSlotKeys0),
   sort(CNSlotKeys0, CNSlotKeys),
@@ -278,12 +278,12 @@ dependency:goal_specific_slot(grouped_package_dependency(_,C,N,PackageDeps):_Act
   member(package_dependency(_Phase,_Strength,C,N,_O,_V,SlotReq,_U), PackageDeps),
   is_list(SlotReq),
   member(slot(S0), SlotReq),
-  candidate:canon_slot(S0, Slot),
+  slotmeta:canon_slot(S0, Slot),
   !.
 
 dependency:goal_specific_slot(grouped_package_dependency(C,N,PackageDeps):_Action?{_Ctx}, Slot) :-
   member(package_dependency(_Phase,_Strength,C,N,_O,_V,SlotReq,_U), PackageDeps),
   is_list(SlotReq),
   member(slot(S0), SlotReq),
-  candidate:canon_slot(S0, Slot),
+  slotmeta:canon_slot(S0, Slot),
   !.

@@ -78,9 +78,9 @@ target:is_cn_target(qualified_target(none, _, _, _, version_none, _)).
 target:resolve_candidate(Q, Repository://Ebuild) :-
   ( target:is_cn_target(Q) ->
       ( query:search(Q, Repository://Ebuild),
-        candidate:entry_has_accepted_keyword(Repository://Ebuild),
+        acceptance:entry_has_accepted_keyword(Repository://Ebuild),
         \+ query:search(masked(true), Repository://Ebuild),
-        \+ candidate:license_masked(Repository://Ebuild)
+        \+ acceptance:license_masked(Repository://Ebuild)
       ; query:search(Q, Repository://Ebuild)
       )
   ; query:search(Q, Repository://Ebuild)
@@ -195,7 +195,7 @@ target:deep_update_goals(Self, MergedDeps, DeepUpdates) :-
             pkg://OldEntry \== Self,
             query:search(version(OldVer), pkg://OldEntry),
             query:search(slot(Slot0), pkg://OldEntry),
-            candidate:canon_slot(Slot0, Slot),
+            slotmeta:canon_slot(Slot0, Slot),
             ( KeywordQ == []
               -> query:search(latest([select(repository,notequal,pkg),
                                       category(C),name(N),slot(Slot),
@@ -288,7 +288,7 @@ candidate:resolve(required_use(any_of, Deps):validate?{_},
 % memoized model (AvlModel) and survives into the resolve phase.
 
 candidate:resolve(choice_group(Deps):config?{Context}, [D:config?{Context}]) :-
-  candidate:prioritize_deps_keep_all(Deps, Context, SortedDeps),
+  ranking:prioritize_deps_keep_all(Deps, Context, SortedDeps),
   % Commit to the first viable alternative (preferred branch first).
   member(D, SortedDeps),
   candidate:any_of_config_dep_ok(Context, D),
@@ -301,7 +301,7 @@ candidate:resolve(choice_group(Deps):config?{Context}, [D:config?{Context}]) :-
 % reject choices that degrade into domain assumptions.
 
 candidate:resolve(choice_group(Deps):Action?{Context}, Conditions) :-
-  candidate:prioritize_deps_keep_all(Deps, Context, SortedDeps),
+  ranking:prioritize_deps_keep_all(Deps, Context, SortedDeps),
   member(D0, SortedDeps),
   candidate:group_choice_dep(D0, D),
   rules:rule(D:Action?{Context}, Conditions0),
@@ -380,18 +380,18 @@ candidate:resolve(grouped_dep(C,N,PackageDeps):Action?{Context}, Conditions) :-
 candidate:resolve(grouped_dep(C,N,PackageDeps):Action?{Context}, _) :-
   candidate:augment_package_deps_with_self_rdepend(Action, C, N, Context, PackageDeps, PackageDeps1),
   \+ memo:requse_violation_(C, N, _),
-  candidate:maybe_learn_wildcard_domain(C, N, PackageDeps1, Context),
+  cnselect:maybe_learn_wildcard_domain(C, N, PackageDeps1, Context),
   fail.
 
 candidate:resolve(grouped_dep(C,N,PackageDeps):_Action?{Context}, _) :-
   candidate:augment_package_deps_with_self_rdepend(_, C, N, Context, PackageDeps, PackageDeps1),
   \+ memo:requse_violation_(C, N, _),
-  candidate:maybe_learn_parent_narrowing(C, N, PackageDeps1, Context),
+  cnselect:maybe_learn_parent_narrowing(C, N, PackageDeps1, Context),
   fail.
 candidate:resolve(grouped_dep(C,N,PackageDeps):Action?{Context}, _) :-
   candidate:augment_package_deps_with_self_rdepend(Action, C, N, Context, PackageDeps, PackageDeps1),
   \+ memo:requse_violation_(C, N, _),
-  candidate:maybe_request_grouped_dep_reprove(Action, C, N, PackageDeps1, Context),
+  cnselect:maybe_request_grouped_dep_reprove(Action, C, N, PackageDeps1, Context),
   fail.
 
 candidate:resolve(grouped_dep(C,N,PackageDeps):Action?{Context}, Conditions) :-
@@ -411,10 +411,10 @@ candidate:resolve(grouped_dep(C,N,PackageDeps):Action?{Context}, Conditions) :-
 % nothing installed matches.
 
 candidate:resolve(grouped_dep(C,N,PackageDeps):depclean?{_}, Conditions) :-
-  candidate:merge_slot_restriction(run, C, N, PackageDeps, SlotReq),
+  slotmeta:merge_slot_restriction(run, C, N, PackageDeps, SlotReq),
   ( query:search([name(N),category(C),installed(true)], pkg://Installed),
-    candidate:query_search_slot_constraint(SlotReq, pkg://Installed, _),
-    candidate:installed_entry_satisfies_package_deps(run, C, N, PackageDeps, pkg://Installed),
+    slotmeta:query_search_slot_constraint(SlotReq, pkg://Installed, _),
+    cnselect:installed_entry_satisfies_package_deps(run, C, N, PackageDeps, pkg://Installed),
     query:search(version(V), pkg://Installed),
     preference:accept_keywords(K),
     query:search([select(repository,notequal,pkg),category(C),name(N),keywords(K),version(V)],
@@ -510,10 +510,10 @@ candidate:resolve(Repository://Ebuild:update?{Context}, Conditions) :-
   \+ preference:flag(emptytree),
   query:search([category(Category),name(Name)], Repository://Ebuild),
   \+ candidate:installed(Repository://Ebuild),
-  ( candidate:entry_slot_default(Repository, Ebuild, SlotNew),
-    candidate:installed_entry_cn(Category, Name, OldRepo, OldEbuild),
+  ( slotmeta:entry_slot_default(Repository, Ebuild, SlotNew),
+    cnselect:installed_entry_cn(Category, Name, OldRepo, OldEbuild),
     ( query:search(slot(SlotOld0), OldRepo://OldEbuild)
-      -> candidate:canon_slot(SlotOld0, SlotOld)
+      -> slotmeta:canon_slot(SlotOld0, SlotOld)
       ;  SlotOld = SlotNew
     ),
     SlotOld == SlotNew
@@ -538,7 +538,7 @@ candidate:resolve(Repository://Ebuild:update?{Context}, []) :-
   candidate:installed(Repository://Ebuild),
   % An incoming `replaces(...)` annotation means an upstream caller (e.g.
   % rule(:install/:run?{Ctx}) detecting a build_with_use mismatch, or
-  % grouped_dep_determine_action/7) has explicitly requested a transactional
+  % grouped_dep_determine_action/5) has explicitly requested a transactional
   % update. In that case we must NOT short-circuit even though the same-
   % version entry is on disk -- the transactional update clause below has to
   % run to walk DEPEND/BDEPEND under the new BWU and pull the newly-required
@@ -627,7 +627,7 @@ candidate:resolve(Repository://Ebuild:upgrade?{Context}, Conditions) :-
   preference:accept_keywords(K),
   query:search([category(Category),name(Name),installed(true)],
                Repository://Ebuild),
-  candidate:entry_slot_default(Repository, Ebuild, SlotInstalled),
+  slotmeta:entry_slot_default(Repository, Ebuild, SlotInstalled),
   query:search(latest([name(Name),category(Category),keywords(K),
                        select(slot,greater,SlotInstalled)]),
                LatestRepo://LatestEbuild),
@@ -640,9 +640,9 @@ candidate:resolve(Repository://Ebuild:upgrade?{Context}, Conditions) :-
   \+ preference:flag(emptytree),
   query:search([category(Category),name(Name)], Repository://Ebuild),
   \+ candidate:installed(Repository://Ebuild),
-  candidate:entry_slot_default(Repository, Ebuild, SlotNew),
-  ( candidate:installed_entry_cn(Category, Name, OldRepo, OldEbuild),
-    candidate:entry_slot_default(OldRepo, OldEbuild, SlotOld),
+  slotmeta:entry_slot_default(Repository, Ebuild, SlotNew),
+  ( cnselect:installed_entry_cn(Category, Name, OldRepo, OldEbuild),
+    slotmeta:entry_slot_default(OldRepo, OldEbuild, SlotOld),
     SlotOld \== SlotNew
   -> feature_unification:unify([replaces(OldRepo://OldEbuild)], Context, UpdCtx),
      candidate:resolve(Repository://Ebuild:upgrade?{UpdCtx}, Conditions)
@@ -767,8 +767,8 @@ candidate:install_dep_model(Repository://Ebuild, Model, AfterForDeps, install,
   query:search(model(dependency(MergedDeps0,install)):config?{ModelExt}, Repository://Ebuild),
   dependency:add_self_to_dep_contexts(Repository://Ebuild, MergedDeps0, MergedDeps),
   featureterm:add_after_to_dep_contexts(AfterForDeps, MergedDeps, MergedDepsAfter),
-  candidate:seed_bwu_memo_from_dep_tree(MergedDepsAfter),
-  candidate:order_deps_for_proof(install, MergedDepsAfter, MergedDepsOrdered),
+  ranking:seed_bwu_memo_from_dep_tree(MergedDepsAfter),
+  ranking:order_deps_for_proof(install, MergedDepsAfter, MergedDepsOrdered),
   ( memberchk(C, ['virtual','acct-group','acct-user']) ->
       Prefix0 = [ Selected,
                   constraint(use(Repository://Ebuild):{R}),
@@ -809,9 +809,9 @@ candidate:run_dep_model(Repository://Ebuild, Model, AfterForDeps, run,
       featureterm:add_after_to_dep_contexts(AfterForDeps, MergedDepsInstall, MergedDepsInstallAfter)
   ; MergedDepsInstallAfter = []
   ),
-  candidate:seed_bwu_memo_from_dep_tree(MergedDepsInstallAfter),
-  candidate:seed_bwu_memo_from_dep_tree(MergedDepsAfter),
-  candidate:order_deps_for_proof(run, MergedDepsAfter, MergedDepsOrdered),
+  ranking:seed_bwu_memo_from_dep_tree(MergedDepsInstallAfter),
+  ranking:seed_bwu_memo_from_dep_tree(MergedDepsAfter),
+  ranking:order_deps_for_proof(run, MergedDepsAfter, MergedDepsOrdered),
   target:run_install_action(Repository://Ebuild, C, N, R, BResolved, InstallAction, InstallCtx0),
   target:run_tag_suggestions(Repository://Ebuild, BResolved, R, InstallCtx0, InstallCtx),
   InstallOrUpdate = Repository://Ebuild:InstallAction?{InstallCtx},
@@ -836,7 +836,7 @@ candidate:run_dep_model(Repository://Ebuild, Model, AfterForDeps, run,
 candidate:resolve_required_use(_Phase, C, N, Repository://Ebuild, Context1, R, BResolved, Model) :-
   use:context_build_with_use_state(Context1, B0),
   use:merge_memo_candidate_bwu(C, N, B0, B1),
-  candidate:apply_equality_pins(Repository://Ebuild, B1, B),
+  ranking:apply_equality_pins(Repository://Ebuild, B1, B),
   ( memberchk(required_use:R, Context1) -> true ; true ),
   query:search(model(Model,required_use(R),build_with_use(B)), Repository://Ebuild),
   use:build_with_use_resolve_required_use(B, Repository://Ebuild, BResolved0),
@@ -865,12 +865,12 @@ candidate:resolve_required_use(_Phase, C, N, Repository://Ebuild, Context1, R, B
 target:run_install_action(Repository://Ebuild, C, N, R, BResolved, InstallAction, InstallCtx0) :-
   use:merge_memo_candidate_bwu(C, N, BResolved, BResolved1),
   ( \+ preference:flag(emptytree),
-    candidate:entry_slot_default(Repository, Ebuild, SlotNew),
+    slotmeta:entry_slot_default(Repository, Ebuild, SlotNew),
     query:search(package(C,N), pkg://_),
-    candidate:installed_entry_cn(C, N, OldRepo, OldEbuild),
+    cnselect:installed_entry_cn(C, N, OldRepo, OldEbuild),
     OldEbuild \== Ebuild,
     ( query:search(slot(SlotOld0), OldRepo://OldEbuild)
-      -> candidate:canon_slot(SlotOld0, SlotOld)
+      -> slotmeta:canon_slot(SlotOld0, SlotOld)
       ;  SlotOld = SlotNew
     ),
     SlotOld == SlotNew
@@ -900,12 +900,12 @@ target:run_install_action(Repository://Ebuild, C, N, R, BResolved, InstallAction
 target:run_tag_suggestions(Repository://Ebuild, BResolved, R, Ctx0, Ctx) :-
   ( prover:assuming(unmask), query:search(masked(true), Repository://Ebuild) ->
       Ctx1 = [suggestion(unmask, Repository://Ebuild)|Ctx0]
-  ; candidate:license_masked(Repository://Ebuild) ->
+  ; acceptance:license_masked(Repository://Ebuild) ->
       Ctx1 = [suggestion(accept_license, Repository://Ebuild)|Ctx0]
   ; Ctx1 = Ctx0
   ),
   ( prover:assuming(keyword_acceptance),
-    candidate:candidate_non_accepted_keyword(Repository://Ebuild, NonAccKw) ->
+    acceptance:candidate_non_accepted_keyword(Repository://Ebuild, NonAccKw) ->
       Ctx2 = [suggestion(accept_keyword, NonAccKw)|Ctx1]
   ; Ctx2 = Ctx1
   ),

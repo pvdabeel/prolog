@@ -232,10 +232,10 @@ depclean:direct_deps_from_repo_entry(Repo://Entry, DepsInstalled) :-
 depclean:dep_literal_installed_dep(MergedDeps, DepInstalled) :-
   member(D0, MergedDeps),
   depclean:dep_term_cn_deps(D0, Action, C, N, PackageDeps),
-  candidate:merge_slot_restriction(Action, C, N, PackageDeps, SlotReq),
+  slotmeta:merge_slot_restriction(Action, C, N, PackageDeps, SlotReq),
   query:search([name(N),category(C),installed(true)], pkg://DepInstalled),
-  candidate:query_search_slot_constraint(SlotReq, pkg://DepInstalled, _),
-  candidate:installed_entry_satisfies_package_deps(Action, C, N, PackageDeps, pkg://DepInstalled).
+  slotmeta:query_search_slot_constraint(SlotReq, pkg://DepInstalled, _),
+  cnselect:installed_entry_satisfies_package_deps(Action, C, N, PackageDeps, pkg://DepInstalled).
 
 
 %! depclean:dep_term_cn_deps(+DepTerm, -Action, -C, -N, -PackageDeps)

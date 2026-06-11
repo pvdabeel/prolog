@@ -26,7 +26,7 @@ An implementation of a query language for the knowledge base
 %
 %   2. prover:assuming(keyword_acceptance) / prover:assuming(unmask) — these
 %      nb_setval flags change between fallback attempts in prove_with_fallback.
-%      any_of_config_dep_ok calls candidate:accepted_keyword_candidate, which
+%      any_of_config_dep_ok calls acceptance:accepted_keyword_candidate, which
 %      checks these flags.  A cached model from the strict attempt may be wrong
 %      in the unmask attempt (previously-unsatisfiable OR branches become viable).
 %
@@ -152,7 +152,7 @@ candidate:goal_expansion(eligible(Repo://Id:Action?{_}), Expanded) :-
   ;  query:compile_query_compound(masked(true), Repo://Id, Masked),
      Expanded =
        ( ( Masked -> prover:assuming(unmask) ; true ),
-         ( candidate:entry_has_accepted_keyword(Repo://Id) -> true
+         ( acceptance:entry_has_accepted_keyword(Repo://Id) -> true
          ; prover:assuming(keyword_acceptance) ) )
   ).
 
@@ -1611,7 +1611,7 @@ group_dependencies(L, Groups) :-
 % group per dep. Otherwise keep the group as-is.
 
 split_multislot_group(grouped_package_dependency(no,C,N,PackageDeps):Action?{Ctx}, Acc, Acc1) :-
-    candidate:should_split_grouped_dep(PackageDeps),
+    slotmeta:should_split_grouped_dep(PackageDeps),
     !,
     split_grouped_singletons(PackageDeps, C, N, Action, Ctx, Acc, Acc1).
 split_multislot_group(Group, Acc, [Group|Acc]).

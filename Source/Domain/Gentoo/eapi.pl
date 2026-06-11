@@ -2376,7 +2376,7 @@ eapi:normalize_slot_term_(Other, Other) :-
 
 % Shared slot-value canonicalizer (integers/numbers -> atom; atoms pass
 % through). Used by repository cache generation and delegated to by
-% candidate:canon_slot/2, version_domain:canon_slot/2 and
+% slotmeta:canon_slot/2, version_domain:canon_slot/2 and
 % preference:canon_slot_atom_/2.
 eapi:normalize_slot_value_(S0, S) :-
   ( atom(S0)    -> S = S0

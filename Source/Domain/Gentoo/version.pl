@@ -348,7 +348,7 @@ version_domain:normalize_bound_op(_Other, none).
 % ('0.6*') and [N,W,A,S] list forms. Fails for bare wildcards ('*'),
 % which carry no numeric components and are therefore unbounded.
 % Canonical entry point for wildcard-to-bound derivation; callers
-% (e.g. candidate:wildcard_upper_bound_domain) must not re-implement it.
+% (e.g. cnselect:wildcard_upper_bound_domain) must not re-implement it.
 
 version_domain:wildcard_upper_bound(Ver0, version(UpperNums, '', 4, 0, [], 0, UpperFull)) :-
   wildcard_base_nums(Ver0, Nums),

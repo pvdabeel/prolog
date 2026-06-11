@@ -369,7 +369,7 @@ warning:print_license_suggestions(LicenseSuggestions) :-
 
 warning:print_license_suggestion_line(R, E) :-
   ( builder:atom_for_entry(R, E, Atom) -> true ; Atom = E ),
-  findall(Lic, candidate:effective_license(R://E, Lic), Lics0),
+  findall(Lic, acceptance:effective_license(R://E, Lic), Lics0),
   sort(Lics0, Lics),
   ( Lics == [] ->
       format('    =~w~n', [Atom])

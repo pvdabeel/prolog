@@ -115,12 +115,12 @@ heuristic:obligation_candidate(Literal) :-
 %! heuristic:handle_reprove(+Info, -Added)
 %
 % Process a reprove conflict. Delegates domain conflict processing
-% to candidate:add_cn_domain_rejects/5 and candidate:add_cn_domain_origin_rejects/2.
+% to cnselect:add_cn_domain_rejects/5 and cnselect:add_cn_domain_origin_rejects/2.
 
 heuristic:handle_reprove(cn_domain(C, N, Domain, Candidates, Reasons), Added) :-
-  candidate:add_cn_domain_rejects(C, N, Domain, Candidates, AddedDomain),
+  cnselect:add_cn_domain_rejects(C, N, Domain, Candidates, AddedDomain),
   ( Candidates == [] ->
-      candidate:add_cn_domain_origin_rejects(Reasons, AddedOrigins)
+      cnselect:add_cn_domain_origin_rejects(Reasons, AddedOrigins)
   ; AddedOrigins = false
   ),
   ( AddedDomain == true -> Added = true
@@ -222,7 +222,7 @@ heuristic:constraint_guard(constraint(cn_domain(C,N,Slot):{Domain0}), Constraint
   ; ( get_assoc(selected_cn(C,N), Constraints, ordset(Selected)) ->
       filter_selected_by_slot(Slot, Selected, SlotSelected),
       ( SlotSelected == [] -> true
-      ; candidate:selected_cn_domain_compatible_or_reprove(C, N, Domain, SlotSelected, Constraints)
+      ; cnselect:selected_cn_domain_compatible_or_reprove(C, N, Domain, SlotSelected, Constraints)
       )
   ; true
     )
@@ -230,25 +230,25 @@ heuristic:constraint_guard(constraint(cn_domain(C,N,Slot):{Domain0}), Constraint
 heuristic:constraint_guard(constraint(blocked_cn(C,N):{ordset(Specs)}), Constraints) :-
   !,
   ( get_assoc(selected_cn(C,N), Constraints, ordset(Selected)) ->
-      candidate:selected_cn_not_blocked_or_reprove(C, N, Specs, Selected, Constraints)
+      cnselect:selected_cn_not_blocked_or_reprove(C, N, Specs, Selected, Constraints)
   ; true
   ).
 heuristic:constraint_guard(constraint(blocked_cn_source(C,N):{ordset(Sources)}), _Constraints) :-
   !,
-  candidate:record_blocked_cn_source_snapshot(C, N, Sources).
+  cnselect:record_blocked_cn_source_snapshot(C, N, Sources).
 heuristic:constraint_guard(constraint(selected_cn_allow_multislot(_C,_N):{_}), _Constraints) :-
   !.
 heuristic:constraint_guard(constraint(selected_cn(C,N):{ordset(_SelectedNew)}), Constraints) :-
   !,
   get_assoc(selected_cn(C,N), Constraints, ordset(SelectedMerged)),
-  candidate:record_selected_cn_snapshot(C, N, SelectedMerged),
-  ( candidate:cn_domain_for_slot(C, N, any, Constraints, Domain) ->
-      candidate:selected_cn_domain_compatible_or_reprove(C, N, Domain, SelectedMerged, Constraints)
+  cnselect:record_selected_cn_snapshot(C, N, SelectedMerged),
+  ( cnselect:cn_domain_for_slot(C, N, any, Constraints, Domain) ->
+      cnselect:selected_cn_domain_compatible_or_reprove(C, N, Domain, SelectedMerged, Constraints)
   ; true
   ),
-  candidate:selected_cn_unique_or_reprove(C, N, SelectedMerged, Constraints),
+  cnselect:selected_cn_unique_or_reprove(C, N, SelectedMerged, Constraints),
   ( get_assoc(blocked_cn(C,N), Constraints, ordset(Specs)) ->
-      candidate:selected_cn_not_blocked_or_reprove(C, N, Specs, SelectedMerged, Constraints)
+      cnselect:selected_cn_not_blocked_or_reprove(C, N, Specs, SelectedMerged, Constraints)
   ; true
   ).
 heuristic:constraint_guard(_Other, _Constraints).
@@ -268,7 +268,7 @@ heuristic:filter_selected_by_slot(Slot, Selected, Filtered) :-
   include(selected_on_slot_(Slot), Selected, Filtered).
 
 heuristic:selected_on_slot_(Slot, selected(_Repo, _Entry, _Act, _Ver, SlotMeta)) :-
-  candidate:selected_cn_slot_key_(SlotMeta, Slot).
+  cnselect:selected_cn_slot_key_(SlotMeta, Slot).
 
 
 % =============================================================================

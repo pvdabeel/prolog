@@ -1414,8 +1414,8 @@ test(seed_run_before_install_phase, [true(M == use_state([dbus],[]))]) :-
   RunDeps = [grouped_package_dependency(no, 'dev-libs', glib,
       [package_dependency(run, no, 'dev-libs', glib, none, version_none, [],
                           [use(enable(dbus), positive)])])],
-  candidate:seed_bwu_memo_from_dep_tree(InstallDeps),
-  candidate:seed_bwu_memo_from_dep_tree(RunDeps),
+  ranking:seed_bwu_memo_from_dep_tree(InstallDeps),
+  ranking:seed_bwu_memo_from_dep_tree(RunDeps),
   memo:candidate_bwu_('dev-libs', glib, M).
 
 :- end_tests(use_candidate_bwu_memo).
@@ -1426,40 +1426,40 @@ test(seed_run_before_install_phase, [true(M == use_state([dbus],[]))]) :-
 test(equal_provider_enabled_enables_self, [true(Mode == enable)]) :-
   use:clear_bwu_cross_dep_memos,
   assertz(memo:candidate_bwu_('dev-qt', qtbase, use_state([icu], []))),
-  once(candidate:equality_pin_from_usedep('dev-qt', qtbase, use(equal(icu), negative), icu, Mode)).
+  once(ranking:equality_pin_from_usedep('dev-qt', qtbase, use(equal(icu), negative), icu, Mode)).
 
 test(equal_provider_disabled_disables_self, [true(Mode == disable)]) :-
   use:clear_bwu_cross_dep_memos,
   assertz(memo:candidate_bwu_('dev-qt', qtbase, use_state([], [icu]))),
-  once(candidate:equality_pin_from_usedep('dev-qt', qtbase, use(equal(icu), positive), icu, Mode)).
+  once(ranking:equality_pin_from_usedep('dev-qt', qtbase, use(equal(icu), positive), icu, Mode)).
 
 test(inverse_provider_enabled_disables_self, [true(Mode == disable)]) :-
   use:clear_bwu_cross_dep_memos,
   assertz(memo:candidate_bwu_('dev-qt', qtbase, use_state([icu], []))),
-  once(candidate:equality_pin_from_usedep('dev-qt', qtbase, use(inverse(icu), negative), icu, Mode)).
+  once(ranking:equality_pin_from_usedep('dev-qt', qtbase, use(inverse(icu), negative), icu, Mode)).
 
 test(inverse_provider_disabled_enables_self, [true(Mode == enable)]) :-
   use:clear_bwu_cross_dep_memos,
   assertz(memo:candidate_bwu_('dev-qt', qtbase, use_state([], [icu]))),
-  once(candidate:equality_pin_from_usedep('dev-qt', qtbase, use(inverse(icu), positive), icu, Mode)).
+  once(ranking:equality_pin_from_usedep('dev-qt', qtbase, use(inverse(icu), positive), icu, Mode)).
 
 test(unpinned_provider_yields_no_pin, [fail]) :-
   use:clear_bwu_cross_dep_memos,
-  candidate:equality_pin_from_usedep('dev-qt', qtbase, use(equal(icu), negative), icu, _Mode).
+  ranking:equality_pin_from_usedep('dev-qt', qtbase, use(equal(icu), negative), icu, _Mode).
 
 test(term_walk_collects_top_level, [true(Pairs == [icu-enable])]) :-
   use:clear_bwu_cross_dep_memos,
   assertz(memo:candidate_bwu_('dev-qt', qtbase, use_state([icu], []))),
   Term = package_dependency(install, no, 'dev-qt', qtbase, tilde, version_none, [],
                             [use(equal(icu), negative), use(enable(network), positive)]),
-  findall(F-M, candidate:equality_pin_from_term(Term, F, M), Pairs).
+  findall(F-M, ranking:equality_pin_from_term(Term, F, M), Pairs).
 
 test(term_walk_descends_all_of_group, [true(Pairs == [icu-enable])]) :-
   use:clear_bwu_cross_dep_memos,
   assertz(memo:candidate_bwu_('dev-qt', qtbase, use_state([icu], []))),
   Term = all_of_group([package_dependency(install, no, 'dev-qt', qtbase, tilde, version_none, [],
                                           [use(equal(icu), negative)])]),
-  findall(F-M, candidate:equality_pin_from_term(Term, F, M), Pairs).
+  findall(F-M, ranking:equality_pin_from_term(Term, F, M), Pairs).
 
 test(conditional_group_not_descended, [true(Pairs == [])]) :-
   use:clear_bwu_cross_dep_memos,
@@ -1467,19 +1467,19 @@ test(conditional_group_not_descended, [true(Pairs == [])]) :-
   Term = use_conditional_group(positive, someflag, none,
            [package_dependency(install, no, 'dev-qt', qtbase, tilde, version_none, [],
                                [use(equal(icu), negative)])]),
-  findall(F-M, candidate:equality_pin_from_term(Term, F, M), Pairs).
+  findall(F-M, ranking:equality_pin_from_term(Term, F, M), Pairs).
 
 test(pin_conflict_detected) :-
-  candidate:pin_flags_conflict([icu], [icu]).
+  ranking:pin_flags_conflict([icu], [icu]).
 
 test(pin_no_conflict, [fail]) :-
-  candidate:pin_flags_conflict([icu], [foo]).
+  ranking:pin_flags_conflict([icu], [foo]).
 
 test(seed_conditional_minus_use_recurses, [fail]) :-
-  candidate:seed_use_conditional_inactive(positive, minus(foo), some://entry).
+  ranking:seed_use_conditional_inactive(positive, minus(foo), some://entry).
 
 test(seed_conditional_non_entry_recurses, [fail]) :-
-  candidate:seed_use_conditional_inactive(positive, foo, not_an_entry).
+  ranking:seed_use_conditional_inactive(positive, foo, not_an_entry).
 
 :- end_tests(equality_use_pin_propagation).
 
@@ -1534,36 +1534,36 @@ test(prefers_effective_negative, [true(S == negative)]) :-
 :- begin_tests(use_expand_target_rank).
 
 test(llvm_slot_numeric, [true(R == 20)]) :-
-  candidate:use_rank('llvm_slot_20', R).
+  ranking:use_rank('llvm_slot_20', R).
 
 test(llvm_slot_newer_ranks_higher) :-
-  candidate:use_rank('llvm_slot_20', R20),
-  candidate:use_rank('llvm_slot_19', R19),
+  ranking:use_rank('llvm_slot_20', R20),
+  ranking:use_rank('llvm_slot_19', R19),
   R20 > R19.
 
 test(python_single_target_newer_ranks_higher) :-
-  candidate:use_rank('python_single_target_python3_13', R13),
-  candidate:use_rank('python_single_target_python3_12', R12),
+  ranking:use_rank('python_single_target_python3_13', R13),
+  ranking:use_rank('python_single_target_python3_12', R12),
   R13 > R12.
 
 test(lua5_newer_ranks_higher) :-
-  candidate:use_rank('lua_single_target_lua5-4', R4),
-  candidate:use_rank('lua_single_target_lua5-3', R3),
+  ranking:use_rank('lua_single_target_lua5-4', R4),
+  ranking:use_rank('lua_single_target_lua5-3', R3),
   R4 > R3.
 
 test(lua_non_numeric_is_zero, [true(R == 0)]) :-
-  candidate:use_rank('lua_single_target_luajit', R).
+  ranking:use_rank('lua_single_target_luajit', R).
 
 test(non_use_expand_is_zero, [true(R == 0)]) :-
-  candidate:use_rank(some_random_flag, R).
+  ranking:use_rank(some_random_flag, R).
 
 test(digit_groups_multi, [true(G == [3,13])]) :-
   atom_codes('python3_13', Cs),
-  candidate:digit_groups(Cs, G).
+  ranking:digit_groups(Cs, G).
 
 test(digit_groups_none, [true(G == [])]) :-
   atom_codes(luajit, Cs),
-  candidate:digit_groups(Cs, G).
+  ranking:digit_groups(Cs, G).
 
 :- end_tests(use_expand_target_rank).
 

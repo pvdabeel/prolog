@@ -23,14 +23,22 @@ Helper predicates used by these rules live in the Rules/ submodules.
 
 | Module        | Responsibility                                          |
 |---------------|---------------------------------------------------------|
-| candidate.pl  | Candidate selection, slot merging, CN-consistency,      |
-|               | blocker matching, keyword helpers, any_of validation    |
+| acceptance.pl | Keyword, mask, and license acceptance: keyword-aware    |
+|               | candidate enumeration, suggestions                      |
+| candidate.pl  | Grouped-dep resolution pipeline, blocker matching,      |
+|               | eligibility protocol, any_of validation                 |
+| cnselect.pl   | CN-consistency: selected_cn reuse, CN-domain reject     |
+|               | map, learned-domain narrowing, uniqueness enforcement   |
 | featureterm.pl| Proof-context list helpers (module: featureterm)        |
 | dependency.pl | Self-entry injection, USE-requirement collection,       |
 |               | slot/build-with-use propagation in ?{Context} lists     |
 | heuristic.pl  | Prover hooks: constraint guard, cycle classification,   |
 |               | proof obligations (PDEPEND), reprove state, debugging   |
 | memo.pl       | Thread-local caching declarations, clear_caches/0       |
+| ranking.pl    | Dependency ordering (dep_priority/2), choice-group      |
+|               | ranking, BWU memo seeding, equality-USE pins            |
+| slotmeta.pl   | Slot canonicalization, slot restriction merging, slot   |
+|               | constraint queries, grouped-dep slot helpers            |
 | target.pl     | Target resolution, update/downgrade transactions,       |
 |               | depclean rewriting, --exclude / --rebuild-if-* helpers  |
 | use.pl        | USE flag evaluation, conditionals, build_with_use,      |
@@ -496,9 +504,9 @@ rule(Repository://Ebuild:depclean?{Context}, Conditions) :-
 % alternative in an any_of_group.
 
 rule(package_dependency(Phase,no,C,N,O,V,S,_U):config?{Context},[]) :-
-  candidate:is_self_dep(C, N, Phase, S, Context),
+  slotmeta:is_self_dep(C, N, Phase, S, Context),
   !,
-  candidate:self_dep_satisfiable(C, N, O, V, S, Context).
+  slotmeta:self_dep_satisfiable(C, N, O, V, S, Context).
 
 rule(package_dependency(_,_,_,_,_,_,_,_):config?{_},[]) :- !.
 
