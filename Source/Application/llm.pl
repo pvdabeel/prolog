@@ -368,8 +368,10 @@ llm:llm_service(Service) :-
 % (`Service:history/1`, updated via `Service:update_history/1`); StreamGoal is
 % the streaming predicate to call as
 % `StreamGoal(Endpoint, Key, Model, Messages, Response)` -- `llm:stream` for the
-% OpenAI-style services, `claude:llm_stream_claude` for Claude. Ollama is not
-% routed here: it is keyless and deliberately skips check_api_key/2.
+% OpenAI-style services, `claude:llm_stream_claude` for Claude. The same
+% StreamGoal is threaded through llm:handle_response so that follow-up requests
+% (tool-call replay) use the service's own wire format. Ollama is not routed
+% here: it is keyless and deliberately skips check_api_key/2.
 
 llm:chat(Service, StreamGoal, Input, ResponseContent) :-
   ( config:llm_api_key(Service,Key) -> true ; Key = '' ),
@@ -381,7 +383,7 @@ llm:chat(Service, StreamGoal, Input, ResponseContent) :-
      call(StreamGoal, Endpoint, Key, Model, Messages, Response),
      ( Response = _{contents: Contents, history: NewHistory}
      -> atomic_list_concat(Contents, ResponseContent),
-        llm:handle_response(Key, Model, Endpoint, Service:update_history, ResponseContent, NewHistory)
+        llm:handle_response(StreamGoal, Key, Model, Endpoint, Service:update_history, ResponseContent, NewHistory)
      ; Response = _{error: Error, history: _}
      -> write('Error: '), write(Error), nl, ResponseContent = ''
      )
@@ -407,31 +409,24 @@ llm:execute_and_get_output(ServiceStr-Msg, Output) :-
 
 llm:execute_and_get_output("swi_prolog"-Code, Output) :-
     catch(
-        (
-            %read_term_from_atom(Code, Term, [variable_names(_)]),
-            catch(
-                with_output_to(
-                  string(OutputStr), %(call(Term) -> true ; format(string(OutputStr), 'Goal failed', []))),
-                  llm:execute_llm_code(Code),
-                  [capture([user_output,user_error]),color(true)]
-                ),
-                SafeError,
-                format(string(OutputStr), 'Execution error: ~w', [SafeError])
-            )
+        with_output_to(
+          string(Output),
+          llm:execute_llm_code(Code),
+          [capture([user_output,user_error]),color(true)]
         ),
-        ReadError,
-        format(string(OutputStr), 'Parse error: ~w', [ReadError])
-    ),
-    Output = OutputStr.
+        Error,
+        format(string(Output), 'Execution error: ~w', [Error])
+    ).
 
 
 %! llm:make_function_message(+Service,+Content,-Message)
 %
 % Prepare a json message to be send back to the LLM.
-% Write the output to stream, wrapping it as computer output
+% Write the output to stream, wrapping it as computer output.
+% Claude only accepts 'user' and 'assistant' roles, so for Claude the output
+% is wrapped in <command_output> tags inside a regular user message.
 
 llm:make_function_message(Service,Content, Message) :-
-    % atomic_list_concat(['<command_output:swi_prolog>', Output, '</command_output:swi_prolog>'], Content),
     nl,
     message:hl('computer'),
     message:color(green),
@@ -441,6 +436,9 @@ llm:make_function_message(Service,Content, Message) :-
     nl,
     (Service = gemini
      -> Message = _{ role: 'user', parts: [ _{function_response: _{ name: 'swi_prolog_exec',response: _{ result_key: Content }}}]}
+     ; Service = claude
+     -> atomic_list_concat(['<command_output>', Content, '</command_output>'], Tagged),
+        Message = _{role: 'user', content: Tagged}
      ;  Message = _{role: 'function', name: 'swi_prolog_exec', content: Content}).
 
 
@@ -456,11 +454,14 @@ llm:find_first_assistant([], _{role: 'assistant', content: ''}).
 
 
 
-%! llm:handle_response(+ApiKey,+Model,+Endpoint,+HistoryUpdater,+Response,+History)
+%! llm:handle_response(:StreamGoal,+ApiKey,+Model,+Endpoint,+HistoryUpdater,+Response,+History)
 %
-% Called with the response of the LLM, handles execution and message passing to other LLM
+% Called with the response of the LLM, handles execution and message passing
+% to other LLMs. Follow-up requests are sent through the same StreamGoal that
+% produced the original response, so each service keeps its own wire format
+% (OpenAI-style llm:stream vs claude:llm_stream_claude).
 
-llm:handle_response(ServiceAPIKey, ServiceModel, ServiceEndpoint, Service:UpdateHistory, ResponseContent, History) :-
+llm:handle_response(StreamGoal, ServiceAPIKey, ServiceModel, ServiceEndpoint, Service:UpdateHistory, ResponseContent, History) :-
   ( llm:extract_calls(ResponseContent, Pairs),
     Pairs \= []
 
@@ -475,16 +476,16 @@ llm:handle_response(ServiceAPIKey, ServiceModel, ServiceEndpoint, Service:Update
 
         % send back the automated response to the llm
 
-        stream(ServiceEndpoint, ServiceAPIKey, ServiceModel, UpdatedHistory, NewResponse),
+        call(StreamGoal, ServiceEndpoint, ServiceAPIKey, ServiceModel, UpdatedHistory, NewResponse),
 
-        % handle the new response from the
+        % handle the new response from the llm
         (
             NewResponse = _{contents: NewContents, history: NewerHistory}
             ->
             % keep handling responses
 
             atomic_list_concat(NewContents, NewResponseContent),
-            llm:handle_response(ServiceAPIKey, ServiceModel, ServiceEndpoint, Service:UpdateHistory, NewResponseContent, NewerHistory)
+            llm:handle_response(StreamGoal, ServiceAPIKey, ServiceModel, ServiceEndpoint, Service:UpdateHistory, NewResponseContent, NewerHistory)
 
             ;   NewResponse = _{error: NewError, history: _}
                 ->  write('Error: '), write(NewError), nl
@@ -511,17 +512,21 @@ llm:get_input(Msg) :-
 
 %! llm:prompt(Prompt)
 %
-% Put together a prompt for the LLM based on capabilities defined in config.pl
+% Put together a prompt for the LLM based on capabilities defined in config.pl.
+% Fails when no capabilities are configured (config:llm_capability/2 absent or
+% without clauses), in which case no prompt is injected (see llm:add_prompt/3).
 
 llm:prompt(Prompt) :-
-  findall(Capability,
-          config:llm_capability(_, Capability),
-          Cs),
+  catch(findall(Capability,
+                config:llm_capability(_, Capability),
+                Cs),
+        _, Cs = []),
+  Cs \== [],
   atomic_list_concat(Cs, ' ', Capabilities),
-  PromptEnding = " This was a prompt message, no need to acknowledge or respond to the previous sentences.
-                   Everything behind this final sentence is not a prompt and can be reacted to and acknowledged as regular input.",
+  PromptEnding = "This was a prompt message, no need to acknowledge or respond to the previous sentences.
+                  Everything behind this final sentence is not a prompt and can be reacted to and acknowledged as regular input.",
   normalize_space(string(Ending),PromptEnding),
-  string_concat(Capabilities,Ending,Prompt).
+  atomics_to_string([Capabilities, ' ', Ending], Prompt).
 
 
 %! llm:prepare_message(+History,+Role,+Input,-Messages)
@@ -534,10 +539,14 @@ llm:prepare_message(History,Role,Input,Messages) :-
   append(History,[UserMessage],Messages).
 
 
+%! llm:add_prompt(+History,+Msg,-NewMsg)
+%
+% On the first message of a conversation (empty history), prepend the
+% capability prompt (llm:prompt/1) so the LLM knows about the <call:...>
+% tag mechanism. Later messages pass through unchanged.
 
-%llm:add_prompt([],Msg,NewMsg) :-
-%  !,
-%  llm:prompt(P),
-%  string_concat(P,Msg,NewMsg).
-
-llm:add_prompt(_,Msg,Msg) :- !.
+llm:add_prompt([],Msg,NewMsg) :-
+  llm:prompt(P),
+  !,
+  atomics_to_string([P, ' ', Msg], NewMsg).
+llm:add_prompt(_,Msg,Msg).
