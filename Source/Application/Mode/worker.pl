@@ -85,24 +85,12 @@ worker:sync_to_server(_, _) :-
 
 worker:sync_to_commit(Commit) :-
   portage:get_location(Location),
-  server:git_head(Location, LocalHead),
+  git:head(Location, LocalHead),
   ( LocalHead == Commit ->
       message:inform(['Local tree already at ', Commit, '.'])
   ; message:inform(['Syncing local tree to ', Commit, '...']),
-    worker:git_checkout(Location, Commit),
+    git:checkout(Location, Commit),
     kb:load
-  ).
-
-%! worker:git_checkout(+Dir, +Commit)
-%
-% Checkout a specific commit in a git repository.
-
-worker:git_checkout(Dir, Commit) :-
-  process_create(path(git), ['checkout', Commit],
-                 [stdout(null), stderr(null), cwd(Dir), process(Pid)]),
-  process_wait(Pid, Status),
-  ( Status == exit(0) -> true
-  ; message:failure(['git checkout failed for ', Commit, ' in ', Dir])
   ).
 
 

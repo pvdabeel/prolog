@@ -160,7 +160,9 @@ client:rpc_execute(Hostname,Port,Cmd,Output,Srclist) :-
 %! client:execute_remotely(Host,Port,Page)
 %
 % Triggers a pre-defined action remotely. E.g. syncing a repository.
-% Output is streamed over https in realtime
+% Output is streamed over https in realtime. Actions are sent as POST
+% requests: the server only accepts POST on its state-mutating and
+% expensive endpoints (/sync, /save, /load, /clear, /graph, /prove).
 
 client:execute_remotely(Hostname,Port,Page) :-
     format(atom(URL), 'https://~w:~d~w', [Hostname,Port, Page]),
@@ -180,6 +182,7 @@ client:execute_remotely(Hostname,Port,Page) :-
                 certificate_file(ClientCert),
                 key_file(ClientKey),
                 password(Pass),
+                post(atom('')),
                 chunked
               ]),
     set_stream(In, buffer(false)),

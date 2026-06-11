@@ -38,13 +38,16 @@ Three roles interact in the portage-ng architecture:
 
 :- pengine_application('portage-ng').
 
+% State-mutating or expensive operations require POST; only informational
+% endpoints remain GET (avoids crawlers with credentials triggering e.g. /clear).
+
 :- http_handler('/',      reply, [id('portage-ng'), methods([get])]).
-:- http_handler('/sync',  reply, [id('sync'),       methods([get]), time_limit(infinite)]).
-:- http_handler('/save',  reply, [id('save'),       methods([get])]).
-:- http_handler('/load',  reply, [id('load'),       methods([get])]).
-:- http_handler('/clear', reply, [id('clear'),      methods([get])]).
-:- http_handler('/graph', reply, [id('graph'),      methods([get]), time_limit(infinite)]).
-:- http_handler('/prove', reply, [id('prove'),      methods([get]), time_limit(infinite)]).
+:- http_handler('/sync',  reply, [id('sync'),       methods([post]), time_limit(infinite)]).
+:- http_handler('/save',  reply, [id('save'),       methods([post])]).
+:- http_handler('/load',  reply, [id('load'),       methods([post])]).
+:- http_handler('/clear', reply, [id('clear'),      methods([post])]).
+:- http_handler('/graph', reply, [id('graph'),      methods([post]), time_limit(infinite)]).
+:- http_handler('/prove', reply, [id('prove'),      methods([post]), time_limit(infinite)]).
 :- http_handler('/info',  reply, [id('info'),       methods([get])]).
 
 
@@ -62,13 +65,15 @@ server:start_server  :-
   config:digest_passwordfile(Pwdfile),
   config:digest_realm(Realm),
   server:require_tls_files(Hostname, CaCert, ServerCert, ServerKey),
+  config:server_workers(Workers),
+  config:server_keep_alive_timeout(KeepAlive),
+  server:ensure_queues,
   nl,
   http:http_server(http_dispatch,
                    [ port(Port) ,
  		     authentication(digest(Pwdfile,Realm)),
-		     chuncked(true),
-                     workers(32) ,
-		     keep_alive_timeout(2),
+                     workers(Workers) ,
+		     keep_alive_timeout(KeepAlive),
                      ssl([ certificate_file(ServerCert),
                            key_file(ServerKey),
                            password(Pass),
@@ -87,7 +92,8 @@ server:start_server  :-
 
 server:stop_server :-
   interface:process_server(_Hostname,Port),
-  catch(http:http_stop_server(Port,[]),_,true).
+  catch(http:http_stop_server(Port,[]),_,true),
+  server:destroy_queues.
 
 
 % -----------------------------------------------------------------------------
@@ -105,61 +111,85 @@ server:require_tls_files(Hostname, CaCert, ServerCert, ServerKey) :-
 server:reply(Request) :-
     member(path('/sync'), Request),
     !,
-    format('Transfer-encoding: chunked~n~n', []),
-    current_output(S),
-    set_stream(S,buffer(false)),
-    ( catch(kb:sync, E,
-            ( format('% Server sync error: ~w~n', [E]), flush_output ))
-    -> true
-    ; format('% Server sync failed~n', []), flush_output
-    ).
+    server:chunked_reply('/sync', kb:sync).
 
 server:reply(Request) :-
     member(path('/save'), Request),
     !,
-    format('Transfer-encoding: chunked~n~n', []),
-    current_output(S),
-    set_stream(S,buffer(false)),
-    kb:save.
+    server:chunked_reply('/save', kb:save).
 
 server:reply(Request) :-
     member(path('/load'), Request),
     !,
-    format('Transfer-encoding: chunked~n~n', []),
-    current_output(S),
-    set_stream(S,buffer(false)),
-    kb:load.
+    server:chunked_reply('/load', kb:load).
 
 server:reply(Request) :-
     member(path('/clear'), Request),
     !,
-    format('Transfer-encoding: chunked~n~n', []),
-    current_output(S),
-    set_stream(S,buffer(false)),
-    kb:clear.
+    server:chunked_reply('/clear', kb:clear).
 
 server:reply(Request) :-
     member(path('/graph'), Request),
     !,
-    format('Transfer-encoding: chunked~n~n', []),
-    current_output(S),
-    set_stream(S,buffer(false)),
-    kb:graph.
+    server:chunked_reply('/graph', kb:graph).
 
 server:reply(Request) :-
     member(path('/prove'), Request),
     !,
-    format('Transfer-encoding: chunked~n~n', []),
-    current_output(S),
-    set_stream(S,buffer(false)),
-    prover:test_latest(portage,parallel_verbose).
+    server:chunked_reply('/prove', prover:test_latest(portage,parallel_verbose)).
 
 server:reply(Request) :-
     member(path('/info'), Request),
     !,
+    server:chunked_reply('/info', server:info).
+
+
+%! server:chunked_reply(+Path, +Goal)
+%
+% Shared handler body: switch the reply to chunked transfer encoding,
+% unbuffer the output stream so progress is streamed to the client in
+% realtime, then run Goal. Exceptions and failure are caught, reported
+% to the client in-band and logged server-side, so a failing handler
+% never truncates the response mid-chunk or escapes to thread_httpd.
+
+server:chunked_reply(Path, Goal) :-
+    format('Transfer-encoding: chunked~n~n', []),
+    current_output(S),
+    set_stream(S,buffer(false)),
+    ( catch(Goal, Error, server:handler_error(Path, Error))
+    -> true
+    ;  server:handler_failed(Path)
+    ).
+
+
+%! server:handler_error(+Path, +Error)
+%
+% Report an exception escaping a request handler: log server-side and
+% inform the client in-band on the chunked stream.
+
+server:handler_error(Path, Error) :-
+    format(user_error, 'portage-ng server: error in ~w handler: ~w~n', [Path, Error]),
+    format('% Server error in ~w: ~w~n', [Path, Error]),
+    flush_output.
+
+
+%! server:handler_failed(+Path)
+%
+% Report a request handler that failed without raising an exception.
+
+server:handler_failed(Path) :-
+    format(user_error, 'portage-ng server: ~w handler failed~n', [Path]),
+    format('% Server request ~w failed~n', [Path]),
+    flush_output.
+
+
+%! server:info
+%
+% Print basic host information.
+
+server:info :-
     config:hostname(Hostname),
     config:number_of_cpus(Cpu),
-    format('Transfer-encoding: chunked~n~n', []),
     format('Host ~w has ~w cpu cores available.~n', [Hostname, Cpu]).
 
 
@@ -172,12 +202,36 @@ server:reply(Request) :-
 :- dynamic server:inflight_job/3.
 :- dynamic server:workers_done/0.
 
+%! server:ensure_queues
+%
+% Create the job/result queues if they don't exist yet. Guarded by a
+% mutex: queue accessors run on many concurrent HTTP worker threads, so
+% an unguarded check-then-act would let two threads race past the check
+% and the loser would throw permission_error on message_queue_create/1.
+% Also called eagerly from start_server.
+
 server:ensure_queues :-
-  ( server:queue_created(true) -> true
-  ; message_queue_create(server_jobs),
-    message_queue_create(server_results),
-    assertz(server:queue_created(true))
-  ).
+  with_mutex(server_queues,
+    ( server:queue_created(true)
+      -> true
+      ;  message_queue_create(server_jobs),
+         message_queue_create(server_results),
+         assertz(server:queue_created(true))
+    )).
+
+%! server:destroy_queues
+%
+% Tear down the job/result queues (called from stop_server) so they
+% don't persist after the server is stopped.
+
+server:destroy_queues :-
+  with_mutex(server_queues,
+    ( server:queue_created(true)
+      -> catch(message_queue_destroy(server_jobs),_,true),
+         catch(message_queue_destroy(server_results),_,true),
+         retractall(server:queue_created(_))
+      ;  true
+    )).
 
 %! server:post_job(+Job)
 %
@@ -458,37 +512,8 @@ server:total_cpus(N) :-
 %! server:snapshot(+Repository, -Commit)
 %
 % Returns the git HEAD commit hash for the portage tree backing Repository.
+% Git plumbing lives in the shared Source/Application/System/git.pl module.
 
 server:snapshot(portage, Commit) :-
   portage:get_location(Location),
-  server:git_head(Location, Commit).
-
-%! server:git_head(+Dir, -Commit)
-%
-% Read the short git HEAD commit hash of a directory.
-
-server:git_head(Dir, Commit) :-
-  process_create(path(git), ['rev-parse', '--short', 'HEAD'],
-                 [stdout(pipe(Out)), cwd(Dir), process(Pid)]),
-  call_cleanup(
-    ( read_string(Out, _, Raw),
-      split_string(Raw, "\n", "\n \t", [CommitStr|_]),
-      atom_string(Commit, CommitStr)
-    ),
-    ( close(Out), process_wait(Pid, _) )
-  ).
-
-%! server:git_head_full(+Dir, -Commit)
-%
-% Read the full git HEAD commit hash of a directory.
-
-server:git_head_full(Dir, Commit) :-
-  process_create(path(git), ['rev-parse', 'HEAD'],
-                 [stdout(pipe(Out)), cwd(Dir), process(Pid)]),
-  call_cleanup(
-    ( read_string(Out, _, Raw),
-      split_string(Raw, "\n", "\n \t", [CommitStr|_]),
-      atom_string(Commit, CommitStr)
-    ),
-    ( close(Out), process_wait(Pid, _) )
-  ).
+  git:head(Location, Commit).

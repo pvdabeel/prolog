@@ -348,6 +348,21 @@ config:server_host('mac-pro.local').
 config:server_port(4000).
 
 
+%! config:server_workers(?Count)
+%
+% Number of HTTP worker threads the server spawns to handle requests.
+
+config:server_workers(32).
+
+
+%! config:server_keep_alive_timeout(?Seconds)
+%
+% How long an idle keep-alive HTTP connection is kept open before the
+% server closes it.
+
+config:server_keep_alive_timeout(2).
+
+
 %! config:cluster_result_timeout(?Seconds)
 %
 % How long a single result poll blocks while collecting distributed
