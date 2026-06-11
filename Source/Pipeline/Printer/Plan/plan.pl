@@ -30,31 +30,30 @@ rendering lives in removal.pl.
 %  Main entry points
 % -----------------------------------------------------------------------------
 
-%! plan:print(+Target, +ModelAVL, +ProofAVL, +Plan, +TriggersAVL)
+%! plan:print(+Target, +ModelAVL, +ProofAVL, +Plan, +TriggersAVL, +SCCs)
 %
 % Prints a plan. Triggers are required so the printer can explain assumptions
-% (e.g. dependency cycles) when present.
+% (e.g. dependency cycles) when present. SCCs is the scheduler's SCC
+% decomposition info (list of scc(Id, Kind, Members), as returned by
+% scheduler:schedule/7); pass [] when unavailable.
 
-plan:print(Target, ModelAVL, ProofAVL, Plan, TriggersAVL) :-
-  plan:print(Target, ModelAVL, ProofAVL, Plan, plan:dry_run, TriggersAVL).
+plan:print(Target, ModelAVL, ProofAVL, Plan, TriggersAVL, SCCs) :-
+  plan:print(Target, ModelAVL, ProofAVL, Plan, plan:dry_run, TriggersAVL, SCCs).
 
-%! plan:print(+Target, +ModelAVL, +ProofAVL, +Plan, +Call, +TriggersAVL)
+%! plan:print(+Target, +ModelAVL, +ProofAVL, +Plan, +Call, +TriggersAVL, +SCCs)
 
-plan:print(Target, ModelAVL, ProofAVL, Plan, Call, TriggersAVL) :-
+plan:print(Target, ModelAVL, ProofAVL, Plan, Call, TriggersAVL, SCCs) :-
   annotation:collect(ProofAVL, Annotations),
   annotation:blocker_notes(Annotations, BlockerNotes),
-  setup_call_cleanup(nb_setval(printer_blocker_notes, BlockerNotes),
-    ( plan:resolve_print_target(Target, ProofAVL, TargetPrint, TargetHeader),
-      plan:print_header(TargetHeader),
-      annotation:pre_actions(Annotations, PreActions),
-      plan:print_plan_pre_actions(PreActions, 0, PreSteps),
-      plan:inject_cycle_break_verifies(Annotations, Plan, AugmentedPlan),
-      plan:print_body(TargetPrint, AugmentedPlan, Call, PreSteps, Steps),
-      plan:print_footer(AugmentedPlan, ModelAVL, Steps, PreActions),
-      plan:print_scc_decomposition,
-      warning:print_warnings(ModelAVL, Annotations, ProofAVL, TriggersAVL)
-    ),
-    nb_delete(printer_blocker_notes)).
+  plan:resolve_print_target(Target, ProofAVL, TargetPrint, TargetHeader),
+  plan:print_header(TargetHeader),
+  annotation:pre_actions(Annotations, PreActions),
+  plan:print_plan_pre_actions(PreActions, 0, PreSteps),
+  plan:inject_cycle_break_verifies(Annotations, Plan, AugmentedPlan),
+  plan:print_body(TargetPrint, BlockerNotes, AugmentedPlan, Call, PreSteps, Steps),
+  plan:print_footer(AugmentedPlan, ModelAVL, Steps, PreActions),
+  plan:print_scc_decomposition(SCCs),
+  warning:print_warnings(ModelAVL, Annotations, ProofAVL, TriggersAVL).
 
 
 %! plan:dry_run(+Step)
@@ -122,8 +121,8 @@ plan:chosen_candidate_from_body(uninstall, Body, Repo, Ebuild) :-
 % =============================================================================
 %
 % The blocker note map itself is built by annotation:collect/2 (single-pass
-% proof traversal) and stashed in the printer_blocker_notes global by
-% plan:print/6.
+% proof traversal) and threaded to the step renderers inside the ps/3
+% print-state term built by plan:print_body/6.
 
 %! plan:format_blocker_origin(+Origin)
 %
@@ -153,9 +152,8 @@ plan:print_newuse_note_if_any(update, Context) :-
   message:color(normal).
 plan:print_newuse_note_if_any(_Action, _Context).
 
-plan:print_blocker_note_if_any(Action, Repository, Entry) :-
+plan:print_blocker_note_if_any(ps(_, Notes, _), Action, Repository, Entry) :-
   ( ( Action == install ; Action == run ),
-    nb_current(printer_blocker_notes, Notes),
     plan:action_phase(Action, Phase),
     ( cache:ordered_entry(Repository, Entry, C, N, _) ->
         true
@@ -197,75 +195,77 @@ plan:action_phase(_Other, other).
 %  Plan printing
 % -----------------------------------------------------------------------------
 
-%! plan:printable_element(+Literal)
+%! plan:printable_element(+State, +Literal)
 %
-% Declares which Literals are printable
+% Declares which Literals are printable. State is the ps/3 print-state term
+% (see plan:print_body/6); only the planned-package suppression clauses
+% consult it.
 
-plan:printable_element(rule(uri(_,_,_),_)) :- !.
-plan:printable_element(rule(uri(_),_)) :- !.
-plan:printable_element(rule(_Repository://_Entry:run?_,_)) :- !.
-plan:printable_element(rule(_Repository://_Entry:download?_,_)) :- !.
-plan:printable_element(rule(_Repository://_Entry:install?_,_)) :- !.
-plan:printable_element(rule(_Repository://_Entry:reinstall?_,_)) :- !.
-plan:printable_element(rule(_Repository://_Entry:uninstall?_,_)) :- !.
+plan:printable_element(_,rule(uri(_,_,_),_)) :- !.
+plan:printable_element(_,rule(uri(_),_)) :- !.
+plan:printable_element(_,rule(_Repository://_Entry:run?_,_)) :- !.
+plan:printable_element(_,rule(_Repository://_Entry:download?_,_)) :- !.
+plan:printable_element(_,rule(_Repository://_Entry:install?_,_)) :- !.
+plan:printable_element(_,rule(_Repository://_Entry:reinstall?_,_)) :- !.
+plan:printable_element(_,rule(_Repository://_Entry:uninstall?_,_)) :- !.
 
 % Suppress printing the "wrapper" update/downgrade target when it schedules the
 % actual transactional update/downgrade on a chosen replacement version.
-plan:printable_element(rule(_Repository://_Entry:update?{_Context},Body)) :-
+plan:printable_element(_,rule(_Repository://_Entry:update?{_Context},Body)) :-
   member(_NewRepo://_NewEntry:update?{_}, Body),
   !,
   fail.
-plan:printable_element(rule(_Repository://_Entry:downgrade?{_Context},Body)) :-
+plan:printable_element(_,rule(_Repository://_Entry:downgrade?{_Context},Body)) :-
   member(_NewRepo://_NewEntry:downgrade?{_}, Body),
   !,
   fail.
 
-plan:printable_element(rule(_Repository://_Entry:update?_,_)) :- !.
-plan:printable_element(rule(_Repository://_Entry:downgrade?_,_)) :- !.
-plan:printable_element(rule(_Repository://_Entry:upgrade?_,_)) :- !.
+plan:printable_element(_,rule(_Repository://_Entry:update?_,_)) :- !.
+plan:printable_element(_,rule(_Repository://_Entry:downgrade?_,_)) :- !.
+plan:printable_element(_,rule(_Repository://_Entry:upgrade?_,_)) :- !.
 
 % Suppress assumed dependency verifies when a concrete ebuild for the same
 % package is already scheduled in the plan. These clauses must precede the
 % domain assumption accept clauses below (which cut), or they never fire.
-plan:printable_element(rule(assumed(grouped_package_dependency(C,N,_Deps):install?{_Context}),[])) :-
-  plan:planned_pkg(install, C, N),
+plan:printable_element(State,rule(assumed(grouped_package_dependency(C,N,_Deps):install?{_Context}),[])) :-
+  plan:planned_pkg(State, install, C, N),
   !,
   fail.
-plan:printable_element(rule(assumed(package_dependency(install,no,C,N,_,_,_,_):install?{_Context}),[])) :-
-  plan:planned_pkg(install, C, N),
+plan:printable_element(State,rule(assumed(package_dependency(install,no,C,N,_,_,_,_):install?{_Context}),[])) :-
+  plan:planned_pkg(State, install, C, N),
   !,
   fail.
-plan:printable_element(rule(assumed(grouped_package_dependency(C,N,_Deps):run?{_Context}),[])) :-
-  plan:planned_pkg(run, C, N),
+plan:printable_element(State,rule(assumed(grouped_package_dependency(C,N,_Deps):run?{_Context}),[])) :-
+  plan:planned_pkg(State, run, C, N),
   !,
   fail.
-plan:printable_element(rule(assumed(package_dependency(run,no,C,N,_,_,_,_):run?{_Context}),[])) :-
-  plan:planned_pkg(run, C, N),
+plan:printable_element(State,rule(assumed(package_dependency(run,no,C,N,_,_,_,_):run?{_Context}),[])) :-
+  plan:planned_pkg(State, run, C, N),
   !,
   fail.
 % Domain assumptions (rule(assumed(X))) — printable as verify steps.
-plan:printable_element(rule(assumed(_Repository://_Entry:_?_),_)) :- !.
-plan:printable_element(rule(assumed(package_dependency(install,no,_,_,_,_,_,_):install?_),_)) :- !. % legacy form
-plan:printable_element(rule(assumed(package_dependency(run,no,_,_,_,_,_,_):run?_),_)) :- !. % legacy form
-plan:printable_element(rule(assumed(grouped_package_dependency(_,_,_):install?_),_)) :- !.
-plan:printable_element(rule(assumed(grouped_package_dependency(_,_,_):run?_),_)) :- !.
+plan:printable_element(_,rule(assumed(_Repository://_Entry:_?_),_)) :- !.
+plan:printable_element(_,rule(assumed(package_dependency(install,no,_,_,_,_,_,_):install?_),_)) :- !. % legacy form
+plan:printable_element(_,rule(assumed(package_dependency(run,no,_,_,_,_,_,_):run?_),_)) :- !. % legacy form
+plan:printable_element(_,rule(assumed(grouped_package_dependency(_,_,_):install?_),_)) :- !.
+plan:printable_element(_,rule(assumed(grouped_package_dependency(_,_,_):run?_),_)) :- !.
 % Prover cycle-break assumptions (assumed(rule(X))) — entry-rule and
 % dependency-level cycle-breaks show as verify steps in the plan.
-plan:printable_element(assumed(rule(_Repository://_Entry:install?_,_))) :- !.
-plan:printable_element(assumed(rule(_Repository://_Entry:run?_,_))) :- !.
-plan:printable_element(assumed(rule(_Repository://_Entry:fetchonly?_,_))) :- !.
-plan:printable_element(assumed(rule(package_dependency(_,_,_,_,_,_,_,_):install?_,_))) :- !.
-plan:printable_element(assumed(rule(package_dependency(_,_,_,_,_,_,_,_):run?_,_))) :- !.
-plan:printable_element(assumed(rule(grouped_package_dependency(_,_,_,_):install?_,_))) :- !. % todo: phase out
-plan:printable_element(assumed(rule(grouped_package_dependency(_,_,_,_):run?_,_))) :- !. % todo: phase out
-plan:printable_element(assumed(rule(grouped_package_dependency(_,_,_):install?_,_))) :- !.
-plan:printable_element(assumed(rule(grouped_package_dependency(_,_,_):run?_,_))) :- !.
+plan:printable_element(_,assumed(rule(_Repository://_Entry:install?_,_))) :- !.
+plan:printable_element(_,assumed(rule(_Repository://_Entry:run?_,_))) :- !.
+plan:printable_element(_,assumed(rule(_Repository://_Entry:fetchonly?_,_))) :- !.
+plan:printable_element(_,assumed(rule(package_dependency(_,_,_,_,_,_,_,_):install?_,_))) :- !.
+plan:printable_element(_,assumed(rule(package_dependency(_,_,_,_,_,_,_,_):run?_,_))) :- !.
+plan:printable_element(_,assumed(rule(grouped_package_dependency(_,_,_,_):install?_,_))) :- !. % todo: phase out
+plan:printable_element(_,assumed(rule(grouped_package_dependency(_,_,_,_):run?_,_))) :- !. % todo: phase out
+plan:printable_element(_,assumed(rule(grouped_package_dependency(_,_,_):install?_,_))) :- !.
+plan:printable_element(_,assumed(rule(grouped_package_dependency(_,_,_):run?_,_))) :- !.
 % Suppress any remaining cycle-break types from plan display.
-plan:printable_element(assumed(rule(_,_))) :- !, fail.
+plan:printable_element(_,assumed(rule(_,_))) :- !, fail.
 
 
 % Uncomment if you want 'confirm' steps shown in the plan:
-% plan:printable_element(rule(package_dependency(run,_,_,_,_,_,_,_),_)) :- !.
+% plan:printable_element(_,rule(package_dependency(run,_,_,_,_,_,_,_),_)) :- !.
 
 
 %! plan:element_weight(+Literal)
@@ -316,9 +316,10 @@ plan:tag_with_weight_index([R|Rs], I, [(W-I)-R|Rest]) :-
   plan:tag_with_weight_index(Rs, I1, Rest).
 
 
-%! plan:print_element(+Printable)
+%! plan:print_element(+State, +Printable)
 %
-% Prints a printable Literal
+% Prints a printable Literal. State is the ps/3 print-state term carrying
+% the resolved print target, blocker notes and planned-package set.
 
 plan:print_element(_,rule(package_dependency(run_post,_,_C,_N,_,_,_,_),[Repository://Entry:_Action?{_Context}])) :-
   !,
@@ -334,7 +335,8 @@ plan:print_element(_,rule(package_dependency(run_post,_,_C,_N,_,_,_,_),[Reposito
 % CASE: simple package, is a target of the plan
 % ---------------------------------------------
 
-plan:print_element(Target,rule(Repository://Entry:Action?{Context},_Body)) :-
+plan:print_element(State,rule(Repository://Entry:Action?{Context},_Body)) :-
+  State = ps(Target, _, _),
   ( member(Repository://Entry:Action?_,Target)
   ; memberchk(Action, [update,downgrade]),
     memberchk(replaces(OldRepo://OldEntry), Context),
@@ -362,7 +364,7 @@ plan:print_element(Target,rule(Repository://Entry:Action?{Context},_Body)) :-
   % Ensure inline notes (e.g. blocker annotations) don't inherit the bold style
   % used for target entries.
   message:style(normal),
-  plan:print_blocker_note_if_any(Action, Repository, Entry),
+  plan:print_blocker_note_if_any(State, Action, Repository, Entry),
   plan:print_newuse_note_if_any(Action, Context),
   message:color(normal),
   useflags:print_config(Repository://Entry:Action?{Context}).
@@ -450,7 +452,7 @@ plan:print_element(_,rule(Repository://Entry:Action?{Context},_Body)) :-
 % CASE: simple package, is not a target of the plan
 % -------------------------------------------------
 
-plan:print_element(_,rule(Repository://Entry:Action?{Context},_)) :-
+plan:print_element(State,rule(Repository://Entry:Action?{Context},_)) :-
   message:color(cyan),
   message:print(Action),
   message:color(green),
@@ -466,7 +468,7 @@ plan:print_element(_,rule(Repository://Entry:Action?{Context},_)) :-
      message:color(normal)
   ; true
   ),
-  plan:print_blocker_note_if_any(Action, Repository, Entry),
+  plan:print_blocker_note_if_any(State, Action, Repository, Entry),
   plan:print_newuse_note_if_any(Action, Context),
   message:color(normal),
   useflags:print_config(Repository://Entry:Action?{Context}).
@@ -706,16 +708,16 @@ plan:print_header(Target) :-
   nl.
 
 
-%! plan:print_body(+Target,+Plan,+Call,+StartStep,-Steps)
+%! plan:print_body(+Target,+BlockerNotes,+Plan,+Call,+StartStep,-Steps)
 %
 % Prints the body for a given plan, starting step count from StartStep.
-plan:print_body(Target, Plan, Call, StartStep, Steps) :-
+% Bundles the resolved print target, blocker notes and planned-package set
+% into a single ps/3 print-state term threaded through the step renderers
+% (no global variables involved).
+plan:print_body(Target, BlockerNotes, Plan, Call, StartStep, Steps) :-
   plan:build_planned_pkg_set(Plan, PlannedSet),
-  setup_call_cleanup(
-    nb_setval(printer_planned_pkg_set, PlannedSet),
-    plan:print_steps_in_plan(Target, Plan, Call, StartStep, Steps),
-    ( nb_current(printer_planned_pkg_set, _) -> nb_delete(printer_planned_pkg_set) ; true )
-  ).
+  State = ps(Target, BlockerNotes, PlannedSet),
+  plan:print_steps_in_plan(State, Plan, Call, StartStep, Steps).
 
 % -----------------------------------------------------------------------------
 %  Pre-actions: unmask / license / keyword / USE-change before the plan
@@ -908,8 +910,7 @@ plan:build_planned_pkg_set_rule(Rule, In, Out) :-
   !.
 plan:build_planned_pkg_set_rule(_Other, Set, Set).
 
-plan:planned_pkg(Action, C, N) :-
-  nb_current(printer_planned_pkg_set, Set),
+plan:planned_pkg(ps(_, _, Set), Action, C, N) :-
   get_assoc(Action-C-N, Set, true).
 
 plan:is_run_cycle_break(Content) :-
@@ -936,26 +937,26 @@ plan:print_cycle_break_detail(Content) :-
   ).
 
 
-%! plan:print_steps_in_plan(+Target,+Plan,+Call,+Count,-NewCount)
+%! plan:print_steps_in_plan(+State,+Plan,+Call,+Count,-NewCount)
 %
 % Print the steps in a plan.
 
 plan:print_steps_in_plan(_, [], _, Count, Count) :- !.
 
-plan:print_steps_in_plan(Target, [Step|Rest], Call, Count, CountFinal) :-
+plan:print_steps_in_plan(State, [Step|Rest], Call, Count, CountFinal) :-
   plan:stable_sort_by_weight(Step, SortedRules),
-  plan:print_first_in_step(Target, SortedRules, Count, CountNew),
+  plan:print_first_in_step(State, SortedRules, Count, CountNew),
   call(Call, SortedRules), !,
-  plan:print_steps_in_plan(Target, Rest, Call, CountNew, CountFinal).
+  plan:print_steps_in_plan(State, Rest, Call, CountNew, CountFinal).
 
 
-%! plan:print_first_in_step(+Target,+Step,+Count,-NewCount)
+%! plan:print_first_in_step(+State,+Step,+Count,-NewCount)
 %
 % Print a step in a plan
 plan:print_first_in_step(_,[],Count,Count) :- !.
 
-plan:print_first_in_step(Target,[Rule|Rest],Count,NewCount) :-
-  plan:printable_element(Rule),
+plan:print_first_in_step(State,[Rule|Rest],Count,NewCount) :-
+  plan:printable_element(State,Rule),
   NewCount is Count + 1,
   format(atom(AtomNewCount),'~t~0f~2|',[NewCount]),
   format(atom(StepNewCount),'step ~a',[AtomNewCount]),
@@ -963,29 +964,29 @@ plan:print_first_in_step(Target,[Rule|Rest],Count,NewCount) :-
   write(' └─'),
   message:bubble(darkgray,StepNewCount),
   write('─┤ '),
-  plan:print_element(Target,Rule),
-  plan:print_next_in_step(Target,Rest).
+  plan:print_element(State,Rule),
+  plan:print_next_in_step(State,Rest).
 
-plan:print_first_in_step(Target,[_|Rest],Count,NewCount) :-
-  plan:print_first_in_step(Target,Rest,Count,NewCount).
+plan:print_first_in_step(State,[_|Rest],Count,NewCount) :-
+  plan:print_first_in_step(State,Rest,Count,NewCount).
 
 
-%! plan:print_next_in_step(+Target,+Step)
+%! plan:print_next_in_step(+State,+Step)
 %
 % Print a step in a plan
 plan:print_next_in_step(_,[]) :- nl,nl,!.
 
-plan:print_next_in_step(Target,[Rule|Rest]) :-
-  plan:printable_element(Rule),
+plan:print_next_in_step(State,[Rule|Rest]) :-
+  plan:printable_element(State,Rule),
   !,
   nl,
   write('             │ '),
-  plan:print_element(Target,Rule),
-  plan:print_next_in_step(Target,Rest).
+  plan:print_element(State,Rule),
+  plan:print_next_in_step(State,Rest).
 
-plan:print_next_in_step(Target,[_|Rest]) :-
+plan:print_next_in_step(State,[_|Rest]) :-
   !,
-  plan:print_next_in_step(Target,Rest).
+  plan:print_next_in_step(State,Rest).
 
 
 %! plan:print_footer(+Plan, +ModelAVL, +PrintedSteps, +PreActions)
@@ -1146,15 +1147,13 @@ plan:already_downloaded_size(_, _, 0).
 %
 % Shows the scheduler's Kosaraju SCC decomposition: which packages form
 % cyclic merge-sets and the linearization order the scheduler chose.
-% Controlled by config:print_scc/1.
+% The SCC info is returned by scheduler:schedule/7 and passed in explicitly
+% (no cross-thread dynamic handoff). Controlled by config:print_scc/1.
 
-plan:print_scc_decomposition :-
+plan:print_scc_decomposition(_SCCs) :-
   \+ config:print_scc(true),
   !.
-plan:print_scc_decomposition :-
-  findall(scc(Id, Kind, Members),
-          scheduler:scc_info_(Id, Kind, Members),
-          SCCs0),
+plan:print_scc_decomposition(SCCs0) :-
   ( SCCs0 == [] -> true
   ; sort(SCCs0, SCCs),
     nl,

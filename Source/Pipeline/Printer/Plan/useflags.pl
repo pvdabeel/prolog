@@ -14,6 +14,11 @@ Renders the per-entry configuration block shown below plan steps: USE flag
 diffs (with change annotations relative to the installed version), USE_EXPAND
 variables, SLOT info, and download lines. Shared by the plan printer
 (plan.pl) and the build display (builder.pl / Printer/Build/build.pl).
+
+Rendering state is threaded explicitly as a uctx(Style, Prefix, OldUseInfo)
+term (printing style, current USE_EXPAND prefix, installed-version USE/IUSE
+info) instead of process/thread globals, so concurrent renderers (jobserver
+worker threads, line-count probes) cannot interfere with each other.
 */
 
 :- module(useflags, []).
@@ -46,16 +51,16 @@ useflags:right_edge_ok :-
 %  Config item prefixes
 % -----------------------------------------------------------------------------
 
-%! useflags:print_config_prefix(+Word)
+%! useflags:print_config_prefix(+Style, +Word)
 %
-% prints the prefix for a config item
+% prints the prefix for a config item, for an explicit printing style
 
 % -------------------------------
 % CASE: Fancy build plan printing
 % -------------------------------
 
-useflags:print_config_prefix(Word) :-
-  config:printing_style('fancy'),!,
+useflags:print_config_prefix('fancy', Word) :-
+  !,
   nl,write('             │           '),
   message:color(darkgray),
   message:print('└─ '),
@@ -67,44 +72,44 @@ useflags:print_config_prefix(Word) :-
 % CASE: Short build plan printing
 % -------------------------------
 
-useflags:print_config_prefix(_Word) :-
-  config:printing_style('short'),!,
+useflags:print_config_prefix('short', _Word) :-
+  !,
   nl,write('             │           ').
 
 % --------------------------------
 % CASE: Column build plan printing
 % --------------------------------
 
-useflags:print_config_prefix(file) :-
-  config:printing_style('column'),!,
+useflags:print_config_prefix('column', file) :-
+  !,
   message:column(104,' ').
 
-useflags:print_config_prefix(live) :-
-  config:printing_style('column'),!,
+useflags:print_config_prefix('column', live) :-
+  !,
   message:column(104,' ').
 
-useflags:print_config_prefix('conf') :-
-  config:printing_style('column'), !,
+useflags:print_config_prefix('column', 'conf') :-
+  !,
   message:column(104,' ').
 
 
-%! useflags:print_config_prefix
+%! useflags:print_config_prefix(+Style)
 %
-% prints the prefix for a config item
+% prints the prefix for a config item, for an explicit printing style
 
-useflags:print_config_prefix :-
-  config:printing_style('fancy'),!,
+useflags:print_config_prefix('fancy') :-
+  !,
   nl,write('             │          '),
   message:color(darkgray),
   message:print('          │ '),
   message:color(normal).
 
-useflags:print_config_prefix :-
-  config:printing_style('short'),!,
+useflags:print_config_prefix('short') :-
+  !,
   nl,write('             │           ').
 
-useflags:print_config_prefix :-
-  config:printing_style('column'),!,
+useflags:print_config_prefix('column') :-
+  !,
   nl,write('             │ '),
   message:column(104,' ').
 
@@ -143,6 +148,19 @@ useflags:resolve_slot(Repository://Entry, Context, Slot) :-
 %! useflags:print_config(+Repository://+Entry:+Action:+Context)
 %
 % Prints the configuration for a given repository entry (USE flags, USE expand, ...)
+% using the ambient printing style (config:printing_style/1).
+
+useflags:print_config(Term) :-
+  config:printing_style(Style),
+  useflags:print_config(Style, Term).
+
+
+%! useflags:print_config(+Style, +Repository://+Entry:+Action:+Context)
+%
+% Prints the configuration for a given repository entry with an explicit
+% printing style, so callers (e.g. the build display's line-count probe)
+% can render in a different style without flipping the process-global
+% config:interface_printing_style.
 
 % ----------------------
 % CASE: fetchonly action
@@ -150,14 +168,14 @@ useflags:resolve_slot(Repository://Entry, Context, Slot) :-
 
 % iuse empty
 
-useflags:print_config(Repository://Entry:fetchonly?{_Context}) :-
+useflags:print_config(_Style, Repository://Entry:fetchonly?{_Context}) :-
   \+(query:search(iuse(_),Repository://Entry)),!.
 
 % use flags to show
 
-useflags:print_config(Repository://Entry:fetchonly?{Context}) :-
+useflags:print_config(Style, Repository://Entry:fetchonly?{Context}) :-
  !,
- useflags:print_config(Repository://Entry:install?{Context}).
+ useflags:print_config(Style, Repository://Entry:install?{Context}).
 
 
 
@@ -167,28 +185,28 @@ useflags:print_config(Repository://Entry:fetchonly?{Context}) :-
 
 % live downloads
 
-useflags:print_config(Repository://Ebuild:download?{_Context}) :-
+useflags:print_config(Style, Repository://Ebuild:download?{_Context}) :-
   ebuild:is_live(Repository://Ebuild),!,
-  useflags:print_config_prefix('live'),
+  useflags:print_config_prefix(Style, 'live'),
   useflags:print_config_item('download','git repository','live').
 
 
 % no downloads
 
-useflags:print_config(Repository://Ebuild:download?{_Context}) :-
+useflags:print_config(_Style, Repository://Ebuild:download?{_Context}) :-
   \+(query:search(manifest(preference,_,_,_),Repository://Ebuild)),!.
 
 
 % at least one download
 
-useflags:print_config(Repository://Ebuild:download?{_Context}) :-
+useflags:print_config(Style, Repository://Ebuild:download?{_Context}) :-
   !,
   findall([File,Size],query:search(manifest(preference,_,File,Size),Repository://Ebuild),Downloads),
   sort(Downloads,[[FirstFile,FirstSize]|Rest]),
-  useflags:print_config_prefix('file'),
+  useflags:print_config_prefix(Style, 'file'),
   useflags:print_config_item('download',FirstFile,FirstSize),
   forall(member([RestFile,RestSize],Rest),
-         (useflags:print_config_prefix,
+         (useflags:print_config_prefix(Style),
           useflags:print_config_item('download',RestFile,RestSize))).
 
 
@@ -198,21 +216,21 @@ useflags:print_config(Repository://Ebuild:download?{_Context}) :-
 
 % iuse empty
 
-useflags:print_config(Repository://Entry:install?{Context}) :-
+useflags:print_config(Style, Repository://Entry:install?{Context}) :-
   \+(query:search(iuse(_),Repository://Entry)),!,
   useflags:resolve_slot(Repository://Entry, Context, Slot),
   (Slot \== [], Slot \== [slot('0')]
-  -> useflags:print_config_prefix('conf'),
+  -> useflags:print_config_prefix(Style, 'conf'),
      useflags:print_config_item('slot',Slot)
   ;  true).
 
 % use flags to show
 
-useflags:print_config(Repository://Entry:install?{Context}) :-
+useflags:print_config(Style, Repository://Entry:install?{Context}) :-
   !,
   useflags:collect_context_assumed_use(Context, Assumed),
 
-  useflags:set_old_use_context(Repository://Entry, Context),
+  useflags:old_use_info(Repository://Entry, Context, OldUseInfo),
 
   % Get regular USE flags (filtered, excluding USE_EXPAND)
   findall([Reason,Group], group_by(Reason, Use, query:search(iuse_filtered(Use,Reason),Repository://Entry), Group), Useflags),
@@ -234,15 +252,15 @@ useflags:print_config(Repository://Entry:install?{Context}) :-
   useflags:resolve_slot(Repository://Entry, Context, Slot),
   ( Slot \== [], Slot \== [slot('0')]
   -> ( Useflags == [], ValidUseExpandVariables == []
-     -> useflags:print_config_prefix('conf'),
+     -> useflags:print_config_prefix(Style, 'conf'),
         useflags:print_config_item('slot',Slot)
-     ;  useflags:print_config_prefix('conf'),
-        useflags:print_config_items_aligned(Useflags, ValidUseExpandVariables, Assumed, Slot)
+     ;  useflags:print_config_prefix(Style, 'conf'),
+        useflags:print_config_items_aligned(Style, OldUseInfo, Useflags, ValidUseExpandVariables, Assumed, Slot)
      )
   ;  ( Useflags == [], ValidUseExpandVariables == []
      -> true
-     ;  useflags:print_config_prefix('conf'),
-        useflags:print_config_items_aligned(Useflags, ValidUseExpandVariables, Assumed, [])
+     ;  useflags:print_config_prefix(Style, 'conf'),
+        useflags:print_config_items_aligned(Style, OldUseInfo, Useflags, ValidUseExpandVariables, Assumed, [])
      )
   ),!.
 
@@ -255,31 +273,31 @@ useflags:print_config(Repository://Entry:install?{Context}) :-
 % Update actions are transactional same-slot replacements, so the config shown is
 % for the *new* version being merged.
 
-useflags:print_config(Repository://Entry:update?{Context}) :-
+useflags:print_config(Style, Repository://Entry:update?{Context}) :-
   !,
-  useflags:print_config(Repository://Entry:install?{Context}).
+  useflags:print_config(Style, Repository://Entry:install?{Context}).
 
-useflags:print_config(Repository://Entry:downgrade?{Context}) :-
+useflags:print_config(Style, Repository://Entry:downgrade?{Context}) :-
   !,
-  useflags:print_config(Repository://Entry:install?{Context}).
+  useflags:print_config(Style, Repository://Entry:install?{Context}).
 
-useflags:print_config(Repository://Entry:reinstall?{Context}) :-
+useflags:print_config(Style, Repository://Entry:reinstall?{Context}) :-
   !,
-  useflags:print_config(Repository://Entry:install?{Context}).
+  useflags:print_config(Style, Repository://Entry:install?{Context}).
 
 
 % ----------------
 % CASE: Run action
 % ----------------
 
-useflags:print_config(_://_:run?{_Context}) :- !.
+useflags:print_config(_Style, _://_:run?{_Context}) :- !.
 
 
 % -------------------
 % CASE: Other actions
 % -------------------
 
-useflags:print_config(_://_:_?_) :- !.
+useflags:print_config(_Style, _://_:_?_) :- !.
 
 
 % -----------------------------------------------------------------------------
@@ -331,37 +349,37 @@ useflags:valid_use_expand([_Key, Flags]) :-
 %  Aligned config item printing
 % -----------------------------------------------------------------------------
 
-%! useflags:print_config_items_aligned(+Useflags, +ValidUseExpandVariables, +Assumed, +Slot)
+%! useflags:print_config_items_aligned(+Style, +OldUseInfo, +Useflags, +ValidUseExpandVariables, +Assumed, +Slot)
 %
 % Print USE flags, USE_EXPAND variables, and SLOT with aligned formatting.
+% Builds the per-section uctx/3 rendering state (style, USE_EXPAND prefix,
+% installed-version USE info) threaded through the flag renderers.
 
-useflags:print_config_items_aligned(Useflags, ValidUseExpandVariables, Assumed, Slot) :-
+useflags:print_config_items_aligned(Style, OldUseInfo, Useflags, ValidUseExpandVariables, Assumed, Slot) :-
 
   % 1. First print USE flags with proper formatting and alignment
-  nb_setval(plan_use_expand_prefix, ''),
-  useflags:print_config_item_aligned('use', Useflags, Assumed),
+  useflags:print_config_item_aligned(uctx(Style, '', OldUseInfo), 'use', Useflags, Assumed),
 
   % 2. Second print USE_EXPAND variables with proper formatting and alignment
   (ValidUseExpandVariables == [] -> true ;
    forall(member([Key, Keyflags], ValidUseExpandVariables),
           (atom_concat(Key, '_', ExpandPrefix),
-           nb_setval(plan_use_expand_prefix, ExpandPrefix),
-           useflags:print_config_prefix,
-           useflags:print_config_item_aligned(Key, Keyflags, Assumed),
-           nb_setval(plan_use_expand_prefix, '')))),
+           useflags:print_config_prefix(Style),
+           useflags:print_config_item_aligned(uctx(Style, ExpandPrefix, OldUseInfo), Key, Keyflags, Assumed)))),
 
   % 3. Lastly print SLOT with proper formatting and alignment
   (Slot == [] -> true ;
-   (useflags:print_config_prefix,
-    useflags:print_config_item_aligned('slot', Slot, []))).
+   (useflags:print_config_prefix(Style),
+    useflags:print_config_item_aligned(uctx(Style, '', OldUseInfo), 'slot', Slot, []))).
 
 
-%! useflags:print_config_item_aligned(+Key, +Value, +Assumed)
+%! useflags:print_config_item_aligned(+Ctx, +Key, +Value, +Assumed)
 %
 % Print a single KEY = "value" configuration line with bubble formatting.
+% Ctx is the uctx/3 rendering state.
 
 % Helper predicate: Print Use flags
-useflags:print_config_item_aligned('use', List, Assumed) :-
+useflags:print_config_item_aligned(Ctx, 'use', List, Assumed) :-
   !,
   upcase_atom('use', KeyU),
   message:bubble(darkgray,KeyU),
@@ -370,18 +388,18 @@ useflags:print_config_item_aligned('use', List, Assumed) :-
       ( config:printing_tty_size(_, TermWidth),
         line_position(current_output, StartCol),
         useflags:collect_all_flags(List, Assumed, AllFlags),
-        useflags:print_flags_wrapped(AllFlags, StartCol, TermWidth)
+        useflags:print_flags_wrapped(Ctx, AllFlags, StartCol, TermWidth)
       ),
       error(io_error(check, stream(_)), _),
       ( useflags:collect_all_flags(List, Assumed, AllFlags),
-        useflags:print_flags_unwrapped(AllFlags)
+        useflags:print_flags_unwrapped(Ctx, AllFlags)
       )
   ),
   message:print('"'),
   useflags:maybe_print_use_descriptions(AllFlags).
 
 
-useflags:print_config_item_aligned('slot', Slot, _) :-
+useflags:print_config_item_aligned(_Ctx, 'slot', Slot, _) :-
   !,
   upcase_atom('slot', KeyU),
   message:bubble(darkgray,KeyU),
@@ -391,7 +409,7 @@ useflags:print_config_item_aligned('slot', Slot, _) :-
   message:color(normal),
   message:print('"').
 
-useflags:print_config_item_aligned(Key, Keyflags, Assumed) :-
+useflags:print_config_item_aligned(Ctx, Key, Keyflags, Assumed) :-
   eapi:use_expand(Key),
   !,
   upcase_atom(Key, KeyU),
@@ -400,7 +418,7 @@ useflags:print_config_item_aligned(Key, Keyflags, Assumed) :-
   config:printing_tty_size(_, TermWidth),
   line_position(current_output, StartCol),
   useflags:collect_all_flags(Keyflags, Assumed, AllFlags),
-  useflags:print_flags_wrapped(AllFlags,StartCol,TermWidth),
+  useflags:print_flags_wrapped(Ctx, AllFlags, StartCol, TermWidth),
   message:print('"').
 
 
@@ -472,60 +490,61 @@ useflags:print_slot_value(Slot) :-
 %  Flag wrapping
 % -----------------------------------------------------------------------------
 
-%! useflags:print_flags_wrapped(+AllFlags, +StartCol, +TermWidth)
+%! useflags:print_flags_wrapped(+Ctx, +AllFlags, +StartCol, +TermWidth)
 %
 % Prints a list of flags wrapped to the terminal width.
 
-useflags:print_flags_wrapped(AllFlags, StartCol, TermWidth) :-
-    foldl(useflags:print_one_flag_wrapped(StartCol,TermWidth),
+useflags:print_flags_wrapped(Ctx, AllFlags, StartCol, TermWidth) :-
+    foldl(useflags:print_one_flag_wrapped(Ctx, StartCol, TermWidth),
           AllFlags,
           [StartCol, true],
           _).
 
 
-%! useflags:print_one_flag_wrapped(+StartCol, +TermWidth, +FlagTerm, +StateIn, -StateOut)
+%! useflags:print_one_flag_wrapped(+Ctx, +StartCol, +TermWidth, +FlagTerm, +StateIn, -StateOut)
 %
 % Prints a single flag wrapped to the terminal width.
 
-useflags:print_one_flag_wrapped(StartCol, TermWidth, flag(Type, Flag, Assumed), [ColIn, IsFirst], [ColOut, false]) :-
-    useflags:get_flag_length(Type, Flag, Assumed, FlagLen),
+useflags:print_one_flag_wrapped(Ctx, StartCol, TermWidth, flag(Type, Flag, Assumed), [ColIn, IsFirst], [ColOut, false]) :-
+    useflags:get_flag_length(Ctx, Type, Flag, Assumed, FlagLen),
     (IsFirst -> SpaceLen = 0 ; SpaceLen = 1),
     (
         ( ColIn + SpaceLen + FlagLen > TermWidth )
     ->  % Wrap
         (
-            useflags:print_continuation_prefix(StartCol),      % go to next line, print prefix, jump to start position
-            useflags:print_use_flag(Type, Flag, Assumed),      % print flag
+            Ctx = uctx(Style, _, _),
+            useflags:print_continuation_prefix(Style, StartCol), % go to next line, print prefix, jump to start position
+            useflags:print_use_flag(Ctx, Type, Flag, Assumed),   % print flag
             ColOut is StartCol + FlagLen
         )
     ;   % No wrap
         (
             (IsFirst -> true ; write(' ')),
-            useflags:print_use_flag(Type, Flag, Assumed),
+            useflags:print_use_flag(Ctx, Type, Flag, Assumed),
             ColOut is ColIn + SpaceLen + FlagLen
         )
     ).
 
 
-%! useflags:print_continuation_prefix(+IndentColumn)
+%! useflags:print_continuation_prefix(+Style, +IndentColumn)
 %
 % Prints the continuation prefix for wrapped flags.
 
-useflags:print_continuation_prefix(StartColumn) :-
+useflags:print_continuation_prefix(Style, StartColumn) :-
     nl,
 
-    ( config:printing_style('short')  ->
+    ( Style == 'short'  ->
         write('             │ '),
         NewStartColumn is StartColumn - 1,
         message:column(NewStartColumn,'')
     );
 
-    ( config:printing_style('column') ->
+    ( Style == 'column' ->
         write('             │ '),
         NewStartColumn is StartColumn - 1,
         message:column(NewStartColumn,'')
     );
-    ( config:printing_style('fancy')  ->
+    ( Style == 'fancy'  ->
         write('             │                    '),
         message:color(darkgray),
         write('│ '),
@@ -640,47 +659,47 @@ useflags:use_change_to_assumed_atom(use_change(F, disable), minus(Stripped)) :-
   eapi:strip_prefix_atom(Key, F, Stripped).
 
 
-%! useflags:print_flags_unwrapped(+AllFlags)
+%! useflags:print_flags_unwrapped(+Ctx, +AllFlags)
 %
 % Prints a list of flags unwrapped.
 
-useflags:print_flags_unwrapped([]) :- !.
-useflags:print_flags_unwrapped([flag(Type, Flag, Assumed)|Rest]) :-
-    useflags:print_use_flag(Type, Flag, Assumed),
+useflags:print_flags_unwrapped(_Ctx, []) :- !.
+useflags:print_flags_unwrapped(Ctx, [flag(Type, Flag, Assumed)|Rest]) :-
+    useflags:print_use_flag(Ctx, Type, Flag, Assumed),
     (Rest == [] -> true ; write(' ')),
-    useflags:print_flags_unwrapped(Rest).
+    useflags:print_flags_unwrapped(Ctx, Rest).
 
 
 % -----------------------------------------------------------------------------
 %  Flag lengths (for wrapping)
 % -----------------------------------------------------------------------------
 
-%! useflags:get_flag_length(+Type, +Flag, +Assumed, -Length)
+%! useflags:get_flag_length(+Ctx, +Type, +Flag, +Assumed, -Length)
 %
 % Gets the length of a flag.
 
-useflags:get_flag_length(Type, Flag, Assumed, Length) :-
+useflags:get_flag_length(Ctx, Type, Flag, Assumed, Length) :-
     (   memberchk(minus(Flag), Assumed)
     ->  atom_length(Flag, L), Length is L + 1
     ;   memberchk(Flag, Assumed)
     ->  atom_length(Flag, Length)
     ;   useflags:get_flag_length_typed(Type, Flag, BaseLen),
-        useflags:get_change_extra_length(Type, Flag, ChangeExtra),
+        useflags:get_change_extra_length(Ctx, Type, Flag, ChangeExtra),
         Length is BaseLen + ChangeExtra
     ).
 
 
-%! useflags:get_change_extra_length(+Type, +Flag, -ExtraLen)
+%! useflags:get_change_extra_length(+Ctx, +Type, +Flag, -ExtraLen)
 %
 % Returns the extra length from change annotations for line wrapping.
 
-useflags:get_change_extra_length(positive:_, Flag, Extra) :-
+useflags:get_change_extra_length(Ctx, positive:_, Flag, Extra) :-
     !,
-    useflags:change_annotation_length(Flag, positive, Extra).
-useflags:get_change_extra_length(negative:_, Flag, Extra) :-
+    useflags:change_annotation_length(Ctx, Flag, positive, Extra).
+useflags:get_change_extra_length(Ctx, negative:_, Flag, Extra) :-
     !,
-    useflags:change_annotation_length(Flag, negative, Extra).
-useflags:get_change_extra_length(_, _, 0).
+    useflags:change_annotation_length(Ctx, Flag, negative, Extra).
+useflags:get_change_extra_length(_, _, _, 0).
 
 useflags:get_flag_length_typed(positive:preference, Flag, Length) :-
     atom_length(Flag, L),
@@ -725,13 +744,14 @@ useflags:get_flag_length_typed(negative:default, Flag, Length) :-
 %  Old USE/IUSE comparison helpers
 % -----------------------------------------------------------------------------
 
-%! useflags:set_old_use_context(+RepositoryEntry, +Context)
+%! useflags:old_use_info(+RepositoryEntry, +Context, -OldUseInfo)
 %
-% Looks up the installed version's USE/IUSE sets for the given entry
-% and stores them via nb_setval for use by print_use_flag/3.
-% For new packages (no installed version), sets IsNew = true.
+% Looks up the installed version's USE/IUSE sets for the given entry and
+% returns them as old_use_info(IsNew, OldUse, OldIuse), consumed by the
+% flag renderers via the uctx/3 state term. For new packages (no installed
+% version), IsNew = true.
 
-useflags:set_old_use_context(Repository://Entry, Context) :-
+useflags:old_use_info(Repository://Entry, Context, OldUseInfo) :-
     cache:ordered_entry(Repository, Entry, Category, Name, _),
     (memberchk(slot(_,_,SlotList):{Repository://Entry}, Context),
      SlotList = [slot(SlotAtom)|_]
@@ -743,40 +763,33 @@ useflags:set_old_use_context(Repository://Entry, Context) :-
      ;  true)
     -> use:vdb_enabled_use_set(pkg://InstalledEntry, OldUse),
        use:entry_iuse_set(pkg://InstalledEntry, OldIuse),
-       nb_setval(plan_old_use_info, old_use_info(false, OldUse, OldIuse))
-    ;  nb_setval(plan_old_use_info, old_use_info(true, [], []))
+       OldUseInfo = old_use_info(false, OldUse, OldIuse)
+    ;  OldUseInfo = old_use_info(true, [], [])
     ),
-    nb_setval(plan_use_expand_prefix, ''),
     !.
-useflags:set_old_use_context(_, _) :-
-    nb_setval(plan_old_use_info, old_use_info(true, [], [])),
-    nb_setval(plan_use_expand_prefix, '').
+useflags:old_use_info(_, _, old_use_info(true, [], [])).
 
 
-%! useflags:use_flag_full_name(+Flag, -FullFlag)
+%! useflags:use_flag_full_name(+Prefix, +Flag, -FullFlag)
 %
 % Reconstructs the full USE flag name by prepending the current
 % USE_EXPAND prefix (if any).
 
-useflags:use_flag_full_name(Flag, FullFlag) :-
-    nb_current(plan_use_expand_prefix, Prefix),
-    Prefix \== '',
-    !,
+useflags:use_flag_full_name('', Flag, Flag) :- !.
+useflags:use_flag_full_name(Prefix, Flag, FullFlag) :-
     atom_concat(Prefix, Flag, FullFlag).
-useflags:use_flag_full_name(Flag, Flag).
 
 
-%! useflags:use_flag_change_type(+Flag, +Polarity, -ChangeType)
+%! useflags:use_flag_change_type(+Ctx, +Flag, +Polarity, -ChangeType)
 %
 % Determines the change type of a USE flag relative to the installed version.
 % ChangeType is one of: steady, changed, new_flag.
 
-useflags:use_flag_change_type(Flag, Polarity, ChangeType) :-
-    nb_current(plan_old_use_info, old_use_info(IsNew, OldUse, OldIuse)),
+useflags:use_flag_change_type(uctx(_Style, Prefix, old_use_info(IsNew, OldUse, OldIuse)), Flag, Polarity, ChangeType) :-
     !,
-    useflags:use_flag_full_name(Flag, FullFlag),
+    useflags:use_flag_full_name(Prefix, Flag, FullFlag),
     useflags:classify_flag_change(FullFlag, Polarity, IsNew, OldUse, OldIuse, ChangeType).
-useflags:use_flag_change_type(_, _, steady).
+useflags:use_flag_change_type(_, _, _, steady).
 
 
 %! useflags:classify_flag_change(+Flag, +Polarity, +IsNew, +OldUse, +OldIuse, -ChangeType)
@@ -801,12 +814,12 @@ useflags:classify_flag_change(Flag, negative, false, OldUse, OldIuse, ChangeType
 useflags:classify_flag_change(_, _, _, _, _, steady).
 
 
-%! useflags:change_annotation_length(+Flag, +Polarity, -ExtraLen)
+%! useflags:change_annotation_length(+Ctx, +Flag, +Polarity, -ExtraLen)
 %
 % Returns the extra character length added by change annotations.
 
-useflags:change_annotation_length(Flag, Polarity, ExtraLen) :-
-    useflags:use_flag_change_type(Flag, Polarity, ChangeType),
+useflags:change_annotation_length(Ctx, Flag, Polarity, ExtraLen) :-
+    useflags:use_flag_change_type(Ctx, Flag, Polarity, ChangeType),
     (ChangeType == changed
     -> ExtraLen = 1
     ;  ChangeType == new_flag, Polarity == positive
@@ -816,13 +829,13 @@ useflags:change_annotation_length(Flag, Polarity, ExtraLen) :-
     ;  ExtraLen = 0).
 
 
-%! useflags:maybe_print_change_annotation(+Flag, +Polarity)
+%! useflags:maybe_print_change_annotation(+Ctx, +Flag, +Polarity)
 %
 % Prints a change annotation suffix when the flag state differs from
 % the installed version: * for changed, %* for new enabled, % for new disabled.
 
-useflags:maybe_print_change_annotation(Flag, Polarity) :-
-    useflags:use_flag_change_type(Flag, Polarity, ChangeType),
+useflags:maybe_print_change_annotation(Ctx, Flag, Polarity) :-
+    useflags:use_flag_change_type(Ctx, Flag, Polarity, ChangeType),
     (ChangeType == changed
     -> message:print('*')
     ;  ChangeType == new_flag, Polarity == positive
@@ -885,11 +898,11 @@ useflags:print_easy_negative(new_flag, Flag) :-
     message:print('%').
 
 
-%! useflags:print_use_flag(+Reason,+Flag,Assumed)
+%! useflags:print_use_flag(+Ctx,+Reason,+Flag,+Assumed)
 %
-% Prints a single flag.
+% Prints a single flag. Ctx is the uctx/3 rendering state.
 
-useflags:print_use_flag(_Reason, Flag, Assumed) :-
+useflags:print_use_flag(_Ctx, _Reason, Flag, Assumed) :-
   memberchk(minus(Flag), Assumed), !,
   message:color(orange),
   %message:style(bold),
@@ -897,26 +910,26 @@ useflags:print_use_flag(_Reason, Flag, Assumed) :-
   message:print(Flag),
   message:color(normal).
 
-useflags:print_use_flag(_Reason, Flag, Assumed) :-
+useflags:print_use_flag(_Ctx, _Reason, Flag, Assumed) :-
   memberchk(Flag, Assumed), !,
   message:color(orange),
   %message:style(bold),
   message:print(Flag),
   message:color(normal).
 
-useflags:print_use_flag(positive:Reason, Flag, _Assumed) :-
+useflags:print_use_flag(Ctx, positive:Reason, Flag, _Assumed) :-
   config:color_palette(easy),
   Reason \== profile_package_use_force, !,
-  useflags:use_flag_change_type(Flag, positive, ChangeType),
+  useflags:use_flag_change_type(Ctx, Flag, positive, ChangeType),
   useflags:print_easy_positive(ChangeType, Flag).
 
-useflags:print_use_flag(negative:Reason, Flag, _Assumed) :-
+useflags:print_use_flag(Ctx, negative:Reason, Flag, _Assumed) :-
   config:color_palette(easy),
   Reason \== profile_package_use_mask, !,
-  useflags:use_flag_change_type(Flag, negative, ChangeType),
+  useflags:use_flag_change_type(Ctx, Flag, negative, ChangeType),
   useflags:print_easy_negative(ChangeType, Flag).
 
-useflags:print_use_flag(positive:preference, Flag, _Assumed) :-
+useflags:print_use_flag(_Ctx, positive:preference, Flag, _Assumed) :-
   preference:global_use(Flag,env), !,
   message:color(green),
   message:style(bold),
@@ -925,7 +938,7 @@ useflags:print_use_flag(positive:preference, Flag, _Assumed) :-
   ( preference:profile_forced_use_flag(Flag) -> message:print('%') ; true ),
   message:print('*').
 
-useflags:print_use_flag(positive:profile_package_use_force, Flag, _Assumed) :-
+useflags:print_use_flag(_Ctx, positive:profile_package_use_force, Flag, _Assumed) :-
   !,
   message:color(green),
   message:style(bold),
@@ -934,7 +947,7 @@ useflags:print_use_flag(positive:profile_package_use_force, Flag, _Assumed) :-
   message:print(')'),
   message:color(normal).
 
-useflags:print_use_flag(positive:preference, Flag, _Assumed) :-
+useflags:print_use_flag(_Ctx, positive:preference, Flag, _Assumed) :-
   !,
   message:color(red),
   message:style(bold),
@@ -942,23 +955,23 @@ useflags:print_use_flag(positive:preference, Flag, _Assumed) :-
   message:color(normal),
   ( preference:profile_forced_use_flag(Flag) -> message:print('%') ; true ).
 
-useflags:print_use_flag(positive:package_use, Flag, _Assumed) :-
+useflags:print_use_flag(Ctx, positive:package_use, Flag, _Assumed) :-
   !,
   message:color(red),
   message:style(bold),
   message:print(Flag),
   message:color(normal),
-  useflags:maybe_print_change_annotation(Flag, positive).
+  useflags:maybe_print_change_annotation(Ctx, Flag, positive).
 
-useflags:print_use_flag(positive:ebuild, Flag, _Assumed) :-
+useflags:print_use_flag(Ctx, positive:ebuild, Flag, _Assumed) :-
   !,
   message:color(red),
   message:style(italic),
   message:print(Flag),
   message:color(normal),
-  useflags:maybe_print_change_annotation(Flag, positive).
+  useflags:maybe_print_change_annotation(Ctx, Flag, positive).
 
-useflags:print_use_flag(negative:preference, Flag, _Assumed) :-
+useflags:print_use_flag(_Ctx, negative:preference, Flag, _Assumed) :-
   preference:global_use(minus(Flag),env), !,
   message:color(green),
   message:style(bold),
@@ -968,7 +981,7 @@ useflags:print_use_flag(negative:preference, Flag, _Assumed) :-
   ( preference:profile_masked_use_flag(Flag) -> message:print('%') ; true ),
   message:print('*').
 
-useflags:print_use_flag(negative:profile_package_use_mask, Flag, _Assumed) :-
+useflags:print_use_flag(_Ctx, negative:profile_package_use_mask, Flag, _Assumed) :-
   !,
   message:color(green),
   message:style(bold),
@@ -978,7 +991,7 @@ useflags:print_use_flag(negative:profile_package_use_mask, Flag, _Assumed) :-
   message:print(')'),
   message:color(normal).
 
-useflags:print_use_flag(negative:preference, Flag, _Assumed) :-
+useflags:print_use_flag(_Ctx, negative:preference, Flag, _Assumed) :-
   !,
   message:color(blue),
   message:style(bold),
@@ -987,32 +1000,32 @@ useflags:print_use_flag(negative:preference, Flag, _Assumed) :-
   message:color(normal),
   ( preference:profile_masked_use_flag(Flag) -> message:print('%') ; true ).
 
-useflags:print_use_flag(negative:package_use, Flag, _Assumed) :-
+useflags:print_use_flag(Ctx, negative:package_use, Flag, _Assumed) :-
   !,
   message:color(blue),
   message:style(bold),
   message:print('-'),
   message:print(Flag),
   message:color(normal),
-  useflags:maybe_print_change_annotation(Flag, negative).
+  useflags:maybe_print_change_annotation(Ctx, Flag, negative).
 
-useflags:print_use_flag(negative:ebuild, Flag, _Assumed) :-
+useflags:print_use_flag(Ctx, negative:ebuild, Flag, _Assumed) :-
   !,
   message:color(lightblue),
   message:style(italic),
   message:print('-'),
   message:print(Flag),
   message:color(normal),
-  useflags:maybe_print_change_annotation(Flag, negative).
+  useflags:maybe_print_change_annotation(Ctx, Flag, negative).
 
-useflags:print_use_flag(negative:default, Flag, _Assumed) :-
+useflags:print_use_flag(Ctx, negative:default, Flag, _Assumed) :-
   !,
   message:color(darkgray),
   message:style(italic),
   message:print('-'),
   message:print(Flag),
   message:color(normal),
-  useflags:maybe_print_change_annotation(Flag, negative).
+  useflags:maybe_print_change_annotation(Ctx, Flag, negative).
 
 
 % -----------------------------------------------------------------------------

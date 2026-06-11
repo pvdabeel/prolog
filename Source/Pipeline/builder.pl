@@ -51,8 +51,8 @@ supporting concerns are split into sibling modules:
 % shared run_plan/6 lifecycle.
 
 builder:build(Goals) :-
-  pipeline:prove_plan_with_fallback(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL),
-  printer:print(Goals, ModelAVL, ProofAVL, Plan, TriggersAVL),
+  pipeline:prove_plan_with_fallback(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, SCCs, _FallbackUsed),
+  printer:print(Goals, ModelAVL, ProofAVL, Plan, TriggersAVL, SCCs),
   nl,
   ( builder:ask_confirmation
   -> true

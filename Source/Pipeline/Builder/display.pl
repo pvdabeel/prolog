@@ -175,29 +175,19 @@ display:count_conf_lines(_, _, _, _, 0).
 
 %! display:count_conf_lines_as_short(+Repo, +Entry, +Action, +Ctx, -Count) is det.
 %
-% Count config lines as if printing style were 'short'. KNOWN ISSUE:
-% the 'column' branch temporarily retract/asserts the process-global
-% config:interface_printing_style around a with_output_to while
-% jobserver worker threads may concurrently render slots; tracked
-% separately as part of the global-state cleanup.
+% Count config lines as if printing style were 'short'. In 'column' mode
+% the probe renders with an explicit 'short' style argument
+% (useflags:print_config/2) instead of flipping the process-global
+% config:interface_printing_style, so jobserver worker threads rendering
+% slots concurrently are unaffected.
 
 display:count_conf_lines_as_short(Repo, Entry, Action, Ctx, Count) :-
-  config:printing_style('column'), !,
-  setup_call_cleanup(
-    ( retract(config:interface_printing_style('column')),
-      assertz(config:interface_printing_style('short')) ),
-    ( with_output_to(string(S),
-        catch(useflags:print_config(Repo://Entry:Action?{Ctx}), _, true)),
-      split_string(S, "\n", "", Parts),
-      length(Parts, N),
-      Count is max(0, N - 1) ),
-    ( retract(config:interface_printing_style('short')),
-      assertz(config:interface_printing_style('column')) )
-  ).
-
-display:count_conf_lines_as_short(Repo, Entry, Action, Ctx, Count) :-
+  ( config:printing_style('column')
+  -> Style = 'short'
+  ;  config:printing_style(Style)
+  ),
   with_output_to(string(S),
-    catch(useflags:print_config(Repo://Entry:Action?{Ctx}), _, true)),
+    catch(useflags:print_config(Style, Repo://Entry:Action?{Ctx}), _, true)),
   split_string(S, "\n", "", Parts),
   length(Parts, N),
   Count is max(0, N - 1).

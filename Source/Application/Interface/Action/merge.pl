@@ -49,15 +49,15 @@ action:process_action(Action,ArgsSets,Options) :-
    ;  true),
   (Mode == 'client' ->
     (client:rpc_execute(Host,Port,
-     (pipeline:prove_plan_with_fallback(Proposal, ProofAVL, ModelAVL, Plan, Triggers),
-      printer:print(Proposal,ModelAVL,ProofAVL,Plan,Triggers)),
+     (pipeline:prove_plan_with_fallback(Proposal, ProofAVL, ModelAVL, Plan, Triggers, SCCs, _FallbackUsed),
+      printer:print(Proposal,ModelAVL,ProofAVL,Plan,Triggers,SCCs)),
      Output),
      writeln(Output));
     ( ( memberchk(timeout(TimeLimitSec), Options) -> true ; TimeLimitSec = 0 ),
       ( memberchk(variants(VariantsOpt), Options) -> true ; VariantsOpt = none ),
       ( memberchk(explain(ExplainOpt), Options) -> true ; ExplainOpt = none ),
       ( TimeLimitSec =< 0 ->
-          ( ( pipeline:prove_plan_with_fallback(Proposal, ProofAVL, ModelAVL, Plan, Triggers, FallbackUsed) ->
+          ( ( pipeline:prove_plan_with_fallback(Proposal, ProofAVL, ModelAVL, Plan, Triggers, SCCs, FallbackUsed) ->
                 true
             ; message:bubble(red,'Error'),
               message:color(red),
@@ -66,7 +66,7 @@ action:process_action(Action,ArgsSets,Options) :-
               flush_output,
               halt(1)
             ),
-            printer:print(Proposal,ModelAVL,ProofAVL,Plan,Triggers),
+            printer:print(Proposal,ModelAVL,ProofAVL,Plan,Triggers,SCCs),
             ( VariantsOpt \== none, PretendMode == true
             -> run_variants(VariantsOpt, Proposal, ProofAVL, Plan, Triggers)
             ;  true
@@ -78,7 +78,7 @@ action:process_action(Action,ArgsSets,Options) :-
           )
       ; catch(
           call_with_time_limit(TimeLimitSec,
-            ( ( pipeline:prove_plan_with_fallback(Proposal, ProofAVL, ModelAVL, Plan, Triggers, FallbackUsed) ->
+            ( ( pipeline:prove_plan_with_fallback(Proposal, ProofAVL, ModelAVL, Plan, Triggers, SCCs, FallbackUsed) ->
                   true
               ; message:bubble(red,'Error'),
                 message:color(red),
@@ -87,7 +87,7 @@ action:process_action(Action,ArgsSets,Options) :-
                 flush_output,
                 halt(1)
               ),
-              printer:print(Proposal,ModelAVL,ProofAVL,Plan,Triggers),
+              printer:print(Proposal,ModelAVL,ProofAVL,Plan,Triggers,SCCs),
               ( VariantsOpt \== none, PretendMode == true
               -> run_variants(VariantsOpt, Proposal, ProofAVL, Plan, Triggers)
               ;  true

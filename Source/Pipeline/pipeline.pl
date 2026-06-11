@@ -66,7 +66,16 @@ but not currently used in the default path.
 % the remainder into a fully ordered Plan.
 
 pipeline:prove_plan(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL) :-
-  pipeline:prove_plan_basic(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL).
+  pipeline:prove_plan_basic(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, _SCCs).
+
+
+%! pipeline:prove_plan(+Goals, -ProofAVL, -ModelAVL, -Plan, -TriggersAVL, -SCCs)
+%
+% Same as prove_plan/5 but also returns the scheduler's SCC decomposition
+% info (see scheduler:schedule/7) for the printer.
+
+pipeline:prove_plan(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, SCCs) :-
+  pipeline:prove_plan_basic(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, SCCs).
 
 
 % -----------------------------------------------------------------------------
@@ -153,7 +162,7 @@ pipeline:prove_with_fallback(Goals, ProofAVL, ModelAVL, TriggersAVL) :-
 % paths so the fallback chain is consistent.
 
 pipeline:prove_plan_with_fallback(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL) :-
-  pipeline:prove_plan_with_fallback(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, _).
+  pipeline:prove_plan_with_fallback(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, _SCCs, _FallbackUsed).
 
 
 %! pipeline:prove_plan_with_fallback(+Goals, -Proof, -Model, -Plan, -Triggers, -FallbackUsed)
@@ -163,19 +172,32 @@ pipeline:prove_plan_with_fallback(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL) 
 % keyword_unmask.  Fails deterministically when all tiers fail.
 
 pipeline:prove_plan_with_fallback(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, FallbackUsed) :-
+  pipeline:prove_plan_with_fallback(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, _SCCs, FallbackUsed).
+
+
+%! pipeline:prove_plan_with_fallback(+Goals, -Proof, -Model, -Plan, -Triggers, -SCCs, -FallbackUsed)
+%
+% Same as prove_plan_with_fallback/6 but additionally returns the
+% scheduler's SCC decomposition info (see scheduler:schedule/7), which
+% plan-printing callers pass to printer:print so the SCC section reflects
+% the schedule that produced the Plan (explicit handoff, no thread-local
+% scheduler state).
+
+pipeline:prove_plan_with_fallback(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, SCCs, FallbackUsed) :-
   pipeline:with_fallback(
-    pipeline:prove_plan(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL),
+    pipeline:prove_plan(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, SCCs),
     FallbackUsed).
 
 
-%! pipeline:prove_plan_basic(+Goals, -ProofAVL, -ModelAVL, -Plan, -TriggersAVL)
+%! pipeline:prove_plan_basic(+Goals, -ProofAVL, -ModelAVL, -Plan, -TriggersAVL, -SCCs)
 %
 % Single-pass pipeline with per-stage wall-time instrumentation.
 % Pre-injects selected_cn_allow_multislot constraints when the goal
 % list contains multiple targets for the same Category-Name (different
-% versions/slots).
+% versions/slots). SCCs is the scheduler's SCC decomposition info
+% (see scheduler:schedule/7).
 
-pipeline:prove_plan_basic(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL) :-
+pipeline:prove_plan_basic(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, SCCs) :-
   memo:clear_caches,
   sampler:phase_walltime(T0),
   pipeline:multislot_initial_constraints(Goals, InitCons),
@@ -183,7 +205,7 @@ pipeline:prove_plan_basic(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL) :-
   sampler:phase_walltime(T1),
   planner:plan(ProofAVL, TriggersAVL, t, Plan0, Remainder0),
   sampler:phase_walltime(T2),
-  scheduler:schedule(ProofAVL, TriggersAVL, Plan0, Remainder0, Plan, _Remainder),
+  scheduler:schedule(ProofAVL, TriggersAVL, Plan0, Remainder0, Plan, _Remainder, SCCs),
   sampler:phase_walltime(T3),
   sampler:phase_record(T0, T1, T2, T3).
 
@@ -226,11 +248,11 @@ pipeline:test_stats(Repository, Style) :-
               'Pipeline',
               Repository://Entry,
               (Repository:entry(Entry)),
-              ( pipeline:prove_plan_with_fallback([Repository://Entry:Action?{[]}],ProofAVL,ModelAVL,Plan,Triggers)
+              ( pipeline:prove_plan_with_fallback([Repository://Entry:Action?{[]}],ProofAVL,ModelAVL,Plan,Triggers,SCCs,_FallbackUsed)
               ),
               ( sampler:record(entry(Repository://Entry, ModelAVL, ProofAVL, Triggers, false)),
                 sampler:set_current_entry(Repository://Entry),
-                printer:print([Repository://Entry:Action?{[]}],ModelAVL,ProofAVL,Plan,Triggers),
+                printer:print([Repository://Entry:Action?{[]}],ModelAVL,ProofAVL,Plan,Triggers,SCCs),
                 sampler:clear_current_entry
               ),
               false),
@@ -314,7 +336,7 @@ pipeline:build_multislot_avl([C-N|Rest], AVL0, AVL) :-
 
 pipeline:prove_plan_with_pdepend(Goals0, ProofAVL, ModelAVL, Plan, TriggersAVL) :-
   statistics(walltime, [T0,_]),
-  pipeline:prove_plan_basic(Goals0, Proof0, Model0, Plan0, Trig0),
+  pipeline:prove_plan_basic(Goals0, Proof0, Model0, Plan0, Trig0, _SCCs0),
   statistics(walltime, [T1,_]),
   Pass1Ms is T1 - T0,
   statistics(walltime, [T2,_]),
@@ -333,7 +355,7 @@ pipeline:prove_plan_with_pdepend(Goals0, ProofAVL, ModelAVL, Plan, TriggersAVL) 
         ProofAVL = Proof0, ModelAVL = Model0, Plan = Plan0, TriggersAVL = Trig0
     ; append(Goals0, NewGoals, Goals1),
       statistics(walltime, [T4,_]),
-      pipeline:prove_plan_basic(Goals1, ProofAVL, ModelAVL, Plan, TriggersAVL),
+      pipeline:prove_plan_basic(Goals1, ProofAVL, ModelAVL, Plan, TriggersAVL, _SCCs1),
       statistics(walltime, [T5,_]),
       Pass2Ms is T5 - T4,
       sampler:pdepend_perf_add(Pass1Ms, ExtractMs, Pass2Ms, 1, NewGoalsCount)

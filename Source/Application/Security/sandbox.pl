@@ -180,6 +180,7 @@ sandbox:safe_primitive(planner:test_stats(_)).
 sandbox:safe_primitive(planner:test_stats(_,_)).
 
 sandbox:safe_primitive(scheduler:schedule(_,_,_,_,_,_)).
+sandbox:safe_primitive(scheduler:schedule(_,_,_,_,_,_,_)).
 sandbox:safe_primitive(scheduler:test(_)).
 sandbox:safe_primitive(scheduler:test(_,_)).
 sandbox:safe_primitive(scheduler:test_latest(_)).
@@ -195,9 +196,11 @@ sandbox:safe_primitive(pipeline:test(_)).
 sandbox:safe_primitive(pipeline:test_stats(_)).
 sandbox:safe_primitive(pipeline:test_stats(_,_)).
 sandbox:safe_primitive(pipeline:prove_plan(_,_,_,_,_)).
+sandbox:safe_primitive(pipeline:prove_plan(_,_,_,_,_,_)).
 sandbox:safe_primitive(pipeline:prove_with_fallback(_,_,_,_)).
 sandbox:safe_primitive(pipeline:prove_plan_with_fallback(_,_,_,_,_)).
 sandbox:safe_primitive(pipeline:prove_plan_with_fallback(_,_,_,_,_,_)).
+sandbox:safe_primitive(pipeline:prove_plan_with_fallback(_,_,_,_,_,_,_)).
 
 % -----------------------------------------------------------------------------
 %  Message

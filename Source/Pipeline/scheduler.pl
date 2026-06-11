@@ -40,8 +40,6 @@ and a condensed schedule for the remainder only.
 
 :- module(scheduler, []).
 
-:- thread_local scheduler:scc_info_/3.  % (Id, Kind, Members)
-
 user:goal_expansion(perf_reset, true) :-
   \+ current_prolog_flag(instrumentation, true).
 
@@ -54,6 +52,15 @@ user:goal_expansion(perf_report, true) :-
 
 %! scheduler:schedule(+ProofAVL,+TriggersAVL,+PlanIn,+RemainderIn,-PlanOut,-RemainderOut)
 %
+% Convenience wrapper around schedule/7 for callers that do not consume
+% the SCC decomposition info.
+%
+schedule(ProofAVL, TriggersAVL, PlanIn, RemainderIn, PlanOut, RemainderOut) :-
+  scheduler:schedule(ProofAVL, TriggersAVL, PlanIn, RemainderIn, PlanOut, RemainderOut, _SCCs).
+
+
+%! scheduler:schedule(+ProofAVL,+TriggersAVL,+PlanIn,+RemainderIn,-PlanOut,-RemainderOut,-SCCs)
+%
 % If RemainderIn is empty, skips remainder SCC extraction; the plan still
 % passes through merge-order biasing and the ordering check. The ordering
 % check is a cheap single-pass violation scan that only escalates to the
@@ -62,14 +69,18 @@ user:goal_expansion(perf_report, true) :-
 % Otherwise schedules the schedulable portion of the remainder by collapsing
 % :run SCCs (merge sets) and returns a new remainder for the unschedulable part.
 %
-schedule(ProofAVL, TriggersAVL, PlanIn, RemainderIn, PlanOut, []) :-
+% SCCs is the SCC decomposition info for printer visualization: a list of
+% scc(Id, Kind, Members) terms for the non-trivial (multi-member) components
+% of the remainder subgraph. Returned explicitly so the printer — which may
+% run on a different thread — never reads scheduler-local dynamic state.
+%
+schedule(ProofAVL, TriggersAVL, PlanIn, RemainderIn, PlanOut, [], []) :-
   RemainderIn == [],
   !,
-  retractall(scheduler:scc_info_(_,_,_)),
   scheduler:perf_add(0, 0, 0, 0, 0, 0, 0, 0),
   scheduler:merge_order_bias(ProofAVL, TriggersAVL, PlanIn, PlanBiased),
   scheduler:enforce_order_after_constraints(PlanBiased, PlanOut).
-schedule(ProofAVL, TriggersAVL, PlanIn, RemainderIn, PlanOut, RemainderOut) :-
+schedule(ProofAVL, TriggersAVL, PlanIn, RemainderIn, PlanOut, RemainderOut, SCCInfo) :-
   % Only schedule from the planner-provided remainder. Do not remove items from
   % the existing plan here: removing + re-adding must be proven correct, and we
   % currently want a safe scheduler that never drops actions.
@@ -83,7 +94,7 @@ schedule(ProofAVL, TriggersAVL, PlanIn, RemainderIn, PlanOut, RemainderOut) :-
   length(SCCs, SCCsN),
   scheduler:build_components(SCCs, Forward, CompMap, Comps),
   length(Comps, CompsN),
-  scheduler:record_scc_info(Comps),
+  scheduler:scc_info_from_comps(Comps, SCCInfo),
   % Compute the condensation edges once; both the blocked-component closure
   % and the Kahn wave ordering consume the same edge set.
   scheduler:comp_edges(Forward, CompMap, CompEdges),
@@ -101,15 +112,20 @@ schedule(ProofAVL, TriggersAVL, PlanIn, RemainderIn, PlanOut, RemainderOut) :-
   scheduler:enforce_order_after_constraints(PlanBiased, PlanOut).
 
 % -----------------------------------------------------------------------------
-%  SCC info recording (for printer visualization)
+%  SCC info extraction (for printer visualization)
 % -----------------------------------------------------------------------------
 
-scheduler:record_scc_info(Comps) :-
-  retractall(scheduler:scc_info_(_,_,_)),
-  forall(member(comp(Id, Kind, Members), Comps),
-         ( Members = [_] -> true
-         ; assertz(scheduler:scc_info_(Id, Kind, Members))
-         )).
+%! scheduler:scc_info_from_comps(+Comps, -SCCInfo)
+%
+% Extracts the non-trivial (multi-member) components as scc(Id, Kind,
+% Members) terms for the printer's SCC decomposition display.
+
+scheduler:scc_info_from_comps(Comps, SCCInfo) :-
+  findall(scc(Id, Kind, Members),
+          ( member(comp(Id, Kind, Members), Comps),
+            Members = [_,_|_]
+          ),
+          SCCInfo).
 
 
 % -----------------------------------------------------------------------------

@@ -27,7 +27,7 @@ Architecture:
     state.pl          module state       — prover state debugger display
 
 This hub retains:
-- print/5,6          — thin wrappers delegating to plan:print/5,6
+- print/6,7          — thin wrappers delegating to plan:print/6,7
 - test/1,2, test_latest/1,2 — whole-repo test entry points
 
 File-writing predicates live in Source/writer.pl.
@@ -41,17 +41,18 @@ The prove+plan+schedule pipeline lives in Source/pipeline.pl.
 % =============================================================================
 
 
-%! printer:print(+Target, +ModelAVL, +ProofAVL, +Plan, +TriggersAVL)
+%! printer:print(+Target, +ModelAVL, +ProofAVL, +Plan, +TriggersAVL, +SCCs)
 %
-% Thin wrapper — delegates to plan:print/5.
+% Thin wrapper — delegates to plan:print/6. SCCs is the scheduler's SCC
+% decomposition info (scheduler:schedule/7); pass [] when unavailable.
 
-printer:print(Target, ModelAVL, ProofAVL, Plan, TriggersAVL) :-
-  plan:print(Target, ModelAVL, ProofAVL, Plan, TriggersAVL).
+printer:print(Target, ModelAVL, ProofAVL, Plan, TriggersAVL, SCCs) :-
+  plan:print(Target, ModelAVL, ProofAVL, Plan, TriggersAVL, SCCs).
 
-%! printer:print(+Target, +ModelAVL, +ProofAVL, +Plan, +Call, +TriggersAVL)
+%! printer:print(+Target, +ModelAVL, +ProofAVL, +Plan, +Call, +TriggersAVL, +SCCs)
 
-printer:print(Target, ModelAVL, ProofAVL, Plan, Call, TriggersAVL) :-
-  plan:print(Target, ModelAVL, ProofAVL, Plan, Call, TriggersAVL).
+printer:print(Target, ModelAVL, ProofAVL, Plan, Call, TriggersAVL, SCCs) :-
+  plan:print(Target, ModelAVL, ProofAVL, Plan, Call, TriggersAVL, SCCs).
 
 
 % -----------------------------------------------------------------------------
@@ -87,11 +88,11 @@ printer:test(Repository,Style) :-
               (Repository:entry(Entry)),
               ( prover:prove(Repository://Entry:Action?{[]},t,ProofAVL,t,ModelAVL,t,_Constraint,t,Triggers),
                 planner:plan(ProofAVL,Triggers,t,Plan0,Remainder0),
-                scheduler:schedule(ProofAVL,Triggers,Plan0,Remainder0,Plan,_Remainder)
+                scheduler:schedule(ProofAVL,Triggers,Plan0,Remainder0,Plan,_Remainder,SCCs)
               ),
               ( sampler:record(entry(Repository://Entry, ModelAVL, ProofAVL, Triggers, false)),
                 sampler:set_current_entry(Repository://Entry),
-              printer:print([Repository://Entry:Action?{[]}],ModelAVL,ProofAVL,Plan,Triggers),
+              printer:print([Repository://Entry:Action?{[]}],ModelAVL,ProofAVL,Plan,Triggers,SCCs),
                 sampler:clear_current_entry
               ),
               false),
@@ -120,11 +121,11 @@ printer:test_latest(Repository,Style) :-
               (Repository:package(C,N),once(Repository:ebuild(Entry,C,N,_))),
               ( prover:prove(Repository://Entry:Action?{[]},t,ProofAVL,t,ModelAVL,t,_Constraint,t,Triggers),
                 planner:plan(ProofAVL,Triggers,t,Plan0,Remainder0),
-                scheduler:schedule(ProofAVL,Triggers,Plan0,Remainder0,Plan,_Remainder)
+                scheduler:schedule(ProofAVL,Triggers,Plan0,Remainder0,Plan,_Remainder,SCCs)
               ),
               ( sampler:record(entry(Repository://Entry, ModelAVL, ProofAVL, Triggers, false)),
                 sampler:set_current_entry(Repository://Entry),
-                printer:print([Repository://Entry:Action?{[]}],ModelAVL,ProofAVL,Plan,Triggers),
+                printer:print([Repository://Entry:Action?{[]}],ModelAVL,ProofAVL,Plan,Triggers,SCCs),
                 sampler:clear_current_entry
               ),
               false),

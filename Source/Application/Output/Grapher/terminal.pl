@@ -58,10 +58,10 @@ terminal:capture_content(merge, Repository://Entry, Content) :-
     Goals = [Repository://Entry:run?{[]}],
     get_time(T0),
     (   catch(
-            (   pipeline:prove_plan_with_fallback(Goals, Proof, Model, Plan, Triggers),
+            (   pipeline:prove_plan_with_fallback(Goals, Proof, Model, Plan, Triggers, SCCs, _FallbackUsed),
                 capture_output(
                     (   timing:print_timing_header('merge', T0),
-                        printer:print(Goals, Model, Proof, Plan, Triggers),
+                        printer:print(Goals, Model, Proof, Plan, Triggers, SCCs),
                         timing:print_timing_footer('merge', T0)
                     ),
                     Content)
@@ -77,10 +77,10 @@ terminal:capture_content(fetchonly, Repository://Entry, Content) :-
     Goals = [Repository://Entry:fetchonly?{[]}],
     get_time(T0),
     (   catch(
-            (   pipeline:prove_plan_with_fallback(Goals, Proof, Model, Plan, Triggers),
+            (   pipeline:prove_plan_with_fallback(Goals, Proof, Model, Plan, Triggers, SCCs, _FallbackUsed),
                 capture_output(
                     (   timing:print_timing_header('fetchonly', T0),
-                        printer:print(Goals, Model, Proof, Plan, Triggers),
+                        printer:print(Goals, Model, Proof, Plan, Triggers, SCCs),
                         timing:print_timing_footer('fetchonly', T0)
                     ),
                     Content)
