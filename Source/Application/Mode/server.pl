@@ -170,6 +170,7 @@ server:reply(Request) :-
 :- dynamic server:queue_created/1.
 :- dynamic server:submitted_counter/1.
 :- dynamic server:inflight_job/3.
+:- dynamic server:workers_done/0.
 
 server:ensure_queues :-
   ( server:queue_created(true) -> true
@@ -221,7 +222,17 @@ server:get_job(Job, Timeout, Worker) :-
 %! server:get_job_for(-Job, +Timeout, +Worker)
 %
 % Shared implementation behind get_job/1,2,3.
+%
+% When server:stop_workers has been called, `done` is returned to every
+% polling thread without consuming anything from the queue, so the stop
+% signal is broadcast to all threads of all workers instead of being a
+% single-consumer sentinel.
 
+server:get_job_for(Job, _Timeout, Worker) :-
+  server:workers_done,
+  !,
+  server:worker_heartbeat(Worker),
+  Job = done.
 server:get_job_for(Job, Timeout, Worker) :-
   server:ensure_queues,
   ( Timeout == infinite ->
@@ -233,6 +244,22 @@ server:get_job_for(Job, Timeout, Worker) :-
   ; get_time(Now),
     assertz(server:inflight_job(Job, Worker, Now))
   ).
+
+%! server:stop_workers
+%
+% Signal all polling worker threads to stop. Every subsequent get_job
+% poll (from any thread of any worker) receives the `done` sentinel.
+% Call server:resume_workers before submitting a new batch of jobs.
+
+server:stop_workers :-
+  ( server:workers_done -> true ; assertz(server:workers_done) ).
+
+%! server:resume_workers
+%
+% Clear the stop signal so workers receive jobs again.
+
+server:resume_workers :-
+  retractall(server:workers_done).
 
 %! server:post_result(+Job, +Result)
 %

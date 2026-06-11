@@ -134,11 +134,14 @@ worker:register(ServerHost, ServerPort, Cpus) :-
 %  Job polling
 % =============================================================================
 
+:- dynamic worker:stopping/0.
+
 %! worker:spawn_threads(+Host, +Port, +N)
 %
 % Spawn N worker threads, each running the poll loop independently.
 
 worker:spawn_threads(Host, Port, N) :-
+  retractall(worker:stopping),
   forall(between(1, N, I),
          ( atom_concat(worker_thread_, I, Alias),
            thread_create(worker:poll_loop(Host, Port), _, [alias(Alias)])
@@ -146,28 +149,91 @@ worker:spawn_threads(Host, Port, N) :-
 
 %! worker:poll_loop(+Host, +Port)
 %
-% Repeatedly poll the server for a job, execute it locally, and post
-% the result back. Runs until the server sends the `done` sentinel.
+% Repeatedly poll the server for a job, execute it locally, and post the
+% result back. Runs until the server signals `done` or a sibling thread
+% has set the shared worker:stopping flag.
+%
+% RPC exceptions (connection refused, TLS handshake, server restart) are
+% caught and logged; the thread backs off exponentially (capped at 60s)
+% and keeps polling instead of dying silently.
 
 worker:poll_loop(Host, Port) :-
-  repeat,
-    worker:poll_once(Host, Port, Continue),
-    Continue == stop,
-  !.
+  worker:poll_loop(Host, Port, 1).
+
+worker:poll_loop(Host, Port, Backoff) :-
+  ( worker:stopping ->
+      worker:log_stop
+  ; catch(worker:poll_once(Host, Port, Continue),
+          Error,
+          ( thread_self(Thread),
+            message:warning(['Worker ', Thread, ': RPC error: ', Error,
+                             '. Retrying in ', Backoff, 's.']),
+            Continue = backoff )),
+    ( Continue == stop ->
+        worker:log_stop
+    ; Continue == backoff ->
+        sleep(Backoff),
+        NextBackoff is min(Backoff * 2, 60),
+        worker:poll_loop(Host, Port, NextBackoff)
+    ; worker:poll_loop(Host, Port, 1)
+    )
+  ).
+
+%! worker:log_stop
+%
+% Log that the current poll thread is shutting down.
+
+worker:log_stop :-
+  thread_self(Thread),
+  message:inform(['Worker ', Thread, ': stopping.']).
 
 %! worker:poll_once(+Host, +Port, -Continue)
 %
 % Fetch one job, execute, post result. Continue = continue | stop.
+% Identifies itself by hostname so the server can track in-flight job
+% ownership and worker liveness (stale jobs get re-queued).
+%
+% On `done`, the shared worker:stopping flag is set so sibling threads
+% stop on their next iteration as well; the server additionally
+% broadcasts `done` to every polling thread once server:stop_workers
+% has been called, so all threads of all workers wind down.
 
 worker:poll_once(Host, Port, Continue) :-
-  ( client:rpc_execute(Host, Port, server:get_job(Job, 30)) ->
+  config:hostname(Hostname),
+  ( client:rpc_execute(Host, Port, server:get_job(Job, 30, Hostname)) ->
       ( Job == done ->
+          ( worker:stopping -> true ; assertz(worker:stopping) ),
           Continue = stop
       ; worker:execute_job(Job, Result),
-        client:rpc_execute(Host, Port, server:post_result(Job, Result)),
+        worker:post_result(Host, Port, Job, Result),
         Continue = continue
       )
   ; Continue = continue
+  ).
+
+%! worker:post_result(+Host, +Port, +Job, +Result)
+%
+% Post a computed result back to the server, retrying with backoff so a
+% transient RPC failure does not discard an already-computed result. If
+% all attempts fail, the result is dropped with a warning; the server
+% re-queues the job once this worker is presumed dead (stale-job
+% re-queueing), so the job is not lost.
+
+worker:post_result(Host, Port, Job, Result) :-
+  between(1, 5, Attempt),
+  ( catch(client:rpc_execute(Host, Port, server:post_result(Job, Result)),
+          Error,
+          ( message:warning(['Posting result for ', Job, ' failed (attempt ',
+                             Attempt, '): ', Error]),
+            fail ))
+  -> !
+  ; ( Attempt =:= 5 ->
+        message:warning(['Dropping result for ', Job,
+                         '; server will re-queue the job.'])
+    ; Wait is 2 ** Attempt,
+      sleep(Wait),
+      fail
+    )
   ).
 
 
@@ -177,19 +243,48 @@ worker:poll_once(Host, Port, Continue) :-
 
 %! worker:execute_job(+Job, -Result)
 %
-% Run the prover + planner + scheduler pipeline for a single target.
-% Result = plan(Plan) | error(Error).
+% Run the canonical pipeline (prover + planner + scheduler) for a single
+% target through pipeline:prove_plan_with_fallback/6, so workers use the
+% same 5-tier committed-choice fallback chain (strict, keyword_acceptance,
+% blockers, unmask, keyword_unmask) as standalone mode.
+%
+% Returns a compact result — plan steps, relaxation tier and assumption
+% summary — rather than the full Proof/Model/Constraints/Triggers AVLs,
+% keeping the Pengine RPC payload small.
+%
+% Result = plan(Job, Plan, Tier, assumptions(DomainCount, CycleBreakCount))
+%        | failed(Job)
+%        | error(Job, Error)
 
 worker:execute_job(Job, Result) :-
+  worker:job_goals(Job, Goals),
   ( catch(
-      ( prover:prove(Job, t, Proof, t, Model, t, Cons, t, Triggers),
-        !,
-        planner:plan(Proof, Triggers, [], Plan0, Remainder0),
-        scheduler:schedule(Proof, Triggers, Plan0, Remainder0, Plan, _Remainder),
-        Result = plan(Job, Proof, Model, Cons, Plan, Triggers)
+      ( pipeline:prove_plan_with_fallback(Goals, ProofAVL, _ModelAVL, Plan,
+                                          _TriggersAVL, Tier),
+        worker:assumption_summary(ProofAVL, Summary),
+        Result = plan(Job, Plan, Tier, Summary)
       ),
       Error,
       Result = error(Job, Error)
     ) -> true
   ; Result = failed(Job)
   ).
+
+%! worker:job_goals(+Job, -Goals)
+%
+% Wrap a job target in a goal list, attaching an empty `?{Context}` list
+% unless the job already carries one.
+
+worker:job_goals(Job, [Job]) :-
+  Job = _?{_}, !.
+worker:job_goals(Job, [Job?{[]}]).
+
+%! worker:assumption_summary(+ProofAVL, -Summary)
+%
+% Compact assumption summary for RPC transport:
+% assumptions(DomainCount, CycleBreakCount). Domain assumptions use the
+% proof key rule(assumed(_)); prover cycle breaks use assumed(rule(_)).
+
+worker:assumption_summary(ProofAVL, assumptions(Domain, CycleBreaks)) :-
+  aggregate_all(count, assoc:gen_assoc(rule(assumed(_)), ProofAVL, _), Domain),
+  aggregate_all(count, assoc:gen_assoc(assumed(rule(_)), ProofAVL, _), CycleBreaks).
