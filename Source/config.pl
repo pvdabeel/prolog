@@ -1360,6 +1360,15 @@ config:semantic_model('nomic-embed-text').
 config:semantic_endpoint('http://localhost:11434/api/embed').
 
 
+%! config:semantic_batch_size(?Size) is det.
+%
+% Number of texts embedded per HTTP request when building the semantic
+% index. Ollama's /api/embed accepts an array of inputs, so batching
+% avoids one round-trip per package.
+
+config:semantic_batch_size(64).
+
+
 %! config:semantic_top_n(?N) is det.
 %
 % Number of results returned by a semantic search query.

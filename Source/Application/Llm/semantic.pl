@@ -64,46 +64,25 @@ semantic:index_file(Path) :-
 
 %! semantic:embed_text(+Text, -Embedding) is semidet.
 %
-% Generate an embedding vector for Text via the Ollama API.
-% Handles both /api/embeddings (legacy) and /api/embed (current) response
-% formats.
+% Generate an embedding vector for a single Text via the Ollama API.
+% Convenience wrapper around semantic:embed_texts/2.
 
 semantic:embed_text(Text, Embedding) :-
+  semantic:embed_texts([Text], [Embedding]).
+
+
+%! semantic:embed_texts(+Texts, -Embeddings) is semidet.
+%
+% Generate embedding vectors for a list of texts in a single HTTP
+% round-trip via llm:embed/4. Ollama's /api/embed accepts an array of
+% inputs, so batching avoids one round-trip per text. Fails if the
+% server does not return exactly one embedding per input.
+
+semantic:embed_texts(Texts, Embeddings) :-
   semantic:embedding_model(Model),
   semantic:embedding_endpoint(Endpoint),
-  Payload = _{model: Model, input: Text},
-  catch(
-    ( http_open(Endpoint, In,
-                [method(post), post(json(Payload)),
-                 request_header('Content-Type'='application/json')]),
-      call_cleanup(
-        json_read_dict(In, Response),
-        close(In)),
-      semantic:extract_embedding(Response, Embedding)
-    ),
-    _Error,
-    fail
-  ).
-
-
-%! semantic:extract_embedding(+Response, -Embedding) is semidet.
-%
-% Extract the embedding vector from an Ollama response dict.
-% Supports both response formats:
-%   /api/embeddings (legacy): {"embedding": [...]}
-%   /api/embed (current):     {"embeddings": [[...]]}
-
-semantic:extract_embedding(Response, Embedding) :-
-  ( is_dict(Response),
-    get_dict(embedding, Response, E),
-    is_list(E), E \== []
-  -> Embedding = E
-  ; is_dict(Response),
-    get_dict(embeddings, Response, Es),
-    is_list(Es), Es = [E|_],
-    is_list(E), E \== []
-  -> Embedding = E
-  ).
+  llm:embed(Endpoint, Model, Texts, Embeddings),
+  same_length(Texts, Embeddings).
 
 
 %! semantic:package_text(+Repo, +Entry, -Text) is semidet.
@@ -134,8 +113,10 @@ semantic:package_text(Repo, Entry, Text) :-
 %! semantic:build_index is det.
 %
 % Generate embeddings for all unique category/name pairs in the knowledge
-% base using the latest version's metadata. Stores results as
-% semantic:embedding/3 facts and saves to disk.
+% base using the latest version's metadata. Texts are embedded in batches
+% (config:semantic_batch_size/1 per HTTP round-trip) rather than one
+% request per package. Stores results as semantic:embedding/3 facts and
+% saves to disk.
 
 semantic:build_index :-
   semantic:check_ollama,
@@ -149,7 +130,10 @@ semantic:build_index :-
   sort(Packages, UniquePackages),
   length(UniquePackages, Total),
   message:inform(['Embedding ', Total, ' packages...']),
-  semantic:embed_packages(UniquePackages, 0, Total),
+  semantic:package_texts(UniquePackages, Items),
+  config:semantic_batch_size(BatchSize),
+  semantic:chunk_list(Items, BatchSize, Batches),
+  semantic:embed_batches(Batches, 0, Total),
   semantic:save_index,
   assertz(semantic:index_loaded),
   semantic:count_embeddings(Indexed),
@@ -192,50 +176,84 @@ semantic:count_embeddings(N) :-
   aggregate_all(count, semantic:embedding(_, _, _), N).
 
 
-%! semantic:embed_packages(+Packages, +Done, +Total) is det.
+%! semantic:package_texts(+Packages, -Items) is det.
 %
-% Embed each category/name pair, using the latest version's description.
+% Build the embedding input for each package, using the latest version's
+% metadata. Items is a list of Cat-Name-Text triples; packages for which
+% no text can be constructed are skipped.
 
-semantic:embed_packages([], _, _).
-
-semantic:embed_packages([Repo-Cat-Name|Rest], Done, Total) :-
-  ( cache:ordered_entry(Repo, Entry, Cat, Name, _),
-    semantic:package_text(Repo, Entry, Text),
-    semantic:embed_text(Text, Embedding),
-    semantic:normalize_vector(Embedding, Normalized)
-  -> assertz(semantic:embedding(Cat, Name, Normalized)),
-     Done1 is Done + 1,
-     ( Done1 mod 100 =:= 0
-     -> format(user_error, '\r  ~w / ~w', [Done1, Total]),
-        flush_output(user_error)
-     ; true
-     )
-  ; ( Done =:= 0
-    -> message:warning(['Failed to embed first package: ', Cat, '/', Name]),
-       semantic:diagnose_first_failure(Repo, Cat, Name)
-    ; true
+semantic:package_texts(Packages, Items) :-
+  findall(Cat-Name-Text,
+    ( member(Repo-Cat-Name, Packages),
+      once(( cache:ordered_entry(Repo, Entry, Cat, Name, _),
+             semantic:package_text(Repo, Entry, Text) ))
     ),
-    Done1 is Done + 1
-  ),
-  !,
-  semantic:embed_packages(Rest, Done1, Total).
+    Items).
 
 
-%! semantic:diagnose_first_failure(+Repo, +Cat, +Name) is det.
+%! semantic:chunk_list(+List, +Size, -Chunks) is det.
 %
-% Report which step fails for the first package that could not be embedded.
+% Partition List into consecutive chunks of at most Size elements.
 
-semantic:diagnose_first_failure(Repo, Cat, Name) :-
-  ( cache:ordered_entry(Repo, Entry, Cat, Name, _)
-  -> ( semantic:package_text(Repo, Entry, Text)
-     -> ( catch(semantic:embed_text(Text, _Emb), Err,
-               (message:warning(['  embed_text threw: ', Err]), fail))
-        -> message:warning(['  normalize_vector failed'])
-        ; message:warning(['  embed_text failed for: ', Text])
-        )
-     ; message:warning(['  package_text failed for entry: ', Entry])
-     )
-  ; message:warning(['  No ordered_entry found for ', Cat, '/', Name])
+semantic:chunk_list([], _, []) :- !.
+
+semantic:chunk_list(List, Size, [Chunk|Chunks]) :-
+  length(Chunk, Size),
+  append(Chunk, Rest, List),
+  !,
+  semantic:chunk_list(Rest, Size, Chunks).
+
+semantic:chunk_list(List, _, [List]).
+
+
+%! semantic:embed_batches(+Batches, +Done, +Total) is det.
+%
+% Embed each batch of Cat-Name-Text triples with a single HTTP round-trip,
+% reporting progress after every batch.
+
+semantic:embed_batches([], _, _).
+
+semantic:embed_batches([Batch|Rest], Done, Total) :-
+  semantic:embed_batch(Batch),
+  length(Batch, N),
+  Done1 is Done + N,
+  format(user_error, '\r  ~w / ~w', [Done1, Total]),
+  flush_output(user_error),
+  semantic:embed_batches(Rest, Done1, Total).
+
+
+%! semantic:embed_batch(+Batch) is det.
+%
+% Embed a batch of Cat-Name-Text triples in one request and assert the
+% resulting embedding/3 facts. When the batched request fails, falls back
+% to embedding each text individually so a single problematic input does
+% not drop the whole batch.
+
+semantic:embed_batch(Batch) :-
+  findall(Text, member(_-_-Text, Batch), Texts),
+  ( semantic:embed_texts(Texts, Embeddings)
+  -> maplist(semantic:assert_embedding, Batch, Embeddings)
+  ; forall(member(Item, Batch), semantic:embed_single(Item))
+  ).
+
+
+%! semantic:assert_embedding(+Item, +Embedding) is det.
+%
+% Normalize and store the embedding for a Cat-Name-Text triple.
+
+semantic:assert_embedding(Cat-Name-_, Embedding) :-
+  semantic:normalize_vector(Embedding, Normalized),
+  assertz(semantic:embedding(Cat, Name, Normalized)).
+
+
+%! semantic:embed_single(+Item) is det.
+%
+% Fallback: embed a single Cat-Name-Text triple, warning on failure.
+
+semantic:embed_single(Cat-Name-Text) :-
+  ( semantic:embed_text(Text, Embedding)
+  -> semantic:assert_embedding(Cat-Name-Text, Embedding)
+  ; message:warning(['Failed to embed ', Cat, '/', Name])
   ).
 
 
@@ -289,13 +307,18 @@ semantic:log_index_count :-
 
 %! semantic:read_terms(+Stream) is det.
 %
-% Read and assert all terms from Stream.
+% Read terms from Stream, asserting only the expected embedding/3 facts.
+% Other terms are ignored, so a stale or hand-edited index file cannot
+% inject arbitrary clauses.
 
 semantic:read_terms(In) :-
   read_term(In, Term, []),
   ( Term == end_of_file
   -> true
-  ; assert(Term),
+  ; ( Term = semantic:embedding(Cat, Name, Emb)
+    -> assertz(semantic:embedding(Cat, Name, Emb))
+    ; true
+    ),
     semantic:read_terms(In)
   ).
 

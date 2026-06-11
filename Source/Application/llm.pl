@@ -296,6 +296,52 @@ llm:execute_llm_code(Src) :-
                close(Stream)).
 
 
+%! llm:embed(+Endpoint, +Model, +Texts, -Embeddings) is semidet.
+%
+% Request embedding vectors for a list of texts in a single HTTP round-trip.
+% Texts is a list of atoms or strings; Embeddings is unified with a list of
+% embedding vectors (lists of floats), one per input text, in order.
+%
+% Posts to an Ollama-style embedding endpoint. The current /api/embed
+% endpoint accepts an array of inputs, so callers should batch their texts
+% rather than issuing one request per text. The legacy /api/embeddings
+% single-input response format ({"embedding": [...]}) is also supported.
+% Fails silently on HTTP or parsing errors so callers can implement their
+% own retry/diagnostic strategy.
+
+llm:embed(Endpoint, Model, Texts, Embeddings) :-
+  Payload = _{model: Model, input: Texts},
+  catch(
+    ( http_open(Endpoint, In,
+                [method(post), post(json(Payload)),
+                 request_header('Content-Type'='application/json')]),
+      call_cleanup(
+        json_read_dict(In, Response),
+        close(In))
+    ),
+    _Error,
+    fail),
+  llm:extract_embeddings(Response, Embeddings).
+
+
+%! llm:extract_embeddings(+Response, -Embeddings) is semidet.
+%
+% Extract the embedding vectors from an Ollama response dict.
+% Supports both response formats:
+%   /api/embed (current):     {"embeddings": [[...], ...]}
+%   /api/embeddings (legacy): {"embedding": [...]}
+
+llm:extract_embeddings(Response, Embeddings) :-
+  is_dict(Response),
+  ( get_dict(embeddings, Response, Es),
+    is_list(Es), Es \== []
+  -> Embeddings = Es
+  ; get_dict(embedding, Response, E),
+    is_list(E), E \== []
+  -> Embeddings = [E]
+  ).
+
+
 %! llm:llm_service(?Service) is nondet.
 %
 % Derived registry of the supported chat backends: a service is supported when
