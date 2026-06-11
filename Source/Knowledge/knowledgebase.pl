@@ -226,7 +226,12 @@ load ::-
   directory_file_path(Dir,'Knowledge/kb.qlf',Qlf),
   exists_file(Qlf),!,
   ensure_loaded(Qlf),
-  knowledgebase:kb_warm_metadata_index.
+  % Warm the JIT indexes off the critical path: index building is
+  % mutex-protected per predicate, so an early query at worst blocks on
+  % the build already in progress (same cost as warming synchronously,
+  % but overlapped with the remainder of startup).
+  thread_create(ignore(catch(knowledgebase:kb_warm_metadata_index, _, true)),
+                _, [detached(true)]).
 
 load ::-
   \+ proxy,
@@ -397,14 +402,21 @@ port(Port) ::-
 
 %! knowledgebase:kb_warm_metadata_index is det.
 %
-% Prime the JIT index on cache:entry_metadata/4 for the (Repo, Id, slot, slot(_))
-% access pattern used by preference:init profile-mask slot checks.  Without this,
-% the first slotted package.mask atom after kb.qlf load can spend ~0.7s per entry
-% until SWI-Prolog builds the index.
+% Prime the JIT indexes used by preference:init and the resolver after
+% kb.qlf load.  SWI-Prolog builds a JIT index *completely* on the first
+% call that needs it, so one bound probe per access pattern suffices:
+%
+%   1. cache:ordered_entry/5 with all args unbound (binds a witness entry)
+%   2. cache:entry_metadata/4 with Repo+Id+key bound — forces the
+%      (Id, Key) hash index over all metadata facts
+%   3. cache:ordered_entry/5 with category/name bound — forces the
+%      (C, N) index used by per-package iteration
+%
+% The probes are for their index-building side effect only; the soft-fail
+% wrappers keep this predicate from failing when the witness entry has no
+% slot metadata.
 
 kb_warm_metadata_index :-
-  cache:ordered_entry(Repo, Id, C, N, _),
-  cache:entry_metadata(Repo, Id, slot, slot(_)),
-  !,
-  forall(cache:ordered_entry(Repo, Eid, C, N, _),
-         ( cache:entry_metadata(Repo, Eid, slot, slot(_)) -> true ; true )).
+  once(cache:ordered_entry(Repo, Id, C, N, _)),
+  ( cache:entry_metadata(Repo, Id, slot, slot(_)) -> true ; true ),
+  ( cache:ordered_entry(Repo, _, C, N, _) -> true ; true ).
