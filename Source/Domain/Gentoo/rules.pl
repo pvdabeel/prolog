@@ -96,6 +96,57 @@ Helper predicates used by these rules live in the Rules/ submodules.
 
 
 % =============================================================================
+%  Ruleset: SYNTHETIC TEST RULES (unit testing hook)
+% =============================================================================
+
+% -----------------------------------------------------------------------------
+%  Synthetic rule store
+% -----------------------------------------------------------------------------
+%
+% KB-independent unit tests (Source/Test/unittest.pl, issue #73) drive the
+% prover and planner over tiny hand-built rule sets without a loaded
+% knowledge base.  While the store is active, rule/2 resolves EXCLUSIVELY
+% against the dynamic test_rule/2 clauses (committed choice), so synthetic
+% literals can never fall through to the production ruleset below and the
+% production ruleset can never leak into a synthetic proof.  When inactive
+% (the default), the only cost is a single failing dynamic-predicate call
+% per rule/2 expansion.
+
+:- dynamic test_rules_active/0.
+:- dynamic test_rule/2.
+
+
+%! rules:enable_test_rules
+%
+% Activate the synthetic rule store (unit tests only).
+
+enable_test_rules :-
+  ( test_rules_active -> true ; assertz(test_rules_active) ).
+
+
+%! rules:disable_test_rules
+%
+% Deactivate the synthetic rule store and clear all synthetic rules.
+
+disable_test_rules :-
+  retractall(test_rules_active),
+  retractall(test_rule(_, _)).
+
+
+%! rules:rule(+Literal, -Conditions) — synthetic store dispatch
+%
+% Must remain the FIRST rule/2 clause.  When the synthetic store is active,
+% strip an optional ?{Ctx} proof-context wrapper and resolve against
+% test_rule/2 only.
+
+rule(Literal, Body) :-
+  test_rules_active,
+  !,
+  ( Literal = Core?{_} -> true ; Core = Literal ),
+  test_rule(Core, Body).
+
+
+% =============================================================================
 %  Ruleset: TARGET
 % =============================================================================
 

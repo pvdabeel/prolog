@@ -195,6 +195,55 @@ test(multi_suffix_equal_versions, [nondet]) :-
 
 
 % -----------------------------------------------------------------------------
+%  EAPI version comparison: PMS section 3.3 vectors (issue #73)
+% -----------------------------------------------------------------------------
+%
+% Table-driven vectors for the numeric-component comparison rules of PMS
+% algorithms 3.2/3.3, focusing on component count and numeric padding.
+
+:- begin_tests(eapi_version_pms_vectors).
+
+pms_version(Atom, V) :-
+  atom_codes(Atom, Codes),
+  phrase(eapi:version(V), Codes, []),
+  !.
+
+% Each vector is A-Op-B, asserting eapi:version_compare(Op, A, B).
+pms_order_vector('1'    < '1.0').     % more numeric components wins
+pms_order_vector('1.0'  < '1.0.0').
+pms_order_vector('1.0'  < '1.1').
+pms_order_vector('1.2'  < '1.10').    % numeric, not lexicographic
+pms_order_vector('1.01' < '1.1').     % leading zero sorts first (PMS 3.3)
+pms_order_vector('9.0'  < '10.0').    % multi-digit first component
+pms_order_vector('1.99' < '2.0').
+
+test(pms_numeric_order_vectors) :-
+  forall(pms_order_vector(A < B),
+         ( pms_version(A, VA),
+           pms_version(B, VB),
+           eapi:version_compare(<, VA, VB),
+           eapi:version_compare(>, VB, VA)
+         )).
+
+% Numeric padding (PMS 3.3): trailing zeros in a padded component must not
+% change the normalized numeric key ('1.0' and '1.00' share [1,0]). The
+% version/7 term keeps the display string as final tie-break, so the full
+% terms stay distinguishable for entry identity, but the order-relevant
+% numeric prefix is identical.
+test(pms_padding_same_numeric_key) :-
+  pms_version('1.0',  version(N1, A1, R1, S1, T1, Rev1, _)),
+  pms_version('1.00', version(N2, A2, R2, S2, T2, Rev2, _)),
+  N1 == N2, A1 == A2, R1 == R2, S1 == S2, T1 == T2, Rev1 == Rev2.
+
+test(pms_padding_not_smaller_than_unpadded, [fail]) :-
+  pms_version('1.00', VA),
+  pms_version('1.0',  VB),
+  eapi:version_compare(<, VA, VB).
+
+:- end_tests(eapi_version_pms_vectors).
+
+
+% -----------------------------------------------------------------------------
 %  EAPI operator parsing tests
 % -----------------------------------------------------------------------------
 
@@ -613,6 +662,167 @@ test(nonprototyped_uri, [nondet]) :-
   L == 'plain-distfile.tar.gz'.
 
 :- end_tests(eapi_uri_parsing).
+
+
+% -----------------------------------------------------------------------------
+%  EAPI REQUIRED_USE expression parsing tests (issue #73)
+% -----------------------------------------------------------------------------
+%
+% PMS 8, Section 7.3.4: REQUIRED_USE supports flags, '!'-prefixed flags,
+% USE-conditionals, '||' (or), '^^' (exactly-one-of) and '??'
+% (at-most-one-of) groups, with arbitrary nesting.
+
+:- begin_tests(eapi_required_use_parsing).
+
+requse(Atom, U) :-
+  atom_codes(Atom, Codes),
+  phrase(eapi:required_use(test://e, U), Codes, []),
+  !.
+
+test(requse_plain_flag, [true(U == [required(foo)])]) :-
+  requse('foo', U).
+
+test(requse_blocking_flag, [true(U == [blocking(foo)])]) :-
+  requse('!foo', U).
+
+test(requse_flag_sequence, [true(U == [required(a), blocking(b), required(c)])]) :-
+  requse('a !b c', U).
+
+test(requse_positive_conditional,
+     [true(U == [use_conditional_group(positive, doc, test://e, [required(man)])])]) :-
+  requse('doc? ( man )', U).
+
+test(requse_negative_conditional,
+     [true(U == [use_conditional_group(negative, doc, test://e, [required(man)])])]) :-
+  requse('!doc? ( man )', U).
+
+test(requse_any_of_group,
+     [true(U == [any_of_group([required(a), required(b)])])]) :-
+  requse('|| ( a b )', U).
+
+test(requse_exactly_one_of_group,
+     [true(U == [exactly_one_of_group([required(a), required(b), required(c)])])]) :-
+  requse('^^ ( a b c )', U).
+
+test(requse_at_most_one_of_group,
+     [true(U == [at_most_one_of_group([required(a), required(b)])])]) :-
+  requse('?? ( a b )', U).
+
+test(requse_nested_xor_in_conditional,
+     [true(U == [use_conditional_group(positive, x, test://e,
+                   [exactly_one_of_group([required(a), required(b)])])])]) :-
+  requse('x? ( ^^ ( a b ) )', U).
+
+test(requse_nested_conditional_in_or,
+     [true(U == [any_of_group([use_conditional_group(positive, x, test://e,
+                                 [required(a)]),
+                               required(b)])])]) :-
+  requse('|| ( x? ( a ) b )', U).
+
+test(requse_blocking_inside_group,
+     [true(U == [exactly_one_of_group([required(a), blocking(b)])])]) :-
+  requse('^^ ( a !b )', U).
+
+:- end_tests(eapi_required_use_parsing).
+
+
+% -----------------------------------------------------------------------------
+%  EAPI LICENSE group parsing tests (issue #73)
+% -----------------------------------------------------------------------------
+%
+% PMS 8, Section 7.3: LICENSE is a dependency sequence whose leaves are
+% license names; '||' groups, all-of groups and USE-conditionals apply.
+
+:- begin_tests(eapi_license_parsing).
+
+lic(Atom, L) :-
+  atom_codes(Atom, Codes),
+  phrase(eapi:license(test://e, L), Codes, []),
+  !.
+
+test(license_single, [true(L == ['GPL-2'])]) :-
+  lic('GPL-2', L).
+
+test(license_sequence, [true(L == ['GPL-2', 'LGPL-2.1'])]) :-
+  lic('GPL-2 LGPL-2.1', L).
+
+test(license_any_of_group,
+     [true(L == [any_of_group(['GPL-2', 'BSD'])])]) :-
+  lic('|| ( GPL-2 BSD )', L).
+
+test(license_use_conditional,
+     [true(L == [use_conditional_group(positive, doc, test://e, ['FDL-1.3'])])]) :-
+  lic('doc? ( FDL-1.3 )', L).
+
+test(license_all_of_inside_any_of,
+     [true(L == [any_of_group([all_of_group(['MIT', 'BSD']), 'GPL-2'])])]) :-
+  lic('|| ( ( MIT BSD ) GPL-2 )', L).
+
+test(license_plus_suffix, [true(L == ['GPL-2+'])]) :-
+  lic('GPL-2+', L).
+
+:- end_tests(eapi_license_parsing).
+
+
+% -----------------------------------------------------------------------------
+%  EAPI bracketed USE-dependency syntax tests (issue #73)
+% -----------------------------------------------------------------------------
+%
+% PMS 8, Section 8.3.4: 4-style USE dependencies ([flag], [-flag], [flag=],
+% [!flag=], [flag?], [!flag?]) with (+)/(-) defaults.
+
+:- begin_tests(eapi_usedep_brackets).
+
+usedeps(Atom, U) :-
+  atom_codes(Atom, Codes),
+  phrase(eapi:use_dependencies(U), Codes, []),
+  !.
+
+test(usedep_enable, [true(U == [use(enable(foo), none)])]) :-
+  usedeps('[foo]', U).
+
+test(usedep_disable, [true(U == [use(disable(foo), none)])]) :-
+  usedeps('[-foo]', U).
+
+test(usedep_equal, [true(U == [use(equal(foo), none)])]) :-
+  usedeps('[foo=]', U).
+
+test(usedep_inverse_equal, [true(U == [use(inverse(foo), none)])]) :-
+  usedeps('[!foo=]', U).
+
+test(usedep_optenable, [true(U == [use(optenable(foo), none)])]) :-
+  usedeps('[foo?]', U).
+
+test(usedep_optdisable, [true(U == [use(optdisable(foo), none)])]) :-
+  usedeps('[!foo?]', U).
+
+test(usedep_default_positive, [true(U == [use(enable(foo), positive)])]) :-
+  usedeps('[foo(+)]', U).
+
+test(usedep_default_negative, [true(U == [use(enable(foo), negative)])]) :-
+  usedeps('[foo(-)]', U).
+
+test(usedep_equal_with_default, [true(U == [use(equal(foo), positive)])]) :-
+  usedeps('[foo(+)=]', U).
+
+test(usedep_optional_with_default, [true(U == [use(optdisable(foo), negative)])]) :-
+  usedeps('[!foo(-)?]', U).
+
+test(usedep_comma_list,
+     [true(U == [use(enable(a), none),
+                 use(equal(b), none),
+                 use(optdisable(c), none)])]) :-
+  usedeps('[a,b=,!c?]', U).
+
+% Full package dependency carrying bracketed USE deps.
+test(usedep_in_package_dependency, [nondet]) :-
+  atom_codes('>=dev-libs/foo-1.2[bar=,!baz?]', Codes),
+  phrase(eapi:package_dependency(install, test://e, D), Codes, []),
+  D = package_dependency(install, no, 'dev-libs', foo, greaterequal, V, [], U),
+  eapi:version_full(V, '1.2'),
+  U == [use(equal(bar), none), use(optdisable(baz), none)].
+
+:- end_tests(eapi_usedep_brackets).
 
 
 % -----------------------------------------------------------------------------
@@ -2286,6 +2496,404 @@ test(is_cn_target_rejects_versioned, [fail]) :-
                                        version([1,0],'',4,0,[],0,'1.0'), [[],[]])).
 
 :- end_tests(query_macros).
+
+
+% =============================================================================
+%  Synthetic-rule resolver core tests (issue #73)
+% =============================================================================
+%
+% KB-independent unit tests for the resolver core, in the same spirit as the
+% synthetic scheduler tests above. The rules module exposes a synthetic rule
+% store (rules:enable_test_rules/0, rules:test_rule/2): while active,
+% rules:rule/2 resolves EXCLUSIVELY against hand-built test_rule/2 clauses,
+% so prover:prove/9, planner:plan/5 and the prove_with_fallback tier chain
+% can be exercised over tiny rule sets without a knowledge base.
+%
+% Goals are passed as BARE literals (no ?{[]} proof-context wrapper):
+% prover:canon_literal/3 canonicalizes the R://- and :Action-shaped literal
+% forms used by the production rules, but a bare atom wrapped in ?{Ctx} is
+% itself its canonical form, which would make proof/model keys diverge from
+% the body literals. Bare goals keep all keys canonical.
+
+% Replace the synthetic rule store contents with Head-Body pairs.
+issue73_rules(Pairs) :-
+  rules:enable_test_rules,
+  retractall(rules:test_rule(_, _)),
+  forall(member(H-B, Pairs), assertz(rules:test_rule(H, B))).
+
+% Wave index of the rule whose canonical head is Lit (fails when unplanned).
+issue73_wave(Plan, Lit, W) :-
+  nth1(W, Plan, Wave),
+  member(R, Wave),
+  prover:rule_head(R, Lit),
+  !.
+
+
+% -----------------------------------------------------------------------------
+%  Prover core: proof / model / cycle-break shape (issue #73)
+% -----------------------------------------------------------------------------
+
+:- begin_tests(prover_core_synthetic, [cleanup(rules:disable_test_rules)]).
+
+% A linear chain proves every literal exactly once: the model holds each
+% literal, the proof holds one rule(L) key per literal with the synthetic
+% body and dep count, and the triggers AVL is the reverse dependency index.
+test(chain_proof_model_triggers_shape) :-
+  issue73_rules([a-[b], b-[c], c-[]]),
+  prover:prove([a], t, Proof, t, Model, t, _Cons, t, Triggers),
+  get_assoc(a, Model, _),
+  get_assoc(b, Model, _),
+  get_assoc(c, Model, _),
+  get_assoc(rule(a), Proof, dep(1, [b])?_),
+  get_assoc(rule(b), Proof, dep(1, [c])?_),
+  get_assoc(rule(c), Proof, dep(0, [])?_),
+  \+ gen_assoc(assumed(_), Model, _),
+  forall(gen_assoc(K, Proof, _), K \= assumed(rule(_))),
+  get_assoc(b, Triggers, [a]),
+  get_assoc(c, Triggers, [b]).
+
+% A shared dependency (diamond) is proven once and triggers both parents.
+test(diamond_shared_dep_proved_once) :-
+  issue73_rules([a-[b, c], b-[d], c-[d], d-[]]),
+  prover:prove([a], t, Proof, t, Model, t, _Cons, t, Triggers),
+  get_assoc(rule(d), Proof, dep(0, [])?_),
+  get_assoc(d, Model, _),
+  get_assoc(d, Triggers, Dependents),
+  msort(Dependents, [b, c]).
+
+% A structural cycle yields a prover cycle-break: proof key
+% assumed(rule(Lit)) (dep count -1, body preserved for the scheduler), a
+% cycle_path witness, and assumed(Lit) in the model — while the regular
+% rule(Lit) entry remains. This is the `assumed(rule(X))` axis of the
+% assumption taxonomy, distinct from domain assumptions.
+test(structural_cycle_break_shape) :-
+  issue73_rules([a-[b], b-[a]]),
+  prover:prove([a], t, Proof, t, Model, t, _Cons, t, _Triggers),
+  get_assoc(assumed(rule(a)), Proof, dep(-1, [b])?_),
+  get_assoc(cycle_path(a), Proof, CyclePath),
+  CyclePath == [a, b, a],
+  get_assoc(assumed(a), Model, _),
+  get_assoc(rule(a), Proof, dep(1, [b])?_),
+  get_assoc(rule(b), Proof, dep(1, [a])?_),
+  get_assoc(b, Model, _).
+
+% An RDEPEND-mediated cycle (a :run step on the cycle path) is classified
+% benign by heuristic:cycle_benign/2: no cycle-break assumption of any kind
+% is recorded.
+test(benign_run_cycle_no_assumption) :-
+  issue73_rules([(p:run)-[q:run], (q:run)-[p:run]]),
+  prover:prove([p:run], t, Proof, t, Model, t, _Cons, t, _Triggers),
+  get_assoc(p:run, Model, _),
+  get_assoc(q:run, Model, _),
+  \+ gen_assoc(assumed(_), Model, _),
+  forall(gen_assoc(K, Proof, _), K \= assumed(rule(_))).
+
+% A domain assumption (assumed/1 emitted by a rule body) is stored under the
+% proof key rule(assumed(X)) — the OTHER axis of the assumption taxonomy —
+% and never as a prover cycle-break key.
+test(domain_assumption_shape) :-
+  issue73_rules([p-[assumed(q)], assumed(_)-[]]),
+  prover:prove([p], t, Proof, t, Model, t, _Cons, t, _Triggers),
+  get_assoc(rule(p), Proof, dep(1, [assumed(q)])?_),
+  get_assoc(rule(assumed(q)), Proof, dep(0, [])?_),
+  get_assoc(assumed(q), Model, _),
+  \+ get_assoc(assumed(rule(q)), Proof, _),
+  \+ get_assoc(cycle_path(q), Proof, _).
+
+% naf/1 conflict detection: a body requiring both naf(q) and q has no model.
+test(naf_conflict_fails, [fail]) :-
+  issue73_rules([p-[naf(q), q], naf(_)-[], q-[]]),
+  prover:prove([p], t, _Proof, t, _Model, t, _Cons, t, _Triggers).
+
+% constraint/1 body literals are routed to the constraint store: they never
+% appear in the model or the triggers, but the head's dep body retains them
+% and the value lands in the constraint AVL.
+test(constraint_routed_to_store) :-
+  issue73_rules([p-[constraint(k:{hello})]]),
+  prover:prove([p], t, Proof, t, Model, t, Cons, t, Triggers),
+  get_assoc(rule(p), Proof, dep(1, [constraint(k:{hello})])?_),
+  get_assoc(k, Cons, hello),
+  \+ gen_assoc(constraint(_), Model, _),
+  \+ gen_assoc(constraint(_), Triggers, _).
+
+:- end_tests(prover_core_synthetic).
+
+
+% -----------------------------------------------------------------------------
+%  Planner: wave-ordering invariants over synthetic proofs (issue #73)
+% -----------------------------------------------------------------------------
+
+:- begin_tests(planner_waves_synthetic, [cleanup(rules:disable_test_rules)]).
+
+% Helper: prove Goals over the active synthetic rule set and plan the proof.
+issue73_plan(Goals, Plan, Remainder) :-
+  prover:prove(Goals, t, Proof, t, _Model, t, _Cons, t, Triggers),
+  planner:plan(Proof, Triggers, t, Plan, Remainder).
+
+% A linear chain plans leaf-first, one rule per wave, empty remainder.
+test(chain_waves_dependency_order) :-
+  issue73_rules([a-[b], b-[c], c-[]]),
+  issue73_plan([a], Plan, Remainder),
+  Remainder == [],
+  issue73_wave(Plan, c, W1),
+  issue73_wave(Plan, b, W2),
+  issue73_wave(Plan, a, W3),
+  W1 < W2, W2 < W3.
+
+% Diamond: independent siblings share a wave; the wave invariant holds
+% (every non-constraint body dep sits in a strictly earlier wave).
+test(diamond_siblings_share_wave_and_invariant_holds) :-
+  issue73_rules([a-[b, c], b-[d], c-[d], d-[]]),
+  issue73_plan([a], Plan, Remainder),
+  Remainder == [],
+  issue73_wave(Plan, d, WD),
+  issue73_wave(Plan, b, WB),
+  issue73_wave(Plan, c, WC),
+  issue73_wave(Plan, a, WA),
+  WB =:= WC,
+  WD < WB, WB < WA,
+  forall(( nth1(W, Plan, Wave), member(R, Wave),
+           prover:rule_body(R, Body), member(Dep, Body),
+           \+ constraint:is_constraint(Dep) ),
+         ( prover:canon_literal(Dep, DepLit, _),
+           issue73_wave(Plan, DepLit, WDep),
+           WDep < W )).
+
+% A cycle keeps its members (and everything depending on them) out of the
+% wave plan: they are returned as the remainder for the scheduler, while
+% the acyclic portion is still planned.
+test(cycle_members_stay_in_remainder) :-
+  issue73_rules([top-[a, x], a-[b], b-[a], x-[]]),
+  issue73_plan([top], Plan, Remainder),
+  issue73_wave(Plan, x, _),
+  \+ issue73_wave(Plan, a, _),
+  \+ issue73_wave(Plan, b, _),
+  \+ issue73_wave(Plan, top, _),
+  findall(H, ( member(R, Remainder), prover:rule_head(R, H) ), Heads0),
+  msort(Heads0, Heads),
+  Heads == [a, b, top].
+
+% Domain assumptions are planned like ordinary heads: the assumed literal
+% is a wave-1 leaf and its consumer lands strictly later.
+test(domain_assumption_planned_before_consumer) :-
+  issue73_rules([p-[assumed(q)], assumed(_)-[]]),
+  issue73_plan([p], Plan, Remainder),
+  Remainder == [],
+  issue73_wave(Plan, assumed(q), W1),
+  issue73_wave(Plan, p, W2),
+  W1 < W2.
+
+% Constraint body literals are not ordering edges: a head whose body is
+% only constraints is immediately ready (wave 1).
+test(constraint_deps_do_not_block_readiness) :-
+  issue73_rules([p-[constraint(k:{v})]]),
+  issue73_plan([p], Plan, Remainder),
+  Remainder == [],
+  issue73_wave(Plan, p, 1).
+
+:- end_tests(planner_waves_synthetic).
+
+
+% -----------------------------------------------------------------------------
+%  Pipeline: prove_with_fallback tier selection (issue #73)
+% -----------------------------------------------------------------------------
+%
+% The 5-tier committed-choice relaxation chain (strict, keyword_acceptance,
+% blockers, unmask, keyword_unmask) is exercised with stubbed failures:
+% guarded test_rule/2 clauses succeed only under specific prover:assuming/1
+% flags, and a marker literal in the body records which tier produced the
+% accepted model.
+
+:- begin_tests(pipeline_fallback_tiers, [cleanup(rules:disable_test_rules)]).
+
+test(strict_tier_succeeds_without_flags) :-
+  issue73_rules([s-[]]),
+  pipeline:prove_with_fallback([s], _Proof, Model, _Triggers),
+  get_assoc(s, Model, _).
+
+% Tier order: keyword_acceptance is tried before blockers, so a goal
+% provable under either resolves under keyword_acceptance.
+test(keyword_acceptance_preferred_over_blockers) :-
+  issue73_rules([marker(_)-[]]),
+  assertz((rules:test_rule(k1, [marker(keyword)]) :-
+             prover:assuming(keyword_acceptance))),
+  assertz((rules:test_rule(k1, [marker(blockers)]) :-
+             prover:assuming(blockers))),
+  pipeline:prove_with_fallback([k1], _Proof, Model, _Triggers),
+  get_assoc(marker(keyword), Model, _),
+  \+ get_assoc(marker(blockers), Model, _).
+
+test(blockers_tier_reached_when_keyword_insufficient) :-
+  issue73_rules([marker(_)-[]]),
+  assertz((rules:test_rule(k2, [marker(blockers)]) :-
+             prover:assuming(blockers))),
+  pipeline:prove_with_fallback([k2], _Proof, Model, _Triggers),
+  get_assoc(marker(blockers), Model, _).
+
+% The unmask tier sets ONLY unmask (no keyword_acceptance); the guard
+% rejects the final keyword_unmask tier, so success proves tier 4 ran.
+test(unmask_tier_sets_only_unmask) :-
+  issue73_rules([marker(_)-[]]),
+  assertz((rules:test_rule(k3, [marker(unmask)]) :-
+             prover:assuming(unmask),
+             \+ prover:assuming(keyword_acceptance))),
+  pipeline:prove_with_fallback([k3], _Proof, Model, _Triggers),
+  get_assoc(marker(unmask), Model, _).
+
+% The final tier sets keyword_acceptance AND unmask together.
+test(keyword_unmask_tier_sets_both_flags) :-
+  issue73_rules([marker(_)-[]]),
+  assertz((rules:test_rule(k4, [marker(both)]) :-
+             prover:assuming(keyword_acceptance),
+             prover:assuming(unmask))),
+  pipeline:prove_with_fallback([k4], _Proof, Model, _Triggers),
+  get_assoc(marker(both), Model, _).
+
+% When no tier can prove the goal, the chain fails deterministically.
+test(all_tiers_exhausted_fails, [fail]) :-
+  issue73_rules([]),
+  pipeline:prove_with_fallback([nope], _Proof, _Model, _Triggers).
+
+% prove_plan_with_fallback/6 reports the tier that succeeded and still
+% produces a wave-ordered plan (marker leaf before its consumer).
+test(prove_plan_with_fallback_reports_tier, [true(Used == keyword_acceptance)]) :-
+  issue73_rules([marker(_)-[]]),
+  assertz((rules:test_rule(k5, [marker(keyword)]) :-
+             prover:assuming(keyword_acceptance))),
+  pipeline:prove_plan_with_fallback([k5], _Proof, _Model, Plan, _Triggers, Used),
+  issue73_wave(Plan, marker(keyword), W1),
+  issue73_wave(Plan, k5, W2),
+  W1 < W2.
+
+test(prove_plan_with_fallback_strict_reports_false, [true(Used == false)]) :-
+  issue73_rules([s2-[]]),
+  pipeline:prove_plan_with_fallback([s2], _Proof, _Model, _Plan, _Triggers, Used).
+
+% The assuming/1 flags are scoped to the fallback attempt: none survive.
+test(assuming_flags_restored_after_fallback) :-
+  issue73_rules([marker(_)-[]]),
+  assertz((rules:test_rule(k6, [marker(both)]) :-
+             prover:assuming(keyword_acceptance),
+             prover:assuming(unmask))),
+  pipeline:prove_with_fallback([k6], _Proof, _Model, _Triggers),
+  \+ prover:assuming(keyword_acceptance),
+  \+ prover:assuming(blockers),
+  \+ prover:assuming(unmask).
+
+:- end_tests(pipeline_fallback_tiers).
+
+
+% -----------------------------------------------------------------------------
+%  Assumption classification: polarity table (issue #73)
+% -----------------------------------------------------------------------------
+%
+% Table-driven tests for assumption:assumption_type/2 and
+% assumption:assumption_reason_type/2, organized by the polarity taxonomy
+% from the project rules:
+%   - positive / actionable: a config change resolves the plan
+%     (unmask, accept ~arch, accept license, resolve blocker)
+%   - negative / blocking: structurally unsatisfiable as stated
+%   - cycle axis: prover cycle-breaks, a separate benign axis
+%   - info: bookkeeping types (assumed installed/running)
+
+:- begin_tests(assumption_polarity).
+
+% assumption_type_vector(Polarity, Term, ExpectedType)
+
+% POSITIVE / actionable
+assumption_type_vector(positive,
+  portage://'app-misc/x-1.0':unmask,
+  masked).
+assumption_type_vector(positive,
+  grouped_package_dependency(no, 'dev-libs', foo, []):install?{[assumption_reason(masked)]},
+  masked_dependency).
+assumption_type_vector(positive,
+  grouped_package_dependency(no, 'dev-libs', foo, []):install?{[assumption_reason(keyword_filtered)]},
+  keyword_filtered_dependency).
+assumption_type_vector(positive,
+  blocker(weak, run, 'app-misc', x, none, version_none, []),
+  blocker_assumption).
+
+% NEGATIVE / blocking
+assumption_type_vector(negative,
+  grouped_package_dependency(no, 'dev-libs', foo, []):install,
+  non_existent_dependency).
+assumption_type_vector(negative,
+  package_dependency(install, no, 'dev-libs', foo, none, version_none, [], []):install,
+  non_existent_dependency).
+assumption_type_vector(negative,
+  grouped_package_dependency(no, 'dev-libs', foo, []):install?{[assumption_reason(missing)]},
+  missing_dependency).
+assumption_type_vector(negative,
+  grouped_package_dependency(no, 'dev-libs', foo, []):install?{[assumption_reason(version_no_candidate(any, []))]},
+  version_no_candidate_dependency).
+assumption_type_vector(negative,
+  grouped_package_dependency(no, 'dev-libs', foo, []):install?{[assumption_reason(version_conflict(x))]},
+  version_conflict_dependency).
+assumption_type_vector(negative,
+  grouped_package_dependency(no, 'dev-libs', foo, []):install?{[assumption_reason(unsatisfied_constraints)]},
+  unsatisfied_constraints_dependency).
+
+% CYCLE axis (benign, separate from domain assumptions)
+assumption_type_vector(cycle, cycle_break(foo),                                cycle_break).
+assumption_type_vector(cycle, required(flag),                                  use_requirement_cycle).
+assumption_type_vector(cycle, blocking(flag),                                  use_requirement_cycle).
+assumption_type_vector(cycle, use_conditional_group(positive, f, portage://'a/b-1', []),
+                              use_conditional_cycle).
+assumption_type_vector(cycle, any_of_group([]),                                dependency_group_cycle).
+assumption_type_vector(cycle, all_of_group([]),                                dependency_group_cycle).
+assumption_type_vector(cycle, exactly_one_of_group([]),                        dependency_group_cycle).
+assumption_type_vector(cycle, at_most_one_of_group([]),                        dependency_group_cycle).
+assumption_type_vector(cycle, naf(foo),                                        naf_cycle).
+
+% INFO (bookkeeping). Note: grouped_package_dependency(_,_,_,_):install/run
+% classify as non_existent_dependency (the arity-4 catch-all precedes the
+% action-specific clauses in assumption.pl), so only the concrete
+% R://Entry:Action forms are info-classified.
+assumption_type_vector(info, portage://'app-misc/x-1.0':install,               assumed_installed).
+assumption_type_vector(info, portage://'app-misc/x-1.0':run,                   assumed_running).
+
+% Catch-all
+assumption_type_vector(other, completely_unknown_term(42),                     other).
+
+check_assumption_vectors(Polarity) :-
+  forall(assumption_type_vector(Polarity, Term, Expected),
+         ( assumption:assumption_type(Term, Got),
+           Got == Expected )).
+
+test(positive_actionable_vectors) :- check_assumption_vectors(positive).
+test(negative_blocking_vectors)   :- check_assumption_vectors(negative).
+test(cycle_axis_vectors)          :- check_assumption_vectors(cycle).
+test(info_vectors)                :- check_assumption_vectors(info).
+test(other_fallthrough_vector)    :- check_assumption_vectors(other).
+
+% Classification is total and deterministic over all table entries.
+test(assumption_type_deterministic) :-
+  forall(assumption_type_vector(_, Term, _),
+         ( findall(T, assumption:assumption_type(Term, T), [_]) )).
+
+% assumption_reason_type/2: full reason -> bucket table.
+test(assumption_reason_type_table) :-
+  forall(member(Reason-Type,
+                [ missing                      - missing_dependency,
+                  masked                       - masked_dependency,
+                  keyword_filtered             - keyword_filtered_dependency,
+                  installed_required           - installed_required_dependency,
+                  slot_unsatisfied             - slot_unsatisfied_dependency,
+                  version_no_candidate(any,[]) - version_no_candidate_dependency,
+                  version_no_candidate         - version_no_candidate_dependency,
+                  version_conflict(x)          - version_conflict_dependency,
+                  version_conflict             - version_conflict_dependency,
+                  version_unsatisfied          - version_no_candidate_dependency,
+                  unsatisfied_constraints      - unsatisfied_constraints_dependency ]),
+         ( assumption:assumption_reason_type(Reason, Got),
+           Got == Type )).
+
+% Unknown reasons have no bucket (callers fall back explicitly).
+test(assumption_reason_type_unknown_fails, [fail]) :-
+  assumption:assumption_reason_type(no_such_reason, _).
+
+:- end_tests(assumption_polarity).
 
 
 % =============================================================================
