@@ -15,6 +15,7 @@ Architecture:
 
   Source/Printer/
     Plan/
+      annotation.pl   module annotation  — single-pass proof annotation collector
       assumption.pl   module assumption  — assumption classification
       warning.pl      module warning     — warnings, suggestions, bugreports
       cycle.pl        module cycle       — cycle explanation + DFS/BFS

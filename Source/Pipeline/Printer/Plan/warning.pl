@@ -41,9 +41,11 @@ warning:unwrap_ctx(Ctx0, Ctx) :-
 %  Print warnings
 % -----------------------------------------------------------------------------
 
-%! warning:print_warnings(+ModelAVL, +ProofAVL, +TriggersAVL)
+%! warning:print_warnings(+ModelAVL, +Annotations, +ProofAVL, +TriggersAVL)
 %
-% Prints assumptions found in the proof/model.
+% Prints assumptions found in the proof/model. Annotations is the
+% proof_annotations record produced by annotation:collect/2 (single-pass
+% proof traversal); ProofAVL is still needed for cycle explanations.
 %
 % There are two distinct assumption mechanisms in this codebase:
 %
@@ -60,17 +62,15 @@ warning:unwrap_ctx(Ctx0, Ctx) :-
 %   These are "cycle breaks" (not domain facts). The printer explains them using
 %   the Triggers graph to show a cycle path.
 
-warning:print_warnings(ModelAVL, ProofAVL, TriggersAVL) :-
+warning:print_warnings(ModelAVL, Annotations, ProofAVL, TriggersAVL) :-
   once((assoc:gen_assoc(Key, ModelAVL, _), Key = assumed(_))),
   !,
   nl,
-  findall(Content, (assoc:gen_assoc(rule(assumed(Content)), ProofAVL, _)), DomainAssumptions0),
-  sort(DomainAssumptions0, DomainAssumptions),
-  findall(Content, (assoc:gen_assoc(assumed(rule(Content)), ProofAVL, _)), CycleAssumptions0),
-  sort(CycleAssumptions0, CycleAssumptions),
+  annotation:domain_assumptions(Annotations, DomainAssumptions),
+  annotation:cycle_break_contents(Annotations, CycleAssumptions),
   partition(warning:is_blocker_assumption, DomainAssumptions, BlockerAssumptions, NonBlockerAssumptions),
   % 1. Suggestions/assumptions section first
-  warning:print_suggestions_section(NonBlockerAssumptions, BlockerAssumptions, ProofAVL),
+  warning:print_suggestions_section(NonBlockerAssumptions, BlockerAssumptions, Annotations),
   % 2. Blockers second
   warning:print_blockers_section(BlockerAssumptions),
   % 3. Domain assumptions (with Error banner)
@@ -146,9 +146,9 @@ warning:print_warnings(ModelAVL, ProofAVL, TriggersAVL) :-
   nl,
   message:color(normal),nl.
 
-warning:print_warnings(_, ProofAVL, _) :-
+warning:print_warnings(_, Annotations, _, _) :-
   !,
-  warning:print_suggestions_section([], [], ProofAVL),
+  warning:print_suggestions_section([], [], Annotations),
   nl.
 
 
@@ -265,16 +265,16 @@ warning:print_blocker_line(Strength, Phase, BlockAtom, RequiredBy) :-
 %  Suggestions section (actionable output)
 % -----------------------------------------------------------------------------
 
-%! warning:print_suggestions_section(+NonBlockerAssumptions, +BlockerAssumptions, +ProofAVL)
+%! warning:print_suggestions_section(+NonBlockerAssumptions, +BlockerAssumptions, +Annotations)
 %
 % Collects all suggestion(...) tags from both domain assumptions and
-% fully resolved proof entries, then prints an actionable summary.
+% the proof annotations record, then prints an actionable summary.
 
-warning:print_suggestions_section(NonBlockerAssumptions, _BlockerAssumptions, ProofAVL) :-
-  warning:collect_keyword_suggestions(NonBlockerAssumptions, ProofAVL, KwSuggestions),
-  warning:collect_unmask_suggestions(NonBlockerAssumptions, ProofAVL, UnmaskSuggestions),
-  warning:collect_license_suggestions(ProofAVL, LicenseSuggestions),
-  warning:collect_use_change_suggestions(ProofAVL, UseSuggestions),
+warning:print_suggestions_section(NonBlockerAssumptions, _BlockerAssumptions, Annotations) :-
+  warning:collect_keyword_suggestions(NonBlockerAssumptions, Annotations, KwSuggestions),
+  warning:collect_unmask_suggestions(NonBlockerAssumptions, Annotations, UnmaskSuggestions),
+  warning:collect_license_suggestions(Annotations, LicenseSuggestions),
+  warning:collect_use_change_suggestions(Annotations, UseSuggestions),
   ( KwSuggestions == [], UnmaskSuggestions == [], LicenseSuggestions == [],
     UseSuggestions == [] ->
       true
@@ -287,12 +287,12 @@ warning:print_suggestions_section(NonBlockerAssumptions, _BlockerAssumptions, Pr
     warning:print_use_change_suggestions(UseSuggestions)
   ).
 
-%! warning:collect_keyword_suggestions(+Assumptions, +ProofAVL, -Suggestions)
+%! warning:collect_keyword_suggestions(+Assumptions, +Annotations, -Suggestions)
 %
 % Gathers keyword acceptance suggestions from both domain assumptions
 % and fully resolved proof entries tagged with suggestion(accept_keyword, _).
 
-warning:collect_keyword_suggestions(Assumptions, ProofAVL, Suggestions) :-
+warning:collect_keyword_suggestions(Assumptions, Annotations, Suggestions) :-
   % From domain assumptions (legacy fallback)
   findall(kw(C, N, K),
           ( member(Content, Assumptions),
@@ -300,12 +300,9 @@ warning:collect_keyword_suggestions(Assumptions, ProofAVL, Suggestions) :-
           ),
           Suggestions1),
   % From fully resolved proof entries (keyword_acceptance fallback)
+  annotation:keywords(Annotations, ProofKeywords),
   findall(kw(C, N, K),
-          ( assoc:gen_assoc(rule(Repo://Entry:_Action), ProofAVL, _?Ctx),
-            is_list(Ctx),
-            memberchk(suggestion(accept_keyword, K), Ctx),
-            cache:ordered_entry(Repo, Entry, C, N, _)
-          ),
+          member(accept_keyword(_R, _E, C, N, K), ProofKeywords),
           Suggestions2),
   append(Suggestions1, Suggestions2, Suggestions0),
   sort(Suggestions0, Suggestions).
@@ -320,12 +317,12 @@ warning:assumption_has_keyword_suggestion(Content, C, N, K) :-
   memberchk(suggestion(accept_keyword, K), Ctx),
   !.
 
-%! warning:collect_unmask_suggestions(+Assumptions, +ProofAVL, -Suggestions)
+%! warning:collect_unmask_suggestions(+Assumptions, +Annotations, -Suggestions)
 %
 % Gathers package unmask suggestions from both domain assumptions
 % and fully resolved proof entries tagged with suggestion(unmask, _).
 
-warning:collect_unmask_suggestions(Assumptions, ProofAVL, Suggestions) :-
+warning:collect_unmask_suggestions(Assumptions, Annotations, Suggestions) :-
   % From domain assumptions (legacy fallback)
   findall(unmask(R, E, C, N),
           ( member(Content, Assumptions),
@@ -333,32 +330,18 @@ warning:collect_unmask_suggestions(Assumptions, ProofAVL, Suggestions) :-
           ),
           Suggestions1),
   % From fully resolved proof entries (package.mask / unmask fallback only)
-  findall(unmask(Repo, Entry, C, N),
-          ( assoc:gen_assoc(rule(Repo://Entry:_Action), ProofAVL, _?Ctx0),
-            warning:unwrap_ctx(Ctx0, Ctx),
-            memberchk(suggestion(unmask, _), Ctx),
-            \+ memberchk(suggestion(accept_license, _), Ctx),
-            cache:ordered_entry(Repo, Entry, C, N, _)
-          ),
-          Suggestions2),
+  annotation:unmasks(Annotations, Suggestions2),
   append(Suggestions1, Suggestions2, Suggestions0),
   sort(Suggestions0, Suggestions).
 
 
-%! warning:collect_license_suggestions(+ProofAVL, -Suggestions)
+%! warning:collect_license_suggestions(+Annotations, -Suggestions)
 %
 % Gathers license acceptance suggestions from proof entries tagged with
 % suggestion(accept_license, _).
 
-warning:collect_license_suggestions(ProofAVL, Suggestions) :-
-  findall(accept_license(Repo, Entry, C, N),
-          ( assoc:gen_assoc(rule(Repo://Entry:_Action), ProofAVL, _?Ctx0),
-            warning:unwrap_ctx(Ctx0, Ctx),
-            memberchk(suggestion(accept_license, _), Ctx),
-            cache:ordered_entry(Repo, Entry, C, N, _)
-          ),
-          Suggestions0),
-  sort(Suggestions0, Suggestions).
+warning:collect_license_suggestions(Annotations, Suggestions) :-
+  annotation:licenses(Annotations, Suggestions).
 
 
 %! warning:print_license_suggestions(+Suggestions)
@@ -472,22 +455,18 @@ warning:keyword_atom(K, K).
 %  USE change suggestions (autounmask-use)
 % -----------------------------------------------------------------------------
 
-%! warning:collect_use_change_suggestions(+ProofAVL, -Suggestions)
+%! warning:collect_use_change_suggestions(+Annotations, -Suggestions)
 %
-% Collects USE change suggestions from the proof: both from
+% Collects USE change suggestions from the proof annotations: both from
 % suggestion(use_change, ...) tags and from build_with_use contexts
 % where the effective USE differs from the requested state.
 
-warning:collect_use_change_suggestions(ProofAVL, Suggestions) :-
-  findall(use_sugg(C, N, Entry, Changes),
-          ( assoc:gen_assoc(rule(R://E:_A), ProofAVL, _?Ctx),
-            is_list(Ctx),
-            memberchk(suggestion(use_change, _, Changes), Ctx),
-            cache:ordered_entry(R, E, C, N, _),
-            Entry = R://E
-          ),
+warning:collect_use_change_suggestions(Annotations, Suggestions) :-
+  annotation:use_changes(Annotations, ProofUseChanges),
+  findall(use_sugg(C, N, R://E, Changes),
+          member(use_change(R, E, C, N, Changes), ProofUseChanges),
           Suggestions1),
-  warning:collect_use_changes(ProofAVL, BWUChanges),
+  annotation:bwu_changes(Annotations, BWUChanges),
   findall(use_sugg(C2, N2, Entry2, Changes2),
           ( member(use_change(Entry2, Enables, Disables), BWUChanges),
             Entry2 = R2://E2,
@@ -520,70 +499,6 @@ warning:print_use_change_suggestions(UseSuggestions) :-
          )),
   message:color(normal),
   nl.
-
-
-% -----------------------------------------------------------------------------
-%  USE changes (legacy build_with_use scan)
-% -----------------------------------------------------------------------------
-
-%! warning:print_use_changes(+ProofAVL)
-%
-% Walks the proof and reports packages where the build_with_use context
-% requires USE flag changes that differ from the current effective USE.
-% Now integrated into the Assumptions section; this predicate is kept
-% for backward compatibility but delegates to the suggestions section.
-
-warning:print_use_changes(_ProofAVL).
-
-%! warning:collect_use_changes(+ProofAVL, -UseChanges)
-%
-% Walks the proof for build_with_use contexts and collects entries
-% where the effective USE differs from the requested state.
-
-warning:collect_use_changes(ProofAVL, UseChanges) :-
-  findall(use_change(Entry, Enables, Disables),
-          ( assoc:gen_assoc(Key, ProofAVL, _),
-            warning:proof_key_use_changes(Key, Entry, Enables, Disables),
-            ( Enables \== [] ; Disables \== [] )
-          ),
-          Changes0),
-  sort(Changes0, UseChanges).
-
-%! warning:proof_key_use_changes(+Key, -Entry, -NeedEnable, -NeedDisable)
-%
-% For a proof key with build_with_use context, computes which USE flags
-% need enabling or disabling relative to the effective USE set.
-
-warning:proof_key_use_changes(Key, Entry, NeedEnable, NeedDisable) :-
-  warning:proof_key_bwu_context(Key, Repo, Id, En, Dis),
-  Entry = Repo://Id,
-  use:entry_effective_use_set(Repo://Id, EffEnabled),
-  findall(U, ( member(U, En), \+ memberchk(U, EffEnabled) ), NeedEnable0),
-  findall(U, ( member(U, Dis), memberchk(U, EffEnabled) ), NeedDisable0),
-  sort(NeedEnable0, NeedEnable),
-  sort(NeedDisable0, NeedDisable).
-
-%! warning:proof_key_bwu_context(+Key, -Repo, -Id, -Enable, -Disable)
-%
-% Extracts build_with_use enable/disable lists from a proof key context.
-
-warning:proof_key_bwu_context(Repo://Id:_Action?{Ctx0}, Repo, Id, En, Dis) :-
-  warning:unwrap_ctx(Ctx0, Ctx),
-  memberchk(build_with_use:use_state(En, Dis), Ctx),
-  !.
-
-%! warning:print_use_change_lines(+Changes)
-%
-% Prints USE change lines in package.use format (=entry flag1 -flag2 ...).
-
-warning:print_use_change_lines([]) :- !.
-warning:print_use_change_lines([use_change(Entry, Enables, Disables)|Rest]) :-
-  findall(A, ( member(U, Enables), atom_string(U, A) ), PosAtoms),
-  findall(A, ( member(U, Disables), format(atom(A), '-~w', [U]) ), NegAtoms),
-  append(PosAtoms, NegAtoms, AllFlags),
-  atomic_list_concat(AllFlags, ' ', FlagsStr),
-  format('    =~w ~w~n', [Entry, FlagsStr]),
-  warning:print_use_change_lines(Rest).
 
 
 % -----------------------------------------------------------------------------

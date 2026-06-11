@@ -58,18 +58,18 @@ plan:print(Target, ModelAVL, ProofAVL, Plan, TriggersAVL) :-
 %! plan:print(+Target, +ModelAVL, +ProofAVL, +Plan, +Call, +TriggersAVL)
 
 plan:print(Target, ModelAVL, ProofAVL, Plan, Call, TriggersAVL) :-
-  plan:blocker_note_map(ProofAVL, BlockerNotes),
+  annotation:collect(ProofAVL, Annotations),
+  annotation:blocker_notes(Annotations, BlockerNotes),
   setup_call_cleanup(nb_setval(printer_blocker_notes, BlockerNotes),
     ( plan:resolve_print_target(Target, ProofAVL, TargetPrint, TargetHeader),
       plan:print_header(TargetHeader),
-      plan:collect_plan_pre_actions(ProofAVL, PreActions),
+      annotation:pre_actions(Annotations, PreActions),
       plan:print_plan_pre_actions(PreActions, 0, PreSteps),
-      plan:inject_cycle_break_verifies(ProofAVL, Plan, AugmentedPlan),
+      plan:inject_cycle_break_verifies(Annotations, Plan, AugmentedPlan),
       plan:print_body(TargetPrint, AugmentedPlan, Call, PreSteps, Steps),
       plan:print_footer(AugmentedPlan, ModelAVL, Steps, PreActions),
       plan:print_scc_decomposition,
-      warning:print_warnings(ModelAVL, ProofAVL, TriggersAVL),
-      warning:print_use_changes(ProofAVL)
+      warning:print_warnings(ModelAVL, Annotations, ProofAVL, TriggersAVL)
     ),
     nb_delete(printer_blocker_notes)).
 
@@ -137,42 +137,10 @@ plan:chosen_candidate_from_body(uninstall, Body, Repo, Ebuild) :-
 % =============================================================================
 %  Blocker note annotations
 % =============================================================================
-
-plan:blocker_note_map(ProofAVL, Notes) :-
-  empty_assoc(Empty),
-  findall(K-V,
-          ( assoc:gen_assoc(rule(assumed(Content0)), ProofAVL, _),
-            plan:blocker_assumption_term(Content0, Strength, Phase, C, N, Origin),
-            K = key(C,N,Phase),
-            V = note(Strength, Origin)
-          ),
-          Pairs0),
-  sort(Pairs0, Pairs),
-  foldl(plan:blocker_note_put, Pairs, Empty, Notes).
-
-plan:blocker_note_put(K-V, In, Out) :-
-  ( get_assoc(K, In, _) ->
-      Out = In
-  ; put_assoc(K, In, V, Out)
-  ).
-
-plan:blocker_assumption_term(Content0, Strength, Phase, C, N, Origin) :-
-  ( Content0 = '?'(blocker(Strength, Phase, C, N, _O, _V, _SlotReq), Ctx0),
-    ( is_list(Ctx0) ->
-        Ctx = Ctx0
-    ; Ctx0 = {InnerList}, is_list(InnerList) ->
-        Ctx = InnerList
-    ; Ctx = []
-    ),
-    ( memberchk(self(Origin), Ctx) -> true ; Origin = unknown )
-  )
-  ;
-  ( Content0 = blocker(Strength, Phase, C, N, _O2, _V2, _SlotReq2),
-    Origin = unknown
-  ),
-  ( Strength == weak ; Strength == strong ),
-  ( Phase == install ; Phase == run ).
-
+%
+% The blocker note map itself is built by annotation:collect/2 (single-pass
+% proof traversal) and stashed in the printer_blocker_notes global by
+% plan:print/6.
 
 %! plan:format_blocker_origin(+Origin)
 %
@@ -2102,62 +2070,17 @@ plan:print_body(Target, Plan, Call, StartStep, Steps) :-
 % -----------------------------------------------------------------------------
 %  Pre-actions: unmask / license / keyword / USE-change before the plan
 % -----------------------------------------------------------------------------
-
-%! plan:collect_plan_pre_actions(+ProofAVL, -PreActions)
 %
-% Collects unmask, license, keyword, and USE-change actions from the proof
-% that should be shown as pre-plan steps.
+% Pre-actions are collected by annotation:collect/2 (single-pass proof
+% traversal) and exposed via annotation:pre_actions/2.
 
-plan:collect_plan_pre_actions(ProofAVL, PreActions) :-
-  findall(unmask(R, E, C, N),
-          ( assoc:gen_assoc(rule(R://E:_A), ProofAVL, _?Ctx),
-            is_list(Ctx),
-            memberchk(suggestion(unmask, _), Ctx),
-            cache:ordered_entry(R, E, C, N, _)
-          ),
-          Unmasks0),
-  sort(Unmasks0, Unmasks),
-  findall(accept_license(R, E, C, N),
-          ( assoc:gen_assoc(rule(R://E:_A1), ProofAVL, _?Ctx1),
-            is_list(Ctx1),
-            memberchk(suggestion(accept_license, _), Ctx1),
-            cache:ordered_entry(R, E, C, N, _)
-          ),
-          Licenses0),
-  sort(Licenses0, Licenses),
-  findall(accept_keyword(R, E, C, N, K),
-          ( assoc:gen_assoc(rule(R://E:_A2), ProofAVL, _?Ctx2),
-            is_list(Ctx2),
-            memberchk(suggestion(accept_keyword, K), Ctx2),
-            cache:ordered_entry(R, E, C, N, _)
-          ),
-          Keywords0),
-  sort(Keywords0, Keywords),
-  findall(use_change(R, E, C, N, Changes),
-          ( assoc:gen_assoc(rule(R://E:_A3), ProofAVL, _?Ctx3),
-            is_list(Ctx3),
-            memberchk(suggestion(use_change, _, Changes), Ctx3),
-            cache:ordered_entry(R, E, C, N, _)
-          ),
-          UseChanges0),
-  sort(UseChanges0, UseChanges),
-  append(Unmasks, Licenses, PreActions0),
-  append(PreActions0, Keywords, PreActions1),
-  append(PreActions1, UseChanges, PreActions).
-
-
-%! plan:inject_cycle_break_verifies(+ProofAVL, +Plan, -AugmentedPlan)
+%! plan:inject_cycle_break_verifies(+Annotations, +Plan, -AugmentedPlan)
 %
-% Collects prover cycle-break assumptions from the proof and injects
-% synthetic verify elements into the first plan step.
+% Takes the prover cycle-break assumptions collected by annotation:collect/2
+% and injects synthetic verify elements into the first plan step.
 
-plan:inject_cycle_break_verifies(ProofAVL, Plan, AugmentedPlan) :-
-  findall(CanonRule,
-          ( assoc:gen_assoc(assumed(rule(Lit)), ProofAVL, Value),
-            prover:canon_rule(CanonRule, assumed(rule(Lit)), Value)
-          ),
-          CycleBreaks0),
-  sort(CycleBreaks0, CycleBreaks),
+plan:inject_cycle_break_verifies(Annotations, Plan, AugmentedPlan) :-
+  annotation:cycle_break_rules(Annotations, CycleBreaks),
   ( CycleBreaks == []
   -> AugmentedPlan = Plan
   ; Plan = [FirstStep|RestSteps]
@@ -2518,11 +2441,9 @@ plan:footer_stats_from_plan(Plan, Stats) :-
 plan:footer_stats_from_step(Step, S0, S) :-
   foldl(plan:footer_stats_from_rule, Step, S0, S).
 
-plan:footer_stats_from_rule(assumed(rule(_, _)), S, S) :- !.
 plan:footer_stats_from_rule(Rule0, S0, S) :-
-  ( Rule0 = rule(HeadWithCtx, _Body)
-  ; Rule0 = rule(assumed(HeadWithCtx), _Body)
-  ),
+  prover:rule_parts(Rule0, HeadWithCtx, _Body, Kind),
+  Kind \== cycle_break,
   !,
   prover:canon_literal(HeadWithCtx, Head, _Ctx),
   plan:footer_stats_from_head(Head, S0, S).
