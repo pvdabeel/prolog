@@ -956,13 +956,23 @@ builder:git_progress_callback(_, _, _, _).
 % File sub-lines are already printed by print_job_slots; this predicate
 % only starts async curls, polls progress in-place, and updates the
 % header slot on completion.
+%
+% Binpkg rescue (portage-ng#28): when the source fetch fails (manual
+% fetch required, dead URL, mirror outage) but a USE-compatible binpkg
+% exists for this entry, the failure is downgraded to `done` so the
+% plan proceeds to the install step, where the binpkg fast path merges
+% the gpkg without needing the distfiles. The source fetch is still
+% always attempted first -- binpkgs accelerate the source pipeline,
+% they never replace it pre-emptively.
 
-builder:run_download_parallel(Repo, Entry, _Ctx, LineOff, TotalLines, PlanStep, NumSteps, ActionIdx, Action,
+builder:run_download_parallel(Repo, Entry, Ctx, LineOff, TotalLines, PlanStep, NumSteps, ActionIdx, Action,
                                FileStartLine, DistFiles, Distdir, Outcome) :-
   ( \+ exists_directory(Distdir) -> make_directory_path(Distdir) ; true ),
   ( download:is_fetch_restricted(Repo, Entry)
   -> builder:handle_restricted_files(DistFiles, 0, TotalLines, FileStartLine, Distdir, MissingCount),
      ( MissingCount =:= 0
+     -> FinalStatus = done, Outcome = done
+     ;  builder:binpkg_rescues_download(Action, Repo, Entry, Ctx)
      -> FinalStatus = done, Outcome = done
      ;  FinalStatus = failed('manual fetch required'), Outcome = failed('manual fetch required')
      )
@@ -973,11 +983,32 @@ builder:run_download_parallel(Repo, Entry, _Ctx, LineOff, TotalLines, PlanStep, 
      builder:poll_download_loop(DlJobs, TotalLines, FileStartLine, Distdir, FailCount),
      ( FailCount =:= 0
      -> FinalStatus = done, Outcome = done
+     ;  builder:binpkg_rescues_download(Action, Repo, Entry, Ctx)
+     -> FinalStatus = done, Outcome = done
      ;  FinalStatus = failed('download errors'), Outcome = failed('download errors')
      )
   ),
   with_mutex(build_display,
     build:update_slot(LineOff, TotalLines, FinalStatus, PlanStep, NumSteps, ActionIdx, Action, Repo://Entry)).
+
+
+%! builder:binpkg_rescues_download(+Action, +Repo, +Entry, +Ctx) is semidet.
+%
+% Succeeds when a failed source fetch for Repo://Entry can be tolerated
+% because a USE-compatible binpkg exists: the later install step will
+% short-circuit through `binpkg_exec:execute/6` (qmerge) and never read
+% the distfiles. Probes `binpkg_exec:available_for/4` with the same
+% proof context the install dispatch will use, so the rescue decision
+% mirrors the actual binpkg selection (USE / SLOT / KEYWORDS / subslot
+% pins).
+%
+% Only plain `download` actions qualify: `fetchonly` exists precisely
+% to obtain the sources, so a binpkg can never substitute for it. Any
+% exception from the probe (unregistered repo, missing index) degrades
+% to failure, preserving the original download error.
+
+builder:binpkg_rescues_download(download, Repo, Entry, Ctx) :-
+  catch(binpkg_exec:available_for(Repo, Entry, Ctx, _BinpkgEntryId), _, fail).
 
 
 %! builder:safe_mirror_layout(-Layout) is det.
