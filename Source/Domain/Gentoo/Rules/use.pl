@@ -83,45 +83,21 @@ feature_unification:val_hook([], use_state(En, Dis), use_state(En, Dis)) :- !.
 %
 % Determine the effective state of USE flag Use for the ebuild identified
 % by the `self/1` term in Context. State is unified with `positive` or
-% `negative`. Results are memoized in memo:eff_use_cache_/4.
+% `negative`. Delegates to effective_use_for_entry/3, which implements
+% the precedence chain and memoizes in memo:eff_use_cache_/4.
 
 use:effective_use_in_context(Context, Use, State) :-
-  memberchk(self(RepoEntry0), Context),
-  RepoEntry0 = Repo://Id,
-  \+ Use =.. [minus,_],
-  ( memo:eff_use_cache_(Repo, Id, Use, Cached) ->
-      State = Cached
-  ;
-  use:entry_iuse_default(Repo://Id, Use, Default),
-  cache:ordered_entry(Repo, Id, C, N, _),
-      ( variant:use_overridden(Use, Eff) ->
-      true
-  ; preference:profile_use_hard(Repo://Id, Use, Eff, _Reason0) ->
-      true
-  ; preference:userconfig_use(C, N, Use, positive) ->
-      Eff = positive
-  ; preference:userconfig_use(C, N, Use, negative) ->
-      Eff = negative
-  ; preference:userconfig_use_match(Repo://Id, Use, Eff0) ->
-      Eff = Eff0
-  ; preference:profile_use_soft_match(Repo://Id, Use, Eff0) ->
-      Eff = Eff0
-  ; preference:global_use(Use) ->
-      Eff = positive
-  ; preference:global_use(minus(Use)) ->
-      Eff = negative
-  ; Eff = Default
-  ),
-      assertz(memo:eff_use_cache_(Repo, Id, Use, Eff)),
-      State = Eff
-  ),
-  !.
+  memberchk(self(RepoEntry), Context),
+  use:effective_use_for_entry(RepoEntry, Use, State).
 
 %! use:effective_use_for_entry(+RepoEntry, +Use, -State)
 %
 % Like effective_use_in_context/3 but takes a direct repo entry instead
 % of extracting it from a context. Used by use_conditional_group rules
-% for the ebuild that owns the conditional.
+% for the ebuild that owns the conditional. This is the single
+% implementation of the USE precedence chain (variant override ->
+% profile force/mask -> userconfig per-CN -> userconfig match ->
+% profile soft -> global USE -> IUSE default).
 
 use:effective_use_for_entry(RepoEntry0, Use, State) :-
   RepoEntry0 = Repo://Id,

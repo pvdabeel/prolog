@@ -74,17 +74,37 @@ and obligation filtering.
 %  Obligation candidate filtering (domain hook for prover)
 % =============================================================================
 
+%! heuristic:merge_action(+Action) is semidet.
+%
+% First-argument-indexed facts enumerating the actions that represent a
+% merge transaction and therefore participate in proof obligations
+% (PDEPEND expansion). Action must be bound.
+
+heuristic:merge_action(install).
+heuristic:merge_action(update).
+heuristic:merge_action(downgrade).
+heuristic:merge_action(reinstall).
+
+
+%! heuristic:strip_ctx(+Literal, -Core) is det.
+%
+% Normalize an action literal by dropping a trailing `?{Context}` proof
+% context, yielding the bare core (e.g. `Repo://Entry:Action`).
+% Literals without a `?{Context}` wrapper pass through unchanged.
+
+heuristic:strip_ctx(Core?{_Ctx}, Core) :- !.
+heuristic:strip_ctx(Core, Core).
+
+
 %! heuristic:obligation_candidate(+Literal)
 %
 % Domain hook: succeeds when Literal is eligible for proof obligations.
 % Only install, update, downgrade, and reinstall actions generate
 % obligations; constraints, downloads, and other action types do not.
 
-heuristic:obligation_candidate(_Repo://_Entry:Action?{_Ctx}) :-
-  ( Action == install ; Action == update ; Action == downgrade ; Action == reinstall ),
-  !.
-heuristic:obligation_candidate(_Repo://_Entry:Action) :-
-  ( Action == install ; Action == update ; Action == downgrade ; Action == reinstall ),
+heuristic:obligation_candidate(Literal) :-
+  heuristic:strip_ctx(Literal, _Repo://_Entry:Action),
+  heuristic:merge_action(Action),
   !.
 
 
@@ -351,19 +371,12 @@ heuristic:cycle_benign(_Lit, CyclePath) :-
 %! heuristic:proof_obligation_key(+Literal, +Model, -HookKey) is semidet.
 %
 % Fast path: compute HookKey without dependency-model work.
+% Literal is normalized via strip_ctx/2 so bare and `?{Context}`-carrying
+% action literals share a single clause.
 
-heuristic:proof_obligation_key(Repo://Entry:Action?{_Ctx}, Model, HookKey) :-
-  ( Action == install ; Action == update ; Action == downgrade ; Action == reinstall ),
-  !,
-  AnchorCore = (Repo://Entry:Action),
-  ( cache:entry_metadata(Repo, Entry, pdepend, _) ->
-      ( get_assoc(AnchorCore, Model, AnchorCtx) -> true ; AnchorCtx = [] ),
-      use:context_build_with_use_state(AnchorCtx, B),
-      HookKey = pdepend(AnchorCore, B)
-  ; HookKey = pdepend_none(AnchorCore)
-  ).
-heuristic:proof_obligation_key(Repo://Entry:Action, Model, HookKey) :-
-  ( Action == install ; Action == update ; Action == downgrade ; Action == reinstall ),
+heuristic:proof_obligation_key(Literal, Model, HookKey) :-
+  heuristic:strip_ctx(Literal, Repo://Entry:Action),
+  heuristic:merge_action(Action),
   !,
   AnchorCore = (Repo://Entry:Action),
   ( cache:entry_metadata(Repo, Entry, pdepend, _) ->
@@ -377,29 +390,14 @@ heuristic:proof_obligation_key(Repo://Entry:Action, Model, HookKey) :-
 %! heuristic:proof_obligation_key(+Literal, +Model, -HookKey, -NeedsFullHook) is semidet.
 %
 % Extended fast path: also reports whether the full hook can produce
-% any extra literals at all.
+% any extra literals at all. Literal is normalized via strip_ctx/2.
 
-heuristic:proof_obligation_key(Repo://Entry:Action?{_Ctx}, Model, HookKey, NeedsFullHook) :-
-  ( Action == install ; Action == update ; Action == downgrade ; Action == reinstall ),
+heuristic:proof_obligation_key(Literal, Model, HookKey, NeedsFullHook) :-
+  heuristic:strip_ctx(Literal, Repo://Entry:Action),
+  heuristic:merge_action(Action),
   !,
   AnchorCore = (Repo://Entry:Action),
-  ( heuristic:proof_obligation_applicable(Repo://Entry:Action) ->
-      ( cache:entry_metadata(Repo, Entry, pdepend, _) ->
-          NeedsFullHook = true,
-          ( get_assoc(AnchorCore, Model, AnchorCtx) -> true ; AnchorCtx = [] ),
-          use:context_build_with_use_state(AnchorCtx, B),
-          HookKey = pdepend(AnchorCore, B)
-      ; NeedsFullHook = false,
-        HookKey = pdepend_none(AnchorCore)
-      )
-  ; NeedsFullHook = false,
-    HookKey = pdepend_none(AnchorCore)
-  ).
-heuristic:proof_obligation_key(Repo://Entry:Action, Model, HookKey, NeedsFullHook) :-
-  ( Action == install ; Action == update ; Action == downgrade ; Action == reinstall ),
-  !,
-  AnchorCore = (Repo://Entry:Action),
-  ( heuristic:proof_obligation_applicable(Repo://Entry:Action) ->
+  ( heuristic:proof_obligation_applicable(AnchorCore) ->
       ( cache:entry_metadata(Repo, Entry, pdepend, _) ->
           NeedsFullHook = true,
           ( get_assoc(AnchorCore, Model, AnchorCtx) -> true ; AnchorCtx = [] ),
@@ -432,31 +430,13 @@ heuristic:proof_obligation_applicable(Repo://Entry:install) :-
 
 %! heuristic:proof_obligation(+Literal, +Model, -HookKey, -ExtraLits)
 %
-% Produces extra PDEPEND goals after proving a literal.
+% Produces extra PDEPEND goals after proving a literal. Literal is
+% normalized via strip_ctx/2 so bare and `?{Context}`-carrying action
+% literals share a single clause.
 
-heuristic:proof_obligation(Repo://Entry:Action?{_Ctx}, Model, HookKey, ExtraLits) :-
-  ( Action == install ; Action == update ; Action == downgrade ; Action == reinstall ),
-  !,
-  sampler:hook_maybe_sample(
-    ( AnchorCore = (Repo://Entry:Action),
-      ( cache:entry_metadata(Repo, Entry, pdepend, _) ->
-          flag(po_has_extra, HP0, HP0+1),
-          ( get_assoc(AnchorCore, Model, AnchorCtx) -> true ; AnchorCtx = [] ),
-          use:context_build_with_use_state(AnchorCtx, B),
-          HookKey = pdepend(AnchorCore, B),
-          ModelKey = [build_with_use:B],
-          query:search(model(dependency(Pdeps0, pdepend)):config?{ModelKey}, Repo://Entry),
-          dependency:add_self_to_dep_contexts(Repo://Entry, Pdeps0, Pdeps1),
-          featureterm:drop_build_with_use_from_dep_contexts(Pdeps1, Pdeps2),
-          featureterm:add_after_only_to_dep_contexts(AnchorCore, Pdeps2, ExtraLits)
-      ; flag(po_no_extra, NP0, NP0+1),
-        HookKey = pdepend_none(AnchorCore),
-        ExtraLits = []
-      )
-    )
-  ).
-heuristic:proof_obligation(Repo://Entry:Action, Model, HookKey, ExtraLits) :-
-  ( Action == install ; Action == update ; Action == downgrade ; Action == reinstall ),
+heuristic:proof_obligation(Literal, Model, HookKey, ExtraLits) :-
+  heuristic:strip_ctx(Literal, Repo://Entry:Action),
+  heuristic:merge_action(Action),
   !,
   sampler:hook_maybe_sample(
     ( AnchorCore = (Repo://Entry:Action),
