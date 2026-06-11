@@ -165,7 +165,7 @@ planner:collect_remainder(DepCounts, PlannedHeads, ProofAVL, RemainderRules) :-
     sort(Heads0, Heads),
     findall(Rule,
             ( member(H, Heads),
-              planner:get_full_rule_from_proof(H, ProofAVL, Rule)
+              prover:rule_from_proof(H, ProofAVL, Rule)
             ),
             RemainderRules).
 
@@ -212,7 +212,7 @@ planner:decrement_and_enqueue(ProofAVL, DependentLiteral, InState, OutState) :-
         NewCount is OldCount - 1,
         put_assoc(NormalizedLiteral, InCounts, NewCount, OutCounts),
         (   NewCount =:= 0, \+ get_assoc(NormalizedLiteral, InPlanned, _) ->
-            (   get_full_rule_from_proof(NormalizedLiteral, ProofAVL, FullDependentRule)
+            (   prover:rule_from_proof(NormalizedLiteral, ProofAVL, FullDependentRule)
             ->  OutNextReady = [FullDependentRule | InNextReady],
                 put_assoc(NormalizedLiteral, InPlanned, true, OutPlanned)
             ;
@@ -229,23 +229,6 @@ planner:decrement_and_enqueue(ProofAVL, DependentLiteral, InState, OutState) :-
     ),
         OutState = state(OutCounts, OutNextReady, OutPlanned)
     ).
-
-
-%! planner:get_full_rule_from_proof(+Literal, +ProofAVL, -FullRule)
-%
-% Gets the full rule from the proof.
-
-planner:get_full_rule_from_proof(Literal, ProofAVL, FullRule) :-
-    (   ProofKey = rule(Literal),
-        get_assoc(ProofKey, ProofAVL, ProofValue)
-    ;   ProofKey = assumed(rule(Literal)),
-        get_assoc(ProofKey, ProofAVL, ProofValue)
-    ;   ProofKey = rule(assumed(Literal)),
-        get_assoc(ProofKey, ProofAVL, ProofValue)
-    ),
-    !,
-    prover:canon_rule(FullRule, ProofKey, ProofValue).
-
 
 
 %! planner:test(+Repository)
@@ -313,10 +296,7 @@ planner:test_stats(Repository, Style) :-
 planner:plan_merge_anchor(Plan, Repo://Entry, AnchorCore, Ctx) :-
   member(Step, Plan),
   member(Rule, Step),
-  ( Rule = rule(HeadWithCtx, _Body)
-  ; Rule = assumed(rule(HeadWithCtx, _Body))
-  ; Rule = rule(assumed(HeadWithCtx), _Body)
-  ),
+  prover:rule_parts(Rule, HeadWithCtx, _Body, _Kind),
   prover:canon_literal(HeadWithCtx, AnchorCore, Ctx),
   AnchorCore = (Repo://Entry:Action),
   ( Action == install ; Action == update ; Action == downgrade ; Action == reinstall ),

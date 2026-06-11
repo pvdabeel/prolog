@@ -1087,7 +1087,7 @@ prover:add_rule_triggers(HeadKey-Value, InTriggers, OutTriggers) :-
     ( prover:canon_rule(rule(Head, Body), HeadKey, Value) ; prover:canon_rule(assumed(rule(Head, Body)), HeadKey, Value) ),
     !,
     ( Value = dep(_, _)?Ctx ->
-        % `rule_parts/3` may already return a context-annotated Head (Head?{Ctx}).
+        % `canon_rule/3` may already return a context-annotated Head (Head?{Ctx}).
         % Avoid wrapping a second time, which creates nested context terms like:
         %   portage://(dev-ml/foo-1.0:run?{Ctx})?{Ctx}
         ( Head = _?{_} -> FullHead = Head
@@ -1326,11 +1326,30 @@ prover:canon_rule(rule(L,B),                    rule(L),              dep(_,B)?{
 prover:canon_rule(rule(L?{Ctx},B),              rule(L),              dep(_,B)?Ctx)  :- !.
 
 
+%! prover:rule_parts(+Rule, -HeadWithCtx, -Body, -Kind) is det
+%
+% Deterministically destructure a full-format proof rule into its raw
+% (proof-context-retaining) head, its body, and its kind. Single source of
+% truth for the three rule shapes (issue #61): use this instead of
+% open-coding the ( Rule = rule(H,B) ; Rule = assumed(rule(H,B)) ;
+% Rule = rule(assumed(H),B) ) disjunction. Clauses are ordered
+% most-specific first and committed with a cut, so a rule never yields two
+% different destructurings on backtracking (issue #36).
+%
+% Kinds (see the assumption taxonomy in the project rules):
+%   - cycle_break:       assumed(rule(X, Body))  (prover cycle-break)
+%   - domain_assumption: rule(assumed(X), Body)  (domain assumption)
+%   - regular:           rule(X, Body)           (regular rule)
+
+prover:rule_parts(assumed(rule(HeadWithCtx, Body)), HeadWithCtx, Body, cycle_break) :- !.
+prover:rule_parts(rule(assumed(HeadWithCtx), Body), HeadWithCtx, Body, domain_assumption) :- !.
+prover:rule_parts(rule(HeadWithCtx, Body), HeadWithCtx, Body, regular).
+
+
 %! prover:rule_head(+Rule, -Head) is det
 %
-% Extract the canonical head from a full-format proof rule. Deterministic:
-% clauses are ordered most-specific first and committed with a cut, so a
-% rule never yields two different heads on backtracking (issue #36).
+% Extract the canonical head from a full-format proof rule (deterministic,
+% via prover:rule_parts/4).
 %
 % Canonical head forms:
 %   - assumed(rule(X, Body))  (prover cycle-break)  -> ctx-stripped X
@@ -1340,22 +1359,40 @@ prover:canon_rule(rule(L?{Ctx},B),              rule(L),              dep(_,B)?C
 %     both retain the inner proof context.
 %   - rule(X, Body)           (regular rule)        -> ctx-stripped X
 
-prover:rule_head(assumed(rule(HeadWithCtx, _Body)), Head) :-
-  !,
-  prover:canon_literal(HeadWithCtx, Head, _).
-prover:rule_head(rule(assumed(HeadWithCtx), _Body), assumed(HeadWithCtx)) :- !.
-prover:rule_head(rule(HeadWithCtx, _Body), Head) :-
-  prover:canon_literal(HeadWithCtx, Head, _).
+prover:rule_head(Rule, Head) :-
+  prover:rule_parts(Rule, HeadWithCtx, _Body, Kind),
+  (   Kind == domain_assumption
+  ->  Head = assumed(HeadWithCtx)
+  ;   prover:canon_literal(HeadWithCtx, Head, _)
+  ).
 
 
 %! prover:rule_body(+Rule, -Body) is det
 %
 % Extract the body from a full-format proof rule. Deterministic companion
-% to prover:rule_head/2; rule(assumed(X), Body) is covered by the rule/2
-% clause.
+% to prover:rule_head/2 (via prover:rule_parts/4).
 
-prover:rule_body(assumed(rule(_HeadWithCtx, Body)), Body) :- !.
-prover:rule_body(rule(_HeadWithCtx, Body), Body).
+prover:rule_body(Rule, Body) :-
+  prover:rule_parts(Rule, _HeadWithCtx, Body, _Kind).
+
+
+%! prover:rule_from_proof(+Literal, +ProofAVL, -FullRule) is semidet
+%
+% Look up the full-format rule for a canonical literal in the proof, trying
+% the three proof-key shapes in order: regular rule, prover cycle-break,
+% domain assumption. Shared by planner and scheduler (previously
+% copy-pasted as get_full_rule_from_proof/3, issue #61).
+
+prover:rule_from_proof(Literal, ProofAVL, FullRule) :-
+  (   ProofKey = rule(Literal),
+      get_assoc(ProofKey, ProofAVL, ProofValue)
+  ;   ProofKey = assumed(rule(Literal)),
+      get_assoc(ProofKey, ProofAVL, ProofValue)
+  ;   ProofKey = rule(assumed(Literal)),
+      get_assoc(ProofKey, ProofAVL, ProofValue)
+  ),
+  !,
+  prover:canon_rule(FullRule, ProofKey, ProofValue).
 
 
 % -----------------------------------------------------------------------------
