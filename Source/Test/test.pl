@@ -126,15 +126,94 @@ test:cases([overlay://'test01/web-1.0':run?{[]},
             ]).
 
 
+%! test:bracketed_use(?List)
+%
+% Bracketed-USE install subset (test33..test39): runs the USE flag
+% propagation cases with the :install action so the build_with_use
+% expectations declared below are exercised. Run via
+% test:run(bracketed_use).
+
+test:bracketed_use([overlay://'test33/app-1.0':install?{[]},
+                    overlay://'test34/app-1.0':install?{[]},
+                    overlay://'test35/app-1.0':install?{[]},
+                    overlay://'test36/app-1.0':install?{[]},
+                    overlay://'test37/app-1.0':install?{[]},
+                    overlay://'test38/app-1.0':install?{[]},
+                    overlay://'test39/app-1.0':install?{[]}
+                    ]).
+
+
+% =============================================================================
+%  Test fixtures
+% =============================================================================
+
+%! test:ensure_overlay
+%
+% Ensures the synthetic overlay repository backing the test cases is
+% registered and loaded. When the host configuration already provides
+% overlay cache facts (e.g. via Knowledge/kb.qlf), this is a no-op.
+% Otherwise registers the in-repo overlay (Repository/Overlay, shipped
+% with a complete md5-cache) relative to the installation directory and
+% builds its cache facts in-memory. Host-agnostic: works on any machine
+% without host- or CI-specific repository configuration.
+
+test:ensure_overlay :-
+  cache:repository(overlay),!.
+test:ensure_overlay :-
+  ( catch(overlay:declared(type(instance(repository))),_,fail)
+    -> true
+    ;  config:installation_dir(Dir),
+       os:compose_path([Dir,'Repository/Overlay'],Location),
+       os:compose_path([Dir,'Repository/Overlay/metadata/md5-cache'],Cache),
+       overlay:newinstance(repository),
+       overlay:init(Location,Cache,'','local','eapi'),
+       kb:register(overlay) ),
+  overlay:sync(kb).
+
+
+%! test:requires_vdb(+Target)
+%
+% Declares test cases that need at least one installed entry in the pkg
+% (vdb) repository. These are skipped by the batch runner on hosts
+% without an installed-package database (e.g. CI).
+
+test:requires_vdb(overlay://'test65/app-1.0':run?{[]}).
+
+
+%! test:skip_case(+Target, -Reason)
+%
+% Succeeds with a human-readable Reason when Target cannot run in the
+% current environment and should be skipped by the batch runner.
+
+test:skip_case(Case,'requires installed packages (pkg vdb)') :-
+  test:requires_vdb(Case),
+  \+ cache:ordered_entry(pkg,_,_,_,_).
+
+
 % =============================================================================
 %  Test runner
 % =============================================================================
 
-%! test:run(+Atom)
+%! test:run(+Suite)
 %
-% Runs the named test case list and outputs individual results to the
-% Tests directory. Collects and reports failures at the end.
+% Runs a test suite. `application` runs the full application test suite
+% (reader, parser, prover and planner; the builder has no whole-tree
+% test/1 entry point — use prover:test_stats/1 for build statistics).
+% Any other atom names a test case list predicate (e.g. `cases`,
+% `bracketed_use`); each case in the list is run individually with
+% results written to the Tests directory, and failures are collected
+% and reported at the end.
 
+test:run(application) :-
+  !,
+  message:header(['Testing reader: ']),
+  reader:test(portage),nl,
+  message:header(['Testing parser: ']),
+  parser:test(portage),nl,
+  message:header(['Testing prover: ']),
+  prover:test(portage),nl,
+  message:header(['Testing planner: ']),
+  planner:test(portage),nl.
 test:run(Cases) :-
   retractall(test:failed(_)),
   config:working_dir(Dir),
@@ -160,22 +239,133 @@ test:run(Cases) :-
    ;  true).
 
 
-%! test:run(+application)
+%! test:run(+Suite, +batch)
 %
-% Runs the full application test suite: reader, parser, prover, planner,
-% and builder.
+% Non-interactive variant of test:run/1 for CI and scripted runs: no
+% screen clearing, no per-case pause, no description/emerge-log dumps.
+% Ensures the overlay fixture is loaded, prints one status line per
+% case (PASS/XFAIL/FAIL/SKIP) plus a final summary, and fails when any
+% case failed so callers can derive an exit code.
 
-test:run(application) :-
-  message:header(['Testing reader: ']),
-  reader:test(portage),nl,
-  message:header(['Testing parser: ']),
-  parser:test(portage),nl,
-  message:header(['Testing prover: ']),
-  prover:test(portage),nl,
-  message:header(['Testing planner: ']),
-  planner:test(portage),nl,
-  message:header(['Testing builder: ']),
-  builder:test(portage).
+test:run(Cases,batch) :-
+  retractall(test:failed(_)),
+  test:ensure_overlay,
+  config:working_dir(Dir),
+  atomic_list_concat([Dir, '/Source/Tests'], TestsDir),
+  (exists_directory(TestsDir) -> true ; make_directory(TestsDir)),
+  Inner =.. [Cases,List],
+  call(test:Inner),
+  forall(member(Case,List),
+         ( test:skip_case(Case,Reason)
+           -> format('SKIP  ~w (~w)~n',[Case,Reason])
+           ;  catch(test:run_single_case_batch(Case),E,
+                    (print_message(error,E),fail))
+           -> ( test:xfail(Case,_)
+                -> format('XFAIL ~w~n',[Case])
+                ;  format('PASS  ~w~n',[Case]) )
+           ;  assertz(test:failed(Case)),
+              format('FAIL  ~w~n',[Case]) )),
+  findall(C,test:failed(C),Failed),
+  length(List,Total),
+  length(Failed,NFailed),
+  nl,
+  format('Total: ~w cases, ~w failed.~n',[Total,NFailed]),
+  ( Failed == []
+    -> true
+    ;  nl,
+       forall(member(C,Failed),format(' * ~w~n',[C])),
+       fail ).
+
+
+%! test:case_output_file(+Target, -FilePath)
+%
+% Computes the per-case output file path in the Tests directory.
+
+test:case_output_file(Repo://Id:Action?{_Context},FilePath) :-
+  config:working_dir(Dir),
+  split_string(Id,'/','',[Category,Package]),
+  atomic_list_concat([Repo, Category,Package, Action], '_', TestName),
+  atomic_list_concat([Dir, '/Source/Tests/', TestName, '.txt'], FilePath).
+
+
+%! test:run_case(+Target, +Stream, -Result)
+%
+% Core of a single test case run shared by the interactive and batch
+% runners: proves, plans, schedules, and validates Target, writing the
+% full proof/model/constraint/trigger/plan dump to Stream. Result is
+% success(Proof,Model,Plan,Triggers) or failure; never fails or throws
+% on a failing case (the red 'false' marker is written to Stream).
+
+test:run_case(Repo://Id:Action?{Context},Stream,Result) :-
+  ( prover:prove(Repo://Id:Action?{Context},t,Proof,t,Model,t,Constraints,t,Triggers)
+    -> once(with_output_to(Stream,
+         ( ( writeln(Repo://Id:Action?{Context}),
+             planner:plan(Proof,Triggers,t,Plan0,Remainder0),
+             scheduler:schedule(Proof,Triggers,Plan0,Remainder0,Plan,_Remainder),
+             test:validate(Repo://Id:Action?{Context},Proof,Plan,Model,Triggers),
+             nl,
+             message:color(cyan),
+             writeln('Proof:'),
+             message:color(normal),
+             write_proof(Proof),
+             nl,
+             message:color(cyan),
+             writeln('Model:'),
+             message:color(normal),
+             write_model(Model),
+             nl,
+             message:color(cyan),
+             writeln('Constraints:'),
+             message:color(normal),
+             write_constraints(Constraints),
+             nl,
+             message:color(cyan),
+             writeln('Triggers:'),
+             message:color(normal),
+             write_triggers(Triggers),
+             nl,
+             message:color(cyan),
+             writeln('Plan:'),
+             message:color(normal),
+             write_plan(Plan),
+             nl,
+             printer:print([Repo://Id:Action?{Context}],Model,Proof,Plan,Triggers)
+           )
+           -> Result = success(Proof,Model,Plan,Triggers)
+           ;  ( Result = failure,
+                message:color(red),
+                message:style(bold),
+                message:print('false'),nl,
+                message:color(normal),
+                message:style(normal),
+                nl,nl
+              )
+         )))
+    ;  Result = failure
+  ).
+
+
+%! test:run_case_to_file(+Target, +FilePath, -Result)
+%
+% Runs a single test case, writing diagnostics to FilePath. The stream
+% is closed even when proving throws.
+
+test:run_case_to_file(Target,FilePath,Result) :-
+  setup_call_cleanup(
+    open(FilePath,write,Stream),
+    test:run_case(Target,Stream,Result),
+    close(Stream)).
+
+
+%! test:run_single_case_batch(+Target)
+%
+% Batch (non-interactive) single-case runner: writes the per-case
+% diagnostics file and succeeds iff the case proved and validated.
+
+test:run_single_case_batch(Target) :-
+  test:case_output_file(Target,FilePath),
+  test:run_case_to_file(Target,FilePath,Result),
+  Result = success(_,_,_,_).
 
 
 %! test:run_single_case(+Target)
@@ -192,63 +382,13 @@ test:run_single_case(Repo://Id:Action?{Context}) :-
   message:hl,
   nl,
   config:working_dir(Dir),
-  split_string(Id,'/','',[Category,Package]),
+  split_string(Id,'/','',[Category,_Package]),
   atomic_list_concat([Dir,'/Documentation/Tests/',Category,'/README.md'],Description),
   atomic_list_concat([Dir,'/Documentation/Tests/',Category,'/',Category,'-emerge.log'],EmergeLog),
-  atomic_list_concat([Repo, Category,Package, Action], '_', TestName),
-  atomic_list_concat([Dir, '/Source/Tests/', TestName, '.txt'], FilePath),
-  open(FilePath, write, Stream),
-  prover:prove(Repo://Id:Action?{Context},t,Proof,t,Model,t,Constraints,t,Triggers),
-  once(with_output_to(Stream,
-       ( ( writeln(Repo://Id:Action?{Context}),
-           planner:plan(Proof,Triggers,t,Plan0,Remainder0),
-           scheduler:schedule(Proof,Triggers,Plan0,Remainder0,Plan,_Remainder),
-           test:validate(Repo://Id:Action?{Context},Proof,Plan,Model,Triggers),
-           nl,
-           message:color(cyan),
-           writeln('Proof:'),
-           message:color(normal),
-           write_proof(Proof),
-           nl,
-           message:color(cyan),
-           writeln('Model:'),
-           message:color(normal),
-           write_model(Model),
-           nl,
-           message:color(cyan),
-           writeln('Constraints:'),
-           message:color(normal),
-           write_constraints(Constraints),
-           nl,
-           message:color(cyan),
-           writeln('Triggers:'),
-           message:color(normal),
-           write_triggers(Triggers),
-           nl,
-           message:color(cyan),
-           writeln('Plan:'),
-           message:color(normal),
-           write_plan(Plan),
-           nl,
-           printer:print([Repo://Id:Action?{Context}],Model,Proof,Plan,Triggers)
-         )
-         -> true
-         ;  ( Failure = true,
-              message:color(red),
-              message:style(bold),
-              message:print('false'),nl,
-              message:color(normal),
-              message:style(normal),
-              nl,nl
-            )
-       ))),
-  close(Stream),
-  (Failure == true
-   -> message:color(red),message:color(bold),
-      message:print('false'),nl,
-      message:color(normal),message:style(normal),nl,nl,
-      fail
-   ;  (
+  test:case_output_file(Repo://Id:Action?{Context},FilePath),
+  test:run_case_to_file(Repo://Id:Action?{Context},FilePath,Result),
+  (Result = success(Proof,Model,Plan,Triggers)
+   -> (
        message:header('Description :'),
        nl,
        (exists_file(Description)
@@ -261,7 +401,11 @@ test:run_single_case(Repo://Id:Action?{Context}) :-
        (exists_file(EmergeLog)
         -> test:write_description(EmergeLog)
         ;  message:inform('no emerge output available yet')),
-       nl,nl,nl,nl)),
+       nl,nl,nl,nl)
+   ;  message:color(red),message:color(bold),
+      message:print('false'),nl,
+      message:color(normal),message:style(normal),nl,nl,
+      fail),
    ignore(state:wait_for_input),
    !.
 
@@ -1153,26 +1297,3 @@ test:expect(overlay://'test79/server-1.0':run?{[]},
             [ test:must_have(overlay://'test79/server-1.0':run?{_}),
               test:must_have(overlay://'test79/client-1.0':run?{_})
             ]).
-
-
-% =============================================================================
-%  VDB simulation infrastructure
-% =============================================================================
-
-%! test:setup_vdb(+TestCase, +InstalledList)
-%
-% Simulates installed packages by asserting cache:entry_metadata/4 facts.
-% InstalledList is a list of Category/Name-Version atoms (e.g. 'test73/lib-1.0').
-
-test:setup_vdb(_TestCase, InstalledList) :-
-  forall(member(Entry, InstalledList),
-         asserta(cache:ordered_entry(pkg, Entry, _, _, _))).
-
-
-%! test:cleanup_vdb(+InstalledList)
-%
-% Removes previously asserted VDB simulation facts.
-
-test:cleanup_vdb(InstalledList) :-
-  forall(member(Entry, InstalledList),
-         retractall(cache:ordered_entry(pkg, Entry, _, _, _))).

@@ -69,6 +69,20 @@ test-overlay: ## Run overlay regression tests (requires loaded overlay repositor
 	    "halt." | \
 	    ./Source/Application/Wrapper/portage-ng-dev --mode standalone --shell
 
+test-profile-mask-golden: ## Validate profile package.mask against the golden snapshot (needs kb.qlf + profile.qlf).
+	  printf '%s\n' \
+	    "load_files(portage('Source/Test/unittest'), [if(true)])." \
+	    "profile_mask_golden_main." \
+	    "halt." | \
+	    ./Source/Application/Wrapper/portage-ng-dev --mode standalone --shell
+
+test-profile-mask-golden-update: ## Regenerate the profile package.mask golden snapshot in unittest.pl.
+	  printf '%s\n' \
+	    "load_files(portage('Source/Test/unittest'), [if(true)])." \
+	    "profile_mask_golden_update." \
+	    "halt." | \
+	    ./Source/Application/Wrapper/portage-ng-dev --mode standalone --shell
+
 clean:    ## Remove the built binary.
 	  rm -f $(TARGET)
 
@@ -84,4 +98,4 @@ certs-check: ## Check TLS certificate expiry status for all hosts.
 certs-renew: ## Renew expired/expiring TLS certificates for all hosts.
 	  sh $(CERTDIR)/Scripts/generate.sh --renew
 
-.PHONY: help check all build install test test-overlay clean certs certs-check certs-renew
+.PHONY: help check all build install test test-overlay test-profile-mask-golden test-profile-mask-golden-update clean certs certs-check certs-renew

@@ -36,6 +36,13 @@ Regenerate the golden snapshot after an intentional mask-logic change:
   make test-profile-mask-golden-update
 */
 
+:- module(unittest, [md5cache_validate/0,
+                     md5cache_validate/1,
+                     profile_mask_golden_validate/0,
+                     profile_mask_golden_validate/1,
+                     profile_mask_golden_main/0,
+                     profile_mask_golden_update/0]).
+
 :- use_module(library(plunit)).
 :- use_module(library(assoc)).
 :- use_module(library(lists)).
@@ -1711,12 +1718,12 @@ test(any_different_slot, [true(D == any)]) :-
 % under the new BWU and the planner schedules newly-required deps before
 % the rebuild.
 
-:- begin_tests(rules_install_run_bwu_rebuild).
-
 % Find an installed package with at least one IUSE flag the VDB build
 % does NOT have enabled, so we can construct a real BWU mismatch. We
 % prefer net-firewall/iptables (has nftables IUSE) and fall back to any
-% installed entry that satisfies the predicate.
+% installed entry that satisfies the predicate. Defined at file level so
+% both the rules_install_run_bwu_rebuild and update_use_change_resolve
+% units below can share it (PLUnit units inherit from this module).
 test_setup_pick(pkg://Ebuild, Flag) :-
   ( query:search([category('net-firewall'),name(iptables),installed(true)], pkg://Ebuild),
     Flag = nftables,
@@ -1728,6 +1735,9 @@ test_setup_pick(pkg://Ebuild, Flag) :-
     \+ memberchk(C, ['virtual','acct-group','acct-user']),
     atom(N), atom(Flag), !
   ).
+
+
+:- begin_tests(rules_install_run_bwu_rebuild).
 
 % NOTE: these tests require a populated VDB (installed packages with IUSE
 % metadata) and so are gated on `condition(test_setup_pick/2 succeeds)`.
@@ -1799,6 +1809,8 @@ test(plan_orders_bwu_dep_before_rebuild,
     sub_atom(AIp, _, _, _, ':update'), !,
   WLib < WIp.
 
+:- end_tests(rules_install_run_bwu_rebuild).
+
 
 % =============================================================================
 %  Issue #9: same-version :update must not no-op on USE change
@@ -1812,7 +1824,7 @@ test_setup_same_version_installed(portage://RepoE, pkg://PkgE, Flag) :-
   query:search([category(C),name(N),version(V)], portage://RepoE).
 
 test(update_resolve_not_empty_on_use_change,
-     [condition(test_setup_same_version_installed(_, _, _))]) :-
+     [condition(test_setup_same_version_installed(_, _, _)), nondet]) :-
   test_setup_same_version_installed(portage://RepoE, _PkgE, Flag),
   Changes = [use_change(Flag, enable)],
   Ctx = [suggestion(use_change, portage://RepoE, Changes)],
@@ -1820,8 +1832,6 @@ test(update_resolve_not_empty_on_use_change,
   Conds \== [].
 
 :- end_tests(update_use_change_resolve).
-
-:- end_tests(rules_install_run_bwu_rebuild).
 
 
 % =============================================================================
@@ -3423,6 +3433,11 @@ md5cache_write_report(OutFile, Total, NBatch, Skipped, Missing,
 % Regenerate golden after an intentional change:
 %
 %   make test-profile-mask-golden-update
+%
+% NOTE: the golden list below pins a specific Portage tree snapshot (the
+% tree from which `Knowledge/kb.qlf` / `Knowledge/profile.qlf` were last
+% generated). After a `--sync` that changes profile package.mask entries,
+% a mismatch is expected — review the diff and regenerate the snapshot.
 
 
 % profile-mask-golden-begin
@@ -4072,13 +4087,26 @@ profile_mask_golden_require_inputs :-
 %! profile_mask_golden_masked_ids(-Ids) is det.
 %
 % Apply profile `package.mask` entries in cache order and return sorted ids.
+% The live `preference:local_masked/2` facts (profile + user config) are
+% snapshotted up front and restored afterwards, so running the golden
+% regression does not clobber the session's mask state.
 
 profile_mask_golden_masked_ids(Ids) :-
-  retractall(preference:local_masked(_,_)),
-  forall(profiledata:entry(package_mask, Atom, true),
-         profile:apply_entry(package_mask, Atom, true)),
-  findall(Id, preference:local_masked(Id, portage), Ids0),
-  sort(Ids0, Ids).
+  findall(local_masked(SavedId, SavedRepo),
+          preference:local_masked(SavedId, SavedRepo),
+          Saved),
+  setup_call_cleanup(
+    retractall(preference:local_masked(_,_)),
+    ( forall(profiledata:entry(package_mask, Atom, true),
+             profile:apply_entry(package_mask, Atom, true)),
+      findall(Id, preference:local_masked(Id, portage), Ids0),
+      sort(Ids0, Ids)
+    ),
+    ( retractall(preference:local_masked(_,_)),
+      forall(member(local_masked(SavedId, SavedRepo), Saved),
+             assertz(preference:local_masked(SavedId, SavedRepo)))
+    )
+  ).
 
 
 %! profile_mask_golden_print_sample(+Label, +Ids) is det.
