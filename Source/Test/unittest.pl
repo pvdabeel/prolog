@@ -2449,6 +2449,215 @@ test(is_cn_target_rejects_versioned, [fail]) :-
 
 
 % =============================================================================
+%  Query macro vs runtime dedup (portage-ng#59)
+% =============================================================================
+
+% compile_query_compound/3 is the single source of truth for every query form
+% it covers: the runtime query:search/2 entry clause compiles the query at
+% call time and executes the same cache-level goal the compile-time expansion
+% would inline (the former duplicate runtime clauses for version comparisons,
+% slot constraints, iuse and maintainer were deleted). These tests pin:
+%   (a) macro coverage  — forms that must compile to cache-level goals
+%                         rather than the runtime fallback,
+%   (b) equivalence     — the runtime (=..-built) path returns the same
+%                         results as directly executing the compiled goal,
+%   (c) hook guards     — the module-local expansion hooks neither fire for
+%                         foreign modules nor bind call-site variables.
+
+query_dedup_setup :-
+  query_macros_setup,
+  assertz(cache:entry_metadata(qtest, 'dev-test/foo-1.0', iuse, plus(minimal))),
+  assertz(cache:entry_metadata(qtest, 'dev-test/foo-1.0', iuse, doc)).
+
+query_dedup_cleanup :-
+  query_macros_cleanup.
+
+% Runtime path (query:search/2 on a runtime-constructed query) and expanded
+% path (executing the compile_query_compound/3 goal directly) must agree.
+issue59_runtime_vs_expanded(Q) :-
+  copy_term(Q, Qr),
+  findall(I1, query:search(Qr, qtest://I1), Rs0),
+  msort(Rs0, Rs),
+  copy_term(Q, Qe),
+  query:compile_query_compound(Qe, qtest://I2, G),
+  findall(I2, call(G), Es0),
+  msort(Es0, Es),
+  Rs == Es.
+
+:- begin_tests(query_dedup, [setup(query_dedup_setup),
+                             cleanup(query_dedup_cleanup)]).
+
+% (a) Macro coverage: these forms must compile to cache-level goals, not to
+% the search/2 runtime fallback (guards against macro rot reintroducing a
+% second, runtime-only implementation).
+test(issue59_macro_coverage) :-
+  V = version([1,0],'',4,0,[],0,'1.0'),
+  forall(member(Q, [ name(_), category(_), version(_), slot(_), keyword(_),
+                     iuse(_), masked(true), masked(false),
+                     installed(true), installed(false),
+                     dependency(_,run), dependency(_,install),
+                     dependency(_,fetchonly),
+                     select(version,equal,V), select(version,greaterequal,V),
+                     select(version,tilde,V), select(name,wildcard,_),
+                     select(slot,equal,_), select(slot,constraint([]),_),
+                     select(slot,constraint([slot(_)]),_),
+                     select(slot,constraint([any_same_slot]),_),
+                     select(masked,equal,true), select(installed,equal,true),
+                     select(maintainer,equal,_),
+                     all(depend(_)), all(dependency(_,run)) ]),
+         ( query:compile_query_compound(Q, _R://_I, G),
+           G \= search(_,_) )).
+
+% A slot constraint whose list skeleton is still unbound is deferred to the
+% runtime fallback (and re-compiled at call time once it is bound).
+test(issue59_unbound_slot_constraint_defers) :-
+  query:compile_query_compound(select(slot,constraint(C),Sn), R://I, G),
+  var(C),
+  G == search(select(slot,constraint(C),Sn), R://I).
+
+% (b) Equivalence per query form whose runtime duplicate was deleted.
+test(issue59_runtime_matches_expanded) :-
+  V10 = version([1,0],'',4,0,[],0,'1.0'),
+  forall(member(Q, [ select(version,equal,V10),
+                     select(version,greater,V10),
+                     select(version,greaterequal,V10),
+                     select(version,smaller,V10),
+                     select(version,smallerequal,V10),
+                     select(version,notequal,V10),
+                     select(version,tilde,V10),
+                     select(version,wildcard,version(_,_,_,_,_,_,'1.0*')),
+                     select(slot,constraint([]),_),
+                     select(slot,constraint([slot('1')]),_),
+                     select(slot,constraint([slot(_)]),_),
+                     select(slot,constraint([any_same_slot]),_),
+                     select(slot,constraint([any_different_slot]),_),
+                     select(maintainer,equal,'dev@example.org'),
+                     iuse(_),
+                     installed(false) ]),
+         issue59_runtime_vs_expanded(Q)).
+
+% A runtime slot-constraint query with an unbound inner slot argument
+% (formerly served by the deleted runtime clauses) binds it from the cache.
+test(issue59_slot_constraint_runtime_var_inner,
+     [true(S-Sn == '1'-[slot('1')])]) :-
+  Q =.. [select, slot, constraint([slot(S)]), Sn],
+  once(query:search(Q, qtest://'dev-test/foo-1.0')).
+
+% A runtime slot-constraint query whose entire skeleton is still a variable
+% is served by the runtime-only generator clause: it commits to the first
+% matching skeleton pattern ([], all slot metadata) exactly like the
+% head-unification + cut of the former runtime clauses.
+test(issue59_slot_constraint_runtime_var_skeleton,
+     [true(C-Sn == []-[slot('1')])]) :-
+  Q =.. [select, slot, constraint(C), Sn],
+  once(query:search(Q, qtest://'dev-test/foo-1.0')).
+
+test(issue59_slot_constraint_runtime_var_skeleton_enumerates,
+     [true(N == 3)]) :-
+  Q =.. [select, slot, constraint(_), _],
+  aggregate_all(count, query:search(Q, qtest://_), N).
+
+% A variable operator at call time behaves like the 'none' operator
+% (mirrors the former runtime clause, which unified it with 'none').
+test(issue59_version_var_op_behaves_as_none, [true(N == 3)]) :-
+  Q =.. [select, version, _Op, _V],
+  aggregate_all(count, query:search(Q, qtest://_), N).
+
+% List queries constructed at runtime go through the same compile-then-call
+% path as compile-time literals.
+test(issue59_list_query_runtime, [true(Ids == ['dev-test/foo-2.0'])]) :-
+  QL = [category('dev-test'), name(foo), select(slot,constraint([slot('2')]),_)],
+  findall(I, query:search(QL, qtest://I), Ids0),
+  sort(Ids0, Ids).
+
+% iuse/1 returns the RAW metadata value (e.g. plus(flag)); the deleted
+% runtime clause silently stripped defaults, diverging from the macro.
+test(issue59_iuse_returns_raw_metadata, [true(Vs == [doc, plus(minimal)])]) :-
+  Q =.. [iuse, V],
+  findall(V, query:search(Q, qtest://'dev-test/foo-1.0'), Vs0),
+  msort(Vs0, Vs).
+
+% CLI iuse searches are served by select/4 (sign-aware), the single
+% remaining runtime implementation.
+test(issue59_select_iuse_equal_runtime, [true(Ids == ['dev-test/foo-1.0'])]) :-
+  Q =.. [select, iuse, equal, minimal],
+  findall(I, query:search(Q, qtest://I), Ids0),
+  sort(Ids0, Ids).
+
+test(issue59_select_iuse_wildcard_runtime, [true(Ids == ['dev-test/foo-1.0'])]) :-
+  Q =.. [select, iuse, wildcard, 'mini*'],
+  findall(I, query:search(Q, qtest://I), Ids0),
+  sort(Ids0, Ids).
+
+% (c) The search/2 expansion hook is module-local to query: qualified
+% callers are inlined, while a bare search/2 goal in another module is
+% never rewritten (modules may define their own search/2).
+test(issue59_search_hook_is_module_local) :-
+  query:goal_expansion(search(category(_), qtest://_), G),
+  G \= search(_,_),
+  \+ user:goal_expansion(search(category(_), qtest://_), _).
+
+% Download-specialized candidate hooks fire only for a bound 'download'
+% action; a variable action is left for runtime resolution instead of
+% being bound at expansion time.
+test(issue59_eligible_download_inlined,
+     [true(G =@= cache:ordered_entry(qtest, 'dev-test/foo-1.0', _, _, _))]) :-
+  candidate:goal_expansion(eligible(qtest://'dev-test/foo-1.0':download?{[]}), G),
+  !.
+
+test(issue59_eligible_var_action_not_expanded) :-
+  \+ candidate:goal_expansion(eligible(qtest://'dev-test/foo-1.0':_A?{[]}), _).
+
+test(issue59_resolve_download_expanded,
+     [true(G == featureterm:get(after, ctx, Conds))]) :-
+  candidate:goal_expansion(resolve(qtest://x:download?{ctx}, Conds), G),
+  !.
+
+test(issue59_resolve_var_action_not_expanded) :-
+  \+ candidate:goal_expansion(resolve(qtest://x:_A?{ctx}, _C), _).
+
+% candidate:installed/1 inlines through the same compile_query_compound
+% table its definition compiles through (single source of truth).
+test(issue59_installed_macro_single_source) :-
+  candidate:goal_expansion(installed(R://I), G1),
+  !,
+  query:compile_query_compound(installed(true), R://I, G2),
+  G1 =@= G2.
+
+% The version_domain:normalize_version_term/2 hook (formerly a dead
+% user:goal_expansion clause in query.pl) is module-local to version_domain
+% and rewrites the goal to a cache-free conditional.
+test(issue59_version_domain_hook_fires) :-
+  version_domain:goal_expansion(normalize_version_term(_, _), G),
+  G \= normalize_version_term(_, _).
+
+% The expansion and the predicate agree on every input class: unbound input
+% (identity — the dead macro got this wrong), version/7 passthrough,
+% wildcard atom, parseable atom, version(...)=Ver strip, arbitrary compound
+% passthrough, numeric input. The predicate is meta-called so this compares
+% expansion vs predicate, not expansion vs expansion.
+test(issue59_version_domain_hook_matches_predicate) :-
+  forall(member(V, [_, version([1,0],'',4,0,[],0,'1.0'), '1.0.*', '2.3',
+                    version(a,b,c,d,e,f,g)=myver, foo(bar), 42]),
+         ( version_domain:goal_expansion(normalize_version_term(V, R1), G),
+           call(G),
+           P =.. [normalize_version_term, V, R2],
+           version_domain:P,
+           R1 =@= R2 )).
+
+% The non-download eligible expansion derives its mask check from the
+% masked(true) macro.
+test(issue59_eligible_install_uses_masked_macro) :-
+  candidate:goal_expansion(eligible(qtest://'dev-test/foo-1.0':install?{[]}), G),
+  !,
+  G = ((Masked -> prover:assuming(unmask) ; true), _),
+  query:compile_query_compound(masked(true), qtest://'dev-test/foo-1.0', MaskedExpected),
+  Masked == MaskedExpected.
+
+:- end_tests(query_dedup).
+
+
+% =============================================================================
 %  Synthetic-rule resolver core tests (issue #73)
 % =============================================================================
 %

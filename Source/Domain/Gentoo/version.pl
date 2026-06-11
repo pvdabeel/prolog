@@ -19,6 +19,30 @@ be checked against concrete candidates and used to prune/validate selections.
 :- module(version_domain, []).
 
 % -----------------------------------------------------------------------------
+%  Goal expansion: normalize_version_term/2 fast path
+% -----------------------------------------------------------------------------
+
+% Module-local hook (cf. the GOAL EXPANSION notes in Source/Knowledge/query.pl,
+% portage-ng#59): SWI strips the module qualifier before consulting expansion
+% hooks, so this fires both for the bare calls below and for
+% version_domain:-qualified callers in modules compiled after this file.
+% The hook must precede the call sites textually so they compile through it.
+%
+% The expansion mirrors normalize_version_term/2 exactly, including the
+% identity clause for unbound input (a formerly dead user:goal_expansion
+% clause in query.pl omitted that branch and would have sent unbound input
+% to normalize_version_term_other/2, binding it to version(...)=Ver).
+
+goal_expansion(normalize_version_term(V, V1), Expanded) :-
+  Expanded =
+    ( var(V)
+    -> V1 = V
+    ; functor(V, version, 7)
+    -> V1 = V
+    ; version_domain:normalize_version_term_other(V, V1)
+    ).
+
+% -----------------------------------------------------------------------------
 %  Optional unify.pl extension hook (generic)
 % -----------------------------------------------------------------------------
 

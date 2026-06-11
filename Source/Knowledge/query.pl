@@ -89,55 +89,83 @@ An implementation of a query language for the knowledge base
 % Over 50% of proving time is spent querying, by using Macros and working with
 % an indexed data structure, we keep calling overhead to a minimum.
 
-:- multifile user:goal_expansion/2.
-
 % -----------------------------------------------------------------------------
 %  GOAL EXPANSION
 % -----------------------------------------------------------------------------
 
 % We treat both list queries and compound queries
 
-% IMPORTANT:
-% Most callers invoke this predicate module-qualified as `query:search/2`.
-% Provide goal-expansion rules for that form as well, otherwise no compile-time
-% optimization happens and proving becomes dramatically slower.
+% IMPORTANT (portage-ng#59):
+% The search/2 expansion is a MODULE-LOCAL hook (query:goal_expansion/2),
+% not a user:goal_expansion/2 clause. When SWI-Prolog compiles a qualified
+% goal `query:search(Q, R://Id)` in any module, it strips the qualifier and
+% consults the goal-expansion hooks of module query with the bare
+% `search(Q, R://Id)` term — so this hook fires for every qualified caller
+% (and for bare search/2 calls inside this module). A bare search/2 call in
+% another module never reaches this hook, so a module defining its own
+% search/2 cannot be miscompiled; callers must use the query:-qualified
+% form to opt in to compile-time inlining.
 
-user:goal_expansion(query:search(Q, Repo://Id), Expanded) :-
-  is_list(Q),!,
-  query:compile_query_list(Q, Repo://Id, Expanded).
-
-user:goal_expansion(query:search(Q, Repo://Id), Expanded) :-
-  compound(Q),!,
-  query:compile_query_compound(Q, Repo://Id, Expanded).
-
-user:goal_expansion(search(Q, Repo://Id), Expanded) :-
+goal_expansion(search(Q, Repo://Id), Expanded) :-
   is_list(Q),!,
   compile_query_list(Q, Repo://Id, Expanded).
 
-user:goal_expansion(search(Q, Repo://Id), Expanded) :-
+goal_expansion(search(Q, Repo://Id), Expanded) :-
   compound(Q),!,
   compile_query_compound(Q, Repo://Id, Expanded).
 
-user:goal_expansion(candidate:installed(Repo://Id),
-  (cache:ordered_entry(pkg, Id, _, _, _), (var(Repo) -> Repo = pkg ; true))).
+% Cross-module inlining for hot candidate.pl predicates, hooked module-
+% locally into module candidate for the same reason as above: SWI consults
+% candidate's goal-expansion hooks with the stripped eligible/installed/
+% resolve term when compiling `candidate:...` goals. The hooks live HERE
+% (not in candidate.pl/target.pl) because query.pl is loaded before
+% rules.pl — the main consumer — while candidate.pl and target.pl load
+% after it (see Source/loader.pl).
+%
+% To prevent drift (portage-ng#59), the expanded bodies are derived from
+% the same compile_query_compound/3 table the predicate definitions
+% themselves compile through:
+%   candidate:installed/1 -> query:search(installed(true), ...)
+%   candidate:eligible/1  -> query:search(ebuild(...)/masked(true), ...)
+%                            (Source/Domain/Gentoo/Rules/candidate.pl)
+%   candidate:resolve/2   -> :download clause in
+%                            Source/Domain/Gentoo/Rules/target.pl
+%
+% Guards: head unification may bind variables of the call site, but a
+% clause only keeps those bindings when it succeeds. Each clause therefore
+% nonvar/==-checks the Action before committing, so a call site with a
+% variable Action is never miscompiled by binding it at expansion time
+% (the old download macro head could do exactly that).
+%
+% The multifile declaration is required: without it, loading candidate.pl
+% (which redefines module candidate) would abolish these hook clauses.
 
-user:goal_expansion(candidate:eligible(Repo://Id:download?{_}),
-  cache:ordered_entry(Repo, Id, _, _, _)).
+:- multifile candidate:goal_expansion/2.
 
-user:goal_expansion(candidate:eligible(Repo://Id:_Action?{_}),
-  ( ( preference:masked(Repo://Id) -> prover:assuming(unmask) ; true ),
-    ( candidate:entry_has_accepted_keyword(Repo://Id) -> true
-    ; prover:assuming(keyword_acceptance) )
-  )).
+candidate:goal_expansion(installed(Repo://Id), Expanded) :-
+  query:compile_query_compound(installed(true), Repo://Id, Expanded).
 
-user:goal_expansion(candidate:resolve(_Repo://_Id:download?{Context}, Conditions),
-  featureterm:get(after, Context, Conditions)).
+candidate:goal_expansion(eligible(Repo://Id:Action?{_}), Expanded) :-
+  nonvar(Action),
+  ( Action == download
+  -> query:compile_query_compound(ebuild(Id), Repo://Id, Expanded)
+  ;  query:compile_query_compound(masked(true), Repo://Id, Masked),
+     Expanded =
+       ( ( Masked -> prover:assuming(unmask) ; true ),
+         ( candidate:entry_has_accepted_keyword(Repo://Id) -> true
+         ; prover:assuming(keyword_acceptance) ) )
+  ).
 
-user:goal_expansion(version_domain:normalize_version_term(V, V1),
-  ( nonvar(V), functor(V, version, 7)
-  -> V1 = V
-  ; version_domain:normalize_version_term_other(V, V1)
-  )).
+candidate:goal_expansion(resolve(_Repo://_Id:Action?{Context}, Conditions), Expanded) :-
+  Action == download,
+  Expanded = featureterm:get(after, Context, Conditions).
+
+% NOTE (portage-ng#59): a user:goal_expansion/2 clause with the qualified
+% head version_domain:normalize_version_term/2 used to live here. It never
+% fired (SWI strips the module qualifier before consulting expansion hooks)
+% and its body diverged from the predicate for unbound input. The working,
+% faithful hook now lives next to the predicate in
+% Source/Domain/Gentoo/version.pl.
 
 
 % -----------------------------------------------------------------------------
@@ -391,7 +419,12 @@ compile_query_compound(dependency(D,fetchonly), Repo://Id,
 
 % 7. key=value queries needed for --search
 
-compile_query_compound(select(version, Op, Ver), Repo://Id, Expanded) :-
+% Variable operator: emit a runtime dispatch over the operator. The Key is
+% ==-checked so a query with a variable key is never miscompiled by binding
+% it to 'version' at expansion time (portage-ng#59).
+
+compile_query_compound(select(Key, Op, Ver), Repo://Id, Expanded) :-
+  Key == version,
   var(Op), !,
   Expanded = (
     Op == none ->
@@ -422,8 +455,31 @@ compile_query_compound(select(version, Op, Ver), Repo://Id, Expanded) :-
   ; Op == tilde ->
       ( Ver = version(VT,LT,SRT,SNT,SReT,_,_),
         cache:ordered_entry(Repo, Id, _, _, version(VT,LT,SRT,SNT,SReT,_,_)) )
-  ; search(select(version, Op, Ver), Repo://Id)
+  ; var(Op) ->
+      % Unbound operator at call time: behave like the 'none' operator
+      % (this mirrors the former runtime search/2 clause, which unified a
+      % variable operator with 'none' and enumerated all entries).
+      ( Op = none,
+        cache:ordered_entry(Repo, Id, _, _, _) )
+  ; fail   % unknown operator: fail instead of re-entering runtime search
   ).
+
+% Slot-constraint queries dispatch on the constraint-list skeleton. The
+% skeleton must be sufficiently instantiated (proper list, nonvar elements)
+% so that compiling never binds variables in the caller's query term; the
+% inner slot/subslot arguments may be unbound (they are output arguments).
+% This clause must precede the generic nonground-Cmp fallback below: it is
+% the single implementation of slot-constraint semantics, used both for
+% compile-time inlining and by the runtime search/2 compile-then-call path
+% (the former duplicate runtime clauses were removed, portage-ng#59).
+
+compile_query_compound(select(Key,Cmp,Sn), Repo://Id, Goal) :-
+  Key == slot,
+  nonvar(Cmp),
+  Cmp = constraint(C),
+  nonvar(C),
+  query:slot_constraint_goal(C, Sn, Repo://Id, Goal),
+  !.
 
 compile_query_compound(select(Key,Cmp,Value), Repo://Id,
   ( search(select(Key,Cmp,Value), Repo://Id ) ))  :-
@@ -616,37 +672,50 @@ compile_query_compound(select(subslot,wildcard,S), Repo://Id,
   ( cache:entry_metadata(Repo,Id,slot,subslot(M)),
     wildcard_match(S,M) ) ) :- !.
 
-compile_query_compound(select(slot,constraint([]),Sn), Repo://Id,
+%! query:slot_constraint_goal(+Constraint, ?Sn, +RepoId, -Goal)
+%
+% Maps a slot-constraint list to its cache-level goal. Fails (without
+% binding anything in Constraint) when the skeleton is not sufficiently
+% instantiated, in which case the query is deferred to runtime via the
+% nonground-Cmp fallback above.
+
+slot_constraint_goal(C, Sn, Repo://Id, Goal) :-
+  is_list(C),
+  maplist(nonvar, C),
+  slot_constraint_goal_(C, Sn, Repo://Id, Goal).
+
+slot_constraint_goal_([], Sn, Repo://Id,
   ( cache:ordered_entry(Repo,Id,_,_,_),
-    findall(R,cache:entry_metadata(Repo,Id,slot,R),Sn)) ) :- !. 				% will work: test40
+    findall(R,cache:entry_metadata(Repo,Id,slot,R),Sn) )). 					% will work: test40
 
-compile_query_compound(select(slot,constraint([slot(S)]),Sn), Repo://Id,
+slot_constraint_goal_([slot(S)], Sn, Repo://Id,
   ( cache:entry_metadata(Repo,Id,slot,slot(S)),
-    findall(R,cache:entry_metadata(Repo,Id,slot,R),Sn)) ) :- !. 				% will work: test41
+    findall(R,cache:entry_metadata(Repo,Id,slot,R),Sn) )). 					% will work: test41
 
-compile_query_compound(select(slot,constraint([slot(S),subslot(Ss)]),Sn), Repo://Id,
-  ( cache:entry_metadata(Repo,Id,slot,slot(S)),
-    cache:entry_metadata(Repo,Id,slot,subslot(Ss)),
-    findall(R,cache:entry_metadata(Repo,Id,slot,R),Sn)) ) :- !. 				% will work: test44
-
-compile_query_compound(select(slot,constraint([slot(S),equal]),Sn), Repo://Id,
-  ( cache:entry_metadata(Repo,Id,slot,slot(S)),
-    findall(R,cache:entry_metadata(Repo,Id,slot,R),Sn)) ) :- !.					% adds chosen slot as a requirement to context - no test yet
-
-compile_query_compound(select(slot,constraint([slot(S),subslot(Ss),equal]),Sn), Repo://Id,
+slot_constraint_goal_([slot(S),subslot(Ss)], Sn, Repo://Id,
   ( cache:entry_metadata(Repo,Id,slot,slot(S)),
     cache:entry_metadata(Repo,Id,slot,subslot(Ss)),
-    findall(R,cache:entry_metadata(Repo,Id,slot,R),Sn)) ) :- !.					% adds chosen slot and subslot as a requirement to context - no test yet
+    findall(R,cache:entry_metadata(Repo,Id,slot,R),Sn) )). 					% will work: test44
 
-compile_query_compound(select(slot,constraint([any_same_slot]),Sn), Repo://Id,
+slot_constraint_goal_([slot(S),equal], Sn, Repo://Id,
+  ( cache:entry_metadata(Repo,Id,slot,slot(S)),
+    findall(R,cache:entry_metadata(Repo,Id,slot,R),Sn) )).					% adds chosen slot as a requirement to context - no test yet
+
+slot_constraint_goal_([slot(S),subslot(Ss),equal], Sn, Repo://Id,
+  ( cache:entry_metadata(Repo,Id,slot,slot(S)),
+    cache:entry_metadata(Repo,Id,slot,subslot(Ss)),
+    findall(R,cache:entry_metadata(Repo,Id,slot,R),Sn) )).					% adds chosen slot and subslot as a requirement to context - no test yet
+
+slot_constraint_goal_([any_same_slot], Sn, Repo://Id,
   ( cache:ordered_entry(Repo,Id,_,_,_),
     % For := (any_same_slot) we only want to lock the SLOT, not the SUBSLOT.
-    findall(slot(S), cache:entry_metadata(Repo,Id,slot,slot(S)), Sn)) ) :- !.					% adds chosen slot as a requirement to context - test43
+    % SUBSLOT is a rebuild trigger, not a satisfiability constraint.
+    findall(slot(S), cache:entry_metadata(Repo,Id,slot,slot(S)), Sn) )).			% adds chosen slot as a requirement to context - test43
 
-compile_query_compound(select(slot,constraint([any_different_slot]),Sn), Repo://Id,
+slot_constraint_goal_([any_different_slot], Sn, Repo://Id,
   ( cache:ordered_entry(Repo,Id,_,_,_),
-    findall(slot(S), cache:entry_metadata(Repo,Id,slot,slot(S)), Sn)) ) :- !.					% adds chosen slot as a requirement to context - test 42
-
+    % Like any_same_slot, we only propagate the SLOT component.
+    findall(slot(S), cache:entry_metadata(Repo,Id,slot,slot(S)), Sn) )).			% adds chosen slot as a requirement to context - test 42
 
 
 compile_query_compound(select(keyword,equal,K),	Repo://Id,
@@ -700,11 +769,11 @@ compile_query_compound(select(installed,notequal,false), Repo://Id,
 % 8. all query is treated at runtime, except for a few exceptions
 
 compile_query_compound(all(S), Repo://Id,
-  query:search(all(S),Repo://Id))	:-
+  search(all(S),Repo://Id))	:-
   var(S),!.
 
 compile_query_compound(all(S):A?{C}, Repo://Id,
-  query:search(all(S):A?{C},Repo://Id)) :-
+  search(all(S):A?{C},Repo://Id)) :-
   var(S),!.
 
 
@@ -999,6 +1068,12 @@ compile_query_compound(qualified_target(tilde,Repo,C,P,version(V,L,SR,SN,SRe,_,_
 
 % 12. Fallback – Stuff for which a macro doesn't exist, we fall back to regular predicates
 
+% The fallback goal is emitted unqualified: the goal-expansion machinery
+% preserves the query:-qualifier of the original call site when inlining,
+% and the runtime compile-then-call clause executes it inside this module,
+% so it always resolves to query:search/2. Emitting the same term that was
+% compiled also makes the recursive expansion reach its fixpoint at once.
+
 compile_query_compound(Stmt, Entry,
   search(Stmt,Entry)).
 
@@ -1019,11 +1094,15 @@ compile_query_compound(Stmt, Entry,
 % Search - iterate over list
 % Traverse a list of statements that narrow down the search results.
 
-% Runtime optimization:
-% Even if goal-expansion did not run for a given caller (e.g. due to load order),
-% we can still compile common query forms into cache-level goals and execute them.
-% If there is no compilation rule, `compile_query_compound/3` falls back to
-% `search(Stmt,Entry)`; detect that and let the normal runtime clauses handle it.
+% Compile-then-call (portage-ng#59):
+% compile_query_compound/3 is the single source of truth for every query form
+% it covers. Runtime calls compile the query at call time and execute the
+% resulting cache-level goal, so macro-covered forms have exactly one
+% implementation. When there is no compilation rule, compile_query_compound/3
+% falls back to `search(Stmt,Entry)` (and the deferred nonground-Cmp clause
+% falls back likewise); detect that and let the runtime-only clauses below
+% handle the query (all/model/latest, manifest, iuse state, use-expand,
+% set membership, generic metadata).
 search(Q, Repository://Entry) :-
   sampler:maybe_record_callsite(Q, Repository://Entry),
   ( is_list(Q)
@@ -1217,97 +1296,29 @@ search(select(Key,Comparator,Value),R://I) :-
 % This search based on qualified_target makes lookup initial lookup very fast. We
 % apply filtering on the remaining choicepoints.
 
+% NOTE (portage-ng#59): version-comparison and slot-constraint runtime
+% clauses used to be duplicated here. They were shadowed by (or drifted
+% from) the compile_query_compound/3 expansions, which are now the single
+% implementation: the compile-then-call clause above handles these forms
+% for runtime-constructed queries as well.
+
 % -----------------------------------------------------------------------------
-%  Search: Version
+%  Search: slot constraint with an under-instantiated skeleton
 % -----------------------------------------------------------------------------
 
-search(select(version,none,_),Repo://Id) :-
+% Runtime-only: reached when the compile-then-call clause deferred the query
+% because the constraint skeleton still contains variables (partial list or
+% var elements) — slot_constraint_goal/4 refuses to bind the caller's term
+% during compilation, but at call time binding is the desired generator
+% semantics. once/1 commits to the first matching skeleton pattern of
+% slot_constraint_goal_/4 exactly like the head-unification + cut of the
+% former runtime clauses (a fully unbound constraint unifies with [] first
+% and enumerates all entries); the cache goal itself then backtracks freely.
+
+search(select(slot,constraint(C),Sn), Repo://Id) :-
   !,
-  cache:ordered_entry(Repo,Id,_,_,_).
-
-search(select(version,equal,version_none),Repo://Id) :-
-  !,
-  cache:ordered_entry(Repo,Id,_,_,_).
-
-search(select(version,equal,Ver),Repo://Id) :-
-  !,
-  cache:ordered_entry(Repo,Id,_,_,Ver).
-
-search(select(version,smaller,ReqVer),Repo://Id) :-
-  !,
-  cache:ordered_entry(Repo,Id,_,_,ProposedVersion),
-  eapi:version_compare(<,ProposedVersion,ReqVer).
-
-search(select(version,greater,ReqVer),Repo://Id) :-
-  !,
-  cache:ordered_entry(Repo,Id,_,_,ProposedVersion),
-  eapi:version_compare(>,ProposedVersion,ReqVer).
-
-search(select(version,smallerequal,ReqVer),Repo://Id) :-
-  !,
-  cache:ordered_entry(Repo,Id,_,_,ProposedVersion),
-  ( eapi:version_compare(<,ProposedVersion,ReqVer);
-    eapi:version_compare(=,ProposedVersion,ReqVer) ).
-
-search(select(version,greaterequal,ReqVer),Repo://Id) :-
-  !,
-  cache:ordered_entry(Repo,Id,_,_,ProposedVersion),
-  ( eapi:version_compare(>,ProposedVersion,ReqVer);
-    eapi:version_compare(=,ProposedVersion,ReqVer) ).
-
-search(select(version,notequal,ReqVer), Repo://Id) :-
-  !,
-  cache:ordered_entry(Repo,Id,_,_,ProposedVersion),
-  ProposedVersion \== ReqVer.
-
-search(select(version,wildcard,version(_,_,_,_,_,_,V)),Repo://Id) :-
-  cache:ordered_entry(Repo,Id,_,_,version(_,_,_,_,_,_,ProposedVersion)),
-  wildcard_match(V,ProposedVersion).
-
-search(select(version,tilde,version(V,L,SR,SN,SRe,_,_)),Repo://Id) :-
-  cache:ordered_entry(Repo,Id,_,_,version(V,L,SR,SN,SRe,_,_)).
-
-
-search(select(slot,constraint([]),Sn), Repo://Id) :-
-  !,
-  ( cache:ordered_entry(Repo,Id,_,_,_),
-    findall(R,cache:entry_metadata(Repo,Id,slot,R),Sn)). 					% will work: test40
-
-search(select(slot,constraint([slot(S)]),Sn), Repo://Id) :-
-  !,
-  ( cache:entry_metadata(Repo,Id,slot,slot(S)),
-    findall(R,cache:entry_metadata(Repo,Id,slot,R),Sn)). 					% will work: test41
-
-search(select(slot,constraint([slot(S),subslot(Ss)]),Sn), Repo://Id) :-
-  !,
-  ( cache:entry_metadata(Repo,Id,slot,slot(S)),
-    cache:entry_metadata(Repo,Id,slot,subslot(Ss)),
-    findall(R,cache:entry_metadata(Repo,Id,slot,R),Sn)). 					% will work: test44
-
-search(select(slot,constraint([slot(S),equal]),Sn), Repo://Id) :-
-  !,
-  ( cache:entry_metadata(Repo,Id,slot,slot(S)),
-    findall(R,cache:entry_metadata(Repo,Id,slot,R),Sn)).					% adds chosen slot as a requirement to context - no test yet
-
-search(select(slot,constraint([slot(S),subslot(Ss),equal]),Sn), Repo://Id) :-
-  !,
-  ( cache:entry_metadata(Repo,Id,slot,slot(S)),
-    cache:entry_metadata(Repo,Id,slot,subslot(Ss)),
-    findall(R,cache:entry_metadata(Repo,Id,slot,R),Sn)).					% adds chosen slot and subslot as a requirement to context - no test yet
-
-search(select(slot,constraint([any_same_slot]),Sn), Repo://Id) :-
-  !,
-  ( cache:ordered_entry(Repo,Id,_,_,_),
-    % For := (any_same_slot) we only want to lock the SLOT, not the SUBSLOT.
-    % SUBSLOT is a rebuild trigger, not a satisfiability constraint.
-    findall(slot(S), cache:entry_metadata(Repo,Id,slot,slot(S)), Sn)).					% adds chosen slot as a requirement to context - test43
-
-search(select(slot,constraint([any_different_slot]),Sn), Repo://Id) :-
-  !,
-  ( cache:ordered_entry(Repo,Id,_,_,_),
-    % Like any_same_slot, we only propagate the SLOT component.
-    findall(slot(S), cache:entry_metadata(Repo,Id,slot,slot(S)), Sn)).					% adds chosen slot as a requirement to context - test 42
-
+  once(slot_constraint_goal_(C, Sn, Repo://Id, Goal)),
+  call(Goal).
 
 % -----------------------------------------------------------------------------
 %  Search: Manifest
@@ -1322,39 +1333,13 @@ search(manifest(Scope,Type,Binary,Size),R://I) :-
    cache:manifest_metadata(R,P,Type,Binary,Size,_Checksums).
 
 
-% -----------------------------------------------------------------------------
-%  Search: iuse
-% -----------------------------------------------------------------------------
-
-search(iuse(Iuse),R://I) :-
-  !,
-  cache:entry_metadata(R,I,iuse,Value),
-  eapi:strip_use_default(Value,Iuse).
-
-% -----------------------------------------------------------------------------
-%  Search: select(iuse, ...)
-% -----------------------------------------------------------------------------
-%
-% Support CLI queries like:
-%   -s iuse=minimal
-%   -s iuse:=mini*
-%
-% Note: IUSE entries may be prefixed with +/- defaults. We strip those before
-% matching, so users can search by the "clean" flag name.
-
-search(select(iuse,equal,Flag), R://I) :-
-  !,
-  cache:entry_metadata(R,I,iuse,Raw),
-  query:iuse_flag_atom(Raw, Flag),
-  atom(Flag).
-
-search(select(iuse,wildcard,Pattern), R://I) :-
-  !,
-  cache:entry_metadata(R,I,iuse,Raw),
-  query:iuse_flag_atom(Raw, Flag),
-  atom(Flag),
-  wildcard_match(Pattern, Flag).
-
+% NOTE (portage-ng#59): a runtime `search(iuse(Iuse), ...)` clause used to
+% live here, stripping +/- defaults — a silent divergence from the
+% compile_query_compound iuse/1 expansion (which returns the raw metadata
+% value, e.g. plus(flag)). The clause was unreachable: the compile-then-call
+% clause above always wins, so the macro semantics (raw value) is THE
+% semantics; callers strip defaults themselves via eapi:strip_use_default/2.
+% CLI iuse searches (-s iuse=...) are handled by the select/4 clauses below.
 
 % -----------------------------------------------------------------------------
 %  Search: iuse with use flag state
@@ -1534,24 +1519,10 @@ select(iuse,tilde,Value,R://I) :-
   query:iuse_flag_atom(Raw, Flag),
   dwim_match(Pattern, Flag).
 
-% Maintainer is stored as a list of emails; match if Pattern matches any member.
-select(maintainer,equal,Pattern,R://I) :-
-  !,
-  cache:entry_metadata(R,I,maintainer,Maintainers),
-  member(M,Maintainers),
-  dwim_match(Pattern,M).
-
-select(maintainer,wildcard,Pattern,R://I) :-
-  !,
-  cache:entry_metadata(R,I,maintainer,Maintainers),
-  member(M,Maintainers),
-  wildcard_match(Pattern,M).
-
-select(maintainer,tilde,Pattern,R://I) :-
-  !,
-  cache:entry_metadata(R,I,maintainer,Maintainers),
-  member(M,Maintainers),
-  dwim_match(Pattern,M).
+% NOTE (portage-ng#59): maintainer-specific select/4 clauses used to live
+% here; they were unreachable duplicates of the select(maintainer,...)
+% compile_query_compound expansions, which handle these queries on both the
+% compile-time and the runtime (compile-then-call) path.
 
 select(Key,equal,Value,R://I) :-
   !,
