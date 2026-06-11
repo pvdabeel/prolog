@@ -421,7 +421,7 @@ download:fetch_distfiles(Repository, Entry, _Context, Failures) :-
 
 download:collect_distfile_specs(Repository, Entry, Specs) :-
   findall(dist(Filename, Size, Pairs),
-    ( kb:query(manifest(preference, dist, Filename, Size), Repository://Entry),
+    ( query:search(manifest(preference, dist, Filename, Size), Repository://Entry),
       download:lookup_checksums(Repository, Entry, Filename, Pairs)
     ),
     Specs0),
@@ -662,7 +662,7 @@ download:verify_hashes(Path, Pairs) :-
 % in `use_conditional_group(Sign, UseFlag, Self, Inner)` terms when
 % the ebuild gates them on a USE flag (or a USE_EXPAND such as
 % `amd64?` for ARCH-conditional binary distfiles, e.g. NVIDIA
-% cusparselt). Going through `kb:query(src_uri(uri(...)))` only
+% cusparselt). Going through `query:search(src_uri(uri(...)))` only
 % binds against the wrapper, so we must traverse the SRC_URI model
 % with `query:deep_member(preference, ...)` -- the same helper used
 % by the manifest path -- to honour the active global USE flags and
@@ -672,7 +672,7 @@ download:verify_hashes(Path, Pairs) :-
 % 404 (which it always does for RESTRICT=mirror distfiles).
 
 download:upstream_url(Repo, Entry, Filename, URL) :-
-  kb:query(all(src_uri(Model)), Repo://Entry),
+  query:search(all(src_uri(Model)), Repo://Entry),
   query:deep_member(preference, uri(Proto, Base, Filename), Model),
   % Guard against partially-bound URI terms (see eapi:uri/3 parser
   % regression). Without nonvar/1 here, an `uri(_,_,Filename)` term
@@ -684,7 +684,7 @@ download:upstream_url(Repo, Entry, Filename, URL) :-
   download:resolve_mirror_uri(Base, Filename, URL).
 
 download:upstream_url(Repo, Entry, Filename, URL) :-
-  kb:query(all(src_uri(Model)), Repo://Entry),
+  query:search(all(src_uri(Model)), Repo://Entry),
   query:deep_member(preference, uri(Proto, Base, Filename), Model),
   nonvar(Proto), nonvar(Base),
   Proto \== '',
@@ -702,7 +702,7 @@ download:upstream_url(Repo, Entry, Filename, URL) :-
 % must be manually obtained by the user.
 
 download:is_fetch_restricted(Repo, Entry) :-
-  kb:query(restrict(fetch), Repo://Entry), !.
+  query:search(restrict(fetch), Repo://Entry), !.
 
 
 % -----------------------------------------------------------------------------

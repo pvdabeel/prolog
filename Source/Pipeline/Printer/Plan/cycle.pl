@@ -183,11 +183,13 @@ cycle:is_pkg_key(_://_:_) :- !.
 
 % Retrieve the cached dependency metadata trees for an ebuild.
 % We search all relevant dependency variables to avoid any fuzzy mapping.
+% Direct query:search/2 (not kb:query) so the compile-time macros inline the
+% cache lookups; this printer code only runs where the KB is local (issue #57).
 cycle:metadata_dep_trees(Repo://Entry, Trees) :-
-  findall(T, kb:query(depend(T),  Repo://Entry), T1),
-  findall(T, kb:query(bdepend(T), Repo://Entry), T2),
-  findall(T, kb:query(rdepend(T), Repo://Entry), T3),
-  findall(T, kb:query(pdepend(T), Repo://Entry), T4),
+  findall(T, query:search(depend(T),  Repo://Entry), T1),
+  findall(T, query:search(bdepend(T), Repo://Entry), T2),
+  findall(T, query:search(rdepend(T), Repo://Entry), T3),
+  findall(T, query:search(pdepend(T), Repo://Entry), T4),
   append([T1,T2,T3,T4], Trees0),
   Trees = Trees0.
 

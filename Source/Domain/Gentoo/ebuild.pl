@@ -170,12 +170,17 @@ ebuild:coprocess_invoke(Location, Entry, Contents) :-
   ebuild:read_until_delimiter(Out, Contents).
 
 
+% The predicates below use query:search/2 directly (not kb:query) so the
+% compile-time macros inline the cache lookups (issue #57). They are called
+% from the printer/builder per-ebuild loops, which only run where the KB is
+% local (standalone, or server-side in client mode).
+
 %! ebuild:download_size(+Repository://+Entry,-T)
 %
 % Retrieve total download size for all files corresponding to a given Entry
 
 ebuild:download_size(Scope,Repository://Entry,T) :-
-  aggregate_all(sum(S),F,kb:query(manifest(Scope,_,F,S),Repository://Entry),T),!.
+  aggregate_all(sum(S),F,query:search(manifest(Scope,_,F,S),Repository://Entry),T),!.
 
 ebuild:download_size(_,_://_,0) :- !.
 
@@ -185,7 +190,7 @@ ebuild:download_size(_,_://_,0) :- !.
 % True if an entry is a virtual
 
 ebuild:is_virtual(Repository://Entry) :-
-  kb:query(category('virtual'),Repository://Entry).
+  query:search(category('virtual'),Repository://Entry).
 
 
 %! ebuild:is_live(+Repository://+Entry)
@@ -193,7 +198,7 @@ ebuild:is_virtual(Repository://Entry) :-
 % True if an entry is live
 
 ebuild:is_live(Repository://Entry) :-
-  kb:query(properties(live),Repository://Entry).
+  query:search(properties(live),Repository://Entry).
 
 
 %! ebuild:is_interactive(+Repository://+Entry)
@@ -201,4 +206,4 @@ ebuild:is_live(Repository://Entry) :-
 % True if an entry is interactive
 
 ebuild:is_interactive(Repository://Entry) :-
-  kb:query(properties(interactive),Repository://Entry).
+  query:search(properties(interactive),Repository://Entry).

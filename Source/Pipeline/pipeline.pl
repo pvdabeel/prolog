@@ -260,7 +260,7 @@ pipeline:multislot_initial_constraints(Goals, Constraints) :-
 pipeline:extract_goal_cns([], []).
 
 pipeline:extract_goal_cns([target(Q, _):_?{_}|Rest], [C-N|More]) :-
-  once(kb:query(Q, R://E)),
+  once(query:search(Q, R://E)),
   query:search([category(C), name(N)], R://E),
   !,
   pipeline:extract_goal_cns(Rest, More).

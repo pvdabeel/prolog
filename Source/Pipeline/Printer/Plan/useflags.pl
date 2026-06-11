@@ -117,12 +117,18 @@ useflags:print_config_prefix :-
 %
 % Extract slot info from proof context; fall back to KB query when absent.
 % Returns [] for default slot 0 or when no slot is available.
+%
+% This module renders plans, so it only ever runs where the KB is local
+% (standalone, or server-side in client mode — see Action/merge.pl). Direct
+% query:search/2 calls let the compile-time macros inline the cache lookups
+% (issue #57); kb:query would pay the instance-dispatch + runtime-expansion
+% meta layers on every call.
 
 useflags:resolve_slot(Repository://Entry, Context, Slot) :-
   ( memberchk(slot(_,_,Slot):{Repository://Entry}, Context)
   -> true
-  ; kb:query(slot(S), Repository://Entry)
-  -> ( kb:query(subslot(Sub), Repository://Entry)
+  ; query:search(slot(S), Repository://Entry)
+  -> ( query:search(subslot(Sub), Repository://Entry)
      -> Slot = [slot(S), subslot(Sub)]
      ;  Slot = [slot(S)]
      )
@@ -145,7 +151,7 @@ useflags:resolve_slot(Repository://Entry, Context, Slot) :-
 % iuse empty
 
 useflags:print_config(Repository://Entry:fetchonly?{_Context}) :-
-  \+(kb:query(iuse(_),Repository://Entry)),!.
+  \+(query:search(iuse(_),Repository://Entry)),!.
 
 % use flags to show
 
@@ -170,14 +176,14 @@ useflags:print_config(Repository://Ebuild:download?{_Context}) :-
 % no downloads
 
 useflags:print_config(Repository://Ebuild:download?{_Context}) :-
-  \+(kb:query(manifest(preference,_,_,_),Repository://Ebuild)),!.
+  \+(query:search(manifest(preference,_,_,_),Repository://Ebuild)),!.
 
 
 % at least one download
 
 useflags:print_config(Repository://Ebuild:download?{_Context}) :-
   !,
-  findall([File,Size],kb:query(manifest(preference,_,File,Size),Repository://Ebuild),Downloads),
+  findall([File,Size],query:search(manifest(preference,_,File,Size),Repository://Ebuild),Downloads),
   sort(Downloads,[[FirstFile,FirstSize]|Rest]),
   useflags:print_config_prefix('file'),
   useflags:print_config_item('download',FirstFile,FirstSize),
@@ -193,7 +199,7 @@ useflags:print_config(Repository://Ebuild:download?{_Context}) :-
 % iuse empty
 
 useflags:print_config(Repository://Entry:install?{Context}) :-
-  \+(kb:query(iuse(_),Repository://Entry)),!,
+  \+(query:search(iuse(_),Repository://Entry)),!,
   useflags:resolve_slot(Repository://Entry, Context, Slot),
   (Slot \== [], Slot \== [slot('0')]
   -> useflags:print_config_prefix('conf'),
@@ -209,10 +215,10 @@ useflags:print_config(Repository://Entry:install?{Context}) :-
   useflags:set_old_use_context(Repository://Entry, Context),
 
   % Get regular USE flags (filtered, excluding USE_EXPAND)
-  findall([Reason,Group], group_by(Reason, Use, kb:query(iuse_filtered(Use,Reason),Repository://Entry), Group), Useflags),
+  findall([Reason,Group], group_by(Reason, Use, query:search(iuse_filtered(Use,Reason),Repository://Entry), Group), Useflags),
 
   % Get all USE flags (including USE_EXPAND ones) for USE_EXPAND processing
-  findall(Use, kb:query(iuse(Use, _Reason), Repository://Entry), AllUseFlags),
+  findall(Use, query:search(iuse(Use, _Reason), Repository://Entry), AllUseFlags),
 
   % Separate regular USE flags from USE_EXPAND flags
   partition(useflags:is_use_expand_flag, AllUseFlags, UseExpandFlags, _RegularUseFlags),
@@ -308,7 +314,7 @@ useflags:group_use_expand_flags(UseExpandFlags, ExpandKey, ExpandFlags, Reposito
           group_by(Reason, Suffix,
                    (member(UseFlag, MatchingFlags),
                     eapi:strip_prefix_atom(ExpandKey, UseFlag, Suffix),
-                    kb:query(iuse(UseFlag, Reason), Repository://Entry)),
+                    query:search(iuse(UseFlag, Reason), Repository://Entry)),
                    Group),
           ExpandFlags).
 

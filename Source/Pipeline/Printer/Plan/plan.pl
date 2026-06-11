@@ -1132,7 +1132,7 @@ plan:footer_stats_from_head(_Other, S, S).
 
 plan:already_downloaded_size(Repository, Entry, Bytes) :-
   aggregate_all(sum(Size), File,
-    ( kb:query(manifest(preference, _, File, Size), Repository://Entry),
+    ( query:search(manifest(preference, _, File, Size), Repository://Entry),
       distfiles:present(File)
     ),
     Bytes), !.
