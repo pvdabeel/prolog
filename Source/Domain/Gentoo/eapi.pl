@@ -1641,7 +1641,8 @@ eapi:jumprule(u, 46) :- !.                               % char: '.'
 eapi:jumprule(u, C) :- code_type(C, alnum), !.           % char: alphanumeric
 
 
-% PMS 9, Section 7.2: A slot name may contain '-','_','+','.', and alphanumeric chars
+% PMS 9, Sections 7.2, 7.3, 7.3.5, 7.3.6: A slot or string name may contain
+% '-','_','+','.', and alphanumeric chars
 
 eapi:jumprule(s, 45) :- !.                               % char: '-'
 eapi:jumprule(s, 95) :- !.                               % char: '_'
@@ -1682,15 +1683,6 @@ eapi:jumprule(f, 95) :- !.                               % char: '_'
 eapi:jumprule(f, 43) :- !.                               % char: '+'
 eapi:jumprule(f, 46) :- !.                               % char: '.'
 eapi:jumprule(f, C) :- code_type(C, alnum), !.           % char: alphanumeric
-
-
-% PMS 9, Sections 7.3, 7.3.5, 7.3.6: A string name may contain '-','_','+','.', and alphanumeric chars
-
-eapi:jumprule(s, 45) :- !.                               % char: '-'
-eapi:jumprule(s, 95) :- !.                               % char: '_'
-eapi:jumprule(s, 43) :- !.                               % char: '+'
-eapi:jumprule(s, 46) :- !.                               % char: '.'
-eapi:jumprule(s, C) :- code_type(C, alnum), !.           % char: alphanumeric
 
 
 % PMS 9, Section 7.3.2: A URI protocol name may contain '-','_','+','@','.', and alphanumeric chars
@@ -1807,12 +1799,6 @@ eapi:kchars([42]) -->
 eapi:kchars([C|T]) -->
   eapi:char(k,C),{ code_type(C,alnum) },!,
   eapi:uchars2(T).
-
-eapi:kchars2(C) -->
-  eapi:uchars(C).
-
-eapi:kchars2([]) -->
-  [],!.
 
 
 %! DCG whites
@@ -2272,9 +2258,12 @@ eapi:substitute_sets([system|Tail],Result) :-
   append(Targets,NewResult,Result),
   eapi:substitute_sets(Tail,NewResult).
 
-eapi:substitute_sets([[0'@|system]|Tail],Result) :-
+eapi:substitute_sets([Atom|Tail],Result) :-
+  atom(Atom),
+  atom_concat('@',Set,Atom),
+  memberchk(Set,[world,system]),
   !,
-  eapi:substitute_sets([system|Tail],Result).
+  eapi:substitute_sets([Set|Tail],Result).
 
 eapi:substitute_sets([Set|Tail],Result) :-
   preference:set(Set,Targets),!,
@@ -2290,53 +2279,10 @@ eapi:substitute_sets([Query|Tail],[Query|Rest]) :-
 %  EAPI keys
 % -----------------------------------------------------------------------------
 
-%! eapi:keys(-Keys)
-%
-% Returns the list of metadata keys (PMS 9, Sections 7.2-7.4).
-
-% CASE: PMS cache version (deprecated)
-
-% eapi:keys(['depend',
-%           'rdepend',
-%           'slot',
-%           'src_uri',
-%           'restrict',
-%           'homepage',
-%           'license',
-%           'description',
-%           'keywords',
-%           'inherited',
-%           'iuse',
-%           'required_use',    % EAPI 4: REQUIRED_USE
-%           'cdepend',         % EAPI 4: PDEPEND
-%           'provide',
-%           'eapi',
-%           'unused',          % EAPI 4: PROPERTIES
-%           'functions',       % EAPI 4: DEFINED_PHASES
-%           'unused',
-%           'unused',
-%           'unused',
-%           'unused',
-%           'unused']).
-
 %! eapi:elem(+Key,+Entry,-Content)
 %
-% Given a key and a pms cache entry, retrieves the element
-% corresponding to the given key.
-%
-% Key:     The cache key
-%
-% Entry:   The pms cache entry
-%
-% Content: The content of the pms cache entry
-
-% eapi:elem(K,E,C) :-
-%   eapi:keys(S),
-%   system:nth1(N,S,K),
-%   system:nth1(N,E,C).
-
-
-% CASE: MD5 version
+% Given a key and an md5-cache entry (a list of Key(Content) terms),
+% retrieves the content corresponding to the given key.
 
 eapi:elem(K,[E|_],C) :-
   E =.. [K,C],

@@ -993,8 +993,7 @@ get_type(Type) ::-
 
 get_size(Size) ::-
   :this(Repository),
-  findall(E,Repository:entry(E),L),
-  length(L,Size).
+  aggregate_all(count,Repository:entry(_),Size).
 
 
 %! repository:get_ebuild_file(+Entry,-Ebuild)
