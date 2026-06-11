@@ -1166,6 +1166,22 @@ config:build_live_phases([clean, setup, unpack, prepare, configure, compile, tes
 config:build_serial_retry(true).
 
 
+%! config:build_transient_retry(?Bool)
+%
+% When true, a failed phase whose log tail carries the bash PID-reuse
+% signature ("wait: pid N is not a child of this shell") is retried
+% once before the build is declared failed (portage-ng#76). The
+% signature comes from Portage helpers (ecompress, ...) that `wait`
+% on a process-substitution pid which bash has lost track of due to
+% PID recycling under high fork rates (Gentoo bug #965423, fixed
+% upstream in Nov 2025). The failure is environmental and transient,
+% not a property of the ebuild, so a single retry of the same phase
+% recovers it. Deterministic failures don't match the signature and
+% fail immediately, keeping their original semantics.
+
+config:build_transient_retry(true).
+
+
 %! config:features_test_enabled is semidet.
 %
 % True iff FEATURES (env > make.conf > fallback) contains 'test' with

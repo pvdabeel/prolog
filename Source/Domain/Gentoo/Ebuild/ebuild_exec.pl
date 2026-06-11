@@ -567,6 +567,106 @@ ebuild_exec:maybe_serial_retry(EbuildPath, Phase, LogPath, UseString, Callback, 
 
 
 % =============================================================================
+%  Transient-failure retry (bash PID-reuse race, portage-ng#76)
+% =============================================================================
+%
+% Portage helpers such as ecompress `wait` on the pid of a process
+% substitution to collect find(1)'s exit status. Bash retains only a
+% bounded table of reaped background pids, so under a high fork rate
+% (e.g. guile's install phase forking thousands of rm/ln invocations,
+% tinderbox sessions with bounded kernel.pid_max) the pid gets
+% recycled and bash bails with:
+%
+%   ecompress: line 106: wait: pid 822745 is not a child of this shell
+%
+% which `die`s the whole phase even though every file operation
+% succeeded. This is Gentoo bug #965423, fixed upstream in Nov 2025
+% by replacing `wait "$!"` with a PIPESTATUS check -- but any portage
+% predating that fix can still hit it. The failure is environmental
+% and transient (it depends on system-wide fork rate at the moment
+% the helper runs), not a property of the ebuild, so retrying the
+% same phase once recovers it. For `install` the retry is cheap:
+% dyn_install re-runs src_install from the completed compile.
+%
+% Detection is signature-based on the log segment written by the
+% failed phase (never earlier phases), so deterministic build
+% failures never match and keep their original semantics. Gated by
+% config:build_transient_retry/1.
+
+%! ebuild_exec:transient_retry_enabled is semidet.
+
+ebuild_exec:transient_retry_enabled :-
+  catch(config:build_transient_retry(true), _, fail).
+
+
+%! ebuild_exec:transient_phase_error(+LogPath, +SizeBefore) is semidet.
+%
+% True when the log content appended after byte offset SizeBefore
+% (i.e. by the phase that just failed) contains the bash PID-reuse
+% signature. Only the trailing 64KB of the segment is examined: the
+% helpers that emit this signature run at the very end of a phase,
+% and this keeps the check cheap even for multi-MB compile logs.
+
+ebuild_exec:transient_phase_error(LogPath, SizeBefore) :-
+  catch(
+    ( exists_file(LogPath),
+      size_file(LogPath, Size),
+      Size > SizeBefore,
+      Start is max(SizeBefore, Size - 65536),
+      Len is Size - Start,
+      setup_call_cleanup(
+        open(LogPath, read, S, [type(binary)]),
+        ( seek(S, Start, bof, _),
+          read_string(S, Len, Tail)
+        ),
+        close(S))
+    ),
+    _, fail),
+  sub_string(Tail, _, _, _, "is not a child of this shell"),
+  sub_string(Tail, _, _, _, "wait: pid"),
+  !.
+
+
+%! ebuild_exec:log_transient_retry(+LogPath, +Phase, +ExitCode) is det.
+%
+% Writes a marker line to the build log so the retry is visible when
+% inspecting failures.
+
+ebuild_exec:log_transient_retry(LogPath, Phase, ExitCode) :-
+  catch(
+    ( open(LogPath, append, S),
+      format(S, '~n=== ~w failed (exit ~w) with bash PID-reuse signature; retrying once (transient, portage-ng#76 / Gentoo#965423) ===~n',
+             [Phase, ExitCode]),
+      close(S)
+    ), _, true).
+
+
+%! ebuild_exec:maybe_transient_retry(+EbuildPath, +Phase, +LogPath, +UseString, :Callback, +SizeBefore, +ExitCode0, -ExitCode) is det.
+%
+% Per-phase retry hook for the sequential execution path. On a
+% non-zero exit whose log segment (bytes after SizeBefore) matches
+% the PID-reuse signature, re-runs that single phase once and returns
+% the retry's exit code; otherwise passes ExitCode0 through unchanged.
+% Runs before maybe_serial_retry/7 in the retry chain: the signature
+% match is more specific than the serial heuristic, and the retry
+% keeps the original (parallel) environment since the failure has
+% nothing to do with make-level parallelism.
+
+:- meta_predicate ebuild_exec:maybe_transient_retry(+, +, +, +, 2, +, +, -).
+
+ebuild_exec:maybe_transient_retry(_, _, _, _, _, _, 0, 0) :- !.
+
+ebuild_exec:maybe_transient_retry(EbuildPath, Phase, LogPath, UseString, Callback, SizeBefore, ExitCode0, ExitCode) :-
+  ( ebuild_exec:transient_retry_enabled,
+    ebuild_exec:transient_phase_error(LogPath, SizeBefore)
+  -> ebuild_exec:log_transient_retry(LogPath, Phase, ExitCode0),
+     ebuild_exec:start_phase_async(EbuildPath, Phase, LogPath, UseString, Pid),
+     ebuild_exec:poll_phase_spinning(Pid, Phase, Callback, ExitCode)
+  ;  ExitCode = ExitCode0
+  ).
+
+
+% =============================================================================
 %  Phase execution
 % =============================================================================
 
@@ -769,7 +869,8 @@ ebuild_exec:run_phases_sequential(EbuildPath, Entry, [Phase|Rest], DisplayPhases
   !,
   ebuild_exec:start_phase_async(EbuildPath, Phase, LogPath, UseString, Pid),
   ebuild_exec:poll_phase_progress(Pid, Phase, LogPath, SizeBefore, T0, ExpBytes, ExpSecs, Callback, ExitCode0),
-  ebuild_exec:maybe_serial_retry(EbuildPath, Phase, LogPath, UseString, Callback, ExitCode0, ExitCode),
+  ebuild_exec:maybe_transient_retry(EbuildPath, Phase, LogPath, UseString, Callback, SizeBefore, ExitCode0, ExitCode1),
+  ebuild_exec:maybe_serial_retry(EbuildPath, Phase, LogPath, UseString, Callback, ExitCode1, ExitCode),
   get_time(T1),
   TotalSecs is T1 - T0,
   ebuild_exec:log_file_size(LogPath, SizeAfter),
@@ -802,7 +903,8 @@ ebuild_exec:run_phases_sequential(EbuildPath, Entry, [Phase|Rest], DisplayPhases
   get_time(T0),
   ebuild_exec:start_phase_async(EbuildPath, Phase, LogPath, UseString, Pid),
   ebuild_exec:poll_phase_spinning(Pid, Phase, Callback, ExitCode0),
-  ebuild_exec:maybe_serial_retry(EbuildPath, Phase, LogPath, UseString, Callback, ExitCode0, ExitCode),
+  ebuild_exec:maybe_transient_retry(EbuildPath, Phase, LogPath, UseString, Callback, SizeBefore, ExitCode0, ExitCode1),
+  ebuild_exec:maybe_serial_retry(EbuildPath, Phase, LogPath, UseString, Callback, ExitCode1, ExitCode),
   get_time(T1),
   TotalSecs is T1 - T0,
   ebuild_exec:log_file_size(LogPath, SizeAfter),
