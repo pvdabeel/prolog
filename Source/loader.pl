@@ -9,14 +9,265 @@
 
 
 /** <module> LOADER
-Per-mode module loading. Each predicate loads the libraries and application
-modules required by a specific operating mode (standalone, client, server,
-worker) or shared subsystem (common, LLM).
+Per-mode module loading. Module groups are declared as loader:group/2 facts
+and the per-mode loaders (standalone, client, server, worker, ...) are
+composed from those groups. A module needed by several modes lives in exactly
+one shared group, so additions propagate automatically and the delta between
+modes (e.g. standalone vs worker) stays explicit and reviewable.
 */
 
 % =============================================================================
 %  LOADER declarations
 % =============================================================================
+
+% -----------------------------------------------------------------------------
+%  Module groups
+% -----------------------------------------------------------------------------
+
+%! loader:group(?Group, ?Specs) is nondet.
+%
+% Declares a named, ordered group of file specs (library/1 or portage/1
+% terms). Order within a group is load order; compile-time dependencies
+% (operators, goal expansion, OO context declarations) must precede their
+% dependents.
+
+loader:group(common_libraries,
+   [library('apply_macros'),
+    library('optparse'),
+    library('lists'),
+    library('error'),
+    library('option'),
+    library('shell'),
+    library('tty'),
+    library('time'),
+    library('readutil'),
+    library('ansi_term'),
+    library('filesex'),
+    library('process'),
+    library('thread'),
+    library('ordsets'),
+    library('socket'),
+    library('assoc'),
+    library('apply'),
+    library('sort'),
+    library('pairs'),
+    library('uri'),
+    library('solution_sequences')]).
+
+loader:group(common_modules,
+   [portage('Source/Logic/context.pl'),
+    portage('Source/Logic/unify.pl'),
+    portage('Source/config'),
+    portage('Source/Application/System/os.pl'),
+    portage('Source/Application/System/lock.pl'),
+    portage('Source/Application/Security/sanitize.pl'),
+    portage('Source/Application/Output/message.pl'),
+    portage('Source/Application/interface.pl'),
+    portage('Source/Application/Interface/action.pl'),
+    portage('Source/Application/System/subprocess.pl'),
+    portage('Source/Application/System/bonjour.pl'),
+    portage('Source/Domain/Gentoo/Preference/profile.pl'),
+    portage('Source/Domain/Gentoo/eapi.pl'),
+    portage('Source/Pipeline/reader.pl'),
+    portage('Source/Domain/Gentoo/set.pl')]).
+
+loader:group(ipc_modules,
+   [portage('Source/Application/Mode/ipc.pl')]).
+
+loader:group(daemon_modules,
+   [portage('Source/Application/Mode/daemon.pl')]).
+
+loader:group(client_libraries,
+   [library('socket'),
+    library('broadcast'),
+    library('pengines'),
+    library('http/http_path'),
+    library('http/http_open'),
+    library('http/http_ssl_plugin'),
+    library('http/thread_httpd'),
+    library('http/http_digest')]).
+
+loader:group(client_core_modules,
+   [portage('Source/Application/Mode/stubs.pl'),
+    portage('Source/Knowledge/knowledgebase.pl'),
+    portage('Source/Domain/Gentoo/ebuild.pl')]).
+
+loader:group(client_modules,
+   [portage('Source/Domain/Gentoo/variant.pl'),
+    portage('Source/Pipeline/Builder/snapshot.pl'),
+    portage('Source/Application/Output/writer.pl'),
+    portage('Source/Domain/Gentoo/Preference/userconfig.pl'),
+    portage('Source/Domain/Gentoo/Preference/fallback.pl'),
+    portage('Source/Domain/Gentoo/preference'),
+    portage('Source/Application/System/script.pl'),
+    portage('Source/Application/Mode/client.pl')]).
+
+loader:group(pipeline_libraries,
+   [library('aggregate'),
+    library('apply_macros'),
+    library('crypto'),
+    library('socket'),
+    library('pengines')]).
+
+loader:group(rpc_libraries,
+   [library('broadcast'),
+    library('http/http_path'),
+    library('http/http_open'),
+    library('http/http_ssl_plugin'),
+    library('http/thread_httpd'),
+    library('http/http_digest')]).
+
+loader:group(knowledge_modules,
+   [portage('Source/Application/Mode/stubs.pl'),
+    portage('Source/Logic/context.pl'),
+    portage('Source/Knowledge/cache.pl'),
+    portage('Source/Knowledge/repository.pl'),
+    portage('Source/Knowledge/knowledgebase.pl'),
+    portage('Source/Knowledge/query.pl')]).
+
+loader:group(domain_modules,
+   [portage('Source/Domain/Gentoo/eapi.pl'),
+    portage('Source/Domain/Gentoo/version.pl'),
+    portage('Source/Pipeline/Prover/explainer.pl'),
+    portage('Source/Pipeline/Prover/explanation.pl'),
+    portage('Source/Domain/Gentoo/issue.pl'),
+    portage('Source/Domain/Gentoo/rules.pl'),
+    portage('Source/Domain/Gentoo/Rules/memo.pl'),
+    portage('Source/Domain/Gentoo/Rules/use.pl'),
+    portage('Source/Domain/Gentoo/Rules/candidate.pl'),
+    portage('Source/Domain/Gentoo/Rules/heuristic.pl'),
+    portage('Source/Domain/Gentoo/Rules/dependency.pl'),
+    portage('Source/Domain/Gentoo/Rules/target.pl'),
+    portage('Source/Domain/Gentoo/Rules/featureterm.pl'),
+    portage('Source/Domain/Gentoo/ebuild.pl'),
+    portage('Source/Application/System/script.pl'),
+    portage('Source/Knowledge/stat.pl'),
+    portage('Source/Domain/Gentoo/vdb.pl'),
+    portage('Source/Domain/Gentoo/distfiles.pl'),
+    portage('Source/Domain/Gentoo/Preference/userconfig.pl'),
+    portage('Source/Domain/Gentoo/Preference/fallback.pl'),
+    portage('Source/Domain/Gentoo/preference')]).
+
+loader:group(pipeline_modules,
+   [portage('Source/Application/Performance/sampler.pl'),
+    portage('Source/Pipeline/reader.pl'),
+    portage('Source/Pipeline/parser.pl'),
+    portage('Source/Pipeline/prover.pl'),
+    portage('Source/Logic/constraint.pl'),
+    portage('Source/Pipeline/planner.pl'),
+    portage('Source/Pipeline/scheduler.pl')]).
+
+loader:group(printer_modules,
+   [portage('Source/Pipeline/Printer/Plan/assumption.pl'),
+    portage('Source/Pipeline/Printer/Plan/annotation.pl'),
+    portage('Source/Pipeline/Printer/Plan/cycle.pl'),
+    portage('Source/Pipeline/Printer/Plan/warning.pl'),
+    portage('Source/Pipeline/Printer/Plan/plan.pl'),
+    portage('Source/Pipeline/Printer/Plan/timing.pl'),
+    portage('Source/Pipeline/Printer/index.pl'),
+    portage('Source/Pipeline/Printer/info.pl'),
+    portage('Source/Pipeline/Printer/News/news.pl'),
+    portage('Source/Pipeline/Printer/stats.pl'),
+    portage('Source/Pipeline/Printer/state.pl'),
+    portage('Source/Pipeline/printer.pl'),
+    portage('Source/Pipeline/pipeline.pl')]).
+
+loader:group(standalone_modules,
+   [portage('Source/Domain/Gentoo/mirror.pl'),
+    portage('Source/Pipeline/Builder/buildtime.pl'),
+    portage('Source/Domain/Gentoo/Binpkg/binpkg_index.pl'),
+    portage('Source/Domain/Gentoo/Binpkg/binpkg_extract.pl'),
+    portage('Source/Domain/Gentoo/Binpkg/binpkg_exec.pl'),
+    portage('Source/Pipeline/Printer/Build/build.pl'),
+    portage('Source/Domain/Gentoo/variant.pl'),
+    portage('Source/Pipeline/Builder/snapshot.pl'),
+    portage('Source/Pipeline/Builder/jobserver.pl'),
+    portage('Source/Pipeline/Builder/download.pl'),
+    portage('Source/Domain/Gentoo/Ebuild/ebuild_exec.pl'),
+    portage('Source/Pipeline/builder.pl'),
+    portage('Source/Application/Output/writer.pl'),
+    portage('Source/Application/Output/Grapher/navtheme.pl'),
+    portage('Source/Application/Output/Grapher/gantt.pl'),
+    portage('Source/Application/Output/Grapher/deptree.pl'),
+    portage('Source/Application/Output/Grapher/detail.pl'),
+    portage('Source/Application/Output/Grapher/terminal.pl'),
+    portage('Source/Application/Output/Grapher/dot.pl'),
+    portage('Source/Application/Output/grapher.pl'),
+    portage('Source/Application/Mode/worker.pl'),
+    portage('Source/Test/tester.pl'),
+    portage('Source/Application/Mode/cluster.pl'),
+    portage('Source/Pipeline/Planner/kahn.pl'),
+    portage('Source/Domain/Gentoo/depclean.pl'),
+    portage('Source/Application/System/linkage.pl'),
+    portage('Source/Application/Output/Report/report.pl'),
+    library('http/http_open'),
+    library('http/http_json'),
+    portage('Source/Domain/Gentoo/upstream.pl'),
+    portage('Source/Domain/Gentoo/bugs.pl'),
+    portage('Source/Test/test.pl')]).
+
+loader:group(worker_modules,
+   [portage('Source/Application/Output/writer.pl'),
+    portage('Source/Application/Mode/client.pl'),
+    portage('Source/Application/Mode/worker.pl'),
+    portage('Source/Application/Mode/cluster.pl')]).
+
+loader:group(server_libraries,
+   [library('http/http_server'),
+    library('http/http_open'),
+    library('http/http_ssl_plugin'),
+    library('http/http_digest'),
+    library('http/thread_httpd'),
+    library('streams'),
+    library('pengines')]).
+
+% server.pl must precede sandbox.pl: the sandbox library validates
+% safe_primitive declarations against already-defined predicates.
+loader:group(server_modules,
+   [portage('Source/Application/Mode/server.pl'),
+    portage('Source/Application/Security/sandbox.pl')]).
+
+loader:group(llm_libraries,
+   [library('quasi_quotations'),
+    library('http/http_open'),
+    library('http/http_json'),
+    library('edit'),
+    library('pcre'),
+    library('sandbox')]).
+
+loader:group(llm_modules,
+   [portage('Source/Application/llm.pl'),
+    portage('Source/Application/Llm/grok.pl'),
+    portage('Source/Application/Llm/chatgpt.pl'),
+    portage('Source/Application/Llm/claude.pl'),
+    portage('Source/Application/Llm/gemini.pl'),
+    portage('Source/Application/Llm/ollama.pl'),
+    portage('Source/Application/Llm/explain.pl'),
+    portage('Source/Application/Llm/semantic.pl')]).
+
+
+% -----------------------------------------------------------------------------
+%  Group loading
+% -----------------------------------------------------------------------------
+
+%! loader:load_group(+Group) is det.
+%
+% Loads every file spec in a module group, in declaration order. Files are
+% loaded into the user module, matching the load context of the historical
+% per-mode loader predicates.
+
+loader:load_group(Group) :-
+   loader:group(Group, Specs),
+   forall(member(Spec, Specs), user:ensure_loaded(Spec)).
+
+
+%! loader:load_groups(+Groups) is det.
+%
+% Loads a list of module groups in order.
+
+loader:load_groups(Groups) :-
+   forall(member(Group, Groups), loader:load_group(Group)).
+
 
 % -----------------------------------------------------------------------------
 %  Common modules
@@ -28,44 +279,8 @@ worker) or shared subsystem (common, LLM).
 
 load_common_modules :-
 
-   ensure_loaded(library('apply_macros')),
-   ensure_loaded(library('optparse')),
-   ensure_loaded(library('lists')),
-   ensure_loaded(library('error')),
-   ensure_loaded(library('option')),
-   ensure_loaded(library('shell')),
-   ensure_loaded(library('tty')),
-   ensure_loaded(library('time')),
-   
-   ensure_loaded(library('readutil')),
-   ensure_loaded(library('ansi_term')),
-   ensure_loaded(library('filesex')),
-   ensure_loaded(library('process')),
-   ensure_loaded(library('thread')),
-   ensure_loaded(library('ordsets')),
-   ensure_loaded(library('socket')),
-   ensure_loaded(library('assoc')),
-   ensure_loaded(library('apply')),
-   ensure_loaded(library('sort')),
-   ensure_loaded(library('pairs')),
-   ensure_loaded(library('uri')),
-   ensure_loaded(library('solution_sequences')),
-
-   ensure_loaded(portage('Source/Logic/context.pl')),
-   ensure_loaded(portage('Source/Logic/unify.pl')),
-   ensure_loaded(portage('Source/config')),
-   ensure_loaded(portage('Source/Application/System/os.pl')),
-   ensure_loaded(portage('Source/Application/System/lock.pl')),
-   ensure_loaded(portage('Source/Application/Security/sanitize.pl')),
-   ensure_loaded(portage('Source/Application/Output/message.pl')),
-   ensure_loaded(portage('Source/Application/interface.pl')),
-   ensure_loaded(portage('Source/Application/Interface/action.pl')),
-   ensure_loaded(portage('Source/Application/System/subprocess.pl')),
-   ensure_loaded(portage('Source/Application/System/bonjour.pl')),
-   ensure_loaded(portage('Source/Domain/Gentoo/Preference/profile.pl')),
-   ensure_loaded(portage('Source/Domain/Gentoo/eapi.pl')),
-   ensure_loaded(portage('Source/Pipeline/reader.pl')),
-   ensure_loaded(portage('Source/Domain/Gentoo/set.pl')),
+   loader:load_groups([common_libraries,
+                       common_modules]),
 
    message:log('Loaded common modules...').
 
@@ -82,7 +297,7 @@ load_common_modules :-
 
 load_ipc_modules :-
 
-   ensure_loaded(portage('Source/Application/Mode/ipc.pl')),
+   loader:load_groups([ipc_modules]),
 
    message:log('Loaded ipc modules...').
 
@@ -98,7 +313,7 @@ load_ipc_modules :-
 
 load_daemon_modules :-
 
-   ensure_loaded(portage('Source/Application/Mode/daemon.pl')),
+   loader:load_groups([daemon_modules]),
 
    message:log('Loaded daemon modules...').
 
@@ -109,43 +324,15 @@ load_daemon_modules :-
 
 %! load_client_modules is det.
 %
-% Loads the client modules for remote server communication.
+% Loads the client modules for remote server communication: KB front-end,
+% printers, and the client RPC module.
 
 load_client_modules :-
 
-   ensure_loaded(library('socket')),
-   ensure_loaded(library('broadcast')),
-   ensure_loaded(library('pengines')),
-   ensure_loaded(library('http/http_path')),
-   ensure_loaded(library('http/http_open')),
-   ensure_loaded(library('http/http_ssl_plugin')),
-   ensure_loaded(library('http/thread_httpd')),
-   ensure_loaded(library('http/http_digest')),
-
-   ensure_loaded(portage('Source/Application/Mode/stubs.pl')),
-   ensure_loaded(portage('Source/Knowledge/knowledgebase.pl')),
-   ensure_loaded(portage('Source/Domain/Gentoo/ebuild.pl')),
-   ensure_loaded(portage('Source/Pipeline/Printer/Plan/assumption.pl')),
-   ensure_loaded(portage('Source/Pipeline/Printer/Plan/annotation.pl')),
-   ensure_loaded(portage('Source/Pipeline/Printer/Plan/cycle.pl')),
-   ensure_loaded(portage('Source/Pipeline/Printer/Plan/warning.pl')),
-   ensure_loaded(portage('Source/Pipeline/Printer/Plan/plan.pl')),
-   ensure_loaded(portage('Source/Pipeline/Printer/Plan/timing.pl')),
-   ensure_loaded(portage('Source/Pipeline/Printer/index.pl')),
-   ensure_loaded(portage('Source/Pipeline/Printer/info.pl')),
-   ensure_loaded(portage('Source/Pipeline/Printer/News/news.pl')),
-   ensure_loaded(portage('Source/Pipeline/Printer/stats.pl')),
-   ensure_loaded(portage('Source/Pipeline/Printer/state.pl')),
-   ensure_loaded(portage('Source/Pipeline/printer.pl')),
-   ensure_loaded(portage('Source/Pipeline/pipeline.pl')),
-   ensure_loaded(portage('Source/Domain/Gentoo/variant.pl')),
-   ensure_loaded(portage('Source/Pipeline/Builder/snapshot.pl')),
-   ensure_loaded(portage('Source/Application/Output/writer.pl')),
-   ensure_loaded(portage('Source/Domain/Gentoo/Preference/userconfig.pl')),
-   ensure_loaded(portage('Source/Domain/Gentoo/Preference/fallback.pl')),
-   ensure_loaded(portage('Source/Domain/Gentoo/preference')),
-   ensure_loaded(portage('Source/Application/System/script.pl')),
-   ensure_loaded(portage('Source/Application/Mode/client.pl')),
+   loader:load_groups([client_libraries,
+                       client_core_modules,
+                       printer_modules,
+                       client_modules]),
 
    message:log('Loaded client modules...').
 
@@ -161,97 +348,12 @@ load_client_modules :-
 
 load_standalone_modules :-
 
-   ensure_loaded(library('aggregate')),
-   ensure_loaded(library('apply_macros')),
-   ensure_loaded(library('crypto')),
-   ensure_loaded(library('socket')),
-   ensure_loaded(library('pengines')),
-
-   ensure_loaded(portage('Source/Application/Mode/stubs.pl')),
-   ensure_loaded(portage('Source/Logic/context.pl')),
-   ensure_loaded(portage('Source/Knowledge/cache.pl')),
-   ensure_loaded(portage('Source/Knowledge/repository.pl')),
-   ensure_loaded(portage('Source/Knowledge/knowledgebase.pl')),
-   ensure_loaded(portage('Source/Knowledge/query.pl')),
-
-   ensure_loaded(portage('Source/Domain/Gentoo/eapi.pl')),
-   ensure_loaded(portage('Source/Domain/Gentoo/version.pl')),
-   ensure_loaded(portage('Source/Domain/Gentoo/mirror.pl')),
-   ensure_loaded(portage('Source/Pipeline/Prover/explainer.pl')),
-   ensure_loaded(portage('Source/Pipeline/Prover/explanation.pl')),
-   ensure_loaded(portage('Source/Domain/Gentoo/issue.pl')),
-   ensure_loaded(portage('Source/Domain/Gentoo/rules.pl')),
-   ensure_loaded(portage('Source/Domain/Gentoo/Rules/memo.pl')),
-   ensure_loaded(portage('Source/Domain/Gentoo/Rules/use.pl')),
-   ensure_loaded(portage('Source/Domain/Gentoo/Rules/candidate.pl')),
-   ensure_loaded(portage('Source/Domain/Gentoo/Rules/heuristic.pl')),
-   ensure_loaded(portage('Source/Domain/Gentoo/Rules/dependency.pl')),
-   ensure_loaded(portage('Source/Domain/Gentoo/Rules/target.pl')),
-   ensure_loaded(portage('Source/Domain/Gentoo/Rules/featureterm.pl')),
-   ensure_loaded(portage('Source/Domain/Gentoo/ebuild.pl')),
-   ensure_loaded(portage('Source/Application/System/script.pl')),
-   ensure_loaded(portage('Source/Knowledge/stat.pl')),
-   ensure_loaded(portage('Source/Domain/Gentoo/vdb.pl')),
-   ensure_loaded(portage('Source/Pipeline/Builder/buildtime.pl')),
-   ensure_loaded(portage('Source/Domain/Gentoo/distfiles.pl')),
-   ensure_loaded(portage('Source/Domain/Gentoo/Binpkg/binpkg_index.pl')),
-   ensure_loaded(portage('Source/Domain/Gentoo/Binpkg/binpkg_extract.pl')),
-   ensure_loaded(portage('Source/Domain/Gentoo/Binpkg/binpkg_exec.pl')),
-   ensure_loaded(portage('Source/Domain/Gentoo/Preference/userconfig.pl')),
-   ensure_loaded(portage('Source/Domain/Gentoo/Preference/fallback.pl')),
-   ensure_loaded(portage('Source/Domain/Gentoo/preference')),
-
-   ensure_loaded(portage('Source/Application/Performance/sampler.pl')),
-
-   ensure_loaded(portage('Source/Pipeline/reader.pl')),
-   ensure_loaded(portage('Source/Pipeline/parser.pl')),
-   ensure_loaded(portage('Source/Pipeline/prover.pl')),
-   ensure_loaded(portage('Source/Logic/constraint.pl')),
-   ensure_loaded(portage('Source/Pipeline/planner.pl')),
-   ensure_loaded(portage('Source/Pipeline/scheduler.pl')),
-   ensure_loaded(portage('Source/Pipeline/Printer/Plan/assumption.pl')),
-   ensure_loaded(portage('Source/Pipeline/Printer/Plan/annotation.pl')),
-   ensure_loaded(portage('Source/Pipeline/Printer/Plan/cycle.pl')),
-   ensure_loaded(portage('Source/Pipeline/Printer/Plan/warning.pl')),
-   ensure_loaded(portage('Source/Pipeline/Printer/Plan/plan.pl')),
-   ensure_loaded(portage('Source/Pipeline/Printer/Plan/timing.pl')),
-   ensure_loaded(portage('Source/Pipeline/Printer/index.pl')),
-   ensure_loaded(portage('Source/Pipeline/Printer/info.pl')),
-   ensure_loaded(portage('Source/Pipeline/Printer/News/news.pl')),
-   ensure_loaded(portage('Source/Pipeline/Printer/stats.pl')),
-   ensure_loaded(portage('Source/Pipeline/Printer/state.pl')),
-   ensure_loaded(portage('Source/Pipeline/Printer/Build/build.pl')),
-   ensure_loaded(portage('Source/Pipeline/printer.pl')),
-   ensure_loaded(portage('Source/Pipeline/pipeline.pl')),
-   ensure_loaded(portage('Source/Domain/Gentoo/variant.pl')),
-   ensure_loaded(portage('Source/Pipeline/Builder/snapshot.pl')),
-   ensure_loaded(portage('Source/Pipeline/Builder/jobserver.pl')),
-   ensure_loaded(portage('Source/Pipeline/Builder/download.pl')),
-   ensure_loaded(portage('Source/Domain/Gentoo/Ebuild/ebuild_exec.pl')),
-   ensure_loaded(portage('Source/Pipeline/builder.pl')),
-   ensure_loaded(portage('Source/Application/Output/writer.pl')),
-   ensure_loaded(portage('Source/Application/Output/Grapher/navtheme.pl')),
-   ensure_loaded(portage('Source/Application/Output/Grapher/gantt.pl')),
-   ensure_loaded(portage('Source/Application/Output/Grapher/deptree.pl')),
-   ensure_loaded(portage('Source/Application/Output/Grapher/detail.pl')),
-   ensure_loaded(portage('Source/Application/Output/Grapher/terminal.pl')),
-   ensure_loaded(portage('Source/Application/Output/Grapher/dot.pl')),
-   ensure_loaded(portage('Source/Application/Output/grapher.pl')),
-   ensure_loaded(portage('Source/Application/Mode/worker.pl')),
-   ensure_loaded(portage('Source/Test/tester.pl')),
-   ensure_loaded(portage('Source/Application/Mode/cluster.pl')),
-
-   ensure_loaded(portage('Source/Pipeline/Planner/kahn.pl')),
-   ensure_loaded(portage('Source/Domain/Gentoo/depclean.pl')),
-   ensure_loaded(portage('Source/Application/System/linkage.pl')),
-   ensure_loaded(portage('Source/Application/Output/Report/report.pl')),
-
-   ensure_loaded(library('http/http_open')),
-   ensure_loaded(library('http/http_json')),
-   ensure_loaded(portage('Source/Domain/Gentoo/upstream.pl')),
-   ensure_loaded(portage('Source/Domain/Gentoo/bugs.pl')),
-
-   ensure_loaded(portage('Source/Test/test.pl')),
+   loader:load_groups([pipeline_libraries,
+                       knowledge_modules,
+                       domain_modules,
+                       pipeline_modules,
+                       printer_modules,
+                       standalone_modules]),
 
    message:log('Loaded standalone modules...').
 
@@ -263,74 +365,20 @@ load_standalone_modules :-
 %! load_worker_modules is det.
 %
 % Loads the full proving pipeline plus client RPC for communicating
-% with the server.
+% with the server. Shares knowledge_modules, domain_modules,
+% pipeline_modules and printer_modules with standalone; the delta is
+% standalone_modules (builder/grapher/test extras) vs worker_modules
+% (client RPC).
 
 load_worker_modules :-
 
-   ensure_loaded(library('aggregate')),
-   ensure_loaded(library('apply_macros')),
-   ensure_loaded(library('crypto')),
-   ensure_loaded(library('socket')),
-   ensure_loaded(library('broadcast')),
-   ensure_loaded(library('pengines')),
-   ensure_loaded(library('http/http_path')),
-   ensure_loaded(library('http/http_open')),
-   ensure_loaded(library('http/http_ssl_plugin')),
-   ensure_loaded(library('http/thread_httpd')),
-   ensure_loaded(library('http/http_digest')),
-
-   ensure_loaded(portage('Source/Application/Mode/stubs.pl')),
-   ensure_loaded(portage('Source/Logic/context.pl')),
-   ensure_loaded(portage('Source/Knowledge/cache.pl')),
-   ensure_loaded(portage('Source/Knowledge/repository.pl')),
-   ensure_loaded(portage('Source/Knowledge/knowledgebase.pl')),
-   ensure_loaded(portage('Source/Knowledge/query.pl')),
-
-   ensure_loaded(portage('Source/Domain/Gentoo/eapi.pl')),
-   ensure_loaded(portage('Source/Domain/Gentoo/version.pl')),
-   ensure_loaded(portage('Source/Domain/Gentoo/rules.pl')),
-   ensure_loaded(portage('Source/Domain/Gentoo/Rules/memo.pl')),
-   ensure_loaded(portage('Source/Domain/Gentoo/Rules/use.pl')),
-   ensure_loaded(portage('Source/Domain/Gentoo/Rules/candidate.pl')),
-   ensure_loaded(portage('Source/Domain/Gentoo/Rules/heuristic.pl')),
-   ensure_loaded(portage('Source/Domain/Gentoo/Rules/dependency.pl')),
-   ensure_loaded(portage('Source/Domain/Gentoo/Rules/target.pl')),
-   ensure_loaded(portage('Source/Domain/Gentoo/Rules/featureterm.pl')),
-   ensure_loaded(portage('Source/Domain/Gentoo/ebuild.pl')),
-   ensure_loaded(portage('Source/Application/System/script.pl')),
-   ensure_loaded(portage('Source/Knowledge/stat.pl')),
-   ensure_loaded(portage('Source/Domain/Gentoo/vdb.pl')),
-   ensure_loaded(portage('Source/Domain/Gentoo/distfiles.pl')),
-   ensure_loaded(portage('Source/Domain/Gentoo/Preference/userconfig.pl')),
-   ensure_loaded(portage('Source/Domain/Gentoo/Preference/fallback.pl')),
-   ensure_loaded(portage('Source/Domain/Gentoo/preference')),
-
-   ensure_loaded(portage('Source/Application/Performance/sampler.pl')),
-
-   ensure_loaded(portage('Source/Pipeline/reader.pl')),
-   ensure_loaded(portage('Source/Pipeline/parser.pl')),
-   ensure_loaded(portage('Source/Pipeline/prover.pl')),
-   ensure_loaded(portage('Source/Logic/constraint.pl')),
-   ensure_loaded(portage('Source/Pipeline/planner.pl')),
-   ensure_loaded(portage('Source/Pipeline/scheduler.pl')),
-   ensure_loaded(portage('Source/Pipeline/Printer/Plan/assumption.pl')),
-   ensure_loaded(portage('Source/Pipeline/Printer/Plan/annotation.pl')),
-   ensure_loaded(portage('Source/Pipeline/Printer/Plan/cycle.pl')),
-   ensure_loaded(portage('Source/Pipeline/Printer/Plan/warning.pl')),
-   ensure_loaded(portage('Source/Pipeline/Printer/Plan/plan.pl')),
-   ensure_loaded(portage('Source/Pipeline/Printer/Plan/timing.pl')),
-   ensure_loaded(portage('Source/Pipeline/Printer/index.pl')),
-   ensure_loaded(portage('Source/Pipeline/Printer/info.pl')),
-   ensure_loaded(portage('Source/Pipeline/Printer/News/news.pl')),
-   ensure_loaded(portage('Source/Pipeline/Printer/stats.pl')),
-   ensure_loaded(portage('Source/Pipeline/Printer/state.pl')),
-   ensure_loaded(portage('Source/Pipeline/printer.pl')),
-   ensure_loaded(portage('Source/Pipeline/pipeline.pl')),
-   ensure_loaded(portage('Source/Application/Output/writer.pl')),
-
-   ensure_loaded(portage('Source/Application/Mode/client.pl')),
-   ensure_loaded(portage('Source/Application/Mode/worker.pl')),
-   ensure_loaded(portage('Source/Application/Mode/cluster.pl')),
+   loader:load_groups([pipeline_libraries,
+                       rpc_libraries,
+                       knowledge_modules,
+                       domain_modules,
+                       pipeline_modules,
+                       printer_modules,
+                       worker_modules]),
 
    message:log('Loaded worker modules...').
 
@@ -345,16 +393,8 @@ load_worker_modules :-
 
 load_server_modules :-
 
-   ensure_loaded(library('http/http_server')),
-   ensure_loaded(library('http/http_open')),
-   ensure_loaded(library('http/http_ssl_plugin')),
-   ensure_loaded(library('http/http_digest')),
-   ensure_loaded(library('http/thread_httpd')),
-   ensure_loaded(library('streams')),
-   ensure_loaded(library('pengines')),
-
-   ensure_loaded(portage('Source/Application/Security/sandbox.pl')),
-   ensure_loaded(portage('Source/Application/Mode/server.pl')),
+   loader:load_groups([server_libraries,
+                       server_modules]),
 
    message:log('Loaded server modules...').
 
@@ -369,20 +409,7 @@ load_server_modules :-
 
 load_llm_modules :-
 
-   ensure_loaded(library(quasi_quotations)),
-   ensure_loaded(library(http/http_open)),
-   ensure_loaded(library(http/http_json)),
-   ensure_loaded(library(edit)),
-   ensure_loaded(library(pcre)),
-   ensure_loaded(library(sandbox)),
-
-   ensure_loaded(portage('Source/Application/llm.pl')),
-   ensure_loaded(portage('Source/Application/Llm/grok.pl')),
-   ensure_loaded(portage('Source/Application/Llm/chatgpt.pl')),
-   ensure_loaded(portage('Source/Application/Llm/claude.pl')),
-   ensure_loaded(portage('Source/Application/Llm/gemini.pl')),
-   ensure_loaded(portage('Source/Application/Llm/ollama.pl')),
-   ensure_loaded(portage('Source/Application/Llm/explain.pl')),
-   ensure_loaded(portage('Source/Application/Llm/semantic.pl')),
+   loader:load_groups([llm_libraries,
+                       llm_modules]),
 
    message:log('Loaded Generative AI modules...').
