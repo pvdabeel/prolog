@@ -41,7 +41,7 @@ depclean:run(ArgsSets) :-
       message:warning('depclean: no roots found (empty @world?)'),
       nl
   ; depclean:prove_required(Roots, RequiredInstalled),
-    plan:print_removals(RequiredInstalled)
+    removal:print_removals(RequiredInstalled)
   ).
 
 

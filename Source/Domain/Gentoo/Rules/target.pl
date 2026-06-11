@@ -289,32 +289,10 @@ candidate:resolve(required_use(any_of, Deps):validate?{_},
 
 candidate:resolve(choice_group(Deps):config?{Context}, [D:config?{Context}]) :-
   candidate:prioritize_deps_keep_all(Deps, Context, SortedDeps),
-  ( prover:multimodel_enumeration ->
-      % Native multi-model enumeration. A disjunction can be re-derived at
-      % several config choicepoints (diamond, or the same alternatives in both
-      % DEPEND and RDEPEND); to keep one model consistent, the first evaluation
-      % owns the choicepoint and records its pick, and later evaluations of the
-      % same disjunction follow it. The key ignores the dependency phase so the
-      % build-time and run-time copies of one disjunction share a single pick.
-      candidate:choice_group_key(Deps, ChoiceKey),
-      ( prover:branch_choice(ChoiceKey, Chosen) ->
-          D = Chosen
-      ;   % First evaluation: leave a native choicepoint over the ranked
-          % alternatives (preferred first). Backtracking here is ordinary
-          % Prolog backtracking: the threaded Proof/Model/Constraints/Triggers
-          % unwind automatically and the backtrackable branch record (set
-          % below) is restored by the trail before the next alternative.
-          member(D0, SortedDeps),
-          candidate:any_of_config_dep_ok(Context, D0),
-          prover:set_branch_choice(ChoiceKey, D0),
-          D = D0
-      )
-  ;   % Default pipeline: commit to the first viable alternative (unchanged).
-      member(D0, SortedDeps),
-      candidate:any_of_config_dep_ok(Context, D0),
-      D = D0,
-      !
-  ).
+  % Commit to the first viable alternative (preferred branch first).
+  member(D, SortedDeps),
+  candidate:any_of_config_dep_ok(Context, D),
+  !.
 
 
 %! candidate:resolve(choice_group(+Deps):+Action?{+Context}, -Conditions)
@@ -331,27 +309,6 @@ candidate:resolve(choice_group(Deps):Action?{Context}, Conditions) :-
       fail
   ; Conditions = Conditions0
   ).
-
-
-%! candidate:choice_group_key(+Deps, -Key) is det.
-%
-% Build a phase-independent canonical key for a disjunction's alternatives so
-% the same disjunction appearing in both DEPEND (install) and RDEPEND (run)
-% maps to a single recorded branch choice during enumeration.
-
-candidate:choice_group_key(Deps, Key) :-
-  maplist(candidate:choice_group_key_dep, Deps, Stripped),
-  sort(Stripped, Key).
-
-
-%! candidate:choice_group_key_dep(+Dep, -Stripped) is det.
-%
-% Normalize a single alternative for keying: drop the phase from a plain
-% package_dependency; leave structured alternatives unchanged.
-
-candidate:choice_group_key_dep(package_dependency(_Phase, Strength, C, N, O, V, S, U),
-                            package_dependency(any_phase, Strength, C, N, O, V, S, U)) :- !.
-candidate:choice_group_key_dep(Dep, Dep).
 
 
 % =============================================================================
@@ -418,11 +375,7 @@ candidate:resolve(grouped_dep(C,N,PackageDeps):Action?{Context}, []) :-
 
 candidate:resolve(grouped_dep(C,N,PackageDeps):Action?{Context}, Conditions) :-
   candidate:augment_package_deps_with_self_rdepend(Action, C, N, Context, PackageDeps, PackageDeps1),
-  candidate:grouped_dep_select_and_build(Action, C, N, PackageDeps1, Context, Conditions),
-  % In enumeration mode commit to the concrete resolution so the assumption
-  % fallback (clause below) is never offered as a backtrack alternative: this
-  % removes the proven-vs-assumed redundancy that otherwise multiplies models.
-  ( prover:multimodel_enumeration -> ! ; true ).
+  candidate:grouped_dep_select_and_build(Action, C, N, PackageDeps1, Context, Conditions).
 
 candidate:resolve(grouped_dep(C,N,PackageDeps):Action?{Context}, _) :-
   candidate:augment_package_deps_with_self_rdepend(Action, C, N, Context, PackageDeps, PackageDeps1),
@@ -442,9 +395,6 @@ candidate:resolve(grouped_dep(C,N,PackageDeps):Action?{Context}, _) :-
   fail.
 
 candidate:resolve(grouped_dep(C,N,PackageDeps):Action?{Context}, Conditions) :-
-  % Strict enumeration turns "unresolvable dep" into a proof failure so the
-  % prover reverts to the next disjunctive branch instead of assuming.
-  \+ prover:multimodel_strict,
   candidate:augment_package_deps_with_self_rdepend(Action, C, N, Context, PackageDeps, PackageDeps1),
   candidate:grouped_dep_build_assumption(Action, C, N, PackageDeps1, PackageDeps, Context, Conditions).
 
@@ -772,22 +722,10 @@ candidate:resolve(Repository://Ebuild:install?{Context}, Conditions) :-
   query:search(version(Ver), Repository://Ebuild),
   Selected = constraint(selected_cn(C,N):{ordset([selected(Repository,Ebuild,install,Ver,S)])}),
   candidate:resolve_required_use(install, C, N, Repository://Ebuild, Context1, R, BResolved, Model),
-  ( prover:multimodel_enumeration ->
-      % Enumeration: yield one model per disjunctive branch; only fall back to
-      % an assumption when no branch resolves at all (soft cut keeps all branch
-      % solutions but suppresses the assumed-on-backtrack redundancy).
-      ( candidate:install_dep_model(Repository://Ebuild, Model, AfterForDeps, install,
-                                 Selected, C, N, S, R, BResolved, After, Conditions)
-      *-> true
-      ; \+ prover:multimodel_strict,
-        feature_unification:unify([issue_with_model(explanation)], Context1, Ctx1),
-        Conditions = [assumed(Repository://Ebuild:install?{Ctx1})]
-      )
-  ; ( candidate:install_dep_model(Repository://Ebuild, Model, AfterForDeps, install,
-                               Selected, C, N, S, R, BResolved, After, Conditions)
-    ; feature_unification:unify([issue_with_model(explanation)], Context1, Ctx1),
-      Conditions = [assumed(Repository://Ebuild:install?{Ctx1})]
-    )
+  ( candidate:install_dep_model(Repository://Ebuild, Model, AfterForDeps, install,
+                             Selected, C, N, S, R, BResolved, After, Conditions)
+  ; feature_unification:unify([issue_with_model(explanation)], Context1, Ctx1),
+    Conditions = [assumed(Repository://Ebuild:install?{Ctx1})]
   ).
 
 
@@ -807,22 +745,10 @@ candidate:resolve(Repository://Ebuild:run?{Context}, Conditions) :-
   query:search(version(Ver), Repository://Ebuild),
   Selected = constraint(selected_cn(C,N):{ordset([selected(Repository,Ebuild,run,Ver,S)])}),
   candidate:resolve_required_use(run, C, N, Repository://Ebuild, Context1, R, BResolved, Model),
-  ( prover:multimodel_enumeration ->
-      % Enumeration: yield one model per disjunctive branch; only fall back to
-      % an assumption when no branch resolves at all (soft cut keeps all branch
-      % solutions but suppresses the assumed-on-backtrack redundancy).
-      ( candidate:run_dep_model(Repository://Ebuild, Model, AfterForDeps, run,
-                             Selected, C, N, S, R, BResolved, After, Context1, Conditions)
-      *-> true
-      ; \+ prover:multimodel_strict,
-        feature_unification:unify([issue_with_model(explanation)], Context1, Ctx1),
-        Conditions = [assumed(Repository://Ebuild:run?{Ctx1})]
-      )
-  ; ( candidate:run_dep_model(Repository://Ebuild, Model, AfterForDeps, run,
-                           Selected, C, N, S, R, BResolved, After, Context1, Conditions)
-    ; feature_unification:unify([issue_with_model(explanation)], Context1, Ctx1),
-      Conditions = [assumed(Repository://Ebuild:run?{Ctx1})]
-    )
+  ( candidate:run_dep_model(Repository://Ebuild, Model, AfterForDeps, run,
+                         Selected, C, N, S, R, BResolved, After, Context1, Conditions)
+  ; feature_unification:unify([issue_with_model(explanation)], Context1, Ctx1),
+    Conditions = [assumed(Repository://Ebuild:run?{Ctx1})]
   ).
 
 

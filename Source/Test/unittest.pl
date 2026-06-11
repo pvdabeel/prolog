@@ -2334,66 +2334,6 @@ eapi_repo_registered :-
 :- end_tests(builder_vdb_reconciliation).
 
 
-% -----------------------------------------------------------------------------
-%  Native multi-model enumeration (pure-logic building blocks)
-% -----------------------------------------------------------------------------
-
-:- begin_tests(multimodel_enumeration).
-
-test(choice_key_ignores_phase, [true(KInstall == KRun)]) :-
-  % The same disjunction in DEPEND (install) and RDEPEND (run) must map to one
-  % key so build-time and run-time copies share a single recorded branch pick.
-  DepsInstall = [package_dependency(install, no, c, linux, none, version_none, [], []),
-                 package_dependency(install, no, c, darwin, none, version_none, [], [])],
-  DepsRun     = [package_dependency(run, no, c, linux, none, version_none, [], []),
-                 package_dependency(run, no, c, darwin, none, version_none, [], [])],
-  candidate:choice_group_key(DepsInstall, KInstall),
-  candidate:choice_group_key(DepsRun, KRun).
-
-test(choice_key_distinguishes_alternatives, [true(KAB \== KAC)]) :-
-  candidate:choice_group_key([package_dependency(run, no, c, a, none, version_none, [], []),
-                              package_dependency(run, no, c, b, none, version_none, [], [])], KAB),
-  candidate:choice_group_key([package_dependency(run, no, c, a, none, version_none, [], []),
-                              package_dependency(run, no, c, d, none, version_none, [], [])], KAC).
-
-test(choice_key_order_independent, [true(K1 == K2)]) :-
-  candidate:choice_group_key([package_dependency(run, no, c, a, none, version_none, [], []),
-                              package_dependency(run, no, c, b, none, version_none, [], [])], K1),
-  candidate:choice_group_key([package_dependency(run, no, c, b, none, version_none, [], []),
-                              package_dependency(run, no, c, a, none, version_none, [], [])], K2).
-
-test(branch_choice_set_get, [true(V == linux)]) :-
-  prover:clear_branch_choices,
-  prover:set_branch_choice(key1, linux),
-  prover:branch_choice(key1, V).
-
-test(branch_choice_overwrite, [true(V == darwin)]) :-
-  prover:clear_branch_choices,
-  prover:set_branch_choice(key1, linux),
-  prover:set_branch_choice(key1, darwin),
-  prover:branch_choice(key1, V).
-
-test(branch_choice_cleared, [fail]) :-
-  prover:set_branch_choice(key1, linux),
-  prover:clear_branch_choices,
-  prover:branch_choice(key1, _).
-
-test(branch_choice_is_backtrackable, [all(V == [linux, darwin])]) :-
-  % The record is a backtrackable global, so on backtracking the owner's
-  % choicepoint the pick is undone by the trail and the next pick is recorded
-  % cleanly -- no manual restore. Enumerating the owner must yield each pick.
-  prover:clear_branch_choices,
-  member(Pick, [linux, darwin]),
-  prover:set_branch_choice(key1, Pick),
-  prover:branch_choice(key1, V).
-
-test(multimodel_flag_off_by_default, [fail]) :-
-  ( nb_current(prover_multimodel_enumeration, _) -> nb_delete(prover_multimodel_enumeration) ; true ),
-  prover:multimodel_enumeration.
-
-:- end_tests(multimodel_enumeration).
-
-
 % =============================================================================
 %  Query macro layer (portage-ng#32)
 % =============================================================================

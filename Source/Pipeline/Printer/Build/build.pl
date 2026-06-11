@@ -192,15 +192,15 @@ build:print_skipped_slots([_|Rest], NumSteps) :-
 
 build:print_build_config(RuleHead) :-
   config:printing_style('column'), !,
-  with_output_to(string(S), catch(plan:print_config(RuleHead), _, true)),
+  with_output_to(string(S), catch(useflags:print_config(RuleHead), _, true)),
   ( S \== ""
   -> nl, write('             │ '),
-     catch(plan:print_config(RuleHead), _, true)
+     catch(useflags:print_config(RuleHead), _, true)
   ;  true
   ).
 
 build:print_build_config(RuleHead) :-
-  catch(plan:print_config(RuleHead), _, true).
+  catch(useflags:print_config(RuleHead), _, true).
 
 
 %! build:print_skipped_conf(+RuleHead) is det.
