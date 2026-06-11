@@ -37,40 +37,64 @@ Only processes running as the same OS user can connect.
 %  Client connection
 % -----------------------------------------------------------------------------
 
-%! ipc:connect(-ExitCode) is semidet.
+%! ipc:connect(-ExitCode) is det.
 %
 % Connects to the daemon, sends the current CLI arguments and terminal
 % dimensions, streams the output to current_output, and unifies ExitCode
-% with the daemon's exit code. Fails if no daemon is running.
+% with the daemon's exit code. Only connection-phase errors are reported
+% as "no daemon running"; errors during request I/O are reported verbatim.
 
 ipc:connect(ExitCode) :-
   config:daemon_socket_path(SocketPath),
   ( \+ access_file(SocketPath, exist)
   -> no_daemon_error,
      ExitCode = 1
-  ;  catch(
-       do_connect(SocketPath, ExitCode),
-       _Error,
-       ( no_daemon_error,
-         ExitCode = 1 )
-     )
+  ;  connect_socket(SocketPath, In, Out)
+  -> exchange(In, Out, ExitCode)
+  ;  ExitCode = 1
   ).
 
 
-%! ipc:do_connect(+SocketPath, -ExitCode) is det.
+%! ipc:connect_socket(+SocketPath, -In, -Out) is semidet.
 %
-% Performs the actual connection and I/O with the daemon.
+% Connection phase: creates a Unix domain socket and connects it to the
+% daemon. Only errors raised here mean "no daemon running"; on such an
+% error the message is printed and the predicate fails.
 
-ipc:do_connect(SocketPath, ExitCode) :-
-  unix_domain_socket(Socket),
-  tcp_connect(Socket, SocketPath),
-  tcp_open_socket(Socket, StreamPair),
-  stream_pair(StreamPair, In, Out),
-  set_stream(Out, encoding(utf8)),
-  set_stream(In, encoding(utf8)),
-  send_request(Out),
-  flush_output(Out),
-  stream_response(In, ExitCode),
+ipc:connect_socket(SocketPath, In, Out) :-
+  catch(
+    ( unix_domain_socket(Socket),
+      tcp_connect(Socket, SocketPath),
+      tcp_open_socket(Socket, StreamPair),
+      stream_pair(StreamPair, In, Out),
+      set_stream(Out, encoding(utf8)),
+      set_stream(In, encoding(utf8))
+    ),
+    _ConnectError,
+    ( no_daemon_error,
+      fail )
+  ).
+
+
+%! ipc:exchange(+In, +Out, -ExitCode) is det.
+%
+% I/O phase: sends the request and streams the response. Errors raised
+% after the connection was established (encoding errors, daemon crash
+% mid-stream, permission problems, ...) are reported verbatim instead of
+% being masked as "no daemon running". Output streamed before the error
+% has already been written to current_output and is preserved.
+
+ipc:exchange(In, Out, ExitCode) :-
+  catch(
+    ( send_request(Out),
+      flush_output(Out),
+      stream_response(In, ExitCode)
+    ),
+    Error,
+    ( flush_output,
+      print_message(error, Error),
+      ExitCode = 1 )
+  ),
   catch(close(In), _, true),
   catch(close(Out), _, true).
 
@@ -126,37 +150,118 @@ ipc:forwarded_env_var('APACHE2_MPMS').
 
 %! ipc:stream_response(+In, -ExitCode) is det.
 %
-% Reads the daemon's output byte by byte, writing to current_output,
-% until the EXIT terminator is encountered.
+% Streams the daemon's output to current_output incrementally, chunk by
+% chunk as it arrives, until the `\0EXIT:<code>` terminator or end of
+% stream is encountered. The terminator is matched across chunk
+% boundaries, and a NUL that does not start the terminator is passed
+% through as ordinary output.
 
 ipc:stream_response(In, ExitCode) :-
-  read_string(In, _, FullOutput),
-  parse_output(FullOutput, ExitCode).
+  stream_chunks(In, [], ExitCode).
 
 
-%! ipc:parse_output(+Output, -ExitCode) is det.
+%! ipc:sentinel_marker(-Codes) is det.
 %
-% Splits the output at the EXIT terminator, prints the main output,
-% and extracts the exit code.
+% Character codes of the EXIT marker that follows the NUL terminator
+% byte sent by the daemon.
 
-ipc:parse_output(Output, ExitCode) :-
-  atom_codes(Sentinel, [0, 0'E, 0'X, 0'I, 0'T, 0':]),
-  ( sub_string(Output, Before, _, _, Sentinel)
-  -> sub_string(Output, 0, Before, _, MainOutput),
-     write(MainOutput),
-     flush_output,
-     SentLen = 6,
-     TermStart is Before + SentLen,
-     sub_string(Output, TermStart, _, 0, Tail),
-     ( sub_string(Tail, NL, _, _, "\n")
-     -> sub_string(Tail, 0, NL, _, CodeStr)
-     ;  CodeStr = Tail
-     ),
-     ( number_string(ExitCode, CodeStr) -> true ; ExitCode = 1 )
-  ;  write(Output),
-     flush_output,
-     ExitCode = 0
+ipc:sentinel_marker([0'E, 0'X, 0'I, 0'T, 0':]).
+
+
+%! ipc:stream_chunks(+In, +Carry, -ExitCode) is det.
+%
+% Reads the next available chunk without waiting for end of stream.
+% Carry holds codes held back from the previous chunk because they may
+% start the EXIT sentinel (Carry is empty or begins with NUL). End of
+% stream without a sentinel means the daemon went away mid-request:
+% any held-back codes are flushed, the problem is reported, and the
+% exit code is 1.
+
+ipc:stream_chunks(In, Carry, ExitCode) :-
+  fill_buffer(In),
+  read_pending_codes(In, Chunk, []),
+  ( Chunk == [],
+    at_end_of_stream(In)
+  -> emit_codes(Carry),
+     connection_lost_error,
+     ExitCode = 1
+  ;  Chunk == []
+  -> stream_chunks(In, Carry, ExitCode)
+  ;  append(Carry, Chunk, Codes),
+     scan_output(In, Codes, ExitCode)
   ).
+
+
+%! ipc:scan_output(+In, +Codes, -ExitCode) is det.
+%
+% Prints everything before the first NUL and dispatches on whether the
+% NUL starts the EXIT sentinel. A buffer without a NUL is plain output.
+
+ipc:scan_output(In, Codes, ExitCode) :-
+  ( append(Before, [0|Tail], Codes)
+  -> emit_codes(Before),
+     match_sentinel(In, Tail, ExitCode)
+  ;  emit_codes(Codes),
+     stream_chunks(In, [], ExitCode)
+  ).
+
+
+%! ipc:match_sentinel(+In, +Tail, -ExitCode) is det.
+%
+% Tail holds the codes following a NUL. Three cases: the full `EXIT:`
+% marker follows (parse the exit code), Tail is a prefix of the marker
+% so more input is needed to decide (hold the codes back), or the NUL
+% was ordinary output and scanning continues after it.
+
+ipc:match_sentinel(In, Tail, ExitCode) :-
+  sentinel_marker(Marker),
+  ( append(Marker, AfterMarker, Tail)
+  -> collect_exit_code(In, AfterMarker, ExitCode)
+  ;  append(Tail, _, Marker)
+  -> stream_chunks(In, [0|Tail], ExitCode)
+  ;  emit_codes([0]),
+     scan_output(In, Tail, ExitCode)
+  ).
+
+
+%! ipc:collect_exit_code(+In, +Acc, -ExitCode) is det.
+%
+% Accumulates the codes following the EXIT marker until a newline (or
+% end of stream) is reached, then parses them as the exit code.
+
+ipc:collect_exit_code(In, Acc, ExitCode) :-
+  ( append(CodeCodes, [0'\n|_], Acc)
+  -> parse_exit_code(CodeCodes, ExitCode)
+  ;  fill_buffer(In),
+     read_pending_codes(In, More, []),
+     ( More == []
+     -> parse_exit_code(Acc, ExitCode)
+     ;  append(Acc, More, Acc1),
+        collect_exit_code(In, Acc1, ExitCode)
+     )
+  ).
+
+
+%! ipc:parse_exit_code(+Codes, -ExitCode) is det.
+%
+% Parses the exit code digits; defaults to 1 when malformed.
+
+ipc:parse_exit_code(Codes, ExitCode) :-
+  ( catch(number_codes(Number, Codes), _, fail),
+    integer(Number)
+  -> ExitCode = Number
+  ;  ExitCode = 1
+  ).
+
+
+%! ipc:emit_codes(+Codes) is det.
+%
+% Writes codes to current_output and flushes, keeping output live.
+
+ipc:emit_codes([]) :- !.
+ipc:emit_codes(Codes) :-
+  format('~s', [Codes]),
+  flush_output.
 
 
 %! ipc:no_daemon_error is det.
@@ -171,6 +276,16 @@ ipc:no_daemon_error :-
     [SocketPath]).
 
 
+%! ipc:connection_lost_error is det.
+%
+% Prints an error message when the daemon closed the connection without
+% sending the EXIT terminator (e.g. it crashed or halted mid-request).
+
+ipc:connection_lost_error :-
+  format(user_error,
+    'Error: daemon closed the connection without an exit status.~n', []).
+
+
 % -----------------------------------------------------------------------------
 %  Lifecycle management
 % -----------------------------------------------------------------------------
@@ -178,40 +293,76 @@ ipc:no_daemon_error :-
 %! ipc:fork_background(+Mode) is det.
 %
 % Forks a new detached swipl process running the given Mode (daemon or
-% server) without --background. The parent polls for readiness then exits.
+% server) without --background. The swipl executable and flags are taken
+% from the current process, so they cannot drift from the launcher's.
+% The parent polls for readiness then exits.
 
 ipc:fork_background(Mode) :-
-  config:installation_dir(Dir),
-  atomic_list_concat([Dir, '/portage-ng.pl'], MainFile),
-  atom_concat('portage=', Dir, PortagePath),
-  process_create(
-    path(swipl),
-    [ '-O',
-      '--stack-limit=256G', '--table-space=256G', '--shared-table-space=256G',
-      '-f', MainFile,
-      '-p', PortagePath,
-      '-Dverbose_autoload=false',
-      '-g', 'main',
-      '--',
-      '--mode', Mode
-    ],
+  background_command(Mode, Exe, Args),
+  process_create(Exe, Args,
     [ process(Pid),
       detached(true),
       stdout(null),
       stderr(null)
-    ]
+    ]),
+  format('Starting ~w in background (PID ~w)...~n', [Mode, Pid]),
+  wait_for_ready(Mode, Pid).
+
+
+%! ipc:background_command(+Mode, -Exe, -Args) is det.
+%
+% Rebuilds the command line of the current process with the application
+% arguments (after `--`) replaced by `--mode Mode`. This keeps the swipl
+% flags (-O, stack limits, -f, -p, -g main) in a single place — the
+% launcher that started the current process — instead of duplicating
+% them here.
+
+ipc:background_command(Mode, Exe, Args) :-
+  current_prolog_flag(executable, Exe),
+  current_prolog_flag(os_argv, [_Argv0|Rest]),
+  ( append(SwiplFlags, ['--'|_AppArgs], Rest)
+  -> true
+  ;  SwiplFlags = Rest
   ),
-  atom_string(Mode, ModeStr),
-  format('Starting ~w in background (PID ~w)...~n', [ModeStr, Pid]),
-  ( Mode == daemon
-  -> config:daemon_pid_path(PidPath),
-     wait_for_file(PidPath, 100),
-     ( exists_file(PidPath)
-     -> format('Daemon ready (PID ~w).~n', [Pid])
-     ;  format(user_error, 'Warning: daemon may not have started.~n', [])
-     )
-  ;  sleep(2),
-     format('Server started in background (PID ~w).~n', [Pid])
+  append(SwiplFlags, ['--', '--mode', Mode], Args).
+
+
+%! ipc:wait_for_ready(+Mode, +Pid) is det.
+%
+% Polls for mode-specific readiness instead of sleeping a fixed amount:
+% the daemon is ready once its PID file appears, the server once its
+% port accepts TCP connections.
+
+ipc:wait_for_ready(daemon, Pid) :-
+  !,
+  config:daemon_pid_path(PidPath),
+  wait_for_file(PidPath, 600),
+  ( exists_file(PidPath)
+  -> format('Daemon ready (PID ~w).~n', [Pid])
+  ;  format(user_error, 'Warning: daemon may not have started.~n', [])
+  ).
+ipc:wait_for_ready(server, Pid) :-
+  !,
+  interface:get_port(Port),
+  ( wait_for_port(localhost, Port, 600)
+  -> format('Server ready (PID ~w, port ~w).~n', [Pid, Port])
+  ;  format(user_error, 'Warning: server may not have started.~n', [])
+  ).
+ipc:wait_for_ready(_, _).
+
+
+%! ipc:wait_for_port(+Host, +Port, +Retries) is semidet.
+%
+% Polls until a TCP connection to Host:Port succeeds, sleeping 100ms
+% between retries. Fails when the retries are exhausted.
+
+ipc:wait_for_port(_, _, 0) :- !, fail.
+ipc:wait_for_port(Host, Port, N) :-
+  ( interface:server_reachable(Host, Port)
+  -> true
+  ;  sleep(0.1),
+     N1 is N - 1,
+     wait_for_port(Host, Port, N1)
   ).
 
 
