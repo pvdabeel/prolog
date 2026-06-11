@@ -617,7 +617,7 @@ test:expect(overlay://'test19/web-1.0':run?{[]},
             ]).
 
 % -----------------------------------------------------------------------------
-%  Any-of groups || (test20..test22, test26..test31)
+%  Any-of groups || (test20..test22)
 % -----------------------------------------------------------------------------
 
 % test20: os -> || ( linux bsd windows ) (compile)
@@ -647,19 +647,69 @@ test:expect(overlay://'test22/web-1.0':run?{[]},
               )
             ]).
 
-% test26..test31: any-of variants (same structure as test20)
+% -----------------------------------------------------------------------------
+%  Blockers (strong/weak) + any-of (test26..test31)
+% -----------------------------------------------------------------------------
+
+% test26: app RDEPEND !!windows (strong, runtime) + os any-of -- the prover
+% must avoid windows-1.0 and select linux-1.0 or bsd-1.0 instead
 test:expect(overlay://'test26/web-1.0':run?{[]},
-            [ test:must_have(overlay://'test26/os-1.0':run?{_}) ]).
+            [ test:must_have(overlay://'test26/os-1.0':run?{_}),
+              \+ test:must_have(overlay://'test26/windows-1.0':_?{_}),
+              ( test:must_have(overlay://'test26/linux-1.0':_?{_})
+              ; test:must_have(overlay://'test26/bsd-1.0':_?{_})
+              )
+            ]).
+
+% test27: app RDEPEND !windows (weak, runtime) + os any-of -- the prover
+% steers away from windows-1.0; the weak blocker is recorded separately
 test:expect(overlay://'test27/web-1.0':run?{[]},
-            [ test:must_have(overlay://'test27/os-1.0':run?{_}) ]).
+            [ test:must_have(overlay://'test27/os-1.0':run?{_}),
+              \+ test:must_have(overlay://'test27/windows-1.0':_?{_}),
+              ( test:must_have(overlay://'test27/linux-1.0':_?{_})
+              ; test:must_have(overlay://'test27/bsd-1.0':_?{_})
+              )
+            ]).
+
+% test28: app DEPEND !!windows (strong, compile) + os any-of -- the prover
+% must avoid windows-1.0 and select linux-1.0 or bsd-1.0 instead
 test:expect(overlay://'test28/web-1.0':run?{[]},
-            [ test:must_have(overlay://'test28/os-1.0':run?{_}) ]).
+            [ test:must_have(overlay://'test28/os-1.0':run?{_}),
+              \+ test:must_have(overlay://'test28/windows-1.0':_?{_}),
+              ( test:must_have(overlay://'test28/linux-1.0':_?{_})
+              ; test:must_have(overlay://'test28/bsd-1.0':_?{_})
+              )
+            ]).
+
+% test29: app DEPEND+RDEPEND !!windows (strong, both scopes) + os any-of --
+% the prover must avoid windows-1.0 and select linux-1.0 or bsd-1.0 instead
 test:expect(overlay://'test29/web-1.0':run?{[]},
-            [ test:must_have(overlay://'test29/os-1.0':run?{_}) ]).
+            [ test:must_have(overlay://'test29/os-1.0':run?{_}),
+              \+ test:must_have(overlay://'test29/windows-1.0':_?{_}),
+              ( test:must_have(overlay://'test29/linux-1.0':_?{_})
+              ; test:must_have(overlay://'test29/bsd-1.0':_?{_})
+              )
+            ]).
+
+% test30: app DEPEND !windows (weak, compile) + os any-of -- the prover
+% steers away from windows-1.0; the weak blocker is recorded separately
 test:expect(overlay://'test30/web-1.0':run?{[]},
-            [ test:must_have(overlay://'test30/os-1.0':run?{_}) ]).
+            [ test:must_have(overlay://'test30/os-1.0':run?{_}),
+              \+ test:must_have(overlay://'test30/windows-1.0':_?{_}),
+              ( test:must_have(overlay://'test30/linux-1.0':_?{_})
+              ; test:must_have(overlay://'test30/bsd-1.0':_?{_})
+              )
+            ]).
+
+% test31: app DEPEND+RDEPEND !windows (weak, both scopes) + os any-of --
+% the prover steers away from windows-1.0; weak blockers recorded separately
 test:expect(overlay://'test31/web-1.0':run?{[]},
-            [ test:must_have(overlay://'test31/os-1.0':run?{_}) ]).
+            [ test:must_have(overlay://'test31/os-1.0':run?{_}),
+              \+ test:must_have(overlay://'test31/windows-1.0':_?{_}),
+              ( test:must_have(overlay://'test31/linux-1.0':_?{_})
+              ; test:must_have(overlay://'test31/bsd-1.0':_?{_})
+              )
+            ]).
 
 % -----------------------------------------------------------------------------
 %  At-most-one-of groups ?? (test23..test25)
