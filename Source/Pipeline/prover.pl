@@ -1435,6 +1435,45 @@ prover:test_latest(Repository,Style) :-
 %  Testing + statistics
 % -----------------------------------------------------------------------------
 
+%! prover:timed_prove_and_record(+Target, +Action) is det
+%
+% Shared instrumentation body for the test_stats loops.  Proves
+% Target (a Repository://Entry) via pipeline:prove_with_fallback,
+% measuring wall time, inferences, rule calls and proof-context union
+% costs, and records the outcome with the sampler (under the
+% test_stats mutex, as the loops may run in parallel).  Failures are
+% recorded as failed(other).  Always succeeds.
+
+prover:timed_prove_and_record(Repository://Entry, Action) :-
+  sampler:reset_counters,
+  statistics(inferences, I0),
+  statistics(walltime, [T0,_]),
+  Target = (Repository://Entry:Action?{[]}),
+  ( pipeline:prove_with_fallback([Target], ProofAVL, ModelAVL, Triggers) ->
+      Proved = true
+  ; Proved = false
+  ),
+  statistics(walltime, [T1,_]),
+  statistics(inferences, I1),
+  TimeMs is T1 - T0,
+  Inferences is I1 - I0,
+  ( Proved == true ->
+      sampler:counters(rule_calls(RuleCalls)),
+      sampler:ctx_counters(ctx_union_calls(CtxUC), ctx_union_cost(CtxCost), ctx_max_len(CtxMax), ctx_union_ms_est(CtxMsEst)),
+      sampler:ctx_distribution(ctx_len_hist(CtxHistPairs),
+                               ctx_cost_mul(CtxMul),
+                               ctx_cost_add(CtxAdd),
+                               ctx_len_samples(CtxLenSamples)),
+      with_mutex(test_stats,
+        ( sampler:record(costs(Repository://Entry, TimeMs, Inferences, RuleCalls)),
+          sampler:record(ctx_costs(Repository://Entry, CtxUC, CtxCost, CtxMax, CtxMsEst)),
+          sampler:record(ctx_dist(CtxHistPairs, CtxMul, CtxAdd, CtxLenSamples))
+        )),
+      sampler:record(entry(Repository://Entry, ModelAVL, ProofAVL, Triggers, true))
+  ; sampler:record(failed(other))
+  ).
+
+
 %! prover:test_stats(+Repository) is det
 %
 % Run a whole-repo prove test with detailed statistics recording
@@ -1482,34 +1521,7 @@ prover:test_stats(Repository, Style, TopN) :-
               'Proving',
               Repository://Entry,
               Repository:entry(Entry),
-              ( sampler:reset_counters,
-                statistics(inferences, I0),
-                statistics(walltime, [T0,_]),
-                Target = (Repository://Entry:Action?{[]}),
-                ( pipeline:prove_with_fallback([Target], ProofAVL, ModelAVL, Triggers) ->
-                    Proved = true
-                ; Proved = false
-                ),
-                statistics(walltime, [T1,_]),
-                statistics(inferences, I1),
-                TimeMs is T1 - T0,
-                Inferences is I1 - I0,
-                ( Proved == true ->
-                    sampler:counters(rule_calls(RuleCalls)),
-                    sampler:ctx_counters(ctx_union_calls(CtxUC), ctx_union_cost(CtxCost), ctx_max_len(CtxMax), ctx_union_ms_est(CtxMsEst)),
-                    sampler:ctx_distribution(ctx_len_hist(CtxHistPairs),
-                                                          ctx_cost_mul(CtxMul),
-                                                          ctx_cost_add(CtxAdd),
-                                                          ctx_len_samples(CtxLenSamples)),
-                    with_mutex(test_stats,
-                      ( sampler:record(costs(Repository://Entry, TimeMs, Inferences, RuleCalls)),
-                        sampler:record(ctx_costs(Repository://Entry, CtxUC, CtxCost, CtxMax, CtxMsEst)),
-                        sampler:record(ctx_dist(CtxHistPairs, CtxMul, CtxAdd, CtxLenSamples))
-                      )),
-                    sampler:record(entry(Repository://Entry, ModelAVL, ProofAVL, Triggers, true))
-                ; sampler:record(failed(other))
-                )
-              )),
+              prover:timed_prove_and_record(Repository://Entry, Action)),
   stats:test_stats_print(TopN).
 
 
@@ -1545,32 +1557,5 @@ prover:test_stats_pkgs(Repository, Style, TopN, Pkgs) :-
               ( member(C-N, Pkgs),
                 once(Repository:ebuild(Entry, C, N, _))
               ),
-              ( sampler:reset_counters,
-                statistics(inferences, I0),
-                statistics(walltime, [T0,_]),
-                Target = (Repository://Entry:Action?{[]}),
-                ( pipeline:prove_with_fallback([Target], ProofAVL, ModelAVL, Triggers) ->
-                    Proved = true
-                ; Proved = false
-                ),
-                statistics(walltime, [T1,_]),
-                statistics(inferences, I1),
-                TimeMs is T1 - T0,
-                Inferences is I1 - I0,
-                ( Proved == true ->
-                    sampler:counters(rule_calls(RuleCalls)),
-                    sampler:ctx_counters(ctx_union_calls(CtxUC), ctx_union_cost(CtxCost), ctx_max_len(CtxMax), ctx_union_ms_est(CtxMsEst)),
-                    sampler:ctx_distribution(ctx_len_hist(CtxHistPairs),
-                                                          ctx_cost_mul(CtxMul),
-                                                          ctx_cost_add(CtxAdd),
-                                                          ctx_len_samples(CtxLenSamples)),
-                    with_mutex(test_stats,
-                      ( sampler:record(costs(Repository://Entry, TimeMs, Inferences, RuleCalls)),
-                        sampler:record(ctx_costs(Repository://Entry, CtxUC, CtxCost, CtxMax, CtxMsEst)),
-                        sampler:record(ctx_dist(CtxHistPairs, CtxMul, CtxAdd, CtxLenSamples))
-                      )),
-                    sampler:record(entry(Repository://Entry, ModelAVL, ProofAVL, Triggers, true))
-                ; sampler:record(failed(other))
-                )
-              )),
+              prover:timed_prove_and_record(Repository://Entry, Action)),
   stats:test_stats_print(TopN).

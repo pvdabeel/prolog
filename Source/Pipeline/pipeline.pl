@@ -69,12 +69,69 @@ pipeline:prove_plan(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL) :-
   pipeline:prove_plan_basic(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL).
 
 
+% -----------------------------------------------------------------------------
+% Progressive relaxation: fallback tier table + generic driver
+% -----------------------------------------------------------------------------
+
+%! pipeline:fallback_tiers(-Tiers) is det
+%
+% The canonical 5-tier committed-choice relaxation ladder, in the order
+% tiers are attempted.  'false' is the strict tier (no assumptions).
+% Both prove_with_fallback/4 and prove_plan_with_fallback/6 derive their
+% chain from this single table, so tier changes happen in one place.
+
+pipeline:fallback_tiers([false,
+                         keyword_acceptance,
+                         blockers,
+                         unmask,
+                         keyword_unmask]).
+
+
+%! pipeline:tier_goal(+Tier, +Goal, -Wrapped) is det
+%
+% Maps a tier name to the goal that proves under that tier, by wrapping
+% Goal in the prover:assuming/2 flags the tier stands for.
+
+pipeline:tier_goal(false,              Goal, Goal).
+pipeline:tier_goal(keyword_acceptance, Goal, prover:assuming(keyword_acceptance, Goal)).
+pipeline:tier_goal(blockers,           Goal, prover:assuming(blockers, Goal)).
+pipeline:tier_goal(unmask,             Goal, prover:assuming(unmask, Goal)).
+pipeline:tier_goal(keyword_unmask,     Goal, prover:assuming(keyword_acceptance,
+                                               prover:assuming(unmask, Goal))).
+
+
+%! pipeline:with_fallback(+Goal, -FallbackUsed) is semidet
+%
+% Generic committed-choice fallback driver.  Attempts Goal under each
+% tier of fallback_tiers/1 in order, committing to the first tier that
+% succeeds and unifying FallbackUsed with its name.  Fails when no tier
+% succeeds (bindings of failed attempts are undone on backtracking).
+
+pipeline:with_fallback(Goal, FallbackUsed) :-
+  pipeline:fallback_tiers(Tiers),
+  pipeline:with_fallback_tiers(Tiers, Goal, FallbackUsed).
+
+
+%! pipeline:with_fallback_tiers(+Tiers, +Goal, -FallbackUsed) is semidet
+
+pipeline:with_fallback_tiers([Tier|Rest], Goal, FallbackUsed) :-
+  pipeline:tier_goal(Tier, Goal, Wrapped),
+  ( call(Wrapped) ->
+      FallbackUsed = Tier
+  ; pipeline:with_fallback_tiers(Rest, Goal, FallbackUsed)
+  ).
+
+
+% -----------------------------------------------------------------------------
+% Canonical fallback entry points
+% -----------------------------------------------------------------------------
+
 %! pipeline:prove_with_fallback(+Goals, -ProofAVL, -ModelAVL, -TriggersAVL) is semidet
 %
 % Proves Goals with progressive relaxation (prover only, no plan/schedule).
-% Same 5-tier committed-choice fallback chain as prove_plan_with_fallback:
-% strict, keyword_acceptance, blockers, unmask, keyword_unmask.
-% Clears memo caches and computes multislot initial constraints.
+% Same committed-choice fallback chain (fallback_tiers/1) as
+% prove_plan_with_fallback.  Clears memo caches and computes multislot
+% initial constraints.
 %
 % Used by layered tests (prover:test, planner:test, scheduler:test and
 % their test_stats/test_latest variants) and by --bugs, so each stage
@@ -83,58 +140,32 @@ pipeline:prove_plan(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL) :-
 pipeline:prove_with_fallback(Goals, ProofAVL, ModelAVL, TriggersAVL) :-
   memo:clear_caches,
   pipeline:multislot_initial_constraints(Goals, InitCons),
-  ( prover:prove(Goals, t, ProofAVL, t, ModelAVL, InitCons, _Constraints, t, TriggersAVL) ->
-      true
-  ; prover:assuming(keyword_acceptance,
-      prover:prove(Goals, t, ProofAVL, t, ModelAVL, InitCons, _Constraints, t, TriggersAVL)) ->
-      true
-  ; prover:assuming(blockers,
-      prover:prove(Goals, t, ProofAVL, t, ModelAVL, InitCons, _Constraints, t, TriggersAVL)) ->
-      true
-  ; prover:assuming(unmask,
-      prover:prove(Goals, t, ProofAVL, t, ModelAVL, InitCons, _Constraints, t, TriggersAVL)) ->
-      true
-  ; prover:assuming(keyword_acceptance,
-      prover:assuming(unmask,
-        prover:prove(Goals, t, ProofAVL, t, ModelAVL, InitCons, _Constraints, t, TriggersAVL))) ->
-      true
-  ; fail
-  ).
+  pipeline:with_fallback(
+    prover:prove(Goals, t, ProofAVL, t, ModelAVL, InitCons, _Constraints, t, TriggersAVL),
+    _FallbackUsed).
 
 
 %! pipeline:prove_plan_with_fallback(+Goals, -ProofAVL, -ModelAVL, -Plan, -TriggersAVL)
 %
-% Proves with progressive relaxation: strict first, then keyword_acceptance,
-% blockers, unmask, and finally both keyword_acceptance + unmask.  Used by
-% both standalone and client paths so the fallback chain is consistent.
+% Proves with progressive relaxation along the fallback_tiers/1 ladder:
+% strict first, then keyword_acceptance, blockers, unmask, and finally
+% both keyword_acceptance + unmask.  Used by both standalone and client
+% paths so the fallback chain is consistent.
 
 pipeline:prove_plan_with_fallback(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL) :-
   pipeline:prove_plan_with_fallback(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, _).
 
+
 %! pipeline:prove_plan_with_fallback(+Goals, -Proof, -Model, -Plan, -Triggers, -FallbackUsed)
 %
 % Same as prove_plan_with_fallback/5 but returns which relaxation tier
-% was needed: false (strict), keyword_acceptance, blockers, unmask,
-% keyword_unmask, or none (all tiers failed → deterministic failure).
+% was needed: false (strict), keyword_acceptance, blockers, unmask, or
+% keyword_unmask.  Fails deterministically when all tiers fail.
 
 pipeline:prove_plan_with_fallback(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, FallbackUsed) :-
-  ( pipeline:prove_plan(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL) ->
-      FallbackUsed = false
-  ; prover:assuming(keyword_acceptance,
-      pipeline:prove_plan(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL)) ->
-      FallbackUsed = keyword_acceptance
-  ; prover:assuming(blockers,
-      pipeline:prove_plan(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL)) ->
-      FallbackUsed = blockers
-  ; prover:assuming(unmask,
-      pipeline:prove_plan(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL)) ->
-      FallbackUsed = unmask
-  ; prover:assuming(keyword_acceptance,
-      prover:assuming(unmask,
-        pipeline:prove_plan(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL))) ->
-      FallbackUsed = keyword_unmask
-  ; fail
-  ).
+  pipeline:with_fallback(
+    pipeline:prove_plan(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL),
+    FallbackUsed).
 
 
 %! pipeline:prove_plan_basic(+Goals, -ProofAVL, -ModelAVL, -Plan, -TriggersAVL)
