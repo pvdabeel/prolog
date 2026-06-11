@@ -37,3 +37,4 @@ Each action file is textually included into this module via :- include/1.
 :- include('Action/deselect.pl').
 :- include('Action/installed.pl').
 :- include('Action/estimate.pl').
+:- include('Action/importvdb.pl').

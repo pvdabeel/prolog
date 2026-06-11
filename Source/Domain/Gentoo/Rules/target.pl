@@ -89,10 +89,11 @@ target:resolve_candidate(Q, Repository://Ebuild) :-
 
 %! target:resolve_installed_candidate(+Q, -Repository://Ebuild) is nondet.
 %
-% Resolves a candidate from the installed packages repository (pkg).
+% Resolves a candidate from the active installed-packages (VDB) repository.
 
-target:resolve_installed_candidate(Q, pkg://Ebuild) :-
-  query:search(Q, pkg://Ebuild).
+target:resolve_installed_candidate(Q, VdbRepo://Ebuild) :-
+  knowledgebase:vdb_repository(VdbRepo),
+  query:search(Q, VdbRepo://Ebuild).
 
 
 % =============================================================================
@@ -156,9 +157,9 @@ target:is_excluded_cn(C, N) :-
 % True if --rebuild-if-new-rev or --rebuild-if-new-ver is active and
 % a newer revision or version of the installed package exists in the repo.
 
-target:rebuild_if_newer_available(pkg://InstalledEntry) :-
+target:rebuild_if_newer_available(VdbRepo://InstalledEntry) :-
   ( preference:flag(rebuildnewrev) ; preference:flag(rebuildnewver) ),
-  query:search([category(C),name(N),version(VInstalled)], pkg://InstalledEntry),
+  query:search([category(C),name(N),version(VInstalled)], VdbRepo://InstalledEntry),
   preference:accept_keywords(K),
   query:search([select(repository,notequal,pkg),category(C),name(N),keywords(K),version(VRepo)],
                _://_),
@@ -188,13 +189,14 @@ target:deep_update_goals(Self, MergedDeps, DeepUpdates) :-
   ),
   findall(C-N, (member(Dep, MergedDeps), dep_cn(Dep, C, N)), CN0),
   sort(CN0, CN),
+  knowledgebase:vdb_repository(VdbRepo),
   findall(NewRepo://NewEntry:update?{[replaces(OldRepo://OldEntry)]},
           ( member(C-N, CN),
-            query:search([name(N),category(C),installed(true)], pkg://OldEntry),
-            OldRepo = pkg,
-            pkg://OldEntry \== Self,
-            query:search(version(OldVer), pkg://OldEntry),
-            query:search(slot(Slot0), pkg://OldEntry),
+            query:search([name(N),category(C),installed(true)], VdbRepo://OldEntry),
+            OldRepo = VdbRepo,
+            VdbRepo://OldEntry \== Self,
+            query:search(version(OldVer), VdbRepo://OldEntry),
+            query:search(slot(Slot0), VdbRepo://OldEntry),
             slotmeta:canon_slot(Slot0, Slot),
             ( KeywordQ == []
               -> query:search(latest([select(repository,notequal,pkg),
@@ -412,10 +414,11 @@ candidate:resolve(grouped_dep(C,N,PackageDeps):Action?{Context}, Conditions) :-
 
 candidate:resolve(grouped_dep(C,N,PackageDeps):depclean?{_}, Conditions) :-
   slotmeta:merge_slot_restriction(run, C, N, PackageDeps, SlotReq),
-  ( query:search([name(N),category(C),installed(true)], pkg://Installed),
-    slotmeta:query_search_slot_constraint(SlotReq, pkg://Installed, _),
-    cnselect:installed_entry_satisfies_package_deps(run, C, N, PackageDeps, pkg://Installed),
-    query:search(version(V), pkg://Installed),
+  knowledgebase:vdb_repository(VdbRepo),
+  ( query:search([name(N),category(C),installed(true)], VdbRepo://Installed),
+    slotmeta:query_search_slot_constraint(SlotReq, VdbRepo://Installed, _),
+    cnselect:installed_entry_satisfies_package_deps(run, C, N, PackageDeps, VdbRepo://Installed),
+    query:search(version(V), VdbRepo://Installed),
     preference:accept_keywords(K),
     query:search([select(repository,notequal,pkg),category(C),name(N),keywords(K),version(V)],
                  Repo://Installed)
@@ -473,8 +476,8 @@ candidate:update_requires_use_rebuild(_Repository://_Ebuild, Context) :-
 candidate:update_requires_use_rebuild(Repository://Ebuild, Context) :-
   use:context_build_with_use_state(Context, BWU),
   BWU \= use_state([], []),
-  candidate:update_vdb_entry_for_ebuild(Repository://Ebuild, pkg://InstalledEntry),
-  \+ use:installed_entry_satisfies_build_with_use(pkg://InstalledEntry, Context),
+  candidate:update_vdb_entry_for_ebuild(Repository://Ebuild, InstalledEntry),
+  \+ use:installed_entry_satisfies_build_with_use(InstalledEntry, Context),
   !.
 
 
@@ -482,9 +485,10 @@ candidate:update_requires_use_rebuild(Repository://Ebuild, Context) :-
 %
 % Maps a portage-tree entry to the installed VDB entry with the same C/N/V.
 
-candidate:update_vdb_entry_for_ebuild(Repository://Ebuild, pkg://InstalledEntry) :-
+candidate:update_vdb_entry_for_ebuild(Repository://Ebuild, VdbRepo://InstalledEntry) :-
+  knowledgebase:vdb_repository(VdbRepo),
   query:search([category(C),name(N),version(V)], Repository://Ebuild),
-  query:search([category(C),name(N),version(V),installed(true)], pkg://InstalledEntry).
+  query:search([category(C),name(N),version(V),installed(true)], VdbRepo://InstalledEntry).
 
 
 candidate:resolve(Repository://Ebuild:update?{Context}, Conditions) :-
@@ -527,9 +531,9 @@ candidate:resolve(Repository://Ebuild:update?{Context}, Conditions) :-
   \+ memberchk(replaces(_), Context),
   candidate:installed(Repository://Ebuild),
   candidate:update_requires_use_rebuild(Repository://Ebuild, Context),
-  candidate:update_vdb_entry_for_ebuild(Repository://Ebuild, pkg://InstalledEntry),
+  candidate:update_vdb_entry_for_ebuild(Repository://Ebuild, InstalledEntry),
   !,
-  feature_unification:unify([replaces(pkg://InstalledEntry),
+  feature_unification:unify([replaces(InstalledEntry),
                              rebuild_reason(build_with_use)],
                             Context, UpdCtx),
   candidate:resolve(Repository://Ebuild:update?{UpdCtx}, Conditions).
@@ -866,7 +870,8 @@ target:run_install_action(Repository://Ebuild, C, N, R, BResolved, InstallAction
   use:merge_memo_candidate_bwu(C, N, BResolved, BResolved1),
   ( \+ preference:flag(emptytree),
     slotmeta:entry_slot_default(Repository, Ebuild, SlotNew),
-    query:search(package(C,N), pkg://_),
+    knowledgebase:vdb_repository(VdbRepo),
+    query:search(package(C,N), VdbRepo://_),
     cnselect:installed_entry_cn(C, N, OldRepo, OldEbuild),
     OldEbuild \== Ebuild,
     ( query:search(slot(SlotOld0), OldRepo://OldEbuild)

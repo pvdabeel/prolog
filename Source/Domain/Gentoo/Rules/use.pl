@@ -787,12 +787,12 @@ use:is_abi_x86_flag(Use) :-
 % Uses the VDB's recorded USE state rather than effective USE.
 
 use:installed_pkg_satisfies_use_reqs(_ParentContext, _Installed, []) :- !.
-use:installed_pkg_satisfies_use_reqs(ParentContext, pkg://InstalledId,
+use:installed_pkg_satisfies_use_reqs(ParentContext, VdbRepo://InstalledId,
                                     [use(Directive, Default)|Rest]) :-
   !,
   use:use_dep_requirement(ParentContext, Directive, Default, Req),
-  use:installed_pkg_satisfies_use_requirement(pkg://InstalledId, Req),
-  use:installed_pkg_satisfies_use_reqs(ParentContext, pkg://InstalledId, Rest).
+  use:installed_pkg_satisfies_use_requirement(VdbRepo://InstalledId, Req),
+  use:installed_pkg_satisfies_use_reqs(ParentContext, VdbRepo://InstalledId, Rest).
 use:installed_pkg_satisfies_use_reqs(ParentContext, Installed, [_|Rest]) :-
   use:installed_pkg_satisfies_use_reqs(ParentContext, Installed, Rest).
 
@@ -801,11 +801,11 @@ use:installed_pkg_satisfies_use_reqs(ParentContext, Installed, [_|Rest]) :-
 % Check a single USE requirement against an installed package's VDB USE.
 
 use:installed_pkg_satisfies_use_requirement(_Installed, none) :- !.
-use:installed_pkg_satisfies_use_requirement(pkg://InstalledId, requirement(enable, Use, _Default)) :-
-  query:search(use(Use), pkg://InstalledId),
+use:installed_pkg_satisfies_use_requirement(VdbRepo://InstalledId, requirement(enable, Use, _Default)) :-
+  query:search(use(Use), VdbRepo://InstalledId),
   !.
-use:installed_pkg_satisfies_use_requirement(pkg://InstalledId, requirement(disable, Use, _Default)) :-
-  \+ query:search(use(Use), pkg://InstalledId),
+use:installed_pkg_satisfies_use_requirement(VdbRepo://InstalledId, requirement(disable, Use, _Default)) :-
+  \+ query:search(use(Use), VdbRepo://InstalledId),
   !.
 
 
@@ -860,11 +860,11 @@ use:build_with_use_requirements(BuildWithUse, MustEnable, MustDisable) :-
 % build_with_use constraints in Context. Flags not in the package's
 % IUSE are ignored (they cannot influence the build).
 
-use:installed_entry_satisfies_build_with_use(pkg://InstalledEntry, Context) :-
+use:installed_entry_satisfies_build_with_use(VdbRepo://InstalledEntry, Context) :-
   use:context_build_with_use_state(Context, State),
   use:build_with_use_requirements(State, MustEnable, MustDisable),
-  use:vdb_enabled_use_set(pkg://InstalledEntry, BuiltUse),
-  use:vdb_iuse_set(pkg://InstalledEntry, BuiltIuse),
+  use:vdb_enabled_use_set(VdbRepo://InstalledEntry, BuiltUse),
+  use:vdb_iuse_set(VdbRepo://InstalledEntry, BuiltIuse),
   forall(member(U, MustEnable),
          ( memberchk(U, BuiltIuse) -> memberchk(U, BuiltUse)
          ; true
@@ -886,12 +886,12 @@ use:installed_entry_satisfies_build_with_use(pkg://InstalledEntry, Context) :-
 % Checks both enabled USE and declared IUSE for changes.
 % Used to implement `--newuse` / `-N` rebuild semantics.
 
-use:newuse_mismatch(pkg://InstalledEntry) :-
-  query:search([category(C),name(N),version(V)], pkg://InstalledEntry),
+use:newuse_mismatch(VdbRepo://InstalledEntry) :-
+  query:search([category(C),name(N),version(V)], VdbRepo://InstalledEntry),
   preference:accept_keywords(K),
   ( query:search([select(repository,notequal,pkg),category(C),name(N),keywords(K),version(V)],
                  CurRepo://CurEntry)
-  -> use:newuse_mismatch(pkg://InstalledEntry, CurRepo://CurEntry)
+  -> use:newuse_mismatch(VdbRepo://InstalledEntry, CurRepo://CurEntry)
   ;  fail
   ).
 
@@ -901,11 +901,11 @@ use:newuse_mismatch(pkg://InstalledEntry) :-
 % current repo entry's effective USE or IUSE. Checks both the enabled
 % USE set and the declared IUSE set for symmetric differences.
 
-use:newuse_mismatch(pkg://InstalledEntry, CurRepo://CurEntry) :-
-  use:vdb_enabled_use_set(pkg://InstalledEntry, BuiltUse),
+use:newuse_mismatch(VdbRepo://InstalledEntry, CurRepo://CurEntry) :-
+  use:vdb_enabled_use_set(VdbRepo://InstalledEntry, BuiltUse),
   use:entry_enabled_use_set(CurRepo://CurEntry, CurUse),
   ( use:symmetric_diff_nonempty(BuiltUse, CurUse)
-  ; use:vdb_iuse_set(pkg://InstalledEntry, BuiltIuse),
+  ; use:vdb_iuse_set(VdbRepo://InstalledEntry, BuiltIuse),
     use:entry_iuse_set(CurRepo://CurEntry, CurIuse),
     BuiltIuse \== [],
     CurIuse \== [],
@@ -921,12 +921,12 @@ use:newuse_mismatch(pkg://InstalledEntry, CurRepo://CurEntry) :-
 % this ignores IUSE additions/removals and only checks whether flags
 % that are actually enabled/disabled have changed.
 
-use:changeduse_mismatch(pkg://InstalledEntry) :-
-  query:search([category(C),name(N),version(V)], pkg://InstalledEntry),
+use:changeduse_mismatch(VdbRepo://InstalledEntry) :-
+  query:search([category(C),name(N),version(V)], VdbRepo://InstalledEntry),
   preference:accept_keywords(K),
   ( query:search([select(repository,notequal,pkg),category(C),name(N),keywords(K),version(V)],
                  CurRepo://CurEntry)
-  -> use:changeduse_mismatch(pkg://InstalledEntry, CurRepo://CurEntry)
+  -> use:changeduse_mismatch(VdbRepo://InstalledEntry, CurRepo://CurEntry)
   ;  fail
   ).
 
@@ -937,8 +937,8 @@ use:changeduse_mismatch(pkg://InstalledEntry) :-
 % current repo entry's effective USE set. Only compares the enabled
 % flag sets, ignoring IUSE changes.
 
-use:changeduse_mismatch(pkg://InstalledEntry, CurRepo://CurEntry) :-
-  use:vdb_enabled_use_set(pkg://InstalledEntry, BuiltUse),
+use:changeduse_mismatch(VdbRepo://InstalledEntry, CurRepo://CurEntry) :-
+  use:vdb_enabled_use_set(VdbRepo://InstalledEntry, BuiltUse),
   use:entry_enabled_use_set(CurRepo://CurEntry, CurUse),
   use:symmetric_diff_nonempty(BuiltUse, CurUse),
   !.

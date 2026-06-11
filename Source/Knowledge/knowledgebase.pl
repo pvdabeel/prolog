@@ -431,3 +431,116 @@ kb_warm_metadata_index :-
   once(cache:ordered_entry(Repo, Id, C, N, _)),
   ( cache:entry_metadata(Repo, Id, slot, slot(_)) -> true ; true ),
   ( cache:ordered_entry(Repo, _, C, N, _) -> true ; true ).
+
+
+% -----------------------------------------------------------------------------
+% Active VDB repository selection
+% -----------------------------------------------------------------------------
+
+% Registered client VDB imports: repository name (e.g. 'pkg@laptop.local')
+% with the snapshot stamp the client shipped at import time. Asserted by
+% server:import_vdb/1 and consulted by vdb_repository/1 to detect stale
+% imports.
+:- dynamic knowledgebase:client_vdb_stamp/2.
+
+
+%! knowledgebase:vdb_repository(-Repository) is det.
+%
+% Unifies Repository with the repository name holding the installed-package
+% (VDB) facts for the current execution context:
+%
+%   * Standalone / daemon / worker: always `pkg` (the local VDB snapshot).
+%   * Pengines sandbox context (client-server mode): the per-client
+%     repository (`pkg@<clienthost>`) when the client has shipped a valid
+%     `vdb_repository/1` instance fact after a successful `--import-vdb`,
+%     otherwise `pkg` (the server VDB) with a loud warning.
+%
+% The result is memoized in a per-thread global variable: the accessor is
+% called from resolver hot paths (installed(true) query macros), so it must
+% cost a single nb_current/2 lookup after the first call. Memoization is
+% safe because a thread is either a pengine thread (one request) or a
+% regular thread for its entire lifetime.
+
+knowledgebase:vdb_repository(Repository) :-
+  ( nb_current(kb_vdb_repository, R0) ->
+      Repository = R0
+  ;   knowledgebase:resolve_vdb_repository(R1),
+      nb_setval(kb_vdb_repository, R1),
+      Repository = R1
+  ).
+
+
+%! knowledgebase:resolve_vdb_repository(-Repository) is det.
+%
+% Uncached resolution behind vdb_repository/1. In a Pengines sandbox
+% context, consults the client-shipped `vdb_repository/1` instance fact
+% and validates it against the registered import stamp; outside a pengine
+% the answer is always `pkg`.
+
+knowledgebase:resolve_vdb_repository(Repository) :-
+  ( preference:pengine_module(M) ->
+      knowledgebase:pengine_vdb_repository(M, Repository)
+  ;   Repository = pkg
+  ).
+
+
+%! knowledgebase:pengine_vdb_repository(+Module, -Repository) is det.
+%
+% Pengines sandbox context resolution: missing or stale client imports are
+% reported loudly (never a silent fallback to the server VDB), as required
+% by the --import-vdb design (issue #78). The warnings fire once per
+% pengine request: each pengine runs on a fresh thread, and vdb_repository/1
+% memoizes the resolution per thread.
+
+knowledgebase:pengine_vdb_repository(M, Repository) :-
+  ( catch(M:vdb_repository(R), _, fail) ->
+      ( knowledgebase:client_vdb_valid(M, R) ->
+          Repository = R
+      ;   message:warning(
+            ['Client VDB import \'', R, '\' is missing or stale on this ',
+             'server. Falling back to the server VDB - re-run --import-vdb.']),
+          Repository = pkg
+      )
+  ;   message:warning(
+        ['No client VDB imported - this plan reflects the server\'s ',
+         'installed packages. Run --import-vdb to ship your local VDB.']),
+      Repository = pkg
+  ).
+
+
+%! knowledgebase:client_vdb_valid(+Module, +Repository) is semidet.
+%
+% True when the client-shipped repository name corresponds to a registered
+% import whose facts are resident and whose stamp matches the stamp the
+% client shipped alongside it.
+
+knowledgebase:client_vdb_valid(M, Repository) :-
+  atom(Repository),
+  cache:repository(Repository),
+  knowledgebase:client_vdb_stamp(Repository, Stamp),
+  catch(M:vdb_import_stamp(Stamp0), _, fail),
+  Stamp0 == Stamp.
+
+
+%! knowledgebase:is_vdb_repository(?Repository) is semidet.
+%
+% True when Repository is a VDB-typed repository name: the local `pkg`
+% repository or any per-client import (`pkg@<clienthost>`). Used by query
+% filters that must exclude installed-package repositories from portage
+% tree searches regardless of which VDB repository is active.
+
+knowledgebase:is_vdb_repository(pkg) :- !.
+knowledgebase:is_vdb_repository(Repository) :-
+  atom(Repository),
+  sub_atom(Repository, 0, _, _, 'pkg@').
+
+
+%! knowledgebase:register_client_vdb(+Repository, +Stamp) is det.
+%
+% Record (or refresh) the snapshot stamp for an imported client VDB
+% repository. Called by the server-side import handler after the facts
+% have been asserted.
+
+knowledgebase:register_client_vdb(Repository, Stamp) :-
+  retractall(knowledgebase:client_vdb_stamp(Repository, _)),
+  assertz(knowledgebase:client_vdb_stamp(Repository, Stamp)).

@@ -41,13 +41,14 @@ Three roles interact in the portage-ng architecture:
 % State-mutating or expensive operations require POST; only informational
 % endpoints remain GET (avoids crawlers with credentials triggering e.g. /clear).
 
-:- http_handler('/',      reply, [id('portage-ng'), methods([get])]).
-:- http_handler('/sync',  reply, [id('sync'),       methods([post]), time_limit(infinite)]).
-:- http_handler('/save',  reply, [id('save'),       methods([post])]).
-:- http_handler('/load',  reply, [id('load'),       methods([post])]).
-:- http_handler('/clear', reply, [id('clear'),      methods([post])]).
-:- http_handler('/graph', reply, [id('graph'),      methods([post]), time_limit(infinite)]).
-:- http_handler('/prove', reply, [id('prove'),      methods([post]), time_limit(infinite)]).
+:- http_handler('/',           reply, [id('portage-ng'), methods([get])]).
+:- http_handler('/sync',       reply, [id('sync'),       methods([post]), time_limit(infinite)]).
+:- http_handler('/save',       reply, [id('save'),       methods([post])]).
+:- http_handler('/load',       reply, [id('load'),       methods([post])]).
+:- http_handler('/clear',      reply, [id('clear'),      methods([post])]).
+:- http_handler('/graph',      reply, [id('graph'),      methods([post]), time_limit(infinite)]).
+:- http_handler('/prove',      reply, [id('prove'),      methods([post]), time_limit(infinite)]).
+:- http_handler('/import-vdb', reply, [id('importvdb'),  methods([post]), time_limit(infinite)]).
 :- http_handler('/info',  reply, [id('info'),       methods([get])]).
 
 
@@ -137,6 +138,13 @@ server:reply(Request) :-
     member(path('/prove'), Request),
     !,
     server:chunked_reply('/prove', prover:test_latest(portage,parallel_verbose)).
+
+server:reply(Request) :-
+    member(path('/import-vdb'), Request),
+    !,
+    % Read the POST body before switching the reply to chunked mode.
+    http_client:http_read_data(Request, Payload, [to(string)]),
+    server:chunked_reply('/import-vdb', server:import_vdb(Payload)).
 
 server:reply(Request) :-
     member(path('/info'), Request),
@@ -503,6 +511,196 @@ server:total_cpus(N) :-
   aggregate_all(sum(Cpus),
                 server:registered_worker(_, Cpus, _),
                 N).
+
+
+% =============================================================================
+%  Client VDB import (issue #78)
+% =============================================================================
+
+% Hard caps on the number of facts a single client may import. A typical
+% VDB holds 0.5-2k entries and 40-80k metadata facts; the caps only guard
+% against malformed or hostile payloads.
+server:vdb_import_max_entries(200000).
+server:vdb_import_max_metadata(5000000).
+
+
+%! server:import_vdb(+Payload) is det.
+%
+% Handle a /import-vdb POST: parse and validate the term-stream payload
+% produced by client:vdb_payload/3, then atomically register the facts as
+% the per-client repository pkg@<clienthost>. The client hostname is taken
+% from the (digest + client-cert authenticated) payload and sanitized; the
+% repository name is always derived server-side, never trusted from the
+% wire. Fact shapes are whitelisted and counts are capped.
+
+server:import_vdb(Payload) :-
+  setup_call_cleanup(
+    open_string(Payload, Stream),
+    server:parse_vdb_import(Stream, Hostname, Stamp, Entries, Metadata),
+    close(Stream)),
+  atom_concat('pkg@', Hostname, Repo),
+  server:assert_client_vdb(Repo, Stamp, Entries, Metadata),
+  length(Entries, EntryCount),
+  length(Metadata, MdCount),
+  format('vdb-import: ok ~w (~d entries, ~d metadata facts)~n',
+         [Repo, EntryCount, MdCount]),
+  flush_output.
+
+
+%! server:parse_vdb_import(+Stream, -Hostname, -Stamp, -Entries, -Metadata) is det.
+%
+% Parse and validate the wire format:
+%
+%   vdb_import_v1.
+%   hostname(<atom>).
+%   stamp(stamp(Count, Sha)).
+%   oe(Id, C, N, V).        (repeated; order = version-descending)
+%   md(Id, Key, Value).     (repeated)
+%   end_of_vdb_import(EntryCount, MdCount).
+%
+% Throws permission_error/type_error on any violation.
+
+server:parse_vdb_import(Stream, Hostname, Stamp, Entries, Metadata) :-
+  server:read_vdb_term(Stream, First),
+  ( First == vdb_import_v1 ->
+      true
+  ;   throw(error(type_error(vdb_import_v1, First), server:import_vdb/1))
+  ),
+  server:read_vdb_term(Stream, hostname(Hostname)),
+  ( server:valid_hostname(Hostname) ->
+      true
+  ;   throw(error(permission_error(import, hostname, Hostname),
+                  server:import_vdb/1))
+  ),
+  server:read_vdb_term(Stream, stamp(Stamp)),
+  ( Stamp = stamp(Count, Sha), integer(Count), atom(Sha) ->
+      true
+  ;   throw(error(type_error(vdb_import_stamp, Stamp), server:import_vdb/1))
+  ),
+  server:read_vdb_facts(Stream, 0, 0, Entries, Metadata, Trailer),
+  ( Trailer = end_of_vdb_import(EntryCount, MdCount),
+    length(Entries, EntryCount),
+    length(Metadata, MdCount),
+    EntryCount =:= Count ->
+      true
+  ;   throw(error(type_error(vdb_import_trailer, Trailer), server:import_vdb/1))
+  ).
+
+
+%! server:read_vdb_facts(+Stream, +NE, +NM, -Entries, -Metadata, -Trailer) is det.
+%
+% Read oe/4 and md/3 facts (preserving order) up to the trailer term,
+% validating each fact shape and enforcing the count caps.
+
+server:read_vdb_facts(Stream, NE, NM, Entries, Metadata, Trailer) :-
+  server:read_vdb_term(Stream, Term),
+  ( Term = end_of_vdb_import(_, _) ->
+      Entries = [],
+      Metadata = [],
+      Trailer = Term
+  ; Term = oe(Id, C, N, V) ->
+      server:validate_vdb_entry(Id, C, N, V),
+      NE1 is NE + 1,
+      server:vdb_import_max_entries(MaxE),
+      ( NE1 =< MaxE ->
+          true
+      ;   throw(error(resource_error(vdb_import_entries), server:import_vdb/1))
+      ),
+      Entries = [Term|RestE],
+      server:read_vdb_facts(Stream, NE1, NM, RestE, Metadata, Trailer)
+  ; Term = md(Id, Key, Value) ->
+      server:validate_vdb_metadata(Id, Key, Value),
+      NM1 is NM + 1,
+      server:vdb_import_max_metadata(MaxM),
+      ( NM1 =< MaxM ->
+          true
+      ;   throw(error(resource_error(vdb_import_metadata), server:import_vdb/1))
+      ),
+      Metadata = [Term|RestM],
+      server:read_vdb_facts(Stream, NE, NM1, Entries, RestM, Trailer)
+  ;   throw(error(type_error(vdb_import_fact, Term), server:import_vdb/1))
+  ).
+
+
+%! server:read_vdb_term(+Stream, -Term) is det.
+%
+% Read one term from the payload stream. end_of_file is a protocol error
+% (the trailer terminates a well-formed payload first).
+
+server:read_vdb_term(Stream, Term) :-
+  read_term(Stream, Term0, []),
+  ( Term0 == end_of_file ->
+      throw(error(type_error(vdb_import_term, end_of_file), server:import_vdb/1))
+  ;   Term = Term0
+  ).
+
+
+%! server:validate_vdb_entry(+Id, +C, +N, +V) is det.
+
+server:validate_vdb_entry(Id, C, N, V) :-
+  ( atom(Id), atom(C), atom(N),
+    ( V == version_none ; compound(V), functor(V, version, 7) ) ->
+      true
+  ;   throw(error(type_error(vdb_import_entry, oe(Id, C, N, V)),
+                  server:import_vdb/1))
+  ).
+
+
+%! server:validate_vdb_metadata(+Id, +Key, +Value) is det.
+
+server:validate_vdb_metadata(Id, Key, Value) :-
+  ( atom(Id), atom(Key), ground(Value) ->
+      true
+  ;   throw(error(type_error(vdb_import_metadata, md(Id, Key, Value)),
+                  server:import_vdb/1))
+  ).
+
+
+%! server:valid_hostname(+Hostname) is semidet.
+%
+% Restrictive hostname check: non-empty, max 253 chars, alphanumerics
+% plus '.' and '-', not starting with '.' or '-'.
+
+server:valid_hostname(Hostname) :-
+  atom(Hostname),
+  atom_length(Hostname, Len),
+  Len > 0,
+  Len =< 253,
+  atom_chars(Hostname, Chars),
+  Chars = [First|_],
+  First \== '.',
+  First \== '-',
+  forall(member(Ch, Chars),
+         ( char_type(Ch, alnum) ; Ch == '.' ; Ch == '-' )).
+
+
+%! server:assert_client_vdb(+Repo, +Stamp, +Entries, +Metadata) is det.
+%
+% Atomically replace the cache facts for the per-client repository:
+% retract any previous import, assert the new ordered entries (preserving
+% the client's version-descending order), derive category/package facts,
+% and register the import stamp with the knowledgebase.
+
+server:assert_client_vdb(Repo, Stamp, Entries, Metadata) :-
+  with_mutex(server_vdb_import,
+    ( retractall(cache:repository(Repo)),
+      retractall(cache:category(Repo, _)),
+      retractall(cache:package(Repo, _, _)),
+      retractall(cache:ordered_entry(Repo, _, _, _, _)),
+      retractall(cache:entry_metadata(Repo, _, _, _)),
+      forall(member(oe(Id, C, N, V), Entries),
+             assertz(cache:ordered_entry(Repo, Id, C, N, V))),
+      forall(member(md(Id, Key, Value), Metadata),
+             assertz(cache:entry_metadata(Repo, Id, Key, Value))),
+      findall(C, member(oe(_, C, _, _), Entries), Cs0),
+      sort(Cs0, Cs),
+      forall(member(C, Cs), assertz(cache:category(Repo, C))),
+      findall(C-N, member(oe(_, C, N, _), Entries), CNs0),
+      sort(CNs0, CNs),
+      forall(member(C-N, CNs), assertz(cache:package(Repo, C, N))),
+      assertz(cache:repository(Repo)),
+      knowledgebase:register_client_vdb(Repo, Stamp)
+    )).
 
 
 % =============================================================================

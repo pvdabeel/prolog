@@ -81,12 +81,14 @@ variant:goal_to_entry(target(_Q, Arg):_Action?{_Ctx}, TreeEntry) :-
 
 %! variant:ensure_tree_entry(+RepoEntry, -TreeEntry) is semidet.
 %
-% If the entry is from VDB (pkg://), finds the corresponding portage tree
-% entry with the same category, name, and version. Otherwise passes through.
+% If the entry is from a VDB repository, finds the corresponding portage
+% tree entry with the same category, name, and version. Otherwise passes
+% through.
 
-variant:ensure_tree_entry(pkg://Entry, portage://TreeId) :-
+variant:ensure_tree_entry(Repo://Entry, portage://TreeId) :-
+  knowledgebase:is_vdb_repository(Repo),
   !,
-  cache:ordered_entry(pkg, Entry, C, N, V),
+  cache:ordered_entry(Repo, Entry, C, N, V),
   ( cache:ordered_entry(portage, TreeId, C, N, V)
   -> true
   ;  cache:ordered_entry(portage, TreeId, C, N, _)

@@ -46,10 +46,12 @@ cnselect:installed_entry_satisfies_package_deps(_Action, C, N, PackageDeps, Repo
 
 %! cnselect:installed_entry_cn(+C, +N, -Repo, -Entry)
 %
-% Looks up an installed entry for (C,N) in the VDB (pkg repo).
+% Looks up an installed entry for (C,N) in the active VDB repository
+% (knowledgebase:vdb_repository/1).
 
-cnselect:installed_entry_cn(C, N, pkg, Entry) :-
-  query:search([name(N),category(C),installed(true)], pkg://Entry),
+cnselect:installed_entry_cn(C, N, VdbRepo, Entry) :-
+  knowledgebase:vdb_repository(VdbRepo),
+  query:search([name(N),category(C),installed(true)], VdbRepo://Entry),
   !.
 
 

@@ -629,6 +629,11 @@ binpkg_exec:check_atom_subslot_pin(Cat, Name, Slot) :-
 % merged install and rejects such candidates -- matching emerge, which
 % validates binpkg `:=` pins against the live vartree. The snapshot
 % path remains as a fallback for hosts without a stat'able VDB.
+%
+% When proving for a remote client (knowledgebase:vdb_repository/1
+% resolves to a per-client `pkg@<host>` repo, see --import-vdb) the
+% server's on-disk VDB is irrelevant: we skip the disk consult and use
+% the imported in-memory snapshot instead.
 
 binpkg_exec:live_subslot_matches(Cat, Name, RecSlot, RecSub) :-
   ( binpkg_exec:live_install_subslot(Cat, Name, RecSlot, LiveSub)
@@ -647,12 +652,13 @@ binpkg_exec:live_subslot_matches(Cat, Name, RecSlot, RecSub) :-
 % root is available on this host.
 
 binpkg_exec:live_install_subslot(Cat, Name, RecSlot, LiveSub) :-
+  knowledgebase:vdb_repository(pkg),
   binpkg_exec:vdb_disk_root(Root), !,
   binpkg_exec:vdb_disk_install_subslot(Root, Cat, Name, RecSlot, LiveSub).
 
 binpkg_exec:live_install_subslot(Cat, Name, RecSlot, LiveSub) :-
-  binpkg_exec:find_live_install_for_slot(Cat, Name, RecSlot, LiveEntry),
-  query:search(subslot(LiveSubRaw), pkg://LiveEntry),
+  binpkg_exec:find_live_install_for_slot(Cat, Name, RecSlot, LiveRepo://LiveEntry),
+  query:search(subslot(LiveSubRaw), LiveRepo://LiveEntry),
   slotmeta:canon_slot(LiveSubRaw, LiveSub).
 
 
@@ -700,20 +706,23 @@ binpkg_exec:vdb_disk_install_subslot(Root, Cat, Name, RecSlot, Sub) :-
   !.
 
 
-%! binpkg_exec:find_live_install_for_slot(+Cat, +Name, +RecSlot, -Entry) is semidet.
+%! binpkg_exec:find_live_install_for_slot(+Cat, +Name, +RecSlot, -RepoEntry) is semidet.
 %
-% Resolves the live VDB entry that matches the recorded slot. When
+% Resolves the live VDB entry (in the active VDB repository, see
+% knowledgebase:vdb_repository/1) that matches the recorded slot. When
 % `RecSlot == (-)` (no slot constraint recorded) the first installed
 % entry wins. Otherwise we backtrack through every installed entry
 % of (Cat, Name) and pick the first whose canonicalised slot equals
 % RecSlot.
 
-binpkg_exec:find_live_install_for_slot(Cat, Name, (-), Entry) :- !,
-  query:search([name(Name), category(Cat), installed(true)], pkg://Entry).
+binpkg_exec:find_live_install_for_slot(Cat, Name, (-), VdbRepo://Entry) :- !,
+  knowledgebase:vdb_repository(VdbRepo),
+  query:search([name(Name), category(Cat), installed(true)], VdbRepo://Entry).
 
-binpkg_exec:find_live_install_for_slot(Cat, Name, RecSlot, Entry) :-
-  query:search([name(Name), category(Cat), installed(true)], pkg://Entry),
-  ( query:search(slot(LiveSlotRaw), pkg://Entry)
+binpkg_exec:find_live_install_for_slot(Cat, Name, RecSlot, VdbRepo://Entry) :-
+  knowledgebase:vdb_repository(VdbRepo),
+  query:search([name(Name), category(Cat), installed(true)], VdbRepo://Entry),
+  ( query:search(slot(LiveSlotRaw), VdbRepo://Entry)
   -> slotmeta:canon_slot(LiveSlotRaw, LiveSlot),
      LiveSlot == RecSlot
   ;  true

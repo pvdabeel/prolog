@@ -253,6 +253,20 @@ query:strip_validate_annotation(AKey, Key) :-
   ( AKey = Key0:validate -> Key = Key0 ; Key = AKey ).
 
 
+%! query:repo_not_vdb(?Repo)
+%
+% Guard used by the compiled `select(repository,notequal,pkg)` query: when
+% Repo is already bound it must not be a VDB repository; when still unbound
+% it passes (Repo is bound by later compounds in the compiled conjunction,
+% mirroring the permissiveness of the previous `pkg \== Repo` check).
+
+query:repo_not_vdb(Repo) :-
+  ( var(Repo) ->
+      true
+  ;   \+ knowledgebase:is_vdb_repository(Repo)
+  ).
+
+
 % 1. syntactic suggar
 
 compile_query_compound(repository(Repo), Repo://Id,
@@ -295,10 +309,17 @@ compile_query_compound(keyword(KW), Repo://Id,
 compile_query_compound(keywords(KW), Repo://Id,
   cache:entry_metadata(Repo,Id,keywords,KW)) :- !.
 
+% Installed-state lookups resolve the active VDB repository at runtime via
+% knowledgebase:vdb_repository/1 (memoized): `pkg` in standalone mode, the
+% per-client import (`pkg@<clienthost>`) in a Pengines sandbox context.
 compile_query_compound(installed(true), Repo://Id,
-  (cache:ordered_entry(pkg, Id, _, _, _), (var(Repo) -> Repo = pkg ; true))) :- !.
+  ( knowledgebase:vdb_repository(VdbRepo),
+    cache:ordered_entry(VdbRepo, Id, _, _, _),
+    (var(Repo) -> Repo = VdbRepo ; true) )) :- !.
 compile_query_compound(installed(false), Repo://Id,
-  (cache:ordered_entry(Repo, Id, _, _, _), \+ cache:ordered_entry(pkg, Id, _, _, _))) :- !.
+  ( knowledgebase:vdb_repository(VdbRepo),
+    cache:ordered_entry(Repo, Id, _, _, _),
+    \+ cache:ordered_entry(VdbRepo, Id, _, _, _) )) :- !.
 
 % VDB metadata: USE flags enabled for the installed package.
 compile_query_compound(use(Use), Repo://Id,
@@ -484,6 +505,17 @@ compile_query_compound(select(Key,Cmp,Sn), Repo://Id, Goal) :-
 compile_query_compound(select(Key,Cmp,Value), Repo://Id,
   ( search(select(Key,Cmp,Value), Repo://Id ) ))  :-
   nonground(Cmp,_),!.   % Important: filter out runtime bound Cmp
+
+% `select(repository,notequal,pkg)` is the canonical "tree counterpart of an
+% installed entry" filter: Id must exist in the VDB, while the selected Repo
+% must not be a VDB repository. The literal atom `pkg` is interpreted as
+% "the active VDB repository" (knowledgebase:vdb_repository/1), so the same
+% call sites work in standalone mode and against per-client imports
+% (`pkg@<clienthost>`) in a Pengines sandbox context.
+compile_query_compound(select(repository,notequal,pkg), Repo://Id,
+  ( knowledgebase:vdb_repository(VdbRepo),
+    cache:ordered_entry(VdbRepo,Id,_,_,_),
+    query:repo_not_vdb(Repo) ) ) :- !.
 
 compile_query_compound(select(repository,notequal,R), Repo://Id,
   ( cache:ordered_entry(R,Id,_,_,_),
@@ -753,17 +785,27 @@ compile_query_compound(select(masked,notequal,true), Repo://Id,
   ( cache:ordered_entry(Repo,Id,_,_,_),
     \+ preference:masked(Repo://Id) )) :- !.
 
+% Like installed(true)/installed(false) above: the active VDB repository is
+% resolved at runtime via knowledgebase:vdb_repository/1 (memoized).
 compile_query_compound(select(installed,equal,true), Repo://Id,
-  (cache:ordered_entry(pkg, Id, _, _, _), (var(Repo) -> Repo = pkg ; true))) :- !.
+  ( knowledgebase:vdb_repository(VdbRepo),
+    cache:ordered_entry(VdbRepo, Id, _, _, _),
+    (var(Repo) -> Repo = VdbRepo ; true) )) :- !.
 
 compile_query_compound(select(installed,equal,false), Repo://Id,
-  (cache:ordered_entry(Repo, Id, _, _, _), \+ cache:ordered_entry(pkg, Id, _, _, _))) :- !.
+  ( knowledgebase:vdb_repository(VdbRepo),
+    cache:ordered_entry(Repo, Id, _, _, _),
+    \+ cache:ordered_entry(VdbRepo, Id, _, _, _) )) :- !.
 
 compile_query_compound(select(installed,notequal,true), Repo://Id,
-  (cache:ordered_entry(Repo, Id, _, _, _), \+ cache:ordered_entry(pkg, Id, _, _, _))) :- !.
+  ( knowledgebase:vdb_repository(VdbRepo),
+    cache:ordered_entry(Repo, Id, _, _, _),
+    \+ cache:ordered_entry(VdbRepo, Id, _, _, _) )) :- !.
 
 compile_query_compound(select(installed,notequal,false), Repo://Id,
-  (cache:ordered_entry(pkg, Id, _, _, _), (var(Repo) -> Repo = pkg ; true))) :- !.
+  ( knowledgebase:vdb_repository(VdbRepo),
+    cache:ordered_entry(VdbRepo, Id, _, _, _),
+    (var(Repo) -> Repo = VdbRepo ; true) )) :- !.
 
 
 % 8. all query is treated at runtime, except for a few exceptions

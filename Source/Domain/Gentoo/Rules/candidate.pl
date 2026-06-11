@@ -473,8 +473,9 @@ candidate:eligible(use_conditional(negative, Use, R://E):_?{_}) :-
 
 %! candidate:installed(+RepoEntry) is semidet.
 %
-% Succeeds when the entry is installed (exists in the pkg repository).
-% Goal-expanded at compile time to cache:ordered_entry(pkg, Id, _, _, _).
+% Succeeds when the entry is installed (exists in the active VDB
+% repository, see knowledgebase:vdb_repository/1). Goal-expanded at
+% compile time to a cache:ordered_entry/5 lookup on that repository.
 
 candidate:installed(Repo://Entry) :-
   query:search(installed(true), Repo://Entry).
@@ -617,27 +618,28 @@ candidate:group_choice_dep(D, D).
 
 candidate:grouped_dep_keep_installed(Action, C, N, PackageDeps1, Context) :-
   slotmeta:merge_slot_restriction(Action, C, N, PackageDeps1, SlotReq),
-  query:search([name(N),category(C),installed(true)], pkg://InstalledEntry),
-  slotmeta:query_search_slot_constraint(SlotReq, pkg://InstalledEntry, _),
-  cnselect:installed_entry_satisfies_package_deps(Action, C, N, PackageDeps1, pkg://InstalledEntry),
+  knowledgebase:vdb_repository(VdbRepo),
+  query:search([name(N),category(C),installed(true)], VdbRepo://InstalledEntry),
+  slotmeta:query_search_slot_constraint(SlotReq, VdbRepo://InstalledEntry, _),
+  cnselect:installed_entry_satisfies_package_deps(Action, C, N, PackageDeps1, VdbRepo://InstalledEntry),
   findall(U0, member(package_dependency(_P0,no,C,N,_O,_V,_,U0),PackageDeps1), MergedUse0),
   append(MergedUse0, MergedUse),
-  dependency:process_build_with_use(MergedUse, Context, ContextWU, _BWUCons, pkg://InstalledEntry),
+  dependency:process_build_with_use(MergedUse, Context, ContextWU, _BWUCons, VdbRepo://InstalledEntry),
   use:context_build_with_use_state(ContextWU, BWUEdge),
   use:accumulate_candidate_bwu(C, N, BWUEdge),
   ( memo:candidate_bwu_(C, N, BWUEff) -> true ; BWUEff = BWUEdge ),
   ( C == 'virtual'
   -> true
-  ; use:installed_entry_satisfies_build_with_use(pkg://InstalledEntry,
+  ; use:installed_entry_satisfies_build_with_use(VdbRepo://InstalledEntry,
                                                  [build_with_use:BWUEff])
   ),
   ( preference:flag(newuse) ->
-      \+ use:newuse_mismatch(pkg://InstalledEntry)
+      \+ use:newuse_mismatch(VdbRepo://InstalledEntry)
   ; preference:flag(changeduse) ->
-      \+ use:changeduse_mismatch(pkg://InstalledEntry)
+      \+ use:changeduse_mismatch(VdbRepo://InstalledEntry)
   ; true
   ),
-  \+ target:rebuild_if_newer_available(pkg://InstalledEntry),
+  \+ target:rebuild_if_newer_available(VdbRepo://InstalledEntry),
   \+ target:is_excluded_cn(C, N),
   !.
 
@@ -853,15 +855,16 @@ candidate:grouped_dep_determine_action(gd(Action, C, N, _PackageDeps, _SlotReq, 
                                        SlotMeta, NewerContext, ActionGoal) :-
   ( \+ preference:flag(emptytree),
     cnselect:selected_cn_slot_key_(SlotMeta, SlotChosen),
-    query:search([name(N),category(C),installed(true)], pkg://InstalledEntry2),
-    ( query:search(slot(SlotInstalled0), pkg://InstalledEntry2)
+    knowledgebase:vdb_repository(VdbRepo),
+    query:search([name(N),category(C),installed(true)], VdbRepo://InstalledEntry2),
+    ( query:search(slot(SlotInstalled0), VdbRepo://InstalledEntry2)
       -> slotmeta:canon_slot(SlotInstalled0, SlotInstalled)
       ;  SlotInstalled = SlotChosen
     ),
     SlotInstalled == SlotChosen,
     !,
     candidate:grouped_dep_update_reason(C, N, FoundRepo://Candidate,
-                                        pkg://InstalledEntry2, NewerContext,
+                                        VdbRepo://InstalledEntry2, NewerContext,
                                         DepUpdateAction, UpdateCtx)
   ->
     ActionGoal = FoundRepo://Candidate:DepUpdateAction?{UpdateCtx}
@@ -875,48 +878,48 @@ candidate:grouped_dep_determine_action(gd(Action, C, N, _PackageDeps, _SlotReq, 
 % --newuse, --changed-use, --rebuild-if-new-*).
 
 candidate:grouped_dep_update_reason(_C, _N, FoundRepo://Candidate,
-                                    pkg://InstalledEntry2, NewerContext,
+                                    VdbRepo://InstalledEntry2, NewerContext,
                                     DepUpdateAction, UpdateCtx) :-
   InstalledEntry2 \== Candidate,
-  query:search(version(OldVer), pkg://InstalledEntry2),
+  query:search(version(OldVer), VdbRepo://InstalledEntry2),
   query:search(version(CandVer0), FoundRepo://Candidate),
   OldVer \== CandVer0,
   !,
-  feature_unification:unify([replaces(pkg://InstalledEntry2)], NewerContext, UpdateCtx),
+  feature_unification:unify([replaces(VdbRepo://InstalledEntry2)], NewerContext, UpdateCtx),
   ( eapi:version_compare(<, CandVer0, OldVer)
   -> DepUpdateAction = downgrade
   ;  DepUpdateAction = update
   ).
 candidate:grouped_dep_update_reason(C, _N, _FoundRepo://_Candidate,
-                                    pkg://InstalledEntry2, NewerContext,
+                                    VdbRepo://InstalledEntry2, NewerContext,
                                     update, UpdateCtx) :-
   ( current_predicate(config:avoid_reinstall/1),
     config:avoid_reinstall(true) ->
       fail
   ; C \== 'virtual',
-    \+ use:installed_entry_satisfies_build_with_use(pkg://InstalledEntry2, NewerContext)
+    \+ use:installed_entry_satisfies_build_with_use(VdbRepo://InstalledEntry2, NewerContext)
   ),
   !,
-  feature_unification:unify([replaces(pkg://InstalledEntry2),rebuild_reason(build_with_use)], NewerContext, UpdateCtx).
+  feature_unification:unify([replaces(VdbRepo://InstalledEntry2),rebuild_reason(build_with_use)], NewerContext, UpdateCtx).
 candidate:grouped_dep_update_reason(_C, _N, FoundRepo://Candidate,
-                                    pkg://InstalledEntry2, NewerContext,
+                                    VdbRepo://InstalledEntry2, NewerContext,
                                     update, UpdateCtx) :-
   preference:flag(newuse),
-  use:newuse_mismatch(pkg://InstalledEntry2, FoundRepo://Candidate),
+  use:newuse_mismatch(VdbRepo://InstalledEntry2, FoundRepo://Candidate),
   !,
-  feature_unification:unify([replaces(pkg://InstalledEntry2),rebuild_reason(newuse)], NewerContext, UpdateCtx).
+  feature_unification:unify([replaces(VdbRepo://InstalledEntry2),rebuild_reason(newuse)], NewerContext, UpdateCtx).
 candidate:grouped_dep_update_reason(_C, _N, FoundRepo://Candidate,
-                                    pkg://InstalledEntry2, NewerContext,
+                                    VdbRepo://InstalledEntry2, NewerContext,
                                     update, UpdateCtx) :-
   preference:flag(changeduse),
-  use:changeduse_mismatch(pkg://InstalledEntry2, FoundRepo://Candidate),
+  use:changeduse_mismatch(VdbRepo://InstalledEntry2, FoundRepo://Candidate),
   !,
-  feature_unification:unify([replaces(pkg://InstalledEntry2),rebuild_reason(changeduse)], NewerContext, UpdateCtx).
+  feature_unification:unify([replaces(VdbRepo://InstalledEntry2),rebuild_reason(changeduse)], NewerContext, UpdateCtx).
 candidate:grouped_dep_update_reason(_C, _N, _FoundRepo://_Candidate,
-                                    pkg://InstalledEntry2, NewerContext,
+                                    VdbRepo://InstalledEntry2, NewerContext,
                                     update, UpdateCtx) :-
-  target:rebuild_if_newer_available(pkg://InstalledEntry2),
-  feature_unification:unify([replaces(pkg://InstalledEntry2),rebuild_reason(rebuild)], NewerContext, UpdateCtx).
+  target:rebuild_if_newer_available(VdbRepo://InstalledEntry2),
+  feature_unification:unify([replaces(VdbRepo://InstalledEntry2),rebuild_reason(rebuild)], NewerContext, UpdateCtx).
 
 
 %! candidate:grouped_dep_assemble_conditions(+GD, +Entry, +SlotMeta, +Constraints, +ActionGoal, -Conditions) is det.

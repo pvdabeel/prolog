@@ -73,27 +73,30 @@ depclean:arg_installed_repo_entry(Arg, RepoEntry) :-
   atom(Arg),
   atom_codes(Arg, Codes),
   phrase(eapi:qualified_target(Q), Codes),
-  % Find installed entry in VDB repo.
-  query:search([installed(true)|Q], pkg://InstalledEntry),
-  depclean:installed_to_repo_entry(pkg://InstalledEntry, RepoEntry),
+  % Find installed entry in the active VDB repository.
+  knowledgebase:vdb_repository(VdbRepo),
+  query:search([installed(true)|Q], VdbRepo://InstalledEntry),
+  depclean:installed_to_repo_entry(VdbRepo://InstalledEntry, RepoEntry),
   !.
 
 
 %! depclean:installed_to_repo_entry(+InstalledRef, -RepoEntry)
 %
-% Map an installed pkg://Entry to the corresponding entry in the active
-% repository set (excluding VDB repo `pkg`). Falls back to any matching
-% repo if keywords or overlay differ.
+% Map an installed VDB entry to the corresponding entry in the active
+% repository set (excluding VDB repositories). Falls back to any
+% matching non-VDB repo if keywords or overlay differ.
 
-depclean:installed_to_repo_entry(pkg://InstalledEntry, RepoEntry) :-
-  query:search([category(C),name(N),version(V)], pkg://InstalledEntry),
+depclean:installed_to_repo_entry(VdbRepo://InstalledEntry, RepoEntry) :-
+  query:search([category(C),name(N),version(V)], VdbRepo://InstalledEntry),
   preference:accept_keywords(K),
   ( query:search([select(repository,notequal,pkg),category(C),name(N),keywords(K),version(V)],
-                 Repo://InstalledEntry)
+                 Repo://InstalledEntry),
+    \+ knowledgebase:is_vdb_repository(Repo)
   -> RepoEntry = Repo://InstalledEntry
-  ; % Fallback: if keywords/overlay differ, allow any repo except pkg.
+  ; % Fallback: if keywords/overlay differ, allow any non-VDB repo.
     query:search([select(repository,notequal,pkg),category(C),name(N),version(V)],
                  Repo2://InstalledEntry),
+    \+ knowledgebase:is_vdb_repository(Repo2),
     RepoEntry = Repo2://InstalledEntry
   ).
 
@@ -139,14 +142,15 @@ depclean:model_required_installed(ModelList, RequiredInstalled) :-
 
 %! depclean:model_item_installed(+ModelItem, -InstalledEntry) is semidet.
 %
-% Maps a depclean model literal to its installed pkg://Entry, succeeding only
+% Maps a depclean model literal to its installed VDB entry, succeeding only
 % when the item resolves to a Repo://Entry that is both in the proof model and
 % installed in the VDB. Fails (so convlist/3 drops the item) otherwise.
 
-depclean:model_item_installed(X, pkg://InstalledEntry) :-
+depclean:model_item_installed(X, VdbRepo://InstalledEntry) :-
   depclean:model_item_repo_entry(X, Repo://Entry),
   query:search([category(C),name(N),version(V)], Repo://Entry),
-  query:search([name(N),category(C),version(V),installed(true)], pkg://InstalledEntry).
+  knowledgebase:vdb_repository(VdbRepo),
+  query:search([name(N),category(C),version(V),installed(true)], VdbRepo://InstalledEntry).
 
 
 %! depclean:model_item_repo_entry(+ModelItem, -RepoEntry)
@@ -184,13 +188,13 @@ depclean:uninstall_order(Removable, Order, Cyclic) :-
 
 depclean:build_edges(_NodeSet, [], Assoc) :-
   empty_assoc(Assoc).
-depclean:build_edges(NodeSet, [pkg://E|Es], Out) :-
+depclean:build_edges(NodeSet, [Node|Es], Out) :-
   depclean:build_edges(NodeSet, Es, In),
-  ( depclean:direct_deps_installed(pkg://E, DirectDeps),
+  ( depclean:direct_deps_installed(Node, DirectDeps),
     include({NodeSet}/[X]>>ord_memberchk(X, NodeSet), DirectDeps, DirectDepsInSet),
     list_to_ord_set(DirectDepsInSet, DepsSet),
-    put_assoc(pkg://E, In, DepsSet, Out)
-  ; put_assoc(pkg://E, In, [], Out)
+    put_assoc(Node, In, DepsSet, Out)
+  ; put_assoc(Node, In, [], Out)
   ).
 
 
@@ -200,11 +204,11 @@ depclean:build_edges(NodeSet, [pkg://E|Es], Out) :-
 
 %! depclean:direct_deps_installed(+InstalledRef, -DepsInstalled)
 %
-% Sorted list of direct installed runtime dependencies of a pkg://Entry,
+% Sorted list of direct installed runtime dependencies of a VDB entry,
 % computed via the repo metadata's dependency model.
 
-depclean:direct_deps_installed(pkg://InstalledEntry, DepsInstalled) :-
-  depclean:installed_to_repo_entry(pkg://InstalledEntry, RepoEntry),
+depclean:direct_deps_installed(VdbRepo://InstalledEntry, DepsInstalled) :-
+  depclean:installed_to_repo_entry(VdbRepo://InstalledEntry, RepoEntry),
   depclean:direct_deps_from_repo_entry(RepoEntry, DepsInstalled),
   !.
 
@@ -218,24 +222,25 @@ depclean:direct_deps_from_repo_entry(Repo://Entry, DepsInstalled) :-
   query:search(model(Model,required_use(_),build_with_use(_)), Repo://Entry),
   query:search(model(dependency(MergedDeps0,run)):config?{Model}, Repo://Entry),
   dependency:add_self_to_dep_contexts(Repo://Entry, MergedDeps0, MergedDeps),
-  findall(pkg://DepInstalled,
-          depclean:dep_literal_installed_dep(MergedDeps, DepInstalled),
+  knowledgebase:vdb_repository(VdbRepo),
+  findall(VdbRepo://DepInstalled,
+          depclean:dep_literal_installed_dep(VdbRepo, MergedDeps, DepInstalled),
           Deps0),
   sort(Deps0, DepsInstalled).
 
 
-%! depclean:dep_literal_installed_dep(+MergedDeps, -DepInstalled)
+%! depclean:dep_literal_installed_dep(+VdbRepo, +MergedDeps, -DepInstalled)
 %
-% Non-deterministically unify DepInstalled with an installed pkg://Entry
+% Non-deterministically unify DepInstalled with an installed VDB entry
 % that satisfies one of the merged dependency literals.
 
-depclean:dep_literal_installed_dep(MergedDeps, DepInstalled) :-
+depclean:dep_literal_installed_dep(VdbRepo, MergedDeps, DepInstalled) :-
   member(D0, MergedDeps),
   depclean:dep_term_cn_deps(D0, Action, C, N, PackageDeps),
   slotmeta:merge_slot_restriction(Action, C, N, PackageDeps, SlotReq),
-  query:search([name(N),category(C),installed(true)], pkg://DepInstalled),
-  slotmeta:query_search_slot_constraint(SlotReq, pkg://DepInstalled, _),
-  cnselect:installed_entry_satisfies_package_deps(Action, C, N, PackageDeps, pkg://DepInstalled).
+  query:search([name(N),category(C),installed(true)], VdbRepo://DepInstalled),
+  slotmeta:query_search_slot_constraint(SlotReq, VdbRepo://DepInstalled, _),
+  cnselect:installed_entry_satisfies_package_deps(Action, C, N, PackageDeps, VdbRepo://DepInstalled).
 
 
 %! depclean:dep_term_cn_deps(+DepTerm, -Action, -C, -N, -PackageDeps)
@@ -268,9 +273,9 @@ depclean:build_provides_map(Installed, Map) :-
 %
 % Accumulate ELF provides tokens from a single installed package.
 
-depclean:provides_acc(pkg://E, In, Out) :-
-  ( query:search(provides_elf2(Provides0), pkg://E) -> true ; Provides0 = [] ),
-  foldl(depclean:provides_tok_put(pkg://E), Provides0, In, Out).
+depclean:provides_acc(VdbRepo://E, In, Out) :-
+  ( query:search(provides_elf2(Provides0), VdbRepo://E) -> true ; Provides0 = [] ),
+  foldl(depclean:provides_tok_put(VdbRepo://E), Provides0, In, Out).
 
 
 %! depclean:provides_tok_put(+Pkg, +Token, +MapIn, -MapOut)
@@ -291,9 +296,9 @@ depclean:provides_tok_put(Pkg, Tok, In, Out) :-
 % if the removable set is unmerged (no remaining provider in the kept set).
 
 depclean:collect_broken_needed(Kept, KeptSet, RemovableSet, ProvidesMap, BrokenPairs) :-
-  findall(broken(pkg://E, Tok, RemovedProviders),
-          ( member(pkg://E, Kept),
-            ( query:search(needed_elf2(Needed0), pkg://E) -> true ; Needed0 = [] ),
+  findall(broken(VdbRepo://E, Tok, RemovedProviders),
+          ( member(VdbRepo://E, Kept),
+            ( query:search(needed_elf2(Needed0), VdbRepo://E) -> true ; Needed0 = [] ),
             member(Tok, Needed0),
             get_assoc(Tok, ProvidesMap, ProvidersAll),
             ord_intersection(ProvidersAll, RemovableSet, RemovedProviders),

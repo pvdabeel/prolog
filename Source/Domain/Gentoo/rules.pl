@@ -328,7 +328,8 @@ rule(Repository://Ebuild:install?{Context}, Conditions) :-
   candidate:eligible(Repository://Ebuild:install?{Context}),
   ( candidate:installed(Repository://Ebuild),
     \+ preference:flag(emptytree) ->
-      ( use:installed_entry_satisfies_build_with_use(pkg://Ebuild, Context) ->
+      knowledgebase:vdb_repository(VdbRepo),
+      ( use:installed_entry_satisfies_build_with_use(VdbRepo://Ebuild, Context) ->
           % Already-installed and the requested bracketed USE matches the
           % VDB-recorded USE: nothing to do.
           Conditions = []
@@ -338,7 +339,7 @@ rule(Repository://Ebuild:install?{Context}, Conditions) :-
           % a transactional :update so candidate:resolve walks DEPEND/BDEPEND
           % under the new build_with_use state and the planner can schedule
           % the newly-required deps before the rebuild.
-          feature_unification:unify([replaces(pkg://Ebuild),
+          feature_unification:unify([replaces(VdbRepo://Ebuild),
                                      rebuild_reason(build_with_use)],
                                     Context, UpdCtx),
           Conditions = [Repository://Ebuild:update?{UpdCtx}]
@@ -364,7 +365,8 @@ rule(Repository://Ebuild:run?{Context}, Conditions) :-
   candidate:eligible(Repository://Ebuild:run?{Context}),
   ( candidate:installed(Repository://Ebuild),
     \+ preference:flag(emptytree) ->
-      ( use:installed_entry_satisfies_build_with_use(pkg://Ebuild, Context) ->
+      knowledgebase:vdb_repository(VdbRepo),
+      ( use:installed_entry_satisfies_build_with_use(VdbRepo://Ebuild, Context) ->
           % Already-installed and the requested bracketed USE matches the
           % VDB-recorded USE: short-circuit through :reinstall (or to nothing
           % when --avoid-reinstall is set).
@@ -379,7 +381,7 @@ rule(Repository://Ebuild:run?{Context}, Conditions) :-
           % this, a parent dep like `iptables[nftables]` would silently degrade
           % to an empty :reinstall body and the bracketed-USE-gated child
           % deps (libnftnl, libmnl) would never enter the plan.
-          feature_unification:unify([replaces(pkg://Ebuild),
+          feature_unification:unify([replaces(VdbRepo://Ebuild),
                                      rebuild_reason(build_with_use)],
                                     Context, UpdCtx),
           Conditions = [Repository://Ebuild:update?{UpdCtx}]

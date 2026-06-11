@@ -757,12 +757,13 @@ useflags:old_use_info(Repository://Entry, Context, OldUseInfo) :-
      SlotList = [slot(SlotAtom)|_]
     -> true
     ;  SlotAtom = _),
-    (cache:ordered_entry(pkg, InstalledEntry, Category, Name, _),
+    knowledgebase:vdb_repository(VdbRepo),
+    (cache:ordered_entry(VdbRepo, InstalledEntry, Category, Name, _),
      (nonvar(SlotAtom)
-     -> cache:entry_metadata(pkg, InstalledEntry, slot, slot(SlotAtom))
+     -> cache:entry_metadata(VdbRepo, InstalledEntry, slot, slot(SlotAtom))
      ;  true)
-    -> use:vdb_enabled_use_set(pkg://InstalledEntry, OldUse),
-       use:entry_iuse_set(pkg://InstalledEntry, OldIuse),
+    -> use:vdb_enabled_use_set(VdbRepo://InstalledEntry, OldUse),
+       use:entry_iuse_set(VdbRepo://InstalledEntry, OldIuse),
        OldUseInfo = old_use_info(false, OldUse, OldIuse)
     ;  OldUseInfo = old_use_info(true, [], [])
     ),

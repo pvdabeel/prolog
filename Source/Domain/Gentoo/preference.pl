@@ -730,11 +730,16 @@ preference:license_group_raw(Name, Members) :-
 %! preference:accept_license_wildcard is semidet.
 %
 % True when ACCEPT_LICENSE contains '*'.
-% Dispatches to the Pengine module in client-server mode.
+% Dispatches to the Pengine module in client-server mode. The fact is an
+% optional 0-arity instance (client:remote_predicate_instance/1): when the
+% client has no wildcard, nothing is shipped and the pengine module has no
+% definition at all, so an existence error here simply means "not set".
 
 preference:accept_license_wildcard :-
   ( preference:pengine_module(M) ->
-      M:local_accept_license_wildcard
+      catch(M:local_accept_license_wildcard,
+            error(existence_error(procedure, _), _),
+            fail)
   ; preference:local_accept_license_wildcard
   ).
 

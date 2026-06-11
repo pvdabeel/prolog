@@ -138,6 +138,50 @@ the mode, so distributed proving does not require a separate set of
 data-loading predicates.
 
 
+## Client installed state: `--import-vdb`
+
+By default the server proves against its **own** VDB (the in-memory
+`pkg` repository loaded by its `kb:load`).  For a remote client whose
+installed set differs from the server's, that would produce wrong
+`[nomerge]`, rebuild, and `replaces` decisions.  The `--import-vdb`
+client action closes this gap:
+
+```console
+$ portage-ng --mode client --import-vdb
+```
+
+The client parses its local VDB (`config:pkg_directory/1`, typically
+`/var/db/pkg`) through the regular repository sync path, serializes
+the resulting `cache:` facts as a Prolog term stream with a snapshot
+stamp (entry count + content hash), and POSTs the payload to the
+authenticated `/import-vdb` endpoint (same digest + client-certificate
+TLS as `/sync`).
+
+The server validates the payload (whitelisted fact shapes, sanitized
+hostname, capped counts) and registers the facts atomically as a
+per-client repository named `pkg@<clienthost>`, recording the stamp.
+
+At prove time, every rule that consults the installed set goes through
+a single accessor, `knowledgebase:vdb_repository/1`:
+
+- In **standalone**, **server**, and **worker** mode it resolves to the
+  local `pkg` repository — the behaviour is unchanged (the lookup is
+  memoized per thread, so there is no hot-path cost).
+- Inside a **Pengine** serving a client request it resolves to that
+  client's `pkg@<clienthost>` repository, using the repository name and
+  import stamp the client ships with each RPC.
+
+Stale or missing imports are loud, never silent: if a client has not
+imported its VDB (or the stamp no longer matches what the server
+holds), the server prints an explicit warning and falls back to its
+own `pkg` repository, telling the user to (re-)run `--import-vdb`.
+
+Filesystem-level VDB reads (CONTENTS listings, on-disk SIZE files,
+binpkg live-VDB re-stat) can never work for a remote client; those
+paths detect a per-client repository and degrade to the imported
+in-memory snapshot, or are skipped.  Worker mode is out of scope:
+workers load their own knowledge base and assume a homogeneous fleet.
+
 
 ## mDNS/Bonjour discovery
 

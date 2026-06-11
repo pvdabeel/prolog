@@ -117,6 +117,7 @@ everyday workflows.
 | :--- | :--- |
 | `--sync` | Sync the Portage tree and regenerate caches |
 | `--regen` | Regenerate md5-cache incrementally |
+| `--import-vdb` | Client mode: ship the local VDB to the server so remote plans reflect the client's installed packages (see [Chapter 17](17-doc-distributed.md)) |
 
 ### Visualization
 

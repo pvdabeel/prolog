@@ -79,10 +79,22 @@ sandbox:safe_primitive(cache:manifest(_,_,_,_,_)).
 sandbox:safe_primitive(cache:manifest_metadata(_,_,_,_,_,_)).
 
 % -----------------------------------------------------------------------------
+%  Knowledgebase (VDB repository selection)
+% -----------------------------------------------------------------------------
+
+% vdb_repository/1 only reads/writes a per-thread global variable
+% (kb_vdb_repository) memoizing the active VDB repository resolution, and
+% consults the client-shipped vdb_repository/vdb_import_stamp facts in the
+% Pengines sandbox module.
+sandbox:safe_primitive(knowledgebase:vdb_repository(_)).
+sandbox:safe_primitive(knowledgebase:is_vdb_repository(_)).
+
+% -----------------------------------------------------------------------------
 %  Query
 % -----------------------------------------------------------------------------
 
 sandbox:safe_primitive(query:search(_,_)).
+sandbox:safe_primitive(query:repo_not_vdb(_)).
 sandbox:safe_primitive(query:apply_filters(_,_)).
 sandbox:safe_primitive(query:apply_filter(_,_)).
 sandbox:safe_primitive(query:pdepend_dep_as_pdepend(_,_)).

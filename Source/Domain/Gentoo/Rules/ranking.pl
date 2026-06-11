@@ -586,8 +586,9 @@ ranking:is_preferred_dep(Context, all_of_group(Deps)) :-
   !.
 
 ranking:is_preferred_dep(_Context, package_dependency(_Phase,_Strength,C,N,O,V,_S,_U)) :-
-  query:search([name(N),category(C),installed(true)], pkg://Installed),
-  ( O == none ; query:search(select(version, O, V), pkg://Installed) ),
+  knowledgebase:vdb_repository(VdbRepo),
+  query:search([name(N),category(C),installed(true)], VdbRepo://Installed),
+  ( O == none ; query:search(select(version, O, V), VdbRepo://Installed) ),
   !.
 
 
@@ -719,11 +720,12 @@ ranking:group_member_preferred(_Context, _Other) :-
 
 ranking:installed_pkg_satisfies_dep(ParentContext,
                              package_dependency(_Phase,_Strength,C,N,O,V,_S,UseReqs)) :-
-  query:search([name(N),category(C),installed(true)], pkg://InstalledId),
+  knowledgebase:vdb_repository(VdbRepo),
+  query:search([name(N),category(C),installed(true)], VdbRepo://InstalledId),
   ( O == none
-  ; query:search(select(version, O, V), pkg://InstalledId)
+  ; query:search(select(version, O, V), VdbRepo://InstalledId)
   ),
-  use:installed_pkg_satisfies_use_reqs(ParentContext, pkg://InstalledId, UseReqs),
+  use:installed_pkg_satisfies_use_reqs(ParentContext, VdbRepo://InstalledId, UseReqs),
   !.
 
 %! ranking:installed_version_mismatch_penalty(+PackageDep, -Penalty)
@@ -733,9 +735,10 @@ ranking:installed_pkg_satisfies_dep(ParentContext,
 
 ranking:installed_version_mismatch_penalty(package_dependency(_Phase,_Strength,C,N,O,V,_S,_U), Penalty) :-
   O \== none,
-  query:search([name(N),category(C),installed(true)], pkg://_),
-  \+ ( query:search([name(N),category(C),installed(true)], pkg://InstalledId),
-       query:search(select(version, O, V), pkg://InstalledId)
+  knowledgebase:vdb_repository(VdbRepo),
+  query:search([name(N),category(C),installed(true)], VdbRepo://_),
+  \+ ( query:search([name(N),category(C),installed(true)], VdbRepo://InstalledId),
+       query:search(select(version, O, V), VdbRepo://InstalledId)
      ),
   Penalty is -50000000,
   !.

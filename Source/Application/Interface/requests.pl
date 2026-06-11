@@ -82,6 +82,7 @@ interface:request_handler(report,          _,    _,    Options, action:process_r
 interface:request_handler(rdeps,           _,    Args, _,       action:process_rdeps(Args)).
 interface:request_handler(unuseddistfiles, _,    _,    Options, action:process_unused_distfiles(Options)).
 interface:request_handler(import,          _,    Args, Options, action:process_import(Args, Options)).
+interface:request_handler(importvdb,       Mode, _,    _,       action:process_import_vdb(Mode)).
 interface:request_handler(unmanagedfiles,  _,    Args, _,       action:process_unmanaged_files(Args)).
 interface:request_handler(upstream,        _,    Args, Options, action:process_upstream(Args, Options)).
 interface:request_handler(searchbugs,      _,    Args, Options, action:process_search_bugs(Args, Options)).

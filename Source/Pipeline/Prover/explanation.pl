@@ -256,7 +256,8 @@ self_hosting_requires_installed(_Action, _C, _N, _Context, false).
 % True if the candidate has `installed` metadata set to `true`.
 
 explanation:is_installed_candidate(_Repo://Entry) :-
-  cache:ordered_entry(pkg, Entry, _, _, _).
+  knowledgebase:vdb_repository(VdbRepo),
+  cache:ordered_entry(VdbRepo, Entry, _, _, _).
 
 
 %! explanation:is_unmasked_candidate(+Repo://Entry) is semidet.

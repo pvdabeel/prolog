@@ -13,6 +13,7 @@ Knowledge/preference.stamp
 Knowledge/embeddings.pl
 Knowledge/phase_stats.pl
 Knowledge/resume.pl
+Knowledge/vdbimport.pl
 Source/Knowledge/Sets/**/*.local
 Source/Tests/
 __pycache__/

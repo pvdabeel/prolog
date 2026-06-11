@@ -32,8 +32,9 @@ display-only.
 % print the removal list, uninstall order, and linkage risk report.
 
 removal:print_removals(RequiredInstalled) :-
-  findall(pkg://E,
-          query:search([installed(true)], pkg://E),
+  knowledgebase:vdb_repository(VdbRepo),
+  findall(VdbRepo://E,
+          query:search([installed(true)], VdbRepo://E),
           Installed0),
   sort(Installed0, Installed),
   subtract(Installed, RequiredInstalled, Removable),
@@ -42,8 +43,8 @@ removal:print_removals(RequiredInstalled) :-
   nl,
   ( Removable == [] ->
       writeln('  (none)')
-  ; forall(member(pkg://E, Removable),
-           ( query:search([category(C),name(N),version(V)], pkg://E),
+  ; forall(member(R://E, Removable),
+           ( query:search([category(C),name(N),version(V)], R://E),
              format('  ~w/~w-~w~n', [C, N, V])
            ))
   ),
@@ -77,13 +78,13 @@ removal:print_uninstall_order(Removable) :-
 
 %! removal:print_pkg_list_numbered(+Index, +Packages)
 %
-% Print a numbered list of pkg://Entry terms with category/name-version.
+% Print a numbered list of VDB Repo://Entry terms with category/name-version.
 
 removal:print_pkg_list_numbered(_, []) :- !.
-removal:print_pkg_list_numbered(I, [pkg://E|Es]) :-
-  ( query:search([category(C),name(N),version(V)], pkg://E) ->
+removal:print_pkg_list_numbered(I, [R://E|Es]) :-
+  ( query:search([category(C),name(N),version(V)], R://E) ->
       format('  ~d. ~w/~w-~w~n', [I, C, N, V])
-  ; format('  ~d. ~w~n', [I, pkg://E])
+  ; format('  ~d. ~w~n', [I, R://E])
   ),
   I2 is I + 1,
   removal:print_pkg_list_numbered(I2, Es).
@@ -126,14 +127,14 @@ removal:print_linkage_risks(Installed, Removable) :-
 % Print a single broken-linkage warning: the consumer package, the ELF
 % token it needs, and the removable packages that were its only providers.
 
-removal:print_broken_needed(pkg://E, Tok, RemovedProviders) :-
-  ( query:search([category(C),name(N),version(V)], pkg://E) ->
+removal:print_broken_needed(R://E, Tok, RemovedProviders) :-
+  ( query:search([category(C),name(N),version(V)], R://E) ->
       format('  ~w/~w-~w needs ~w~n', [C, N, V, Tok])
-  ; format('  ~w needs ~w~n', [pkg://E, Tok])
+  ; format('  ~w needs ~w~n', [R://E, Tok])
   ),
-  forall(member(pkg://P, RemovedProviders),
-         ( ( query:search([category(CP),name(NP),version(VP)], pkg://P) ->
+  forall(member(RP://P, RemovedProviders),
+         ( ( query:search([category(CP),name(NP),version(VP)], RP://P) ->
                format('    - would lose provider: ~w/~w-~w~n', [CP, NP, VP])
-           ; format('    - would lose provider: ~w~n', [pkg://P])
+           ; format('    - would lose provider: ~w~n', [RP://P])
            )
          )).

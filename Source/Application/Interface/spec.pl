@@ -143,6 +143,7 @@ interface:spec(S) :-
        [opt(rdeps),       type(boolean), default(false),                          longflags(['rdeps']),       help('Show reverse dependencies of a package')],
        [opt(unuseddistfiles), type(boolean), default(false),                      longflags(['unused-distfiles']), help('List distfiles not used by any installed package')],
        [opt(import),      type(boolean), default(false),                          longflags(['import']),       help('Track manually installed software in VDB')],
+       [opt(importvdb),   type(boolean), default(false),                          longflags(['import-vdb']),   help('Client mode: parse the local VDB and ship installed-package facts to the server')],
        [opt(unmanagedfiles), type(boolean), default(false),                       longflags(['unmanaged-files']), help('Find files not owned by any installed package')],
 
        % resolver hints

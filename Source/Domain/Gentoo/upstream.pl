@@ -250,12 +250,12 @@ upstream:resolve_args([Arg|Rest], Packages) :-
   atom_codes(Arg, Codes),
   ( phrase(eapi:qualified_target(Q), Codes),
     once(kb:query(Q, R://E)),
-    R \== pkg,
+    \+ knowledgebase:is_vdb_repository(R),
     cache:ordered_entry(R, E, C, N, _)
   -> Packages = [C-N|RestPkgs]
   ; atom_codes(Arg, Codes2),
     phrase(eapi:qualified_target(Q2), Codes2),
-    once((kb:query(Q2, R2://E2), R2 \== pkg)),
+    once((kb:query(Q2, R2://E2), \+ knowledgebase:is_vdb_repository(R2))),
     query:search([category(C2), name(N2)], R2://E2)
   -> Packages = [C2-N2|RestPkgs]
   ; message:warning(['Cannot resolve: ', Arg]),
