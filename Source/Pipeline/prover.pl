@@ -175,7 +175,9 @@ prover:handle_reprove(Target, InProof, OutProof, InModel, OutModel, InCons, OutC
 %! prover:prove_once(+Target, +InProof, -OutProof, +InModel, -OutModel, +InCons, -OutCons, +InTriggers, -OutTriggers) is det
 %
 % Single-attempt prove: runs the core recursive engine with cycle-stack
-% bookkeeping.  Triggers are maintained incrementally during the proof.
+% bookkeeping.  Triggers are maintained incrementally during the proof;
+% dependent lists are deduplicated once here, after the proof completes
+% (see `prover:add_trigger/4` / issue #53).
 
 prover:prove_once(Target, InProof, OutProof, InModel, OutModel, InCons, OutCons, InTriggers, OutTriggers) :-
   prover:debug_hook(Target, InProof, InModel, InCons),
@@ -184,8 +186,9 @@ prover:prove_once(Target, InProof, OutProof, InModel, OutModel, InCons, OutCons,
   ; true
   ),
   prover:with_cycle_stack(
-    prover:prove_recursive(Target, InProof, OutProof, InModel, OutModel, InCons, OutCons, InTriggers, OutTriggers)
-  ).
+    prover:prove_recursive(Target, InProof, OutProof, InModel, OutModel, InCons, OutCons, InTriggers, RawTriggers)
+  ),
+  prover:dedup_triggers(RawTriggers, OutTriggers).
 
 
 %! prover:reprove_max_retries(-Max) is det
@@ -1076,7 +1079,8 @@ prover:debug :-
 prover:build_triggers_from_proof(ProofAVL, TriggersAVL) :-
     empty_assoc(EmptyTriggers),
     assoc_to_list(ProofAVL, RulesAsList),
-    foldl(prover:add_rule_triggers, RulesAsList, EmptyTriggers, TriggersAVL).
+    foldl(prover:add_rule_triggers, RulesAsList, EmptyTriggers, RawTriggers),
+    prover:dedup_triggers(RawTriggers, TriggersAVL).
 
 
 %! prover:add_rule_triggers(+HeadKey-Value, +InTriggers, -OutTriggers)
@@ -1113,7 +1117,7 @@ prover:add_trigger(Head, Dep, InTriggers, OutTriggers) :-
     (   constraint:is_constraint(Dep)
     ->  OutTriggers = InTriggers
     ;
-        % CRITICAL: dedupe dependents by CANONICAL head (no proof context).
+        % CRITICAL: dependents are keyed by CANONICAL head (no proof context).
         %
         % The proof AVL keys rules by their canonical head (no `?{Ctx}`
         % suffix), and the planner's `decrement_and_enqueue/4` also looks
@@ -1129,11 +1133,53 @@ prover:add_trigger(Head, Dep, InTriggers, OutTriggers) :-
         % was being scheduled in the same wave as xorg-proto:install
         % because non-canonical dedup let elt-patches/pkgconfig/libICE
         % triggers decrement libICE multiple times in wave 1.
+        %
+        % PERFORMANCE (issue #53): insertion is a plain cons — duplicates
+        % are allowed here and removed once per completed proof by
+        % `prover:dedup_triggers/2` (end of `prove_once/9`).  An inline
+        % `memberchk/2` dedup would make each insertion O(D) and the total
+        % cost per popular dependency literal (glibc-style, hundreds of
+        % dependents) O(D²) on the proving hot path.
         prover:canon_literal(Dep, DepLit, _),
         prover:canon_literal(Head, HeadCanon, _),
         (get_assoc(DepLit, InTriggers, Dependents) -> true ; Dependents = []),
-        (memberchk(HeadCanon, Dependents) -> NewDependents = Dependents ; NewDependents = [HeadCanon | Dependents]),
-        put_assoc(DepLit, InTriggers, NewDependents, OutTriggers)
+        put_assoc(DepLit, InTriggers, [HeadCanon|Dependents], OutTriggers)
+    ).
+
+
+%! prover:dedup_triggers(+InTriggers, -OutTriggers)
+%
+% Remove duplicate dependents from every trigger key in one pass.
+%
+% `add_trigger/4` conses dependents without deduplication (see issue #53);
+% this runs once per completed proof.  The dedup is order-preserving and
+% reproduces exactly the list `memberchk/2`-based insertion used to build:
+% reverse insertion order of first occurrences.  Membership is tracked in
+% an assoc, so a list with I insertions and U unique dependents costs
+% O(I log U) instead of the O(I·U) of an inline scan.
+
+prover:dedup_triggers(InTriggers, OutTriggers) :-
+    map_assoc(prover:dedup_dependents, InTriggers, OutTriggers).
+
+
+%! prover:dedup_dependents(+Dependents, -Deduped)
+%
+% Dedup a single dependent list, keeping the first-inserted occurrence of
+% each head.  The input list is in reverse insertion order (newest first),
+% so we walk it reversed (insertion order) and cons unseen heads, yielding
+% reverse insertion order of first occurrences.
+
+prover:dedup_dependents(Dependents, Deduped) :-
+    reverse(Dependents, InsertionOrder),
+    empty_assoc(Seen),
+    prover:dedup_dependents_(InsertionOrder, Seen, [], Deduped).
+
+prover:dedup_dependents_([], _, Acc, Acc).
+prover:dedup_dependents_([Head|Rest], Seen, Acc, Deduped) :-
+    (   get_assoc(Head, Seen, _)
+    ->  prover:dedup_dependents_(Rest, Seen, Acc, Deduped)
+    ;   put_assoc(Head, Seen, true, NewSeen),
+        prover:dedup_dependents_(Rest, NewSeen, [Head|Acc], Deduped)
     ).
 
 
