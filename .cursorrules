@@ -280,7 +280,7 @@ module:predicate_name(Arg1, Arg2) :-
 - When `cached` is set but `Knowledge/profile.qlf` is missing, falls back to `live`
 
 ### Graph location
-- `Source/config.pl`: graph_directory/2 holds the location of the graph directory that contains .emerge files (traditional gentoo emerge output for a given package). 
+- `Source/Config/<host>.local.pl`: config:graph_directory/1 holds the location of the graph directory that contains .emerge files (traditional gentoo emerge output for a given package). 
 
 ### Configuration 
 - `Source/config.pl`: configuration file with various configuration settings
@@ -585,8 +585,8 @@ comparison against portage-ng output. The install location is per-host and
 not hardcoded anywhere outside `Source/config.pl` and the user's shell rc.
 
 ### Discovering the prefix on the current host
-- Authoritative path: look up the current hostname in
-  `config:emerge_vp_path/2` in `Source/config.pl`. The prefix root is the
+- Authoritative path: `config:emerge_vp_path/1` in the per-host config file
+  `Source/Config/<host>.local.pl`. The prefix root is the
   parent of the `bin/` directory in that path. Examples present today:
   - `imac-pro.local`    → `/Volumes/Disk 1/gentoo-prefix`
   - `mac-pro.local`     → `/Volumes/Storage/gentoo-prefix`
@@ -594,11 +594,11 @@ not hardcoded anywhere outside `Source/config.pl` and the user's shell rc.
 - Convenience: if `emerge-vp` is on `$PATH` (the user's `.zshrc` typically
   prepends `<prefix>/bin`), `command -v emerge-vp` resolves it; the prefix
   is then `dirname "$(dirname "$(command -v emerge-vp)")"`.
-- Adding a new host: add a `config:emerge_vp_path(Host, Path)` clause in
-  `Source/config.pl` and (optionally) add `<prefix>/bin` to the user's
-  `PATH` in `~/.zshrc`. Also add a per-host config like
-  `Source/Config/<host>.local.pl` if `config:ebuild_command/1` needs to
-  point at `<prefix>/bin/ebuild-prefix`.
+- Adding a new host: add a `config:emerge_vp_path(Path)` fact in
+  `Source/Config/<host>.local.pl` and (optionally) add `<prefix>/bin` to the
+  user's `PATH` in `~/.zshrc`. The same file is the place for
+  `config:ebuild_command/1` if it needs to point at
+  `<prefix>/bin/ebuild-prefix`.
 
 ### Setup
 - Installed via the external `emerge-install.sh` script (run once per machine).
@@ -632,7 +632,7 @@ commands work directly with no `PREFIX` indirection.
   VDB), so installed packages correctly show as `[nomerge]`.
 - Nothing inside the prefix tree itself uses absolute self-references, so the
   whole `<prefix>` directory is relocatable: move it, update
-  `config:emerge_vp_path/2` (and `config:ebuild_command/1` if used) plus the
+  `config:emerge_vp_path/1` (and `config:ebuild_command/1` if used) plus the
   user's `PATH`, and it keeps working.
 
 ## Compare to portage source code

@@ -14,6 +14,20 @@
 % Only used when no hostname specific configuration file is found
 
 % -----------------------------------------------------------------------------
+%  Host-specific paths (optional)
+% -----------------------------------------------------------------------------
+
+% Uncomment and adjust in your own Source/Config/<host>.pl. Callers guard
+% these with current_predicate/1, so leaving them undefined is safe:
+% features that need them (vdb contents, --graph, --graph emerge, build
+% time estimation) simply skip their work.
+
+% config:pkg_directory('/var/db/pkg').
+% config:graph_directory('/root/Graph').
+% config:emerge_vp_path('/opt/local/gentoo-prefix/bin/emerge-vp').
+
+
+% -----------------------------------------------------------------------------
 %  Portage repository - sync via git
 % -----------------------------------------------------------------------------
 

@@ -48,9 +48,9 @@ See [Preference cache](#preference-cache) for the materialized preference cache.
 | **Setting** | **Purpose** |
 |:---|:---|
 | `config:portage_confdir/1` | Path to the `/etc/portage` directory (or a development copy).  Determines where `make.conf`, `package.use`, `package.mask`, etc. are read from.  Comment out to use built-in fallback defaults. |
-| `config:pkg_directory/2` | Per-hostname path to the VDB directory (`/var/db/pkg` on a standard Gentoo system). |
+| `config:pkg_directory/1` | Path to the VDB directory (`/var/db/pkg` on a standard Gentoo system).  Defined per host in `Source/Config/<host>.pl`. |
 | `config:world_file/1` | Path to the world set file (auto-resolved from hostname). |
-| `config:graph_directory/2` | Per-hostname output directory for generated dependency graphs and `.merge` files. |
+| `config:graph_directory/1` | Output directory for generated dependency graphs and `.merge` files.  Defined per host in `Source/Config/<host>.pl`. |
 | `config:build_root/1` | Root directory for build work (equivalent to Portage's `PORTAGE_TMPDIR`). |
 | `config:build_log_dir/1` | Directory for per-package build logs. |
 

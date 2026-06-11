@@ -209,15 +209,15 @@ config:preference_cache(server,     cached).
 %  Pkg directory
 % -----------------------------------------------------------------------------
 
-%! config:pkg_directory(?Hostname,?FullPath)
+%! config:pkg_directory(?FullPath)
 %
 % Declaration of the pkg db directory on a system. This holds metadata
-% for all packages installed on a system
-
-config:pkg_directory('imac-pro.local',    '/Volumes/Disk 1/Repository/pkg')  :- !.
-config:pkg_directory('mac-pro.local',     '/Volumes/Storage/Repository/pkg') :- !.
-config:pkg_directory('macbook-pro.local', '/Users/pvdabeel/Repository/pkg')  :- !.
-config:pkg_directory('vm-linux.local',    '/var/db/pkg')                     :- !.
+% for all packages installed on a system (`/var/db/pkg` on a standard
+% Gentoo system).
+%
+% Host-specific: defined in Source/Config/<host>.local.pl (the file loaded
+% via config:systemconfig/1), NOT here. Callers guard with
+% current_predicate/1 so hosts without a clause fail cleanly.
 
 
 % -----------------------------------------------------------------------------
@@ -310,7 +310,38 @@ config:verbosity(debug).
 %  Passwords
 % -----------------------------------------------------------------------------
 
+% The private passwords file is optional. On a fresh checkout (where
+% Source/Config/Private/template_passwords.pl has not been copied to
+% passwords.pl yet) we fall back to the same empty defaults the template
+% ships with, instead of aborting the entire config load.
+
+:- if(exists_source(portage('Source/Config/Private/passwords'))).
 :- include(portage('Source/Config/Private/passwords')).
+:- else.
+
+%! config:certificate_password(?Key,?Pass)
+%
+% Default (empty) passwords for the SSL client/server certificates.
+% Override by creating Source/Config/Private/passwords.pl from the template.
+
+config:certificate_password(server,'').
+config:certificate_password(client,'').
+
+
+%! config:digest_password(?User,?Pass)
+%
+% Default (empty) password for digest user authentication.
+
+config:digest_password('portage-ng','').
+
+
+%! config:digest_realm(?Realm)
+%
+% Default realm for digest user authentication.
+
+config:digest_realm('portage-ng').
+
+:- endif.
 
 
 % -----------------------------------------------------------------------------
@@ -454,7 +485,7 @@ config:digest_passwordfile(Filename) :-
 
 :- dynamic config:interface_graph_modified_only/1.
 
-%! config:graph_directory(?Hostname,?FullPath)
+%! config:graph_directory(?FullPath)
 %
 % This application is capable of writing Graphviz dot files and will turn
 % them into interactive scalable vector graphics (svg) to enable you to
@@ -462,12 +493,9 @@ config:digest_passwordfile(Filename) :-
 %
 % Directory doesn't need a trailing '/'.
 %
-% We store the generated dot and svg files in the following directory.
-
-config:graph_directory('imac-pro.local',    '/Volumes/Disk 1/Graph')  :- !.
-config:graph_directory('mac-pro.local',     '/Volumes/Storage/Graph') :- !.
-config:graph_directory('macbook-pro.local', '/Users/pvdabeel/Graph')  :- !.
-config:graph_directory('vm-linux.local',    '/root/Graph')            :- !.
+% Host-specific: defined in Source/Config/<host>.local.pl (the file loaded
+% via config:systemconfig/1), NOT here. Callers guard with
+% current_predicate/1 so hosts without a clause fail cleanly.
 
 
 %! config:graph_modified_only(?Bool)
@@ -505,17 +533,17 @@ config:graph_modified_only_default(true).
 
 :- dynamic config:force_emerge_regen/1.
 
-%! config:emerge_vp_path(?Hostname, ?Path)
+%! config:emerge_vp_path(?Path)
 %
 % Per-host path to the `emerge-vp` wrapper used by `--graph emerge` to
 % generate `.emerge` files alongside the `.merge` files in the graph
 % directory. The wrapper invokes Gentoo's traditional `emerge -vp` so
-% portage-ng can render side-by-side comparisons in HTML. If no clause
-% matches the current hostname, `--graph emerge` raises a clear error.
-
-config:emerge_vp_path('imac-pro.local',    '/Volumes/Disk 1/gentoo-prefix/bin/emerge-vp')  :- !.
-config:emerge_vp_path('mac-pro.local',     '/Volumes/Storage/gentoo-prefix/bin/emerge-vp') :- !.
-config:emerge_vp_path('macbook-pro.local', '/opt/local/gentoo-prefix/bin/emerge-vp')      :- !.
+% portage-ng can render side-by-side comparisons in HTML.
+%
+% Host-specific: defined in Source/Config/<host>.local.pl (the file loaded
+% via config:systemconfig/1), NOT here. When the host config defines no
+% clause, `--graph emerge` prints a clear warning instead of writing
+% `.emerge` files.
 
 
 %! config:emerge_vp_timeout(?Seconds)
@@ -1264,8 +1292,24 @@ config:build_log_dir('/var/tmp/portage-ng/logs').
 %! config:llm_api_key(?LLM,?Key)
 %
 % Declares the private API key for each large language model.
+%
+% The private api_key file is optional. On a fresh checkout (where
+% Source/Config/Private/template_api_key.pl has not been copied to
+% api_key.pl yet) we fall back to empty keys; llm:check_api_key/2 then
+% prints a clear instruction when an LLM service is actually used.
 
+:- if(exists_source(portage('Source/Config/Private/api_key'))).
 :- include(portage('Source/Config/Private/api_key')).
+:- else.
+
+config:llm_api_key(grok,     '').
+config:llm_api_key(chatgpt,  '').
+config:llm_api_key(claude,   '').
+config:llm_api_key(gemini,   '').
+config:llm_api_key(llama,    '').
+config:llm_api_key(ollama,   '').
+
+:- endif.
 
 
 %! config:llm_capability(+Name,-Capability)

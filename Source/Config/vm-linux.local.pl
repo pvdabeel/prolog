@@ -26,6 +26,18 @@ config:portage_confdir('/etc/portage').
 
 
 % -----------------------------------------------------------------------------
+%  Host-specific paths
+% -----------------------------------------------------------------------------
+
+% Installed package database (vdb) and graph output directory. No
+% config:emerge_vp_path/1 here: traditional emerge is available natively,
+% so --graph emerge falls back to a clear warning if requested.
+
+config:pkg_directory('/var/db/pkg').
+config:graph_directory('/root/Graph').
+
+
+% -----------------------------------------------------------------------------
 %  Portage repository - sync via git
 % -----------------------------------------------------------------------------
 

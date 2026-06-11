@@ -765,8 +765,8 @@ read_time(Time) ::-
 
 prepare_directory(D) ::-
   :this(Repository),
-  config:hostname(H),
-  config:graph_directory(H,G),
+  current_predicate(config:graph_directory/1),
+  config:graph_directory(G),
   os:compose_path(G,Repository,D),
   system:exists_directory(D),!,
   message:scroll_notice(['Directory already exists! Updating...']),
@@ -775,8 +775,8 @@ prepare_directory(D) ::-
 
 prepare_directory(D) ::-
   :this(Repository),
-  config:hostname(H),
-  config:graph_directory(H,G),
+  current_predicate(config:graph_directory/1),
+  config:graph_directory(G),
   os:ensure_directory_path(G),
   os:compose_path(G,Repository,D),
   \+(system:exists_directory(D)),!,

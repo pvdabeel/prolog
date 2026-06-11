@@ -169,10 +169,12 @@ writer:emerge_file_fresh(EmergeFile, Ebuild) :-
 writer:do_write_emerge_file(OutFile, Repository://Entry) :-
   atom_concat(OutFile, '.tmp', TmpFile),
   atom_concat('=', Entry, EmergeTarget),
-  config:hostname(H),
-  ( config:emerge_vp_path(H, EmergeBin) -> true
-  ; with_mutex(mutex,
-      message:warning(['No config:emerge_vp_path/2 for host ', H, '; cannot write .emerge'])),
+  ( current_predicate(config:emerge_vp_path/1),
+    config:emerge_vp_path(EmergeBin) -> true
+  ; config:hostname(H),
+    with_mutex(mutex,
+      message:warning(['No config:emerge_vp_path/1 in Source/Config/', H,
+                       '.pl; cannot write .emerge'])),
     fail
   ),
   config:emerge_vp_timeout(Timeout),

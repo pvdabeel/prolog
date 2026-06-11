@@ -128,7 +128,7 @@ The writer (`Source/Application/Output/writer.pl`) generates `.merge`
 files — one per target package — containing the portage-ng plan
 output in a format comparable to `emerge -vp` output.  These files
 are stored in the graph directory configured by
-`config:graph_directory/2`.
+`config:graph_directory/1` in `Source/Config/<host>.pl`.
 
 `.merge` files serve two purposes:
 

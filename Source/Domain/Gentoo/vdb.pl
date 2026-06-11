@@ -98,8 +98,8 @@ vdb:outdated(Category, Name, pkg://InstalledEntry, portage://LatestEntry) :-
 % obj(Path, MD5, MTime), dir(Path), sym(Path, Target, MTime).
 
 vdb:read_contents(Entry, Contents) :-
-  config:hostname(Hostname),
-  config:pkg_directory(Hostname, PkgDir),
+  current_predicate(config:pkg_directory/1),
+  config:pkg_directory(PkgDir),
   atomic_list_concat([PkgDir, '/', Entry, '/CONTENTS'], File),
   ( exists_file(File) ->
     read_file_to_string(File, Str, []),
@@ -472,8 +472,8 @@ vdb:import_package(Category, Name, Version) :-
   ; throw(error(permission_error(create, vdb_entry, Version),
                 context(vdb:import_package/3, 'Invalid version string')))
   ),
-  config:hostname(Hostname),
-  config:pkg_directory(Hostname, PkgDir),
+  current_predicate(config:pkg_directory/1),
+  config:pkg_directory(PkgDir),
   atomic_list_concat([Name, '-', Version], PV),
   atomic_list_concat([PkgDir, '/', Category], CatDir),
   atomic_list_concat([CatDir, '/', PV], EntryDir),

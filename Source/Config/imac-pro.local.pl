@@ -13,6 +13,18 @@
 
 
 % -----------------------------------------------------------------------------
+%  Host-specific paths
+% -----------------------------------------------------------------------------
+
+% Installed package database (vdb), graph output directory and the
+% gentoo-prefix emerge-vp wrapper used by --graph emerge.
+
+config:pkg_directory('/Volumes/Disk 1/Repository/pkg').
+config:graph_directory('/Volumes/Disk 1/Graph').
+config:emerge_vp_path('/Volumes/Disk 1/gentoo-prefix/bin/emerge-vp').
+
+
+% -----------------------------------------------------------------------------
 %  Portage repository - sync via git
 % -----------------------------------------------------------------------------
 

@@ -145,8 +145,8 @@ terminal:capture_output(Goal, String) :-
 % Resolve the graph output directory for a repository.
 
 terminal:resolve_graph_dir(Repository, Dir) :-
-    gethostname(Host),
-    config:graph_directory(Host, BaseDir),
+    current_predicate(config:graph_directory/1),
+    config:graph_directory(BaseDir),
     !,
     atomic_list_concat([BaseDir, '/', Repository], Dir).
 terminal:resolve_graph_dir(_, '/tmp').

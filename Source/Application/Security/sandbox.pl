@@ -26,10 +26,10 @@ sandbox:safe_primitive(config:certificate(_,_,_)).
 sandbox:safe_primitive(config:build_live_phases(_)).
 sandbox:safe_primitive(config:dry_run_build(_)).
 sandbox:safe_primitive(config:failsilenton(_)).
-sandbox:safe_primitive(config:graph_directory(_,_)).
+sandbox:safe_primitive(config:graph_directory(_)).
 sandbox:safe_primitive(config:graph_modified_only(_)).
 sandbox:safe_primitive(config:graph_include_emerge(_)).
-sandbox:safe_primitive(config:emerge_vp_path(_,_)).
+sandbox:safe_primitive(config:emerge_vp_path(_)).
 sandbox:safe_primitive(config:emerge_vp_timeout(_)).
 sandbox:safe_primitive(config:emerge_vp_concurrency(_)).
 sandbox:safe_primitive(config:force_emerge_regen(_)).
@@ -47,7 +47,7 @@ sandbox:safe_primitive(config:hostname(_)).
 sandbox:safe_primitive(config:installation_dir(_)).
 sandbox:safe_primitive(config:name(_)).
 sandbox:safe_primitive(config:number_of_cpus(_)).
-sandbox:safe_primitive(config:pkg_directory(_,_)).
+sandbox:safe_primitive(config:pkg_directory(_)).
 sandbox:safe_primitive(config:printing_style(_)).
 sandbox:safe_primitive(config:printing_tty_size(_,_)).
 sandbox:safe_primitive(config:proving_target(_)).

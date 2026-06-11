@@ -69,8 +69,8 @@ buildtime:load :-
 
 buildtime:load_vdb_sizes :-
   retractall(buildtime:pkg_size(_, _, _)),
-  config:hostname(Hostname),
-  config:pkg_directory(Hostname, VdbDir),
+  current_predicate(config:pkg_directory/1),
+  config:pkg_directory(VdbDir),
   forall(
     ( cache:ordered_entry(pkg, Entry, _, _, _),
       buildtime:read_vdb_file(VdbDir, Entry, 'SIZE', SizeAtom),
