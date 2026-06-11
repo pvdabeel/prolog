@@ -32,7 +32,7 @@ Key design points:
   imposing incompatible version bounds on the same package).  When
   the domain detects such a conflict, it throws a
   `prover_reprove(Info)` exception.  The prover catches it,
-  delegates to the domain hook `rules:handle_reprove(Info, Added)`
+  delegates to the domain hook `heuristic:handle_reprove(Info, Added)`
   which records *no-goods* (rejected candidates) to avoid repeating
   the same choice, and then restarts the proof from scratch.  This
   bounded learn-and-restart loop runs up to `reprove_max_retries`
@@ -133,7 +133,7 @@ prover:prove(Target, InProof, OutProof, InModel, OutModel, InCons, OutCons, InTr
 %
 % Inner retry loop for domain conflict resolution.  Catches
 % `prover_reprove(Info)` exceptions and delegates to the domain
-% hook `rules:handle_reprove/2` to process the conflict.  Retries
+% hook `heuristic:handle_reprove/2` to process the conflict.  Retries
 % with expanded reject sets up to MaxRetries.
 
 prover:prove_with_retries(Target, InProof, OutProof, InModel, OutModel, InCons, OutCons, InTriggers, OutTriggers, Attempt, MaxRetries) :-
@@ -150,7 +150,7 @@ prover:prove_with_retries(Target, InProof, OutProof, InModel, OutModel, InCons, 
 %! prover:handle_reprove(+Target, +InProof, -OutProof, +InModel, -OutModel, +InCons, -OutCons, +InTriggers, -OutTriggers, +Attempt, +MaxRetries, +Info) is det
 %
 % Handle a reprove exception: delegate to the domain hook
-% `rules:handle_reprove(Info, Added)` to process the conflict
+% `heuristic:handle_reprove(Info, Added)` to process the conflict
 % (e.g. add rejects), then retry or fall back to a final prove
 % with reprove disabled.
 
@@ -207,7 +207,7 @@ prover:reprove_max_retries(Max) :-
 %
 % Run Goal inside a fresh reprove environment.  Manages the prover-owned
 % learned-constraint store and delegates domain-specific state lifecycle
-% to `rules:reprove_init_state/0` and `rules:reprove_cleanup_state/0`.
+% to `heuristic:init_state/0` and `heuristic:cleanup_state/0`.
 
 prover:with_reprove_state(Goal) :-
   ( nb_current(prover_learned_constraints, SavedAVL) -> true ; empty_assoc(SavedAVL) ),

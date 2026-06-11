@@ -156,7 +156,11 @@ When testing changes to the learned constraint mechanism, ALWAYS verify:
 
 - Source filenames must NOT contain hyphens (`-`) or underscores (`_`).
   Use concatenated lowercase words (e.g. `gentoo.pl`, `knowledgebase.pl`).
-  Exception: `portage-ng.pl` (project entry point / name).
+  Exceptions (grandfathered, do not add new ones):
+  - `portage-ng.pl` (project entry point / name)
+  - `binpkg_exec.pl`, `binpkg_index.pl`, `binpkg_extract.pl`,
+    `ebuild_exec.pl` (underscore-named for readability of the
+    `binpkg`/`ebuild` prefix; their module names match the filename)
 - Prolog module names follow the same rule (e.g. `:- module(gentoo, [])`).
 - Subdirectory names under `Source/` may use CamelCase (e.g. `Application/`, `Domain/`, `Config/`, `Pipeline/`).
 
@@ -262,7 +266,7 @@ module:predicate_name(Arg1, Arg2) :-
 ## Configuration
 
 ### Portage tree locations
-- `Source/Config/mac-pro.pl`: contains the specific configuration (location of repository, md5-cache, vdb pkg installation data)
+- `Source/Config/<host>.local.pl` (e.g. `Source/Config/mac-pro.local.pl`): contains the host-specific configuration (location of repository, md5-cache, vdb pkg installation data); `Source/Config/default.pl` holds the defaults
 
 ### /etc/portage configuration
 - `Source/Domain/Gentoo/Preference/userconfig.pl`: reads standard Gentoo /etc/portage user configuration files (make.conf, package.use, package.mask, etc.)

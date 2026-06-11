@@ -72,8 +72,8 @@ Each test under `Documentation/Tests/testNN/` contains:
 
 ### Failure testing
 
-Tests 58, 59, and 60 are explicitly marked as expected failures (XFAIL)
-in the test matrix — known limitations that are documented but not yet
+Tests 59 and 60 are explicitly marked as expected failures (XFAIL) via
+`test:xfail/2` — known limitations that are documented but not yet
 fixed.
 
 

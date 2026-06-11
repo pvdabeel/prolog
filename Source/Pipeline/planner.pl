@@ -141,7 +141,8 @@ planner:plan_loop([ReadyQueue|RestQueues], InCounts, Triggers, ProofAVL, InPlann
     OutPlan = [ReadyQueue | InPlan],
     ( getenv('PLANNER_DEBUG', _) ->
         length(InPlan, WaveIdx), W is WaveIdx + 1,
-        format(user_error, '~n=== planner wave ~w (size ~w) ===~n', [W, length(ReadyQueue)]),
+        length(ReadyQueue, WaveSize),
+        format(user_error, '~n=== planner wave ~w (size ~w) ===~n', [W, WaveSize]),
         forall(member(R, ReadyQueue),
                ( prover:rule_head(R, CH)
                -> format(user_error, '  ~q~n', [CH])

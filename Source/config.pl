@@ -348,12 +348,12 @@ config:server_host('mac-pro.local').
 config:server_port(4000).
 
 
-%! config:server_chunck(?Chunksize)
+%! config:server_chunk(?Chunksize)
 %
-% When set to false, when working in client-server mode, one % RPC call is
+% When set to false, when working in client-server mode, one RPC call is
 % performed per solution. When generating large number of solutions, such as
 % backtracking over a goal, it is best to transfer multiple solutions in one
-% chunck over one rpc call.
+% chunk over one rpc call.
 
 % Setting this to a higher value speeds up searching in client-server mode.
 % Shouldn't be higher than the total number of entries in your repositories.
