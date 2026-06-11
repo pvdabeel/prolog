@@ -38,3 +38,38 @@ jobs:
               load_files(portage('Source/Test/unittest'), [if(true)]),
               (run_tests -> halt(0) ; halt(1))
             " -t 'halt(2)'
+
+  overlay:
+    name: Overlay regression suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install SWI-Prolog
+        run: |
+          sudo apt-add-repository -y ppa:swi-prolog/devel
+          sudo apt-get update -q
+          sudo apt-get install -y swi-prolog
+          swipl --version
+
+      - name: Create private config files from templates
+        run: |
+          cp Source/Config/Private/template_api_key.pl Source/Config/Private/api_key.pl
+          cp Source/Config/Private/template_passwords.pl Source/Config/Private/passwords.pl
+
+      # Runs the 80-scenario end-to-end suite (prover+planner+scheduler+
+      # printer) against the in-repo synthetic overlay (Repository/Overlay).
+      # test:ensure_overlay registers the overlay repo-relative; no host- or
+      # CI-specific repository configuration is involved.
+      - name: Run overlay regression suite
+        run: |
+          ./Source/Application/Wrapper/portage-ng-dev --mode standalone --shell --timeout 900 <<'PL'
+          catch((test:run(cases,batch) -> halt(0) ; halt(1)),E,(print_message(error,E),halt(2))).
+          PL
+
+      - name: Upload per-case outputs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: overlay-test-outputs
+          path: Source/Tests/
