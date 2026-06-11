@@ -816,16 +816,26 @@ context:assert_predicate_clause(class, Context, Head, Body) :-
 %  Local helper predicates (code generation: predicate guarding, access check)
 % -----------------------------------------------------------------------------
 
-%! gen_check_invocation(+Context, +Property, +Head, -Code)
+%! gen_check_invocation(+Context, +Parent, +Property, +Head, -Code)
 %
 % Local predicate
 %
 % Code generator for invocation check.
+%
+% Public methods own the access-token lifecycle: the token is asserted once
+% per invocation (setup) and retracted exactly once on exit (cleanup), whether
+% the call succeeds, fails or throws. Keeping assert and retract paired in the
+% metaclause keeps the token count balanced for multi-clause public predicates
+% (each tried clause must not assert its own token) and makes nested public
+% calls re-entrancy-counting: every invocation stacks one token, every exit
+% removes one.
 
 context:gen_check_invocation(Context, _Parent, public, MetaHead, Code) :-
   context:translate_call(MetaHead,Head),
   Code = (
-           call_cleanup(Head, retract(Context:'$_token'(thread_access)))
+           setup_call_cleanup(assertz(Context:'$_token'(thread_access)),
+                              Head,
+                              retract(Context:'$_token'(thread_access)))
          ).
 
 context:gen_check_invocation(_Context, _Parent, protected, MetaHead, Code) :-
@@ -846,7 +856,7 @@ context:gen_check_invocation(_Context, Parent, static, Head, Code) :-
          ).
 
 
-%! gen_check_access(+Property, +Context, +Head, -Code)
+%! gen_check_access(+Property, +Context, +Head, +Body, -Code)
 %
 % Local predicate
 %
@@ -879,9 +889,12 @@ context:gen_check_access(static, _Context, _Head, Body, Code) :-
             Body
          ).
 
-context:gen_check_access(_Property, Context, _Head, Body, Code) :-
+context:gen_check_access(_Property, _Context, _Head, Body, Code) :-
+  % Public (and any other unguarded) clauses run the body as-is. The access
+  % token is managed by the public invocation metaclause (see
+  % gen_check_invocation/5); asserting it here as well would leak one token
+  % per additionally tried clause of a multi-clause public predicate.
   Code = (
-            assertz(Context:'$_token'(thread_access)),
             Body
          ).
 
