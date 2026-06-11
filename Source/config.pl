@@ -1399,18 +1399,27 @@ config:buildtime_enabled(true).
 %  Daemon (ultralight mode)
 % -----------------------------------------------------------------------------
 
-%! config:daemon_socket_path(-Path) is det.
+%! config:daemon_runtime_dir(-Dir) is det.
 %
-% Path to the Unix domain socket used by the ultralight daemon.
-% Uses XDG_RUNTIME_DIR if available, otherwise /tmp.
+% Directory holding the daemon socket and PID file. Uses XDG_RUNTIME_DIR
+% if available, otherwise a per-user directory under /tmp. Pure accessor:
+% creation, ownership verification, and permission enforcement (0700) are
+% performed by daemon:ensure_runtime_dir/1 at daemon startup.
 
-config:daemon_socket_path(Path) :-
+config:daemon_runtime_dir(Dir) :-
   ( getenv('XDG_RUNTIME_DIR', Dir)
   -> true
   ;  getenv('USER', User),
      atomic_list_concat(['/tmp/portage-ng-', User], Dir)
-  ),
-  ( \+ exists_directory(Dir) -> make_directory(Dir) ; true ),
+  ).
+
+
+%! config:daemon_socket_path(-Path) is det.
+%
+% Path to the Unix domain socket used by the ultralight daemon.
+
+config:daemon_socket_path(Path) :-
+  config:daemon_runtime_dir(Dir),
   atomic_list_concat([Dir, '/portage-ng.sock'], Path).
 
 
@@ -1419,12 +1428,7 @@ config:daemon_socket_path(Path) :-
 % Path to the PID file co-located with the daemon socket.
 
 config:daemon_pid_path(Path) :-
-  ( getenv('XDG_RUNTIME_DIR', Dir)
-  -> true
-  ;  getenv('USER', User),
-     atomic_list_concat(['/tmp/portage-ng-', User], Dir)
-  ),
-  ( \+ exists_directory(Dir) -> make_directory(Dir) ; true ),
+  config:daemon_runtime_dir(Dir),
   atomic_list_concat([Dir, '/portage-ng.pid'], Path).
 
 

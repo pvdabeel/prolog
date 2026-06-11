@@ -18,7 +18,8 @@ Also provides daemon lifecycle control invoked from the client/launcher side:
 background forking (`ipc:fork_background/1`), status queries, autostart, and
 stop/relaunch commands. The daemon server loop itself lives in daemon.pl.
 
-Authentication relies on Unix file permissions (socket created with mode 0600).
+Authentication relies on Unix file permissions (socket mode 0600 inside a
+0700 owner-verified runtime directory; see daemon:ensure_runtime_dir/0).
 Only processes running as the same OS user can connect.
 
 @see daemon.pl

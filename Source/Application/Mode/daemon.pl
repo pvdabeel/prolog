@@ -23,10 +23,14 @@ dynamics populated here per request (`client_env/2`, `client_is_tty/0`,
 every mode; their declarations are mirrored in stubs.pl so non-daemon modes
 resolve them without loading this module.
 
-Authentication relies on Unix file permissions (socket created with mode 0600).
-Only processes running as the same OS user can connect.
+Authentication relies on Unix file permissions: the runtime directory is
+created (or verified) with mode 0700 and owner-checked before the socket is
+bound inside it, and the socket itself is chmod'ed to 0600 in-process. The
+0700 directory means there is no window in which another local user can
+connect. Only processes running as the same OS user can connect.
 
 @see ipc.pl
+@see config:daemon_runtime_dir/1
 @see config:daemon_socket_path/1
 @see config:daemon_pid_path/1
 @see config:daemon_inactivity_timeout/1
@@ -48,16 +52,13 @@ Only processes running as the same OS user can connect.
 % and enters the accept loop. Registers cleanup for halt.
 
 daemon:start :-
+  ensure_runtime_dir,
   config:daemon_socket_path(SocketPath),
   config:daemon_pid_path(PidPath),
   ( access_file(SocketPath, exist) -> delete_file(SocketPath) ; true ),
   unix_domain_socket(Socket),
   tcp_bind(Socket, SocketPath),
-  atom_string(SocketPath, SP),
-  catch(
-    ( process_create(path(chmod), ['600', SP], [stdout(null), stderr(null), process(ChPid)]),
-      process_wait(ChPid, _)
-    ), _, true),
+  secure_socket_file(SocketPath),
   tcp_listen(Socket, 5),
   write_pid(PidPath),
   assertz(daemon:running),
@@ -65,6 +66,53 @@ daemon:start :-
   current_prolog_flag(pid, Pid),
   format('Daemon started (PID ~w), listening on ~w~n', [Pid, SocketPath]),
   accept_loop(Socket).
+
+
+%! daemon:ensure_runtime_dir is det.
+%
+% Creates (if needed) and security-checks the runtime directory holding
+% the daemon socket and PID file. The directory must not be a symlink,
+% must be a real directory, and is set to mode 0700 in-process. Since
+% chmod(2) only succeeds for the owner (or root), a successful chmod also
+% verifies ownership: a directory pre-created by another user (which the
+% sticky bit on /tmp permits) makes the daemon fail hard instead of
+% silently serving requests through an attacker-owned directory.
+
+daemon:ensure_runtime_dir :-
+  config:daemon_runtime_dir(Dir),
+  ( exists_directory(Dir) -> true ; catch(make_directory(Dir), _, true) ),
+  ( read_link(Dir, _, _)
+  -> insecure_runtime_error(Dir, 'is a symlink')
+  ;  true
+  ),
+  ( exists_directory(Dir)
+  -> true
+  ;  insecure_runtime_error(Dir, 'could not be created or is not a directory')
+  ),
+  catch(filesex:chmod(Dir, 0o700), _,
+        insecure_runtime_error(Dir, 'not owned by current user or mode 0700 could not be set')).
+
+
+%! daemon:secure_socket_file(+SocketPath) is det.
+%
+% Restricts the freshly bound socket to mode 0600 in-process (no chmod
+% subprocess). Runs before tcp_listen and while the socket lives inside
+% the 0700 runtime directory, so there is no window in which another
+% local user can connect. Fails hard if permissions cannot be set.
+
+daemon:secure_socket_file(SocketPath) :-
+  catch(filesex:chmod(SocketPath, 0o600), _,
+        insecure_runtime_error(SocketPath, 'mode 0600 could not be set on socket')).
+
+
+%! daemon:insecure_runtime_error(+Path, +Reason) is det.
+%
+% Reports a runtime directory / socket security violation and aborts
+% daemon startup.
+
+daemon:insecure_runtime_error(Path, Reason) :-
+  format(user_error, 'Error: refusing to start daemon: ~w ~w~n', [Path, Reason]),
+  halt(1).
 
 
 %! daemon:write_pid(+PidPath) is det.
