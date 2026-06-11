@@ -435,6 +435,18 @@ config:cluster_worker_timeout(900).
 config:server_chunk(50000).
 
 
+%! config:client_auto_import_vdb(?Bool)
+%
+% When true, client mode automatically (re-)imports the local VDB into the
+% server before executing a command (--pretend, --merge, --search, ...):
+% the import runs when no import record exists for the target server, or
+% when the local VDB changed since the last import (cheap mtime check over
+% the VDB root and its category directories). When false, the VDB is only
+% shipped explicitly via --import-vdb. See knowledgebase:vdb_repository/1.
+
+config:client_auto_import_vdb(true).
+
+
 % -----------------------------------------------------------------------------
 %  Certificates
 % -----------------------------------------------------------------------------

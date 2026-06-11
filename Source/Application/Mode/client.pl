@@ -120,6 +120,7 @@ client:rpc_execute(Hostname,Port,Cmd) :-
   config:digest_password(User,Digestpwd),
   config:server_chunk(ChunkSize),
   client:require_tls_files(LocalHostname, CaCert, ClientCert, ClientKey),
+  client:maybe_auto_import_vdb(Hostname, Port),
   client:ensure_vdb_state(Hostname),
   findall(Template,(remote_predicate_template(Template)),Templates),
   findall(Instance,
@@ -234,6 +235,69 @@ client:require_tls_files(LocalHostname, CaCert, ClientCert, ClientKey) :-
 :- dynamic client:vdb_state_loaded/1.
 :- dynamic client:vdb_repository/1.
 :- dynamic client:vdb_import_stamp/1.
+% Per-process latch: the auto-import freshness check ran for this server.
+:- dynamic client:vdb_auto_checked/1.
+
+
+%! client:maybe_auto_import_vdb(+Server, +Port) is det.
+%
+% Automatic VDB import (config:client_auto_import_vdb/1): before the first
+% RPC of this process to Server, (re-)import the local VDB when no import
+% record exists or the local VDB changed since the last import. A failed
+% auto-import degrades to a warning - the command proceeds and the server
+% warns loudly that the plan reflects its own installed set.
+
+client:maybe_auto_import_vdb(Server, Port) :-
+  ( client:vdb_auto_checked(Server) ->
+      true
+  ;   assertz(client:vdb_auto_checked(Server)),
+      ( config:client_auto_import_vdb(true),
+        client:vdb_import_needed(Server) ->
+          ( catch(client:import_vdb(Server, Port), _, fail) ->
+              true
+          ;   message:warning(['Automatic VDB import failed - continuing; ',
+                               'this plan may reflect the server\'s ',
+                               'installed packages.'])
+          )
+      ;   true
+      )
+  ).
+
+
+%! client:vdb_import_needed(+Server) is semidet.
+%
+% True when no import record exists for Server, or when the local VDB
+% changed since the last import. Change detection stats the VDB root and
+% its category directories (a merge or unmerge touches the category dir),
+% so the fresh path costs a few hundred stat calls, not a VDB parse.
+
+client:vdb_import_needed(Server) :-
+  ( catch(client:stored_vdb_import(Server, _, _, Time), _, fail) ->
+      client:local_vdb_mtime(MTime),
+      MTime > Time
+  ;   true
+  ).
+
+
+%! client:local_vdb_mtime(-MTime) is semidet.
+%
+% Most recent modification time over the local VDB root and its
+% (category) subdirectories.
+
+client:local_vdb_mtime(MTime) :-
+  client:local_pkg_directory(Root),
+  exists_directory(Root),
+  time_file(Root, RootT),
+  findall(T,
+          ( directory_files(Root, Entries),
+            member(E, Entries),
+            E \== '.',
+            E \== '..',
+            directory_file_path(Root, E, Path),
+            exists_directory(Path),
+            catch(time_file(Path, T), _, fail) ),
+          Ts),
+  max_list([RootT|Ts], MTime).
 
 
 %! client:ensure_vdb_state(+Server) is det.

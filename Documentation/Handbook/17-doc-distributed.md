@@ -176,6 +176,15 @@ imported its VDB (or the stamp no longer matches what the server
 holds), the server prints an explicit warning and falls back to its
 own `pkg` repository, telling the user to (re-)run `--import-vdb`.
 
+With `config:client_auto_import_vdb(true)` (the default) the import
+happens automatically: before the first RPC of a client command
+(`--pretend`, `--merge`, `--search`, ...) the client re-imports its
+VDB whenever no import record exists for the target server or the
+local VDB changed since the last import.  Freshness is detected with
+a cheap mtime check over the VDB root and its category directories,
+so an up-to-date import adds no noticeable overhead.  Set the flag to
+`false` to ship the VDB only on an explicit `--import-vdb`.
+
 Filesystem-level VDB reads (CONTENTS listings, on-disk SIZE files,
 binpkg live-VDB re-stat) can never work for a remote client; those
 paths detect a per-client repository and degrade to the imported

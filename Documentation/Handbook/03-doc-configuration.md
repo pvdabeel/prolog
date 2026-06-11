@@ -242,7 +242,7 @@ When `--sync` runs, the knowledge base syncs the `pkg` repository by walking the
 
 This uniform representation means that during resolution, an already-installed package can satisfy a dependency directly without planning a fresh merge.  In the plan output, these appear as `[nomerge]` — the prover verified the dependency is met by what is already on disk.
 
-In client-server mode the server holds its *own* `pkg` repository, which may differ from the client's installed set.  A client can upload its local VDB with `--import-vdb`; the server registers it as a per-client repository (`pkg@<clienthost>`) and uses it for that client's plans.  See [Chapter 17](17-doc-distributed.md) for details.
+In client-server mode the server holds its *own* `pkg` repository, which may differ from the client's installed set.  A client can upload its local VDB with `--import-vdb`; the server registers it as a per-client repository (`pkg@<clienthost>`) and uses it for that client's plans.  With `config:client_auto_import_vdb(true)` (the default) this happens automatically before each client command whenever the local VDB changed.  See [Chapter 17](17-doc-distributed.md) for details.
 
 ## Gentoo configuration
 
