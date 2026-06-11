@@ -168,6 +168,8 @@ server:reply(Request) :-
 % =============================================================================
 
 :- dynamic server:queue_created/1.
+:- dynamic server:submitted_counter/1.
+:- dynamic server:inflight_job/3.
 
 server:ensure_queues :-
   ( server:queue_created(true) -> true
@@ -179,9 +181,17 @@ server:ensure_queues :-
 %! server:post_job(+Job)
 %
 % Enqueue a prove target. Job = Repo://Entry:Action.
+% Increments the submitted counter so collectors know how many results
+% to expect, independently of the job queue size (jobs leave the queue
+% the moment a worker dequeues them).
 
 server:post_job(Job) :-
   server:ensure_queues,
+  with_mutex(server_progress,
+    ( ( retract(server:submitted_counter(N0)) -> true ; N0 = 0 ),
+      N is N0 + 1,
+      assertz(server:submitted_counter(N))
+    )),
   thread_send_message(server_jobs, Job).
 
 %! server:get_job(-Job)
@@ -189,23 +199,49 @@ server:post_job(Job) :-
 % Dequeue a prove target (blocks until one is available).
 
 server:get_job(Job) :-
-  server:ensure_queues,
-  thread_get_message(server_jobs, Job).
+  server:get_job_for(Job, infinite, unknown).
 
 %! server:get_job(-Job, +Timeout)
 %
 % Dequeue a prove target with timeout (seconds). Fails on timeout.
 
 server:get_job(Job, Timeout) :-
+  server:get_job_for(Job, Timeout, unknown).
+
+%! server:get_job(-Job, +Timeout, +Worker)
+%
+% Dequeue a prove target with timeout on behalf of Worker. Fails on
+% timeout. Records the job as in flight for Worker and refreshes the
+% worker's liveness timestamp, so stale jobs can be re-queued if the
+% worker dies.
+
+server:get_job(Job, Timeout, Worker) :-
+  server:get_job_for(Job, Timeout, Worker).
+
+%! server:get_job_for(-Job, +Timeout, +Worker)
+%
+% Shared implementation behind get_job/1,2,3.
+
+server:get_job_for(Job, Timeout, Worker) :-
   server:ensure_queues,
-  thread_get_message(server_jobs, Job, [timeout(Timeout)]).
+  ( Timeout == infinite ->
+      thread_get_message(server_jobs, Job)
+  ; thread_get_message(server_jobs, Job, [timeout(Timeout)])
+  ),
+  server:worker_heartbeat(Worker),
+  ( Job == done -> true
+  ; get_time(Now),
+    assertz(server:inflight_job(Job, Worker, Now))
+  ).
 
 %! server:post_result(+Job, +Result)
 %
-% Post a completed proof/plan result back to the server.
+% Post a completed proof/plan result back to the server. Clears the
+% in-flight record for Job.
 
 server:post_result(Job, Result) :-
   server:ensure_queues,
+  retractall(server:inflight_job(Job, _, _)),
   thread_send_message(server_results, result(Job, Result)).
 
 %! server:get_result(-Job, -Result)
@@ -235,6 +271,83 @@ server:job_count(N) :-
 server:result_count(N) :-
   server:ensure_queues,
   message_queue_property(server_results, size(N)).
+
+%! server:submitted_count(-N)
+%
+% Number of jobs submitted since the last progress reset. Unlike
+% job_count/1 this does not drop when workers dequeue jobs, so it is
+% the authoritative number of results to wait for.
+
+server:submitted_count(N) :-
+  ( server:submitted_counter(N0) -> N = N0 ; N = 0 ).
+
+%! server:inflight_count(-N)
+%
+% Number of jobs currently dequeued by workers but not yet resulted.
+
+server:inflight_count(N) :-
+  aggregate_all(count, server:inflight_job(_, _, _), N).
+
+%! server:reset_progress
+%
+% Reset the submitted counter and in-flight records, and drain both
+% queues. Called after a collection cycle completes so the next batch
+% starts from a clean state (late stragglers from a previous batch are
+% discarded rather than counted against the new batch).
+
+server:reset_progress :-
+  server:ensure_queues,
+  with_mutex(server_progress,
+    ( retractall(server:submitted_counter(_)),
+      retractall(server:inflight_job(_, _, _))
+    )),
+  server:drain_queue(server_jobs),
+  server:drain_queue(server_results).
+
+%! server:drain_queue(+Queue)
+%
+% Remove all pending messages from Queue without blocking.
+
+server:drain_queue(Queue) :-
+  ( thread_get_message(Queue, _, [timeout(0)])
+  -> server:drain_queue(Queue)
+  ;  true ).
+
+%! server:requeue_stale_jobs(+Timeout)
+%
+% Re-queue in-flight jobs whose worker has not been seen for more than
+% Timeout seconds. For jobs dequeued by an unidentified worker (legacy
+% get_job/1,2 callers) the in-flight age itself is used instead. A
+% re-queued job does not increment the submitted counter: it is the
+% same logical job, handed to another worker.
+
+server:requeue_stale_jobs(Timeout) :-
+  get_time(Now),
+  findall(Job-Worker,
+          ( server:inflight_job(Job, Worker, Since),
+            server:job_is_stale(Worker, Since, Now, Timeout) ),
+          Stale),
+  forall(member(Job-Worker, Stale),
+         server:requeue_job(Job, Worker)).
+
+%! server:job_is_stale(+Worker, +Since, +Now, +Timeout)
+%
+% True when the worker holding a job is presumed dead.
+
+server:job_is_stale(Worker, _Since, Now, Timeout) :-
+  server:registered_worker(Worker, _, LastSeen), !,
+  Now - LastSeen > Timeout.
+server:job_is_stale(_Worker, Since, Now, Timeout) :-
+  Now - Since > Timeout.
+
+%! server:requeue_job(+Job, +Worker)
+%
+% Put a presumed-lost job back on the job queue.
+
+server:requeue_job(Job, Worker) :-
+  retractall(server:inflight_job(Job, _, _)),
+  thread_send_message(server_jobs, Job),
+  message:warning(['Re-queued job from unresponsive worker ', Worker, ': ', Job]).
 
 
 % =============================================================================
@@ -278,6 +391,19 @@ server:register_worker(Hostname, Cpus, Timestamp) :-
 
 server:unregister_worker(Hostname) :-
   retractall(server:registered_worker(Hostname, _, _)).
+
+%! server:worker_heartbeat(+Hostname)
+%
+% Refresh the liveness timestamp of a registered worker. A no-op for
+% unregistered or unidentified (unknown) workers.
+
+server:worker_heartbeat(Hostname) :-
+  with_mutex(server_progress,
+    ( retract(server:registered_worker(Hostname, Cpus, _)) ->
+        get_time(Now),
+        assertz(server:registered_worker(Hostname, Cpus, Now))
+    ; true
+    )).
 
 %! server:workers(-Workers)
 %

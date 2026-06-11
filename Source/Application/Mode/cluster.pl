@@ -56,8 +56,10 @@ cluster:submit(Targets) :-
 % Submit all portage entries with the given Action (e.g. run).
 
 cluster:submit_all(Action) :-
+  server:submitted_count(Before),
   server:submit_all(portage, Action),
-  server:job_count(N),
+  server:submitted_count(After),
+  N is After - Before,
   message:inform(['Submitted ', N, ' jobs to cluster.']).
 
 
@@ -67,19 +69,55 @@ cluster:submit_all(Action) :-
 
 %! cluster:wait(-Results)
 %
-% Block until the job queue is drained and all results are collected.
-% Returns a list of result terms.
+% Block until one result has been collected for every submitted job, or
+% until the global deadline (config:cluster_global_deadline/1) expires.
+% Completion is tracked against the submitted counter, not the job
+% queue size: an empty job queue only means all jobs are in flight, not
+% that all work is done. While waiting, jobs held by workers that have
+% stopped responding (config:cluster_worker_timeout/1) are re-queued so
+% they can be picked up by surviving workers. Returns a list of result
+% terms; warns if the deadline was reached with results still missing.
 
 cluster:wait(Results) :-
-  cluster:collect_results([], Results).
+  server:submitted_count(Expected),
+  config:cluster_result_timeout(Poll),
+  config:cluster_global_deadline(MaxWait),
+  get_time(Now),
+  Deadline is Now + MaxWait,
+  cluster:collect_results(Expected, Deadline, Poll, [], Results),
+  length(Results, Collected),
+  ( Collected < Expected ->
+      Missing is Expected - Collected,
+      message:warning(['Cluster deadline reached: collected ', Collected, '/',
+                       Expected, ' results (', Missing, ' missing).'])
+  ; true
+  ),
+  server:reset_progress.
 
-cluster:collect_results(Acc, Results) :-
-  ( server:get_result(Job, Result, 60) ->
-      cluster:collect_results([result(Job, Result)|Acc], Results)
-  ; server:job_count(Remaining),
-    ( Remaining > 0 ->
-        cluster:collect_results(Acc, Results)
-    ; reverse(Acc, Results)
+%! cluster:collect_results(+Expected, +Deadline, +Poll, +Acc, -Results)
+%
+% Collect results until Expected results are in or Deadline passes.
+% Duplicate results for the same job (a re-queued job completed twice)
+% are dropped so they cannot mask a genuinely missing result.
+
+cluster:collect_results(Expected, _, _, Acc, Results) :-
+  length(Acc, Expected),
+  !,
+  reverse(Acc, Results).
+cluster:collect_results(Expected, Deadline, Poll, Acc, Results) :-
+  get_time(Now),
+  ( Now >= Deadline ->
+      reverse(Acc, Results)
+  ; Wait is min(Poll, Deadline - Now),
+    ( server:get_result(Job, Result, Wait) ->
+        ( memberchk(result(Job, _), Acc) ->
+            cluster:collect_results(Expected, Deadline, Poll, Acc, Results)
+        ; cluster:collect_results(Expected, Deadline, Poll,
+                                  [result(Job, Result)|Acc], Results)
+        )
+    ; config:cluster_worker_timeout(LivenessTimeout),
+      server:requeue_stale_jobs(LivenessTimeout),
+      cluster:collect_results(Expected, Deadline, Poll, Acc, Results)
     )
   ).
 
@@ -110,6 +148,7 @@ cluster:status :-
   server:workers(Workers),
   server:total_cpus(TotalCpus),
   server:job_count(Jobs),
+  server:inflight_count(InFlight),
   server:result_count(ResultCount),
   ( server:snapshot(portage, Commit) -> true ; Commit = unknown ),
   length(Workers, NWorkers),
@@ -118,6 +157,7 @@ cluster:status :-
   format('  Snapshot:        ~w~n', [Commit]),
   format('  Workers:         ~d (~d total CPUs)~n', [NWorkers, TotalCpus]),
   format('  Jobs pending:    ~d~n', [Jobs]),
+  format('  Jobs in flight:  ~d~n', [InFlight]),
   format('  Results ready:   ~d~n', [ResultCount]),
   ( Workers \== [] ->
       format('~n  Registered workers:~n'),

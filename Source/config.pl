@@ -348,6 +348,34 @@ config:server_host('mac-pro.local').
 config:server_port(4000).
 
 
+%! config:cluster_result_timeout(?Seconds)
+%
+% How long a single result poll blocks while collecting distributed
+% proving results. On expiry the collector checks for stale in-flight
+% jobs (and re-queues them) before polling again.
+
+config:cluster_result_timeout(60).
+
+
+%! config:cluster_global_deadline(?Seconds)
+%
+% Overall deadline for collecting all results of a distributed proving
+% batch. When reached, cluster:wait/1 returns the results collected so
+% far and warns about missing ones instead of waiting forever.
+
+config:cluster_global_deadline(3600).
+
+
+%! config:cluster_worker_timeout(?Seconds)
+%
+% A worker is presumed dead when it has not contacted the server for
+% this many seconds; its in-flight jobs are then re-queued for other
+% workers. Should exceed the longest expected single prove job, since a
+% busy single-threaded worker only heartbeats between jobs.
+
+config:cluster_worker_timeout(900).
+
+
 %! config:server_chunk(?Chunksize)
 %
 % When set to false, when working in client-server mode, one RPC call is

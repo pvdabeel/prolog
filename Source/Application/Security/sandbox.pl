@@ -260,6 +260,15 @@ sandbox:safe_primitive(userconfig:package_license_entry(_,_)).
 sandbox:safe_primitive(profile:cache_available).
 
 % -----------------------------------------------------------------------------
+%  Server job queue (worker RPC protocol)
+% -----------------------------------------------------------------------------
+
+sandbox:safe_primitive(server:get_job(_,_,_)).
+sandbox:safe_primitive(server:post_result(_,_)).
+sandbox:safe_primitive(server:register_worker(_,_,_)).
+sandbox:safe_primitive(server:snapshot(_,_)).
+
+% -----------------------------------------------------------------------------
 %  Streams
 % -----------------------------------------------------------------------------
 
