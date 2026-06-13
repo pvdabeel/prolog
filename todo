@@ -1,22 +1,16 @@
 Feature exploration
 ===================
 
-- Dark & Light mode colors
+- Better color handling (fg and bg defined twice in message.pl: once for normal messages and once for bubbles)
+
+- Themeing: Dark & Light mode colors
+
+- test output on default linux and default macos (TERM)
 
 - Extend transaction system to use overlayfs or similar (essentially the "session concept" from tinderbox-ng) 
 
   - different transaction strategies (zfs snapshot, unionfs, overlayfs, fuse, other)
 
-- Create bootstrap/stage-3-9999 overlay system enabling pulling of latest stage
-
-- Portage-ng & Ebuild IPC 
-
+- Create portage-ng ebuild
+   
 - Reimplement prefix the proper way
-
-- Enable chroot building 
-   - prefix style
-   - using IPC client
-
-- Think about tinderbox 'statistics' 
-   - overlay with templates? 
-   - --report showing template based filled with actual data?

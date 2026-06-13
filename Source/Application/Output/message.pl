@@ -134,7 +134,7 @@ user:goal_expansion(color(lightgray),      (config:color_output -> ansi_term:kee
 user:goal_expansion(color(darkgray),       (config:color_output -> ansi_term:keep_line_pos(current_output,format("\e[90m",[])) ; true)).
 user:goal_expansion(color(lightred),       (config:color_output -> ansi_term:keep_line_pos(current_output,format("\e[91m",[])) ; true)).
 user:goal_expansion(color(lightgreen),     (config:color_output -> ansi_term:keep_line_pos(current_output,format("\e[92m",[])) ; true)).
-user:goal_expansion(color(yellow),          (config:color_output -> ansi_term:keep_line_pos(current_output,format("\e[93m",[])) ; true)).
+user:goal_expansion(color(yellow),         (config:color_output -> ansi_term:keep_line_pos(current_output,format("\e[93m",[])) ; true)).
 user:goal_expansion(color(lightorange),    (config:color_output -> ansi_term:keep_line_pos(current_output,format("\e[93m",[])) ; true)).
 user:goal_expansion(color(lightblue),      (config:color_output -> ansi_term:keep_line_pos(current_output,format("\e[94m",[])) ; true)).
 user:goal_expansion(color(lightmagenta),   (config:color_output -> ansi_term:keep_line_pos(current_output,format("\e[95m",[])) ; true)).
@@ -180,7 +180,7 @@ user:goal_expansion(style(blink),          (config:color_output -> ansi_term:kee
 %  Goal expansion: Cursor
 % -----------------------------------------------------------------------------
 
-user:goal_expansion(bell,                   (format("\a",[]),flush_output)).
+user:goal_expansion(bell,                  (format("\a",[]),flush_output)).
 user:goal_expansion(el,                    (config:output_tty -> format("\e[K",[]) ; true)).
 user:goal_expansion(hc,                    (config:output_tty -> ansi_term:keep_line_pos(current_output,format("\e[?25l",[])) ; true)).
 user:goal_expansion(sc,                    (config:output_tty -> ansi_term:keep_line_pos(current_output,format("\e[?25h",[])) ; true)).
