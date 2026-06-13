@@ -949,6 +949,44 @@ config:output_tty :-
   ).
 
 
+%! config:powerline_bubbles is semidet.
+%
+% Succeeds when Powerline private-use bubble caps (U+E0B6/U+E0B4)
+% are appropriate for the output terminal. Fails on the Linux console
+% (TERM=linux), where angle-bracket bubbles are used instead.
+
+:- dynamic config:powerline_bubbles_cached/1.
+
+config:powerline_bubbles :-
+  ( config:powerline_bubbles_cached(Val)
+  -> Val == true
+  ; ( config:powerline_bubbles_env_ok
+    -> asserta(config:powerline_bubbles_cached(true))
+    ;  asserta(config:powerline_bubbles_cached(false)),
+       fail
+    )
+  ).
+
+
+%! config:terminal_env_term(-Term) is semidet.
+%
+% TERM from the client-forwarded environment (daemon/IPC) or the
+% local process environment.
+
+config:terminal_env_term(Term) :-
+  ( catch(daemon:client_env('TERM', Term), _, fail)
+  -> true
+  ;  catch(system:getenv('TERM', Term), _, fail)
+  ).
+
+
+config:powerline_bubbles_env_ok :-
+  ( catch(config:terminal_env_term(Term), _, fail)
+  -> Term \== linux
+  ;  true
+  ).
+
+
 % Interface can dynamically set the printing style
 
 :- dynamic config:interface_printing_style/1.

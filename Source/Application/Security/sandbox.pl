@@ -50,6 +50,7 @@ sandbox:safe_primitive(config:number_of_cpus(_)).
 sandbox:safe_primitive(config:pkg_directory(_)).
 sandbox:safe_primitive(config:printing_style(_)).
 sandbox:safe_primitive(config:printing_tty_size(_,_)).
+sandbox:safe_primitive(config:powerline_bubbles).
 sandbox:safe_primitive(config:proving_target(_)).
 sandbox:safe_primitive(config:reprove_max_retries(_)).
 sandbox:safe_primitive(config:server_port(_)).

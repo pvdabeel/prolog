@@ -15,6 +15,10 @@ thin stubs here and compiled away by goal_expansion/2 into direct
 ANSI escape sequences at load time. This gives zero-overhead messaging
 in production while keeping call sites readable.
 
+message:bubble/2 is the exception: it dispatches at runtime so cap
+style can follow TERM (Powerline glyphs vs foreground-only <...> on
+TERM=linux).
+
 Debug messaging (debug_msg/1..3, debug_write/1, debug_writeln/1) is
 conditionally compiled via the SWI-Prolog `-Ddebug` flag: when debug
 is disabled, calls expand to `true` (no overhead).
@@ -83,7 +87,6 @@ user:goal_expansion(debug_msg(Label, Fmt, Args), Expanded) :-
 
 message:color(_).
 message:bgcolor(_).
-message:bubble(_,_).
 message:style(_).
 message:bell.
 message:el.
@@ -191,15 +194,7 @@ user:goal_expansion(clean,                 (config:output_tty -> format("\e[K",[
 % -----------------------------------------------------------------------------
 
 user:goal_expansion(bubble(Color,Text),
-  ( color(Color),
-    format(''),
-    color(normal),
-    bgcolor(Color),
-    format(Text),
-    bgcolor(normal),
-    color(Color),
-    format(''),
-    color(normal))) :- !.
+                    message:bubble(Color, Text)) :- !.
 
 user:goal_expansion(label(success),
   ( bubble(green,success),
@@ -241,6 +236,170 @@ user:goal_expansion(label(log),
 
 user:goal_expansion(label(_),
   ( true )).
+
+
+% -----------------------------------------------------------------------------
+%  Runtime: Bubbles
+% -----------------------------------------------------------------------------
+%
+% bubble/2 is expanded at call sites to message:bubble/2 so the cap style
+% can follow TERM at runtime (Powerline vs <...> on TERM=linux).
+
+%! message:bubble(+Color, +Text) is det.
+%
+% Render a coloured label badge. Uses Powerline caps on UTF-8 terminals
+% and <...> angle brackets on the Linux console (TERM=linux). Angle
+% bubbles omit background colour; step labels render as <step N> in
+% darkgray foreground (brackets included).
+
+message:bubble(Color, Text) :-
+  ( config:powerline_bubbles
+  -> message:bubble_powerline(Color, Text)
+  ;  message:bubble_angle(Color, Text)
+  ).
+
+
+message:bubble_powerline(Color, Text) :-
+  ( config:color_output
+  -> message:bubble_colored(Color, Text, '\uE0B6', '\uE0B4')
+  ;  message:bubble_write(Text)
+  ).
+
+
+message:bubble_angle(Color, Text) :-
+  ( config:color_output
+  -> message:bubble_angle_fg(Color, Text, Fg),
+     message:bubble_angle_colored(Fg, Text, Color)
+  ;  message:bubble_plain_angle(Text)
+  ).
+
+
+message:bubble_angle_fg(_Color, Text, darkgray) :-
+  message:bubble_is_step_label(Text),
+  !.
+
+message:bubble_angle_fg(Color, _Text, Color).
+
+
+%! message:bubble_is_step_label(+Text) is semidet.
+%
+% True when Text is a plan step label ("step  N").
+
+message:bubble_is_step_label(Text) :-
+  atom(Text),
+  sub_atom(Text, 0, 5, _, 'step ').
+
+
+message:bubble_angle_colored(FgColor, Text, BubbleColor) :-
+  message:bubble_emit_fg(FgColor),
+  ( message:bubble_angle_bold(BubbleColor)
+  -> message:bubble_emit_bold
+  ;  true
+  ),
+  format('<'),
+  message:bubble_write(Text),
+  format('>'),
+  ( message:bubble_angle_bold(BubbleColor)
+  -> message:bubble_emit_bold_off
+  ;  true
+  ),
+  message:bubble_emit_fg(normal).
+
+
+message:bubble_angle_bold(green).
+
+
+message:bubble_colored(Color, Text, Left, Right) :-
+  message:bubble_emit_fg(Color),
+  format('~w', [Left]),
+  message:bubble_emit_fg(normal),
+  message:bubble_emit_bg(Color),
+  message:bubble_write(Text),
+  message:bubble_emit_bg(normal),
+  message:bubble_emit_fg(Color),
+  format('~w', [Right]),
+  message:bubble_emit_fg(normal).
+
+
+message:bubble_plain_angle(Text) :-
+  format('<'),
+  message:bubble_write(Text),
+  format('>').
+
+
+message:bubble_write(Text) :-
+  ( atom(Text)
+  -> write(Text)
+  ;  string(Text)
+  -> write(Text)
+  ;  format(Text)
+  ).
+
+
+message:bubble_emit_fg(Color) :-
+  ( config:color_output,
+    message:bubble_fg_code(Color, Code)
+  -> ansi_term:keep_line_pos(current_output, format(Code, []))
+  ;  true
+  ).
+
+
+message:bubble_emit_bg(Color) :-
+  ( config:color_output,
+    message:bubble_bg_code(Color, Code)
+  -> ansi_term:keep_line_pos(current_output, format(Code, []))
+  ;  true
+  ).
+
+
+message:bubble_emit_bold :-
+  ( config:color_output
+  -> ansi_term:keep_line_pos(current_output, format("\e[01m", []))
+  ;  true
+  ).
+
+
+message:bubble_emit_bold_off :-
+  ( config:color_output
+  -> ansi_term:keep_line_pos(current_output, format("\e[22m", []))
+  ;  true
+  ).
+
+
+message:bubble_fg_code(red,         "\e[31m").
+message:bubble_fg_code(green,       "\e[32m").
+message:bubble_fg_code(orange,      "\e[33m").
+message:bubble_fg_code(blue,        "\e[34m").
+message:bubble_fg_code(magenta,     "\e[35m").
+message:bubble_fg_code(cyan,        "\e[36m").
+message:bubble_fg_code(lightgray,   "\e[37m").
+message:bubble_fg_code(darkgray,    "\e[90m").
+message:bubble_fg_code(lightred,    "\e[91m").
+message:bubble_fg_code(lightgreen,  "\e[92m").
+message:bubble_fg_code(yellow,      "\e[93m").
+message:bubble_fg_code(lightorange, "\e[93m").
+message:bubble_fg_code(lightblue,   "\e[94m").
+message:bubble_fg_code(lightmagenta,"\e[95m").
+message:bubble_fg_code(lightcyan,   "\e[96m").
+message:bubble_fg_code(normal,      "\e[00m").
+
+
+message:bubble_bg_code(red,         "\e[41m").
+message:bubble_bg_code(green,       "\e[42m").
+message:bubble_bg_code(orange,      "\e[43m").
+message:bubble_bg_code(blue,        "\e[44m").
+message:bubble_bg_code(magenta,     "\e[45m").
+message:bubble_bg_code(cyan,        "\e[46m").
+message:bubble_bg_code(lightgray,   "\e[47m").
+message:bubble_bg_code(darkgray,    "\e[100m").
+message:bubble_bg_code(lightred,    "\e[101m").
+message:bubble_bg_code(lightgreen,  "\e[102m").
+message:bubble_bg_code(yellow,      "\e[103m").
+message:bubble_bg_code(lightorange, "\e[103m").
+message:bubble_bg_code(lightblue,   "\e[104m").
+message:bubble_bg_code(lightmagenta,"\e[105m").
+message:bubble_bg_code(lightcyan,   "\e[106m").
+message:bubble_bg_code(normal,      "\e[00m").
 
 
 % -----------------------------------------------------------------------------
