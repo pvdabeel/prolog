@@ -849,6 +849,17 @@ candidate:grouped_dep_tag_suggestions(FoundRepo://Candidate, Ctx0, Ctx) :-
 %
 % Determines whether the dep is a fresh install, update, downgrade, or
 % rebuild based on the installed VDB state and CLI flags.
+%
+% Download-only parent actions (fetchonly, download) are special: they
+% never merge anything, so the install/update/downgrade distinction is
+% meaningless for them. Rewriting a fetchonly dep into :update would
+% cascade through the update->run->install rules and leak spurious
+% "update"/"install"/"run" entries into the --fetchonly plan. Instead we
+% keep the action as a pure download, but still run the installed-state
+% detection so the replaces() marker rides along in the context: this
+% tells the fetchonly leaf rule to fetch the sources of a same-version
+% rebuild (USE/BWU change) rather than prune it as "already installed",
+% preserving the full download closure of the equivalent merge plan.
 
 candidate:grouped_dep_determine_action(gd(Action, C, N, _PackageDeps, _SlotReq, _Context),
                                        FoundRepo://Candidate,
@@ -867,7 +878,10 @@ candidate:grouped_dep_determine_action(gd(Action, C, N, _PackageDeps, _SlotReq, 
                                         VdbRepo://InstalledEntry2, NewerContext,
                                         DepUpdateAction, UpdateCtx)
   ->
-    ActionGoal = FoundRepo://Candidate:DepUpdateAction?{UpdateCtx}
+    ( memberchk(Action, [fetchonly, download])
+    -> ActionGoal = FoundRepo://Candidate:Action?{UpdateCtx}
+    ;  ActionGoal = FoundRepo://Candidate:DepUpdateAction?{UpdateCtx}
+    )
   ; ActionGoal = FoundRepo://Candidate:Action?{NewerContext}
   ).
 

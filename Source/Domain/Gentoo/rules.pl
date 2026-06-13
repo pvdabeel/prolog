@@ -289,7 +289,11 @@ rule(Repository://Ebuild:fetchonly?{Context}, Conditions) :-
   !,
   candidate:eligible(Repository://Ebuild:fetchonly?{Context}),
   ( candidate:installed(Repository://Ebuild),
-    \+ preference:flag(emptytree) ->
+    \+ preference:flag(emptytree),
+    % A replaces(_) marker means the equivalent merge would rebuild this
+    % same-version entry (USE/BWU change). Its sources must still be
+    % fetched, so do NOT short-circuit as "already installed".
+    \+ memberchk(replaces(_), Context) ->
       Conditions = []
   ; candidate:resolve(Repository://Ebuild:fetchonly?{Context}, Conditions)
   ).
