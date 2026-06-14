@@ -95,16 +95,36 @@ linkages.
 binpkg_exec:available_for(SrcRepo, SrcEntry, Ctx, BinpkgEntryId) :-
   config:use_binpkg(true),
   cache:repository(binpkg),
-  binpkg_exec:maybe_refresh_index,
-  binpkg_exec:src_entry_cnv(SrcRepo, SrcEntry, Cat, Name, Version),
-  findall(Bid-Eid,
-          ( cache:ordered_entry(binpkg, Eid, Cat, Name, Version),
-            cache:entry_metadata(binpkg, Eid, build_id, Bid),
-            binpkg_exec:candidate_passes_filters(SrcRepo, SrcEntry, Eid, Ctx)
-          ),
-          Candidates),
+  % Hold the binpkg index lock across BOTH the (possibly index-rewriting)
+  % refresh AND the candidate scan. A concurrent `sync(kb)` swap takes the
+  % same lock for its retract+assert, so this probe can never observe a
+  % half-swapped index -- it sees either the full old snapshot or the full
+  % new one, never an empty/partial one (portage-ng#80, item D).
+  with_mutex(binpkg_index_lock,
+    binpkg_exec:refresh_and_collect_candidates(SrcRepo, SrcEntry, Ctx, Candidates)),
   Candidates \== [],
   binpkg_exec:pick_best_candidate(Candidates, BinpkgEntryId).
+
+
+%! binpkg_exec:refresh_and_collect_candidates(+SrcRepo, +SrcEntry, +Ctx, -Candidates) is det.
+%
+% Runs the configured index-refresh policy and then collects all binpkg
+% variants of the source entry's (cat, name, version) that pass the
+% eligibility filters. Always succeeds (binding Candidates to `[]` when
+% the source entry is unknown or no variant qualifies). Must be called
+% with `binpkg_index_lock` held.
+
+binpkg_exec:refresh_and_collect_candidates(SrcRepo, SrcEntry, Ctx, Candidates) :-
+  binpkg_exec:maybe_refresh_index,
+  ( binpkg_exec:src_entry_cnv(SrcRepo, SrcEntry, Cat, Name, Version)
+  -> findall(Bid-Eid,
+             ( cache:ordered_entry(binpkg, Eid, Cat, Name, Version),
+               cache:entry_metadata(binpkg, Eid, build_id, Bid),
+               binpkg_exec:candidate_passes_filters(SrcRepo, SrcEntry, Eid, Ctx)
+             ),
+             Candidates)
+  ;  Candidates = []
+  ).
 
 
 % -----------------------------------------------------------------------------
@@ -141,17 +161,54 @@ binpkg_exec:maybe_refresh_index :-
 
 %! binpkg_exec:apply_refresh_policy(+Policy) is det.
 %
-% Dispatch on the policy atom. The `mtime` branch is serialized via a
-% dedicated mutex so two concurrent probes don't race on the global
-% binpkg cache assertions that `sync(kb)` retract-and-reasserts.
+% Dispatch on the policy atom. The `mtime` branch is serialized via the
+% shared `binpkg_index_lock` so it can neither race another probe nor
+% interleave with the retract+assert swap in `repository:sync(kb)`
+% (both hold the same lock). The lock is recursive, so it is safe to
+% call this from a context that already holds it (e.g. `available_for/4`,
+% `ensure_index_fresh/0`).
 
 binpkg_exec:apply_refresh_policy(manual) :- !.
 
 binpkg_exec:apply_refresh_policy(mtime) :- !,
-  with_mutex(binpkg_exec_refresh,
+  with_mutex(binpkg_index_lock,
              binpkg_exec:refresh_if_stale(binpkg)).
 
 binpkg_exec:apply_refresh_policy(_).
+
+
+%! binpkg_exec:ensure_index_fresh is det.
+%
+% Mtime-gated, atomic (re)load of the on-disk binpkg index into the
+% in-memory cache. This is the single entry point callers use to make
+% sure the binpkg cache is current before they need it:
+%
+%   - `builder:prepare_binpkg_index/0` at build start, and
+%   - the local daemon before each request (so a long-lived daemon acts
+%     as a shared, always-fresh binpkg index service; portage-ng#80,
+%     item D).
+%
+% Behaviour:
+%   - no-op when binpkg consumption is off or the repo isn't registered;
+%   - on the FIRST observation in a process, always syncs (the resident
+%     cache may be an empty register or a stale `kb.qlf` snapshot --
+%     portage-ng#24);
+%   - thereafter syncs ONLY when the `Packages` mtime advanced past the
+%     recorded baseline (portage-ng#80, item A: a back-to-back build on
+%     an unchanged index pays one stat, not a full 27 MB re-parse).
+%
+% The work runs under `binpkg_index_lock`, so it is atomic with respect
+% to concurrent `available_for/4` probes and never leaves the cache
+% empty (a failed/partial parse keeps the previous snapshot intact).
+% Always succeeds.
+
+binpkg_exec:ensure_index_fresh :-
+  ( config:use_binpkg(true),
+    cache:repository(binpkg)
+  -> with_mutex(binpkg_index_lock,
+                binpkg_exec:refresh_if_stale(binpkg))
+  ;  true
+  ).
 
 
 %! binpkg_exec:refresh_if_stale(+Repository) is det.
@@ -162,10 +219,10 @@ binpkg_exec:apply_refresh_policy(_).
 %     assume the in-memory cache matches the on-disk index here:
 %     `kb:register/1` does not parse `Packages`, and a `Knowledge/kb.qlf`
 %     generated at the last `--sync` may carry a stale binpkg snapshot
-%     (portage-ng#24). Build flows normally anchor the baseline earlier
-%     via `builder:prepare_binpkg_index` (which performs the initial
-%     sync), so this branch only pays the parse cost when a probe
-%     arrives outside a prepared build.
+%     (portage-ng#24). Build flows reach this first-observation sync via
+%     `binpkg_exec:ensure_index_fresh` (called from
+%     `builder:prepare_binpkg_index` and the daemon); a probe arriving
+%     outside a prepared build pays the same one-time parse cost here.
 %   - Newer mtime than baseline: update the baseline and call
 %     `Repository:sync(kb)` to re-load the in-memory cache from disk.
 %   - Same or older mtime: no-op.
@@ -190,13 +247,163 @@ binpkg_exec:refresh_if_stale(Repository) :-
 binpkg_exec:refresh_if_stale(_).
 
 
+% -----------------------------------------------------------------------------
+%  Incremental self-inject of just-built binpkgs (portage-ng#80)
+% -----------------------------------------------------------------------------
+
+%! binpkg_exec:inject_built_binpkg(+SrcRepo, +SrcEntry, +Ctx) is det.
+%
+% Register a binary package that THIS process just produced (a source
+% build with `--buildpkg` / `--buildpkgonly`) directly into the
+% in-memory binpkg cache, without re-parsing the on-disk `Packages`
+% index. This is the analogue of emerge's `bintree.inject()`: the
+% builder already holds every fact a later `available_for/4` probe needs
+% (category, name, version, resolved USE, slot), and the only
+% binpkg-specific fields -- the BUILD_ID and the gpkg path -- are read
+% straight off the freshly written archive in `$PKGDIR`.
+%
+% The row is asserted under `binpkg_index_lock`, so it is atomic with
+% respect to a concurrent `available_for/4` / `sync(kb)` and never
+% leaves the index in a partial state. The `mtime` baseline is then
+% advanced to the current `Packages` mtime so the resident process does
+% not turn around and re-parse the whole index just to rediscover its
+% own output; an EXTERNAL producer that bumps the mtime AFTER this still
+% triggers a normal refresh (see `refresh_if_stale/1`).
+%
+% Always succeeds (no-op when self-inject is disabled, binpkg
+% consumption is off, the repo is not registered, or the produced gpkg
+% cannot be located). Any error is swallowed: a failed inject must never
+% fail an otherwise successful build -- worst case the binpkg is simply
+% rediscovered by the next mtime refresh.
+
+binpkg_exec:inject_built_binpkg(SrcRepo, SrcEntry, Ctx) :-
+  ( config:binpkg_self_inject(true),
+    config:use_binpkg(true),
+    cache:repository(binpkg)
+  -> catch(binpkg_exec:do_inject_built_binpkg(SrcRepo, SrcEntry, Ctx), _, true)
+  ;  true
+  ).
+
+
+%! binpkg_exec:do_inject_built_binpkg(+SrcRepo, +SrcEntry, +Ctx) is semidet.
+%
+% The body of `inject_built_binpkg/3`: resolve the produced gpkg, build
+% the cache row, and swap it in under the index lock. Fails (caught by
+% the wrapper) when the source entry is unknown or no matching gpkg is
+% on disk.
+
+binpkg_exec:do_inject_built_binpkg(SrcRepo, SrcEntry, Ctx) :-
+  cache:ordered_entry(SrcRepo, SrcEntry, Cat, Name, Version),
+  binpkg_exec:built_gpkg(Cat, Name, Version, RelPath, BuildId),
+  eapi:version_full(Version, VFull),
+  atomic_list_concat([Cat, '/', Name, '-', VFull, '-', BuildId], EntryId),
+  binpkg_exec:built_binpkg_metadata(SrcRepo, SrcEntry, Ctx, BuildId, RelPath, Meta),
+  with_mutex(binpkg_index_lock,
+    ( retractall(cache:ordered_entry(binpkg, EntryId, _, _, _)),
+      retractall(cache:entry_metadata(binpkg, EntryId, _, _)),
+      assertz(cache:ordered_entry(binpkg, EntryId, Cat, Name, Version)),
+      forall(member(Key-Value, Meta),
+             assertz(cache:entry_metadata(binpkg, EntryId, Key, Value))),
+      ( cache:category(binpkg, Cat)     -> true ; assertz(cache:category(binpkg, Cat)) ),
+      ( cache:package(binpkg, Cat, Name) -> true ; assertz(cache:package(binpkg, Cat, Name)) ),
+      ( cache:repository(binpkg)        -> true ; assertz(cache:repository(binpkg)) ),
+      % Absorb our own `Packages` write into the baseline so the next
+      % probe does not re-parse the full index to rediscover this row.
+      % ONLY when a baseline already exists: a missing baseline means no
+      % first-observation sync has happened yet, and creating one here
+      % would suppress that initial full resync (which guards against a
+      % stale kb.qlf snapshot -- portage-ng#24). In the normal build flow
+      % `prepare_binpkg_index` has already anchored the baseline before
+      % any inject runs.
+      ( binpkg_exec:last_index_mtime(binpkg, _),
+        catch(binpkg_exec:probe_index_mtime(binpkg, NewMtime), _, fail)
+      -> retractall(binpkg_exec:last_index_mtime(binpkg, _)),
+         assertz(binpkg_exec:last_index_mtime(binpkg, NewMtime))
+      ;  true
+      )
+    )).
+
+
+%! binpkg_exec:built_gpkg(+Cat, +Name, +Version, -RelPath, -BuildId) is semidet.
+%
+% Locate the gpkg this process just produced for (Cat, Name, Version) by
+% globbing `<PKGDIR>/<Cat>/<Name>/<Name>-<VFull>-*.gpkg.tar` and picking
+% the highest BUILD_ID (the most recent build wins -- mirrors
+% `pick_best_candidate/2`). RelPath is the gpkg path relative to the
+% binpkg repo root, in the same shape `cache:entry_metadata(.., path, ..)`
+% carries (`<Cat>/<Name>/<basename>`). Fails when the repo root is
+% unknown or no matching archive exists.
+
+binpkg_exec:built_gpkg(Cat, Name, Version, RelPath, BuildId) :-
+  binpkg:get_location(Root),
+  eapi:version_full(Version, VFull),
+  atomic_list_concat([Name, '-', VFull], Pf),
+  atomic_list_concat([Root, '/', Cat, '/', Name, '/', Pf, '-*.gpkg.tar'], Pattern),
+  expand_file_name(Pattern, Files),
+  findall(Bid-Rel,
+          ( member(File, Files),
+            file_base_name(File, Base),
+            atomic_list_concat([Cat, '/', Name, '/', Base], Rel),
+            binpkg_index:path_build_id(Rel, Bid)
+          ),
+          Pairs),
+  Pairs \== [],
+  binpkg_exec:pick_best_candidate(Pairs, RelPath),
+  memberchk(BuildId-RelPath, Pairs).
+
+
+%! binpkg_exec:built_binpkg_metadata(+SrcRepo, +SrcEntry, +Ctx, +BuildId, +RelPath, -Meta) is det.
+%
+% Assemble the minimal `Key-Value` metadata an `available_for/4` probe
+% needs to accept this freshly-built binpkg:
+%
+%   - build_id / path : binpkg-specific identity (qmerge needs `path`).
+%   - use             : the planner's resolved positive USE -- by
+%                       construction identical to what a later probe
+%                       recomputes, so the strict USE filter matches.
+%   - slot            : the source entry's SLOT (`slot/subslot` when a
+%                       subslot is present), so the SLOT filter matches.
+%
+% KEYWORDS and the DEPEND-family fields are deliberately omitted: their
+% absence makes the corresponding filters accept-by-default, which is
+% exactly right for a binpkg just built against the live system (its
+% `:=` subslot pins necessarily match the current VDB, and it was built
+% for this host's arch).
+
+binpkg_exec:built_binpkg_metadata(SrcRepo, SrcEntry, Ctx, BuildId, RelPath, Meta) :-
+  binpkg_exec:planner_positive_use(SrcRepo, SrcEntry, Ctx, UseToks),
+  atomic_list_concat(UseToks, ' ', UseAtom),
+  ( binpkg_exec:src_slot_combined(SrcRepo, SrcEntry, SlotComb)
+  -> SlotPairs = [slot-SlotComb]
+  ;  SlotPairs = []
+  ),
+  append([build_id-BuildId, path-RelPath, use-UseAtom], SlotPairs, Meta).
+
+
+%! binpkg_exec:src_slot_combined(+SrcRepo, +SrcEntry, -Combined) is semidet.
+%
+% Resolve the source entry's SLOT as the combined `slot/subslot` atom
+% (or the bare slot when no subslot is recorded), matching the shape the
+% binpkg `Packages` index stores. Fails when the source has no slot
+% info, in which case the caller omits the slot field entirely.
+
+binpkg_exec:src_slot_combined(SrcRepo, SrcEntry, Combined) :-
+  query:search(slot(Slot), SrcRepo://SrcEntry),
+  ( query:search(subslot(Sub), SrcRepo://SrcEntry), Sub \== ''
+  -> atomic_list_concat([Slot, '/', Sub], Combined)
+  ;  Combined = Slot
+  ).
+
+
 %! binpkg_exec:record_index_baseline(+Repository, +Mtime) is det.
 %
-% Anchor the `mtime` refresh policy after an externally-performed sync
-% (see `builder:prepare_binpkg_index`). Mtime is the index file's mtime
-% probed BEFORE that sync (or the atom `none` when the index was
-% missing); recording the pre-sync value guarantees that an index
-% update racing the sync is still picked up by the next probe.
+% Anchor the `mtime` refresh policy after an externally-performed sync.
+% Mtime is the index file's mtime probed BEFORE that sync (or the atom
+% `none` when the index was missing); recording the pre-sync value
+% guarantees that an index update racing the sync is still picked up by
+% the next probe. Retained as a utility; the in-tree sync paths now flow
+% through `binpkg_exec:ensure_index_fresh/0`, which anchors the baseline
+% itself via `refresh_if_stale/1`.
 
 binpkg_exec:record_index_baseline(Repository, none) :- !,
   retractall(binpkg_exec:last_index_mtime(Repository, _)).

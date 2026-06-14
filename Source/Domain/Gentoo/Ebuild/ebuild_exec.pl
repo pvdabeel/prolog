@@ -1004,7 +1004,8 @@ ebuild_exec:execute_phases(Action, Repo, Entry, Ctx, Outcome) :-
      ;  Outcome = failed(ExitCode)
      )
   ;  Outcome = failed(no_ebuild)
-  ).
+  ),
+  ebuild_exec:maybe_inject_built(Action, Repo, Entry, Ctx, Outcome).
 
 
 %! ebuild_exec:execute_with_progress(+Action, +Repo, +Entry, +Ctx, :PhaseCallback, -Outcome) is det.
@@ -1059,7 +1060,29 @@ ebuild_exec:execute_phases_sequential(Action, Repo, Entry, Ctx, PhaseCallback, O
      ebuild_exec:run_phases_with_config(EbuildPath, Entry, AllPhases, DisplayPhases, LogPath, UseString, PhaseCallback, Outcome),
      ebuild_exec:save_phase_stats
   ;  Outcome = failed(no_ebuild)
-  ).
+  ),
+  ebuild_exec:maybe_inject_built(Action, Repo, Entry, Ctx, Outcome).
+
+
+%! ebuild_exec:maybe_inject_built(+Action, +Repo, +Entry, +Ctx, +Outcome) is det.
+%
+% After a successful SOURCE build that produced a binary package
+% (`--buildpkg` / `--buildpkgonly` -> the `package` phase ran), register
+% the produced gpkg in the in-memory binpkg cache so a later
+% `binpkg_exec:available_for/4` can reuse it without a full `Packages`
+% re-parse (portage-ng#80). Only fires for build-shaped actions that
+% completed (`done`); a binpkg fast-path merge never reaches this code
+% (it produces nothing). Always succeeds; the inject itself is fully
+% guarded so it can never turn a successful build into a failure.
+
+ebuild_exec:maybe_inject_built(Action, Repo, Entry, Ctx, done) :-
+  memberchk(Action, [install, reinstall, update, downgrade]),
+  ( preference:flag(buildpkg) ; preference:flag(buildpkgonly) ),
+  current_predicate(binpkg_exec:inject_built_binpkg/3),
+  !,
+  catch(binpkg_exec:inject_built_binpkg(Repo, Entry, Ctx), _, true).
+
+ebuild_exec:maybe_inject_built(_Action, _Repo, _Entry, _Ctx, _Outcome).
 
 
 % =============================================================================

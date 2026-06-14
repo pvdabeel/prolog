@@ -301,6 +301,57 @@ binpkg_index:split_cpv(Cpv, Category, Pf) :-
 
 
 % -----------------------------------------------------------------------------
+%  Record projection (records -> ready-to-assert cache rows)
+% -----------------------------------------------------------------------------
+
+%! binpkg_index:project_records(+Records, -Rows, -Categories, -Packages) is det.
+%
+% Project the parsed `Packages` records into the in-memory shape that
+% `repository:sync(kb)` (type=binpkg) asserts into the cache, WITHOUT
+% touching the live database. This keeps the slow O(variants) work
+% (CPV split, version parse, BUILD_ID derivation) out of the
+% retract+assert critical section so the actual cache swap is as short
+% (and therefore as atomic) as possible (portage-ng#80).
+%
+%   - Rows is a list of `binpkg_row(EntryId, Cat, Name, Version, Meta)`
+%     terms. `Meta` is the full `Key-Value` metadata list to assert as
+%     `cache:entry_metadata/4`, with the integer `build_id-Bid` pair
+%     forced to the front (so a record's verbatim `build_id` string is
+%     replaced by the parsed integer, mirroring the previous loop).
+%   - Categories is the sorted, de-duplicated list of categories.
+%   - Packages is the sorted, de-duplicated list of `Cat-Name` pairs.
+%
+% Records that fail to yield an entry id (header rows, malformed CPV,
+% missing BUILD_ID) are skipped silently, exactly as before. Deriving
+% Categories/Packages here -- from the projected rows rather than from a
+% findall over the freshly-asserted facts -- removes two full database
+% scans from the sync path (portage-ng#80, item C).
+
+binpkg_index:project_records(Records, Rows, Categories, Packages) :-
+  findall(binpkg_row(EntryId, Cat, Name, Version, Meta),
+          ( member(R, Records),
+            binpkg_index:record_entry_id(R, EntryId),
+            binpkg_index:record_split_cpv(R, Cat, Name, Version),
+            binpkg_index:record_build_id(R, Bid),
+            exclude(binpkg_index:is_build_id_pair, R, RNoBid),
+            Meta = [build_id-Bid | RNoBid]
+          ),
+          Rows),
+  findall(Cat,      member(binpkg_row(_, Cat, _,    _, _), Rows), Cats0),
+  sort(Cats0, Categories),
+  findall(Cat-Name, member(binpkg_row(_, Cat, Name, _, _), Rows), Pkgs0),
+  sort(Pkgs0, Packages).
+
+
+%! binpkg_index:is_build_id_pair(+Pair) is semidet.
+%
+% True for a `build_id-_` metadata pair. Used to strip the verbatim
+% `build_id` string before re-prepending the parsed integer value.
+
+binpkg_index:is_build_id_pair(build_id-_).
+
+
+% -----------------------------------------------------------------------------
 %  Diagnostics
 % -----------------------------------------------------------------------------
 

@@ -140,6 +140,30 @@ config:binpkg_changed_deps(warn).
 config:binpkg_refresh(mtime).
 
 
+%! config:binpkg_self_inject(?Bool)
+%
+% Controls whether portage-ng incrementally registers the binary
+% packages it produces itself (a source build with `--buildpkg` /
+% `--buildpkgonly`, i.e. the `package` phase) directly into the
+% in-memory binpkg cache, instead of waiting for the next mtime-driven
+% full re-parse of `Packages` to discover them.
+%
+% When `true`, a successful source build asserts a single
+% `cache:ordered_entry/5` (+ minimal metadata) for the freshly produced
+% gpkg via `binpkg_exec:inject_built_binpkg/3`, and advances the
+% `mtime` baseline so the resident process does NOT re-parse the whole
+% ~27 MB index just to pick up its own output (portage-ng#80). This is
+% the analogue of emerge's in-memory `bintree.inject()` and is most
+% valuable in daemon mode, where the cache is resident across requests.
+%
+% The `mtime` refresh policy still applies to EXTERNAL producers
+% (concurrent emerge / sibling matrix workers): a `Packages` mtime that
+% advances past the baseline AFTER an inject still triggers a refresh,
+% so cross-process visibility is preserved. Default: true.
+
+config:binpkg_self_inject(true).
+
+
 % -----------------------------------------------------------------------------
 %  Gentoo profile (for Portage parity)
 % -----------------------------------------------------------------------------

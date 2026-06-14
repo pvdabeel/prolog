@@ -308,7 +308,9 @@ daemon:run_with_output(Out, ExitCodeTerm) :-
       set_output(Out)
     ),
     catch(
-      interface:process_requests(standalone),
+      ( daemon:refresh_binpkg_index,
+        interface:process_requests(standalone)
+      ),
       Error,
       handle_error(Out, Error, ExitCodeTerm)
     ),
@@ -316,6 +318,27 @@ daemon:run_with_output(Out, ExitCodeTerm) :-
       set_stream(OldErr, alias(user_error)),
       set_output(OldCurr)
     )
+  ).
+
+
+%! daemon:refresh_binpkg_index is det.
+%
+% Keep the resident binpkg index fresh on a long-lived daemon. The daemon
+% holds the parsed `Packages` cache in memory across requests, so without
+% this a binpkg dropped by a concurrent producer after startup would stay
+% invisible until the daemon restarted. Delegating to
+% `binpkg_exec:ensure_index_fresh/0` turns the daemon into a shared binpkg
+% index service (portage-ng#80, item D): it is mtime-gated (one cheap stat
+% per request, a full re-sync only when `Packages` actually changed) and
+% atomic (a concurrent build's `available_for/4` probe never sees an empty
+% index during the swap). Runs with output redirected to the client, so
+% the one-line "Updated prolog knowledgebase" summary surfaces to the
+% requester rather than the daemon console. Always succeeds.
+
+daemon:refresh_binpkg_index :-
+  ( current_predicate(binpkg_exec:ensure_index_fresh/0)
+  -> catch(binpkg_exec:ensure_index_fresh, _, true)
+  ;  true
   ).
 
 

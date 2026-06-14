@@ -237,23 +237,26 @@ sync(metadata) ::-
 %
 % The repository's `cache` slot points at the `Packages` file itself, not
 % a directory (this is type-specific; for eapi it's the md5-cache dir).
+%
+% Atomicity (portage-ng#80): the index is parsed and projected to
+% ready-to-assert rows BEFORE anything is retracted, and the actual
+% retract+assert swap runs under `binpkg_index_lock`. Together this
+% guarantees there is never a window in which a concurrent consumer sees
+% an empty/partial binpkg index -- a slow or failed parse leaves the
+% previously-loaded cache fully intact, and the swap itself is mutually
+% exclusive with the reader/refresh path in binpkg_exec.
 sync(kb) ::-
   ::type('binpkg'),!,
   :this(Repository),
   ::cache(IndexFile),
   message:hc,
 
-  % Step 1: clean prolog cache for this repository
-  retractall(cache:repository(Repository)),
-  retractall(cache:category(Repository,_)),
-  retractall(cache:entry(Repository,_,_,_,_)),
-  retractall(cache:package(Repository,_,_)),
-  retractall(cache:ordered_entry(Repository,_,_,_,_)),
-  retractall(cache:entry_metadata(Repository,_,_,_)),
-  retractall(cache:manifest(Repository,_,_,_,_)),
-  retractall(cache:manifest_metadata(Repository,_,_,_,_,_)),
-
-  % Step 2: parse the Packages index
+  % Step 1: parse the on-disk `Packages` index FIRST, before mutating any
+  % in-memory cache. A missing file or a parse error must never wipe a
+  % previously-loaded binpkg index: there must be no window in which a
+  % consumer (binpkg_exec:available_for/4) sees an empty index just
+  % because a concurrent re-sync is mid-flight (portage-ng#80, item D).
+  % We only swap the cache once a full, fresh record set is in hand.
   ( exists_file(IndexFile)
   -> binpkg_index:parse_file(IndexFile, _Header, Records),
      length(Records, NRec)
@@ -261,39 +264,46 @@ sync(kb) ::-
      Records = [], NRec = 0
   ),
 
-  % Step 3: assert one ordered_entry + per-record metadata for each variant.
-  % Records that fail to yield an entry id (header rows, malformed cpv,
-  % missing build_id) are skipped silently.
-  forall(
-    member(R, Records),
-    ( ( binpkg_index:record_entry_id(R, EntryId),
-        binpkg_index:record_split_cpv(R, Cat, Name, Version),
-        binpkg_index:record_build_id(R, Bid)
-      -> with_mutex(mutex, message:scroll(['Binpkg: ', EntryId])),
-         assertz(cache:ordered_entry(Repository, EntryId, Cat, Name, Version)),
-         assertz(cache:entry_metadata(Repository, EntryId, build_id, Bid)),
-         forall(
-           member(Key-Value, R),
-           ( Key == build_id
-           -> true
-           ;  assertz(cache:entry_metadata(Repository, EntryId, Key, Value))
-           ))
-      ;  true
-      )
-    )
+  % Step 2: project the parsed records into ready-to-assert rows and
+  % derive the category / package sets in a single pass over the parsed
+  % data -- no findall over the live database (portage-ng#80, item C).
+  binpkg_index:project_records(Records, Rows, Categories, Packages),
+
+  % Step 3 (optional, verbose only): per-variant trace. Default builds and
+  % `--ci` runs stay quiet -- 32k `Binpkg:` lines previously dominated the
+  % build log for trivial targets (portage-ng#80, item B). Emitted here,
+  % outside the swap critical section, so it never extends the window in
+  % which the cache is being mutated.
+  ( config:verbose(true)
+  -> forall(member(binpkg_row(EntryId, _, _, _, _), Rows),
+            message:scroll(['Binpkg: ', EntryId]))
+  ;  true
   ),
 
-  % Step 4: derive cache:category and cache:package facts from the asserted
-  % ordered_entries. No predsort -- we want duplicate Version rows preserved.
-  findall(Ca, cache:ordered_entry(Repository,_,Ca,_,_), Cu),
-  sort(Cu, Cs),
-  forall(member(Ca, Cs), assertz(cache:category(Repository, Ca))),
-
-  findall([Ca,Pa], cache:ordered_entry(Repository,_,Ca,Pa,_), Pu),
-  sort(Pu, Ps),
-  forall(member([Ca,Pa], Ps), assertz(cache:package(Repository, Ca, Pa))),
-
-  assertz(cache:repository(Repository)),
+  % Step 4: atomically swap the in-memory cache. The retract+assert is the
+  % ONLY mutation and is held under `binpkg_index_lock` so it can never
+  % interleave with a concurrent reader/refresh that takes the same lock
+  % (binpkg_exec:available_for/4, binpkg_exec:ensure_index_fresh/0). With
+  % the parse + projection already done, this window is a tight in-memory
+  % swap rather than the multi-second parse it used to straddle.
+  with_mutex(binpkg_index_lock,
+    ( retractall(cache:repository(Repository)),
+      retractall(cache:category(Repository,_)),
+      retractall(cache:entry(Repository,_,_,_,_)),
+      retractall(cache:package(Repository,_,_)),
+      retractall(cache:ordered_entry(Repository,_,_,_,_)),
+      retractall(cache:entry_metadata(Repository,_,_,_)),
+      retractall(cache:manifest(Repository,_,_,_,_)),
+      retractall(cache:manifest_metadata(Repository,_,_,_,_,_)),
+      forall(member(binpkg_row(EntryId, Cat, Name, Version, Meta), Rows),
+             ( assertz(cache:ordered_entry(Repository, EntryId, Cat, Name, Version)),
+               forall(member(Key-Value, Meta),
+                      assertz(cache:entry_metadata(Repository, EntryId, Key, Value)))
+             )),
+      forall(member(Ca, Categories), assertz(cache:category(Repository, Ca))),
+      forall(member(Ca-Pa, Packages), assertz(cache:package(Repository, Ca, Pa))),
+      assertz(cache:repository(Repository))
+    )),
 
   message:sc,
   message:scroll(['Updated prolog knowledgebase. Binpkg variants: ', NRec]), nl,

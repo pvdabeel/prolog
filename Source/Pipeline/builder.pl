@@ -185,22 +185,15 @@ builder:alert :-
 % merged protobuf-34.2, and sci-ml/caffe2 then failed its compile phase
 % on the protobuf gencode/runtime cross-version #error.
 %
-% Fix: always re-sync the binpkg cache from the on-disk index at build
-% start, then record the index mtime baseline so the `mtime` refresh
-% policy (`binpkg_exec:maybe_refresh_index`) tracks subsequent updates
-% by concurrent external producers from a correct anchor. The mtime is
-% probed BEFORE the sync: if a producer updates the index while we
-% parse it, the next probe sees a newer mtime and re-syncs.
+% Delegates to `binpkg_exec:ensure_index_fresh/0`, which is mtime-gated:
+% it always syncs on the first observation in a process (fixing the cold
+% / stale-snapshot cases above) but skips the full ~27 MB re-parse on a
+% back-to-back build whose `Packages` mtime is unchanged (portage-ng#80,
+% item A). The (re)load is atomic and never leaves the index empty.
 
 builder:prepare_binpkg_index :-
-  ( config:use_binpkg(true),
-    cache:repository(binpkg)
-  -> ( catch(binpkg_exec:probe_index_mtime(binpkg, Mtime), _, fail)
-     -> true
-     ;  Mtime = none
-     ),
-     catch(binpkg:sync(kb), _, true),
-     catch(binpkg_exec:record_index_baseline(binpkg, Mtime), _, true)
+  ( current_predicate(binpkg_exec:ensure_index_fresh/0)
+  -> catch(binpkg_exec:ensure_index_fresh, _, true)
   ;  true
   ).
 
