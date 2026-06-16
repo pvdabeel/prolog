@@ -421,6 +421,7 @@ scheduler:rule_ordering_violation(Rule, Map, PkgHeadMap) :-
     prover:rule_body(Rule, Body),
     ( member(Dep, Body),
       \+ constraint:is_constraint(Dep),
+      \+ scheduler:dep_is_blocker(Dep),
       scheduler:dep_violates_wave(Dep, Head, Wave, Map, PkgHeadMap)
     -> true
     ;  Head = _Repo://_Entry:run,
@@ -472,6 +473,7 @@ scheduler:configure_closure_violation(Repo://Entry:run, RunBody, Map, PkgHeadMap
   get_assoc(CHead, Map, CWave),
   member(Dep, RunBody),
   \+ constraint:is_constraint(Dep),
+  \+ scheduler:dep_is_blocker(Dep),
   scheduler:dep_is_run_phase(Dep),
   scheduler:dep_violates_wave(Dep, CHead, CWave, Map, PkgHeadMap),
   !.
@@ -550,6 +552,7 @@ scheduler:repair_dep_heads(Deps, RuleHead, Map, PkgHeadMap, Pd, DepHeads) :-
   findall(DH,
           ( member(Dep, Deps),
             \+ constraint:is_constraint(Dep),
+            \+ scheduler:dep_is_blocker(Dep),
             scheduler:repair_dep_head(Dep, RuleHead, Map, PkgHeadMap, Pd, DH)
           ),
           DepHeads0),
@@ -675,6 +678,7 @@ scheduler:add_install_configure_deps(Rule, In, Out) :-
   -> findall(Dep,
              ( member(Dep, Body),
                \+ constraint:is_constraint(Dep),
+               \+ scheduler:dep_is_blocker(Dep),
                scheduler:dep_is_run_phase(Dep)
              ),
              Deps0),
@@ -690,6 +694,42 @@ scheduler:add_install_configure_deps(Rule, In, Out) :-
 scheduler:dep_is_run_phase(_Repo://_Entry:run) :- !.
 scheduler:dep_is_run_phase(grouped_package_dependency(_, _, _, _):run) :- !.
 scheduler:dep_is_run_phase(grouped_package_dependency(_, _, _, _):run?_) :- !.
+
+
+%! scheduler:dep_is_blocker(+Dep) is semidet
+%
+% True when a body literal is a blocker (soft `!` -> strength `weak`,
+% hard `!!` -> strength `strong`) rather than a normal dependency
+% (strength `no`). A blocker is an anti-dependency ("must not be
+% co-installed"), NOT an ordering constraint, so it must never seed a
+% "schedule-after" edge in the repair / forward-dependency graphs.
+%
+% Treating it as an edge is what co-waved `dev-qt/qtbase` with the very
+% modules that RDEPEND it: qtbase carries `!<dev-qt/qt*-<ver>` soft
+% blockers against its consumers, and the spurious `qtbase:run ->
+% qt*:run` edge closed a cycle with the configure-closure edge
+% (`qt*:install -> qtbase:run`, portage-ng#21), merging provider and
+% consumers into one SCC / wave (portage-ng#83). The blockers are
+% `!<...-<ver>` against OLDER slot versions not in the planned set, so
+% they impose no ordering on the new versions being installed.
+
+scheduler:dep_is_blocker(Dep) :-
+  scheduler:dep_blocker_strength(Dep, Strength),
+  memberchk(Strength, [weak, strong]),
+  !.
+
+%! scheduler:dep_blocker_strength(+Dep, -Strength) is semidet
+%
+% Peel the `assumed/1`, `?{Ctx}` and `:Action` wrappers off a body
+% literal and read the blocker-strength field of the underlying
+% grouped/plain package dependency.
+
+scheduler:dep_blocker_strength(assumed(D), S) :- !, scheduler:dep_blocker_strength(D, S).
+scheduler:dep_blocker_strength(D?{_}, S) :- !, scheduler:dep_blocker_strength(D, S).
+scheduler:dep_blocker_strength(D:_Action, S) :- !, scheduler:dep_blocker_strength(D, S).
+scheduler:dep_blocker_strength(grouped_package_dependency(S, _, _, _), S) :- !.
+scheduler:dep_blocker_strength(package_dependency(_, S, _, _, _, _, _, _), S) :- !.
+
 
 scheduler:install_phase_key(Repo://Entry:run, Repo://Entry:install) :- !.
 scheduler:install_phase_key(Repo://Entry:Action, Repo://Entry:install) :-
@@ -829,6 +869,7 @@ scheduler:add_forward_dep(Rule, In, Out) :-
   -> findall(DepHead,
              ( member(Dep, Body),
                \+ constraint:is_constraint(Dep),
+               \+ scheduler:dep_is_blocker(Dep),
                prover:canon_literal(Dep, DepHead, _)
              ),
              Deps0),

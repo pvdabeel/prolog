@@ -1960,6 +1960,96 @@ test(cycle_does_not_collapse_downstream_chain) :-
   WC > WB,
   WD > WC.
 
+% Regression for portage-ng#83: a provider's soft/hard blocker against the
+% very consumers that depend on it must NOT seed a "schedule-after" edge.
+% qtbase carries `!<dev-qt/qt*-<ver>` soft blockers against the modules
+% that RDEPEND it; treating those as ordering edges closed a cycle with the
+% configure-closure edge and co-waved qtbase:run with the modules' :install.
+test(soft_blocker_recognized) :-
+  scheduler:dep_is_blocker(grouped_package_dependency(weak, 'dev-qt', qtsvg,
+      [package_dependency(run, weak, 'dev-qt', qtsvg, smaller,
+          version([6,11,1], '', 4, 0, [], 0, '6.11.1'), [slot('6')], [])]):run).
+
+test(hard_blocker_recognized) :-
+  scheduler:dep_is_blocker(grouped_package_dependency(strong, 'dev-qt', qtsvg, []):run?{[]}).
+
+test(normal_dep_not_blocker, [fail]) :-
+  scheduler:dep_is_blocker(grouped_package_dependency(no, 'dev-qt', qtbase, []):run).
+
+% The blocker on a provider's :run body must not appear as a forward repair
+% edge to the consumer it blocks (which would form the spurious SCC cycle).
+test(soft_blocker_creates_no_repair_edge) :-
+  Blocker = grouped_package_dependency(weak, 'dev-qt', qtsvg, []):run,
+  PRun = rule(portage://'fake/qtbase-1':run, [Blocker]),
+  list_to_assoc([ (portage://'fake/qtbase-1':run)-1,
+                  (portage://'fake/qtsvg-1':run)-1 ], Map),
+  list_to_assoc([ ('run_phase'-'dev-qt'-qtsvg)-(portage://'fake/qtsvg-1':run) ],
+                 PkgHeadMap),
+  empty_assoc(CfgMap),
+  empty_assoc(F0),
+  scheduler:add_repair_edges(Map, PkgHeadMap, pd(t,t), CfgMap, PRun, F0, F1),
+  get_assoc(portage://'fake/qtbase-1':run, F1, Deps),
+  \+ memberchk(portage://'fake/qtsvg-1':run, Deps).
+
+% End-to-end wave check: consumer RDEPENDs provider (configure closure) while
+% provider soft-blocks consumer. The consumer's :install must land strictly
+% after the provider's :run merge, never co-waved with it.
+test(blocker_provider_consumer_not_cowaved) :-
+  Rdep    = grouped_package_dependency(no, 'dev-qt', qtbase, []):run,
+  Blocker = grouped_package_dependency(weak, 'dev-qt', qtsvg, []):run,
+  CInstall = rule(portage://'fake/qtsvg-1':install, []),
+  CRun     = rule(portage://'fake/qtsvg-1':run, [Rdep]),
+  PInstall = rule(portage://'fake/qtbase-1':install, []),
+  PRun     = rule(portage://'fake/qtbase-1':run, [Blocker]),
+  AllRules = [CInstall, CRun, PInstall, PRun],
+  list_to_assoc([ (portage://'fake/qtsvg-1':install)-1,
+                  (portage://'fake/qtsvg-1':run)-1,
+                  (portage://'fake/qtbase-1':install)-1,
+                  (portage://'fake/qtbase-1':run)-1 ], Map0),
+  list_to_assoc([ ('run_phase'-'dev-qt'-qtbase)-(portage://'fake/qtbase-1':run),
+                  ('run_phase'-'dev-qt'-qtsvg)-(portage://'fake/qtsvg-1':run) ],
+                 PkgHeadMap),
+  scheduler:build_install_configure_dep_map(AllRules, CfgMap),
+  repair_waves(AllRules, Map0, PkgHeadMap, pd(t, t), CfgMap, Map1),
+  get_assoc(portage://'fake/qtbase-1':run, Map1, WPRun),
+  get_assoc(portage://'fake/qtsvg-1':install, Map1, WCInstall),
+  WCInstall > WPRun.
+
+% portage-ng#83 (second build system, meson/pkg-config): media-libs/libglvnd
+% carries a *versionless* weak blocker `!media-libs/mesa` in both DEPEND and
+% RDEPEND, while mesa DEPEND/RDEPENDs libglvnd. The RDEPEND blocker lands on
+% libglvnd:run as a grouped `:run` literal (matched by grouped_run_dep_pkg_key)
+% and previously closed the same SCC cycle, co-waving libglvnd's merge with
+% mesa's configure. The blocker is strength-based, so the versionless
+% `none/version_none` operator must not matter.
+test(versionless_run_blocker_recognized) :-
+  scheduler:dep_is_blocker(grouped_package_dependency(weak, 'media-libs', mesa,
+      [package_dependency(run, weak, 'media-libs', mesa, none, version_none, [],
+          [use(disable(libglvnd), positive)])]):run).
+
+test(libglvnd_mesa_provider_consumer_not_cowaved) :-
+  Rdep    = grouped_package_dependency(no, 'media-libs', libglvnd, []):run,
+  Blocker = grouped_package_dependency(weak, 'media-libs', mesa,
+      [package_dependency(run, weak, 'media-libs', mesa, none, version_none, [],
+          [use(disable(libglvnd), positive)])]):run,
+  CInstall = rule(portage://'fake/mesa-1':install, []),
+  CRun     = rule(portage://'fake/mesa-1':run, [Rdep]),
+  PInstall = rule(portage://'fake/libglvnd-1':install, []),
+  PRun     = rule(portage://'fake/libglvnd-1':run, [Blocker]),
+  AllRules = [CInstall, CRun, PInstall, PRun],
+  list_to_assoc([ (portage://'fake/mesa-1':install)-1,
+                  (portage://'fake/mesa-1':run)-1,
+                  (portage://'fake/libglvnd-1':install)-1,
+                  (portage://'fake/libglvnd-1':run)-1 ], Map0),
+  list_to_assoc([ ('run_phase'-'media-libs'-libglvnd)-(portage://'fake/libglvnd-1':run),
+                  ('run_phase'-'media-libs'-mesa)-(portage://'fake/mesa-1':run) ],
+                 PkgHeadMap),
+  scheduler:build_install_configure_dep_map(AllRules, CfgMap),
+  repair_waves(AllRules, Map0, PkgHeadMap, pd(t, t), CfgMap, Map1),
+  get_assoc(portage://'fake/libglvnd-1':run, Map1, WPRun),
+  get_assoc(portage://'fake/mesa-1':install, Map1, WCInstall),
+  WCInstall > WPRun.
+
 :- end_tests(scheduler_install_configure_deps).
 
 
