@@ -111,13 +111,39 @@ ranking:seed_use_conditional_inactive(negative, Use, Repo://Id) :-
 %
 % Build BWU from bracket atoms on one edge and merge into the (C,N) memo.
 % Never fails the caller (conflicting edges leave the memo unchanged).
+%
+% Only context-independent directives (plain `[flag]` / `[-flag]`) are
+% seeded.  Equality (`[flag=]`), inverse (`[!flag=]`) and optional
+% (`[flag?]` / `[!flag?]`) directives resolve against the *parent's*
+% effective USE state, which is not available during seeding (the seed
+% runs with an empty parent context).  Resolving them here would make
+% use:use_dep_requirement/4 fall back to the bracket's IUSE default --
+% disabling a flag the parent actually enables -- and that bogus pin then
+% conflicts with the correct value the prover derives later under the real
+% parent context (e.g. net-misc/curl[curl_ssl_openssl=] from a consumer
+% with openssl on, issue #82).  These directives are accumulated correctly
+% at proof time via use:check_bwu_ed_conflict/3.
 
 ranking:seed_bwu_memo_for_cn(C, N, UseReqs) :-
-  dependency:process_build_with_use(UseReqs, [], Ctx, _, _),
-  ( use:context_build_with_use_state(Ctx, BWU) ->
-      ranking:seed_accumulate_bwu(C, N, BWU)
-  ; true
+  include(ranking:context_independent_use_directive, UseReqs, SeedReqs),
+  ( SeedReqs == [] ->
+      true
+  ; dependency:process_build_with_use(SeedReqs, [], Ctx, _, _),
+    ( use:context_build_with_use_state(Ctx, BWU) ->
+        ranking:seed_accumulate_bwu(C, N, BWU)
+    ; true
+    )
   ).
+
+
+%! ranking:context_independent_use_directive(+Directive) is semidet
+%
+% True for bracketed USE directives whose enable/disable outcome does not
+% depend on the parent ebuild's effective USE state, i.e. plain `enable`
+% and `disable`.  Equality/inverse/optional directives are excluded.
+
+ranking:context_independent_use_directive(use(enable(_), _)).
+ranking:context_independent_use_directive(use(disable(_), _)).
 
 
 %! ranking:seed_accumulate_bwu(+C, +N, +BWU) is det
