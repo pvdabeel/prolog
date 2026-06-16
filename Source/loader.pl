@@ -150,7 +150,8 @@ loader:group(domain_modules,
     portage('Source/Domain/Gentoo/distfiles.pl'),
     portage('Source/Domain/Gentoo/Preference/userconfig.pl'),
     portage('Source/Domain/Gentoo/Preference/fallback.pl'),
-    portage('Source/Domain/Gentoo/preference')]).
+    portage('Source/Domain/Gentoo/preference'),
+    portage('Source/Domain/Gentoo/Preference/sets.pl')]).
 
 loader:group(pipeline_modules,
    [portage('Source/Application/Performance/sampler.pl'),

@@ -2265,6 +2265,16 @@ eapi:substitute_sets([Atom|Tail],Result) :-
   !,
   eapi:substitute_sets([Set|Tail],Result).
 
+eapi:substitute_sets([Atom|Tail],Result) :-
+  atom(Atom),
+  atom_concat('@',Name,Atom),
+  current_predicate(sets:is_computed_set/1),
+  sets:is_computed_set(Name),
+  !,
+  sets:expand(Name,Targets),
+  append(Targets,NewResult,Result),
+  eapi:substitute_sets(Tail,NewResult).
+
 eapi:substitute_sets([Set|Tail],Result) :-
   preference:set(Set,Targets),!,
   append(Targets,NewResult,Result),

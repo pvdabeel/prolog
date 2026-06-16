@@ -176,6 +176,28 @@ vdb:print_contents_item(sym(Path, Target, _MTime)) :-
 
 
 % -----------------------------------------------------------------------------
+%  VDB metadata file access
+% -----------------------------------------------------------------------------
+
+%! vdb:read_metadata_file(+Entry, +Key, -Value) is semidet.
+%
+% Reads a single VDB metadata file (e.g. BUILD_TIME, COUNTER, repository)
+% for an installed entry (Category/Name-Version) and returns its
+% whitespace-trimmed atom value. Fails when the file is absent or
+% unreadable. Used for fields that are not loaded into the cache by the
+% VDB parser.
+
+vdb:read_metadata_file(Entry, Key, Value) :-
+  current_predicate(config:pkg_directory/1),
+  config:pkg_directory(PkgDir),
+  atomic_list_concat([PkgDir, '/', Entry, '/', Key], File),
+  exists_file(File),
+  read_file_to_string(File, Str, []),
+  normalize_space(atom(Value), Str),
+  Value \== ''.
+
+
+% -----------------------------------------------------------------------------
 %  VDB file ownership
 % -----------------------------------------------------------------------------
 

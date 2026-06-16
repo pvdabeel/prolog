@@ -1,6 +1,30 @@
 Feature exploration
 ===================
 
+- sets: security 
+
+# For security there are multiple classes available, but differences are 
+# rather small (normally there should be no visible difference):
+# - AffectedSet: include all GLSAs that cover a vulnerable package
+# - NewAffectedSet: include all GLSAs that cover a vulnerable package and 
+#   haven't been applied previously
+# - NewGlsaSet: include all GLSAs that haven't been applied
+# - SecuritySet: include all GLSAs
+
+
+# Set to rebuild all packages that need a preserved lib that only remains due
+# to FEATURES=preserve-libs
+[preserved-rebuild]
+class = portage.sets.libs.PreservedLibraryConsumerSet
+
+# Installed packages for which vdb *DEPEND entries are outdated compared
+# to the matching portdb entry.
+[changed-deps]
+class = portage.sets.dbapi.ChangedDepsSet
+
+
+- Smart QLF split
+
 - Better color handling (fg and bg defined twice in message.pl: once for normal messages and once for bubbles)
 
 - Themeing: Dark & Light mode colors
