@@ -11,7 +11,6 @@ Feature exploration
 # - NewGlsaSet: include all GLSAs that haven't been applied
 # - SecuritySet: include all GLSAs
 
-
 # Set to rebuild all packages that need a preserved lib that only remains due
 # to FEATURES=preserve-libs
 [preserved-rebuild]
@@ -29,11 +28,11 @@ class = portage.sets.dbapi.ChangedDepsSet
 
 - Themeing: Dark & Light mode colors
 
-- test output on default linux and default macos (TERM)
+- test output on default linux and default macos (TERM handling)
 
 - Extend transaction system to use overlayfs or similar (essentially the "session concept" from tinderbox-ng) 
 
-  - different transaction strategies (zfs snapshot, unionfs, overlayfs, fuse, other)
+  - different transaction strategies (zfs snapshot, unionfs, overlayfs, fuse, snaps, other)
 
 - Create portage-ng ebuild
    

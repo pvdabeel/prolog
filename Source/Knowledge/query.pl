@@ -393,6 +393,9 @@ compile_query_compound(restrict(R), Repo://Id,
 compile_query_compound(timestamp(T), Repo://Id,
   cache:entry_metadata(Repo,Id,timestamp,T)) :- !.
 
+compile_query_compound(build_time(T), Repo://Id,
+  cache:entry_metadata(Repo,Id,build_time,T)) :- !.
+
 compile_query_compound(md5(M), Repo://Id,
   cache:entry_metadata(Repo,Id,md5,M)) :- !.
 

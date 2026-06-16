@@ -344,6 +344,17 @@ eapi:value('repository', _, repository([Repo])) -->
     atom_string(Repo, S)
   }.
 
+% VDB: BUILD_TIME is the Unix timestamp at which the package was built.
+% Stored as a number when parseable so it compares directly with binpkg
+% BUILD_TIME values.
+eapi:value('BUILD_TIME', _, build_time([T])) -->
+  !,
+  eapi:chars_to_end(Cs),
+  { string_codes(S, Cs),
+    S \== "",
+    ( number_string(T, S) -> true ; atom_string(T, S) )
+  }.
+
 % PMS 9, Section 14.3 (md5-cache: fallback for unused keys)
 eapi:value(_, _, unused(U)) -->
   !,
@@ -2657,6 +2668,8 @@ eapi:vdb_dir_kv_lines(Dir, Lines) :-
           ; eapi:vdb_kv_file(Dir, 'EAPI', 'EAPI', Line)
           ; eapi:vdb_kv_file(Dir, 'IUSE', 'IUSE', Line)
           ; eapi:vdb_kv_file(Dir, 'USE',  'USE',  Line)
+          ; eapi:vdb_kv_file(Dir, 'PROPERTIES', 'PROPERTIES', Line)
+          ; eapi:vdb_kv_file(Dir, 'BUILD_TIME', 'BUILD_TIME', Line)
           ; eapi:vdb_kv_file_joined(Dir, 'NEEDED.ELF.2',   'NEEDED.ELF.2',   Line)
           ; eapi:vdb_kv_file_joined(Dir, 'PROVIDES.ELF.2', 'PROVIDES.ELF.2', Line)
           ; eapi:vdb_kv_file(Dir, 'repository', 'repository', Line)

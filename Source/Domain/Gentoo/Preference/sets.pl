@@ -20,8 +20,8 @@ tree:
 
   - installed        all installed packages, as `cat/name:slot` atoms
                      (mirrors portage.sets.dbapi.EverythingSet)
-  - live-rebuild     installed packages whose tree ebuild carries the
-                     `live` PROPERTY (mirrors a PROPERTIES=live VariableSet)
+  - live-rebuild     installed packages carrying the `live` PROPERTY
+                     (mirrors a PROPERTIES=live VariableSet)
   - changed-subslot  installed packages where the highest visible ebuild has
                      a different subslot than the installed version
                      (mirrors portage.sets.dbapi.SubslotChangedSet)
@@ -128,21 +128,45 @@ sets:installed_set(Targets) :-
 
 %! sets:live_rebuild_set(-Targets) is det.
 %
-% Installed packages whose corresponding tree ebuild carries the `live`
-% PROPERTY.  PROPERTIES is not stored for VDB entries, so the installed
-% category/name/version is mapped back to its tree ebuild first.
+% Installed packages that carry the `live` PROPERTY.
 
 sets:live_rebuild_set(Targets) :-
   findall(Atom,
           ( knowledgebase:vdb_repository(VdbRepo),
-            query:search([category(C),name(N),version(V)], VdbRepo://Entry),
-            V \== version_none,
-            sets:installed_tree_entry(C, N, V, TreeEntry),
-            ebuild:is_live(TreeEntry),
+            query:search([category(C),name(N)], VdbRepo://Entry),
+            sets:installed_is_live(VdbRepo://Entry),
             sets:slot_atom(VdbRepo://Entry, C, N, Atom)
           ),
           Targets0),
   sort(Targets0, Targets).
+
+
+%! sets:installed_is_live(+Repo://+Entry) is semidet.
+%
+% True when the installed package carries the `live` PROPERTY.  Prefers the
+% PROPERTIES recorded in the VDB cache (authoritative for what is actually
+% installed, rather than the possibly-diverged tree ebuild).  When PROPERTIES
+% has not been loaded into the cache for any installed entry -- e.g. before
+% the next `--sync` repopulates kb.qlf -- it falls back to reading the
+% on-disk VDB PROPERTIES file.
+
+sets:installed_is_live(VdbRepo://Entry) :-
+  query:search(properties(live), VdbRepo://Entry),
+  !.
+
+sets:installed_is_live(VdbRepo://Entry) :-
+  \+ cache:entry_metadata(VdbRepo, Entry, properties, _),
+  vdb:read_metadata_file(Entry, 'PROPERTIES', Properties),
+  sets:properties_has_live(Properties).
+
+
+%! sets:properties_has_live(+Properties) is semidet.
+%
+% True when a whitespace-separated PROPERTIES value contains the `live` token.
+
+sets:properties_has_live(Properties) :-
+  split_string(Properties, " ", "", Tokens),
+  memberchk("live", Tokens).
 
 
 % -----------------------------------------------------------------------------
@@ -221,9 +245,7 @@ sets:unavailable_set(Targets) :-
 %
 % Binary packages whose BUILD_TIME differs from the currently installed
 % package of the exact same category/name/version, as `=cat/name-version`
-% atoms.  Yields [] when no binpkg repository is registered.  BUILD_TIME is
-% not stored in the VDB cache, so it is read from the on-disk VDB metadata
-% file.
+% atoms.  Yields [] when no binpkg repository is registered.
 
 sets:rebuilt_binaries_set(Targets) :-
   ( sets:binpkg_available ->
@@ -232,13 +254,26 @@ sets:rebuilt_binaries_set(Targets) :-
               ( cache:ordered_entry(binpkg, BinEntry, C, N, V),
                 cache:entry_metadata(binpkg, BinEntry, build_time, BinBuildTime),
                 cache:ordered_entry(VdbRepo, InstalledEntry, C, N, V),
-                vdb:read_metadata_file(InstalledEntry, 'BUILD_TIME', InstalledBuildTime),
+                sets:installed_build_time(VdbRepo://InstalledEntry, InstalledBuildTime),
                 \+ sets:same_build_time(BinBuildTime, InstalledBuildTime),
                 atom_concat('=', InstalledEntry, Atom)
               ),
               Targets0),
       sort(Targets0, Targets)
   ; Targets = []
+  ).
+
+
+%! sets:installed_build_time(+Repo://+Entry, -BuildTime) is semidet.
+%
+% Returns the installed package BUILD_TIME, preferring the VDB cache and
+% falling back to the on-disk VDB BUILD_TIME file (authoritative even before
+% the next `--sync` loads BUILD_TIME into the cache).
+
+sets:installed_build_time(VdbRepo://Entry, BuildTime) :-
+  ( query:search(build_time(BuildTime0), VdbRepo://Entry)
+    -> BuildTime = BuildTime0
+    ;  vdb:read_metadata_file(Entry, 'BUILD_TIME', BuildTime)
   ).
 
 
@@ -324,17 +359,6 @@ sets:slot_atom(Repo://Entry, C, N, Atom) :-
 
 sets:cn_slot_atom(C, N, Slot, Atom) :-
   atomic_list_concat([C, '/', N, ':', Slot], Atom).
-
-
-%! sets:installed_tree_entry(+Category, +Name, +Version, -TreeEntry) is semidet.
-%
-% Maps an installed category/name/version to the matching non-VDB tree entry.
-
-sets:installed_tree_entry(C, N, V, TreeRepo://TreeEntry) :-
-  query:search([select(repository,notequal,pkg),category(C),name(N),version(V)],
-               TreeRepo://TreeEntry),
-  \+ knowledgebase:is_vdb_repository(TreeRepo),
-  !.
 
 
 %! sets:entry_subslot(+Repo://+Entry, -Subslot) is det.
