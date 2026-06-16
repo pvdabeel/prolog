@@ -164,6 +164,24 @@ config:binpkg_refresh(mtime).
 config:binpkg_self_inject(true).
 
 
+%! config:binpkg_debug(?Bool)
+%
+% When `true`, `binpkg_exec:available_for/4` logs (to `user_error`) the
+% reason every binpkg variant of a scheduled package was rejected by the
+% acceptance filters whenever NO usable binpkg was found and the build
+% therefore falls through to a source compile. The first failing filter
+% per variant is reported (gpkg-on-disk / slot / keywords / USE / subslot
+% `:=` pin / RDEPEND drift), with the resolved gpkg path for the on-disk
+% case so an in-chroot vs host PKGDIR mismatch is visible at a glance.
+%
+% This is a pure diagnostic: it never changes which binpkgs are accepted.
+% Default `false` (zero overhead on the hot path). Intended for pinpointing
+% why a closure that emerge satisfies from `[binary]` is rebuilt from
+% source instead (e.g. the OCaml stack, portage-ng#81).
+
+config:binpkg_debug(false).
+
+
 % -----------------------------------------------------------------------------
 %  Gentoo profile (for Portage parity)
 % -----------------------------------------------------------------------------

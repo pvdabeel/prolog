@@ -122,9 +122,75 @@ binpkg_exec:refresh_and_collect_candidates(SrcRepo, SrcEntry, Ctx, Candidates) :
                cache:entry_metadata(binpkg, Eid, build_id, Bid),
                binpkg_exec:candidate_passes_filters(SrcRepo, SrcEntry, Eid, Ctx)
              ),
-             Candidates)
+             Candidates),
+     ( Candidates == []
+     -> binpkg_exec:maybe_diagnose_rejection(SrcRepo, SrcEntry, Ctx, Cat, Name, Version)
+     ;  true
+     )
   ;  Candidates = []
   ).
+
+
+% -----------------------------------------------------------------------------
+%  Rejection diagnostics (config:binpkg_debug/1, default off)
+% -----------------------------------------------------------------------------
+
+%! binpkg_exec:maybe_diagnose_rejection(+SrcRepo, +SrcEntry, +Ctx, +Cat, +Name, +Version) is det.
+%
+% When `config:binpkg_debug(true)` and no usable binpkg was found for a
+% scheduled (Cat, Name, Version), report -- to `user_error` -- why each
+% binpkg variant was rejected (or that no variant exists). Pure diagnostic;
+% never affects acceptance. No-op (cheap fact check) when debug is off.
+
+binpkg_exec:maybe_diagnose_rejection(SrcRepo, SrcEntry, Ctx, Cat, Name, Version) :-
+  ( config:binpkg_debug(true)
+  -> findall(Eid, cache:ordered_entry(binpkg, Eid, Cat, Name, Version), Variants),
+     ( Variants == []
+     -> binpkg_exec:log_binpkg_debug("no binpkg variant indexed for ~w/~w-~w (source build)",
+                                     [Cat, Name, Version])
+     ;  forall(member(Eid, Variants),
+               binpkg_exec:diagnose_candidate(SrcRepo, SrcEntry, Eid, Ctx))
+     )
+  ;  true
+  ).
+
+
+%! binpkg_exec:diagnose_candidate(+SrcRepo, +SrcEntry, +BinpkgEid, +Ctx) is det.
+%
+% Report the first acceptance filter that rejects this binpkg variant.
+% Mirrors the conjunction order in candidate_passes_filters/4 so the
+% reported reason is the one that actually blocked selection.
+
+binpkg_exec:diagnose_candidate(SrcRepo, SrcEntry, Eid, Ctx) :-
+  ( \+ binpkg_exec:gpkg_on_disk(Eid)
+  -> ( binpkg_exec:gpkg_path(Eid, GpkgPath) -> true ; GpkgPath = '<unresolved>' ),
+     binpkg_exec:log_binpkg_debug("reject ~w: gpkg not on disk (resolved path: ~w)",
+                                  [Eid, GpkgPath])
+  ; \+ binpkg_exec:slot_compatible(SrcRepo, SrcEntry, Eid)
+  -> binpkg_exec:log_binpkg_debug("reject ~w: slot/subslot incompatible with source", [Eid])
+  ; \+ binpkg_exec:keywords_acceptable(Eid)
+  -> binpkg_exec:log_binpkg_debug("reject ~w: KEYWORDS unacceptable for host arch", [Eid])
+  ; \+ binpkg_exec:use_compatible(SrcRepo, SrcEntry, Eid, Ctx)
+  -> ( config:binpkg_respect_use(Mode) -> true ; Mode = strict ),
+     binpkg_exec:log_binpkg_debug("reject ~w: USE incompatible (binpkg_respect_use=~w)",
+                                  [Eid, Mode])
+  ; \+ binpkg_exec:subslot_pins_compatible(Eid)
+  -> binpkg_exec:log_binpkg_debug("reject ~w: subslot := pin mismatch vs live VDB (ABI cascade)",
+                                  [Eid])
+  ; \+ binpkg_exec:rdepend_acceptable(SrcRepo, SrcEntry, Eid)
+  -> binpkg_exec:log_binpkg_debug("reject ~w: RDEPEND drift", [Eid])
+  ;  binpkg_exec:log_binpkg_debug("~w: passes all filters (not the rejection cause)", [Eid])
+  ).
+
+
+%! binpkg_exec:log_binpkg_debug(+Fmt, +Args) is det.
+%
+% Emit a single `binpkg-debug:` prefixed line to `user_error`.
+
+binpkg_exec:log_binpkg_debug(Fmt, Args) :-
+  format(user_error, "binpkg-debug: ", []),
+  format(user_error, Fmt, Args),
+  nl(user_error).
 
 
 % -----------------------------------------------------------------------------
