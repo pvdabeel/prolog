@@ -622,8 +622,21 @@ candidate:grouped_dep_keep_installed(Action, C, N, PackageDeps1, Context) :-
   query:search([name(N),category(C),installed(true)], VdbRepo://InstalledEntry),
   slotmeta:query_search_slot_constraint(SlotReq, VdbRepo://InstalledEntry, _),
   cnselect:installed_entry_satisfies_package_deps(Action, C, N, PackageDeps1, VdbRepo://InstalledEntry),
-  findall(U0, member(package_dependency(_P0,no,C,N,_O,_V,_,U0),PackageDeps1), MergedUse0),
-  append(MergedUse0, MergedUse),
+  % PDEPEND deps are post-merge runtime deps. In the full pipeline they are
+  % expanded via the prover hook (heuristic:proof_obligation) with
+  % build_with_use dropped, so an installed entry that satisfies the version
+  % constraint is kept even when its recorded USE (e.g. an older
+  % PYTHON_TARGETS) no longer matches the parent's build_with_use. The
+  % fetchonly dep union folds PDEPEND into the regular closure
+  % (query:pdepend_dep_as_pdepend), so mirror that build_with_use-drop here;
+  % otherwise a satisfied-but-USE-drifted PDEPEND package would be needlessly
+  % rebuilt and fetched, diverging from the equivalent merge plan (and
+  % forming a parent<->child fetchonly cycle). Mirrors grouped_dep_use_and_slot/3.
+  ( member(package_dependency(pdepend,_,C,N,_,_,_,_), PackageDeps1) ->
+      MergedUse = []
+  ; findall(U0, member(package_dependency(_P0,no,C,N,_O,_V,_,U0),PackageDeps1), MergedUse0),
+    append(MergedUse0, MergedUse)
+  ),
   dependency:process_build_with_use(MergedUse, Context, ContextWU, _BWUCons, VdbRepo://InstalledEntry),
   use:context_build_with_use_state(ContextWU, BWUEdge),
   use:accumulate_candidate_bwu(C, N, BWUEdge),
