@@ -315,6 +315,27 @@ rule(Repository://Ebuild:download?{Context}, Conditions) :-
 
 
 % -----------------------------------------------------------------------------
+%  Rule: Ebuild annotate
+% -----------------------------------------------------------------------------
+%
+% Synthetic carrier leaf. Holds the self-target's suggestion tags (unmask /
+% keyword / license) for a :fetchonly target that has no :download carrier
+% to hang them on, i.e. virtual/acct-* packages with no distfiles. (Normal
+% ebuilds carry their own tags on the self :download context instead.) It is
+% deliberately non-printed (no plan:printable_element clause) and
+% non-executable (excluded by builder:is_executable_rule); the printer's
+% annotation collector reads the tags from its context and hoists them into
+% the plan's pre-action step.
+%
+% eligible: candidate exists
+% resolve : none (empty-body leaf)
+
+rule(Repository://Ebuild:annotate?{Context}, []) :-
+  !,
+  candidate:eligible(Repository://Ebuild:annotate?{Context}).
+
+
+% -----------------------------------------------------------------------------
 %  Rule: Ebuild install
 % -----------------------------------------------------------------------------
 %

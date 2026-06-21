@@ -697,13 +697,35 @@ candidate:resolve(Repository://Ebuild:fetchonly?{Context}, Conditions) :-
   use:dep_walk_context(R, B, Model, ModelExt),
   ( query:search(model(dependency(MergedDeps0, fetchonly)):config?{ModelExt}, Repository://Ebuild) ->
       dependency:add_self_to_dep_contexts(Repository://Ebuild, MergedDeps0, MergedDeps),
+      % The self-target may itself need an unmask / keyword / license tag
+      % (the :run path hangs these on its self :install carrier). Compute
+      % them with the same helper the dependency pipeline uses.
+      candidate:grouped_dep_tag_suggestions(Repository://Ebuild, [], SuggCtx),
       ( memberchk(C, ['virtual','acct-group','acct-user']) ->
+          % Virtual/acct-* have nothing to download, so there is no
+          % :download context to carry the tags. Emit a synthetic
+          % :annotate leaf (non-printed, non-executable) to hold them, but
+          % only when the target actually needs annotating (issue #84
+          % follow-up).
+          ( SuggCtx == [] ->
+              SelfAnnot = []
+          ;   SelfAnnot = [Repository://Ebuild:annotate?{SuggCtx}]
+          ),
+          append([constraint(use(Repository://Ebuild):{R}),
+                  constraint(slot(C,N,S):{Ebuild})
+                  |SelfAnnot], MergedDeps, Conditions)
+      ;   % A normal ebuild already has a self :download; stick the tags
+          % onto its context so a real --fetchonly persists them and the
+          % printer hoists them into the plan's pre-action step.
+          ( SuggCtx == [], is_list(R) ->
+              DownloadCtx = R
+          ;   is_list(R) ->
+              append(SuggCtx, R, DownloadCtx)
+          ;   DownloadCtx = SuggCtx
+          ),
           Conditions = [constraint(use(Repository://Ebuild):{R}),
-                        constraint(slot(C,N,S):{Ebuild})
-                        |MergedDeps]
-      ;   Conditions = [constraint(use(Repository://Ebuild):{R}),
                         constraint(slot(C,N,S):{Ebuild}),
-                        Repository://Ebuild:download?{R}
+                        Repository://Ebuild:download?{DownloadCtx}
                         |MergedDeps]
       )
   ; feature_unification:unify([issue_with_model(explanation)], Context, Ctx1),

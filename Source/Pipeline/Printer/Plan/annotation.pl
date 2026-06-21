@@ -122,11 +122,14 @@ annotation:proof_entry_tag(rule(assumed(Content)), _Value, Type, Term) :-
 % Prover cycle-break assumptions (proof key assumed(rule(Content))).
 annotation:proof_entry_tag(assumed(rule(Content)), Value, cyclebreak,
                            cycle_break(Content, Value)) :- !.
-% Fully resolved entries: suggestion tags live in the value context.
+% Fully resolved entries: suggestion tags live in the value context. The
+% self-target's own unmask / keyword / license tags ride on its :install
+% carrier (:run path) or a synthetic :annotate carrier (:fetchonly path,
+% see rules.pl), so the collector never needs to re-derive them from the
+% mask state — it just reads whatever the resolver placed in the context.
 annotation:proof_entry_tag(rule(R://E:_Action), _?Ctx0, Type, Term) :-
   !,
   annotation:unwrap_ctx(Ctx0, Ctx),
-  Ctx \== [],
   annotation:suggestion_tag(Ctx, R, E, Type, Term).
 % Legacy build_with_use scan over context-bearing proof keys.
 annotation:proof_entry_tag(Key, _Value, bwu, use_change(Entry, Enables, Disables)) :-

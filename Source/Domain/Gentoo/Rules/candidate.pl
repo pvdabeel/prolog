@@ -426,6 +426,10 @@ candidate:eligible(Repo://Entry:download?{_}) :-
   !,
   query:search(ebuild(Entry), Repo://Entry).
 
+candidate:eligible(Repo://Entry:annotate?{_}) :-
+  !,
+  query:search(ebuild(Entry), Repo://Entry).
+
 candidate:eligible(Repo://Entry:_Action?{_}) :-
   ( query:search(masked(true), Repo://Entry) ->
       prover:assuming(unmask)
