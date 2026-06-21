@@ -230,8 +230,7 @@ load ::-
   % mutex-protected per predicate, so an early query at worst blocks on
   % the build already in progress (same cost as warming synchronously,
   % but overlapped with the remainder of startup).
-  thread_create(ignore(catch(knowledgebase:kb_warm_metadata_index, _, true)),
-                _, [detached(true)]).
+  knowledgebase:start_metadata_warmer.
 
 load ::-
   \+ proxy,
@@ -431,6 +430,75 @@ kb_warm_metadata_index :-
   once(cache:ordered_entry(Repo, Id, C, N, _)),
   ( cache:entry_metadata(Repo, Id, slot, slot(_)) -> true ; true ),
   ( cache:ordered_entry(Repo, _, C, N, _) -> true ; true ).
+
+
+% -----------------------------------------------------------------------------
+% Metadata index warmer lifecycle
+% -----------------------------------------------------------------------------
+
+% Thread id of the most recently spawned (joinable) JIT-index warmer. Recorded
+% so the at_halt hook can wait for it to finish before the process exits,
+% avoiding SWI-Prolog's "threads wouldn't die" warning when a fast command
+% (e.g. a quick --search) reaches halt while warming is still in progress.
+
+:- dynamic knowledgebase:warmer_thread/1.
+
+:- at_halt(knowledgebase:join_metadata_warmer).
+
+
+%! knowledgebase:start_metadata_warmer is det.
+%
+% Spawn kb_warm_metadata_index in a joinable background thread and record its
+% id in warmer_thread/1. The thread is joinable (not detached) so join_metadata_warmer/0
+% can reap it cleanly at halt instead of leaving SWI-Prolog to forcibly kill it.
+
+start_metadata_warmer :-
+  thread_create(ignore(catch(knowledgebase:kb_warm_metadata_index, _, true)),
+                Id, []),
+  retractall(knowledgebase:warmer_thread(_)),
+  assertz(knowledgebase:warmer_thread(Id)).
+
+
+%! knowledgebase:join_metadata_warmer is det.
+%
+% at_halt hook: wait for the background metadata warmer to finish (up to a
+% short bound) and join it, so the process exits without the "threads wouldn't
+% die" warning. The warmer is bounded, one-shot work, so the wait is brief in
+% practice; the timeout only guards against a pathological hang.
+
+join_metadata_warmer :-
+  ( retract(knowledgebase:warmer_thread(Id))
+  -> catch(join_thread_timeout(Id, 10), _, true)
+  ;  true ).
+
+
+%! knowledgebase:join_thread_timeout(+Id, +Timeout) is det.
+%
+% Wait up to Timeout seconds for thread Id to leave the `running` state, then
+% join it to release its resources. If it is still running after Timeout we
+% give up waiting (the process is exiting anyway); the join is skipped so halt
+% is never blocked indefinitely.
+
+join_thread_timeout(Id, Timeout) :-
+  get_time(T0),
+  ( wait_thread_done(Id, T0, Timeout)
+  -> catch(thread_join(Id, _), _, true)
+  ;  true ).
+
+
+%! knowledgebase:wait_thread_done(+Id, +T0, +Timeout) is semidet.
+%
+% Poll thread Id until it is no longer `running`. Succeeds once the thread has
+% completed (or thrown); fails if Timeout seconds elapse first.
+
+wait_thread_done(Id, _, _) :-
+  \+ thread_property(Id, status(running)), !.
+
+wait_thread_done(Id, T0, Timeout) :-
+  get_time(Now),
+  Now - T0 < Timeout,
+  sleep(0.02),
+  wait_thread_done(Id, T0, Timeout).
 
 
 % -----------------------------------------------------------------------------
