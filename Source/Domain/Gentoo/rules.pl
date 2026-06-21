@@ -354,16 +354,19 @@ rule(Repository://Ebuild:install?{Context}, Conditions) :-
   ( candidate:installed(Repository://Ebuild),
     \+ preference:flag(emptytree) ->
       knowledgebase:vdb_repository(VdbRepo),
-      ( use:installed_entry_satisfies_build_with_use(VdbRepo://Ebuild, Context) ->
-          % Already-installed and the requested bracketed USE matches the
-          % VDB-recorded USE: nothing to do.
+      ( use:installed_entry_satisfies_plan_use(VdbRepo://Ebuild, Repository://Ebuild, Context) ->
+          % Already-installed and the requested USE (bracketed build_with_use
+          % AND any self suggestion(use_change) flip) matches the VDB-recorded
+          % USE: nothing to do.
           Conditions = []
-      ;   % Already-installed but the requested bracketed USE differs from
-          % what is on disk (e.g. parent dep `iptables[nftables]` against an
-          % installed iptables built without nftables). Re-emit the request as
-          % a transactional :update so candidate:resolve walks DEPEND/BDEPEND
-          % under the new build_with_use state and the planner can schedule
-          % the newly-required deps before the rebuild.
+      ;   % Already-installed but the requested USE differs from what is on
+          % disk (e.g. parent dep `iptables[nftables]` against an installed
+          % iptables built without nftables, or a self USE flip such as
+          % `sys-devel/gcc objc` carried only as suggestion(use_change),
+          % portage-ng#85). Re-emit the request as a transactional :update so
+          % candidate:resolve walks DEPEND/BDEPEND under the new USE state and
+          % the planner can schedule the newly-required deps before the
+          % rebuild.
           feature_unification:unify([replaces(VdbRepo://Ebuild),
                                      rebuild_reason(build_with_use)],
                                     Context, UpdCtx),
@@ -391,21 +394,23 @@ rule(Repository://Ebuild:run?{Context}, Conditions) :-
   ( candidate:installed(Repository://Ebuild),
     \+ preference:flag(emptytree) ->
       knowledgebase:vdb_repository(VdbRepo),
-      ( use:installed_entry_satisfies_build_with_use(VdbRepo://Ebuild, Context) ->
-          % Already-installed and the requested bracketed USE matches the
-          % VDB-recorded USE: short-circuit through :reinstall (or to nothing
-          % when --avoid-reinstall is set).
+      ( use:installed_entry_satisfies_plan_use(VdbRepo://Ebuild, Repository://Ebuild, Context) ->
+          % Already-installed and the requested USE (bracketed build_with_use
+          % AND any self suggestion(use_change) flip) matches the VDB-recorded
+          % USE: short-circuit through :reinstall (or to nothing when
+          % --avoid-reinstall is set).
           ( config:avoid_reinstall(true) ->
               Conditions = []
           ; featureterm:set(reinstall, Repository://Ebuild, Context, Conditions)
           )
-      ;   % Already-installed but the requested bracketed USE differs from the
-          % installed one. Re-emit as a transactional :update so the prover
-          % walks RDEPEND/DEPEND under the new build_with_use and the planner
-          % schedules the newly-required deps before the rebuild. Without
-          % this, a parent dep like `iptables[nftables]` would silently degrade
-          % to an empty :reinstall body and the bracketed-USE-gated child
-          % deps (libnftnl, libmnl) would never enter the plan.
+      ;   % Already-installed but the requested USE differs from the installed
+          % one. Re-emit as a transactional :update so the prover walks
+          % RDEPEND/DEPEND under the new USE state and the planner schedules
+          % the newly-required deps before the rebuild. Without this, a parent
+          % dep like `iptables[nftables]` -- or a self USE flip such as
+          % `sys-devel/gcc objc` carried only as suggestion(use_change)
+          % (portage-ng#85) -- would silently degrade to an empty :reinstall
+          % body and the USE-gated child deps would never enter the plan.
           feature_unification:unify([replaces(VdbRepo://Ebuild),
                                      rebuild_reason(build_with_use)],
                                     Context, UpdCtx),

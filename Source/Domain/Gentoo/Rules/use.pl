@@ -875,6 +875,60 @@ use:installed_entry_satisfies_build_with_use(VdbRepo://InstalledEntry, Context) 
          )).
 
 
+%! use:installed_entry_satisfies_use_change(+Installed, +Changes)
+%
+% True if the installed package's built USE state already satisfies every
+% `use_change(Flag, enable|disable)` in Changes. Flags not in the package's
+% recorded IUSE are ignored (they cannot influence the build). Mirrors the
+% semantics of installed_entry_satisfies_build_with_use/2 but for the
+% planner's suggestion(use_change) self-flips rather than bracketed USE.
+
+use:installed_entry_satisfies_use_change(_Installed, []) :- !.
+use:installed_entry_satisfies_use_change(VdbRepo://InstalledEntry, Changes) :-
+  use:vdb_enabled_use_set(VdbRepo://InstalledEntry, BuiltUse),
+  use:vdb_iuse_set(VdbRepo://InstalledEntry, BuiltIuse),
+  forall(member(use_change(F, enable), Changes),
+         ( memberchk(F, BuiltIuse) -> memberchk(F, BuiltUse)
+         ; true
+         )),
+  forall(member(use_change(F, disable), Changes),
+         ( memberchk(F, BuiltIuse) -> \+ memberchk(F, BuiltUse)
+         ; true
+         )).
+
+
+%! use:installed_entry_satisfies_plan_use(+Installed, +SrcEntry, +Context)
+%
+% True if the installed package's built USE state satisfies BOTH the
+% bracketed `build_with_use` constraints AND any self-targeted
+% `suggestion(use_change, SrcEntry, Changes)` recorded in Context.
+%
+% This is the guard the :install / :run rules consult before short-
+% circuiting an already-installed package to a no-op. Checking
+% build_with_use alone was insufficient: when the prover records a USE
+% flip purely as a suggestion(use_change) (e.g. a REQUIRED_USE pick, or a
+% bracketed-USE requirement that reached the entry via the per-(C,N) memo
+% rather than this literal's own build_with_use term), the build_with_use
+% state on this exact context can be empty and the short-circuit would
+% wrongly report the installed -USE build as satisfactory. That left
+% candidate:update_requires_use_rebuild/2 (which DOES honour
+% suggestion(use_change)) unreachable, so the transactional :update that
+% walks DEPEND/BDEPEND under the flipped USE was never scheduled
+% (portage-ng#85).
+%
+% SrcEntry is the source-tree literal whose suggestion(use_change) tags
+% refer to this package; only suggestions keyed to SrcEntry are honoured
+% so a suggestion meant for a different (introduced) candidate cannot
+% spuriously force a rebuild here.
+
+use:installed_entry_satisfies_plan_use(VdbRepo://InstalledEntry, SrcRepo://SrcEntry, Context) :-
+  use:installed_entry_satisfies_build_with_use(VdbRepo://InstalledEntry, Context),
+  ( memberchk(suggestion(use_change, SrcRepo://SrcEntry, Changes), Context)
+  -> use:installed_entry_satisfies_use_change(VdbRepo://InstalledEntry, Changes)
+  ;  true
+  ).
+
+
 % =============================================================================
 %  --newuse / --changed-use support
 % =============================================================================

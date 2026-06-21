@@ -1813,6 +1813,69 @@ test(plan_orders_bwu_dep_before_rebuild,
 
 
 % =============================================================================
+%  suggestion(use_change) rebuild for already-installed packages (portage-ng#85)
+% =============================================================================
+
+% Regression test for the asymmetry that left an already-installed package
+% short-circuited to []/reinstall when a self USE flip arrived as a
+% suggestion(use_change) with an EMPTY build_with_use term (e.g. a
+% REQUIRED_USE pick, or a flip propagated via the per-(C,N) memo). The
+% install/run short-circuit consulted installed_entry_satisfies_build_with_use/2
+% only, which reported the installed -USE build as satisfactory and never
+% reached candidate:update_requires_use_rebuild/2. Fix: consult
+% use:installed_entry_satisfies_plan_use/3, which also honours self
+% suggestion(use_change) flips, so a transactional :update is emitted and the
+% deps gated by the flipped flag enter the plan.
+
+:- begin_tests(rules_install_run_use_change_rebuild).
+
+% installed_entry_satisfies_plan_use/3 must report NOT satisfied when a
+% self suggestion(use_change) enables a flag the installed build lacks
+% (and the flag is in the entry's IUSE).
+test(plan_use_unsatisfied_on_suggestion_flip,
+     [condition(test_setup_pick(_, _))]) :-
+  test_setup_pick(pkg://Ebuild, Flag),
+  Ctx = [suggestion(use_change, portage://Ebuild, [use_change(Flag, enable)])],
+  \+ use:installed_entry_satisfies_plan_use(pkg://Ebuild, portage://Ebuild, Ctx).
+
+% rule(:install?{Ctx with suggestion(use_change) flip}) on an installed entry
+% must NOT short-circuit to []. It must emit a :update?{[...,replaces,...]}
+% literal so the dep walker runs under the flipped USE.
+test(install_rule_emits_update_on_use_change,
+     [condition(test_setup_pick(_, _))]) :-
+  test_setup_pick(pkg://Ebuild, Flag),
+  Ctx = [suggestion(use_change, portage://Ebuild, [use_change(Flag, enable)])],
+  rules:rule(portage://Ebuild:install?{Ctx}, Conds),
+  Conds = [portage://Ebuild:update?{UpdCtx}],
+  memberchk(replaces(pkg://Ebuild), UpdCtx),
+  memberchk(rebuild_reason(build_with_use), UpdCtx).
+
+% rule(:run?{Ctx with suggestion(use_change) flip}) on an installed entry must
+% emit the same :update literal (instead of degrading to :reinstall with an
+% empty body).
+test(run_rule_emits_update_on_use_change,
+     [condition(test_setup_pick(_, _))]) :-
+  test_setup_pick(pkg://Ebuild, Flag),
+  Ctx = [suggestion(use_change, portage://Ebuild, [use_change(Flag, enable)])],
+  rules:rule(portage://Ebuild:run?{Ctx}, Conds),
+  Conds = [portage://Ebuild:update?{UpdCtx}],
+  memberchk(replaces(pkg://Ebuild), UpdCtx),
+  memberchk(rebuild_reason(build_with_use), UpdCtx).
+
+% A suggestion(use_change) for a flag NOT in the entry's IUSE cannot change
+% the build, so it must preserve the short-circuit (no spurious rebuild).
+test(install_rule_absent_flag_keeps_short_circuit,
+     [condition(test_setup_pick(_, _))]) :-
+  test_setup_pick(pkg://Ebuild, _),
+  Ctx = [suggestion(use_change, portage://Ebuild,
+                    [use_change('portage_ng_nonexistent_flag', enable)])],
+  rules:rule(portage://Ebuild:install?{Ctx}, Conds),
+  Conds == [].
+
+:- end_tests(rules_install_run_use_change_rebuild).
+
+
+% =============================================================================
 %  Issue #9: same-version :update must not no-op on USE change
 % =============================================================================
 
