@@ -1193,17 +1193,72 @@ use:bwu_conflict_disable(use_conditional_group(negative, Use, _, SubDeps), Enabl
 % are made, capped at 5 iterations to avoid infinite loops.
 
 use:stabilize_required_use(Repo://Entry, BWU_In, BWU_Out) :-
-    BWU_In = use_state(Enable0, Disable0),
-    ( Enable0 == [], Disable0 == [] ->
+    findall(ReqUse,
+            cache:entry_metadata(Repo, Entry, required_use, ReqUse),
+            AllReqUse),
+    ( AllReqUse == [] ->
         BWU_Out = BWU_In
-    ; findall(ReqUse,
-              cache:entry_metadata(Repo, Entry, required_use, ReqUse),
-              AllReqUse),
-      ( AllReqUse == [] ->
-          BWU_Out = BWU_In
-      ; use:stabilize_required_use_loop(Repo://Entry, AllReqUse, BWU_In, BWU_Out, 5)
-      )
+    ; BWU_In == use_state([], []) ->
+        use:stabilize_required_use_seed(Repo://Entry, AllReqUse, BWU_In, BWU_Out)
+    ; use:stabilize_required_use_loop(Repo://Entry, AllReqUse, BWU_In, BWU_Out, 5)
     ).
+
+
+%! use:stabilize_required_use_seed(+RepoEntry, +AllReqUse, +BWU_In, -BWU_Out)
+%
+% Empty-BWU stabilization entry point. The package was pulled with no
+% bracketed USE directives, so its build_with_use is empty. If its own
+% REQUIRED_USE contains an *unsatisfied* choice group (any_of `||` or
+% exactly_one_of `^^`) under the current effective USE, seed it by
+% enabling the highest-priority member, then run the normal fixed-point
+% loop to resolve the cascading implications of that committed choice.
+%
+% Speculation from empty BWU is deliberately restricted to choice
+% groups. Conditional (`use? ( ... )`) and plain `required(Flag)`
+% implications are NOT seeded here, because flipping them from a global
+% USE state causes the chain-effects documented in dep_walk_context/4
+% (e.g. net-fs/samba `gpg? ( addc )`). A choice group, by contrast,
+% encodes a genuine "pick at least one" requirement that has no
+% satisfying assignment under the profile defaults, so enabling the
+% preferred member is the actionable resolution (surfaced downstream as
+% a positive `suggestion(use_change)`).
+
+use:stabilize_required_use_seed(RepoEntry, AllReqUse, BWU_In, BWU_Out) :-
+    foldl(use:seed_choice_group_term(RepoEntry), AllReqUse, BWU_In, BWUSeed),
+    ( BWUSeed == BWU_In ->
+        BWU_Out = BWU_In
+    ; use:stabilize_required_use_loop(RepoEntry, AllReqUse, BWUSeed, BWU_Out, 5)
+    ).
+
+
+%! use:seed_choice_group_term(+RepoEntry, +Term, +BWU_In, -BWU_Out)
+%
+% Fold helper: if Term is an unsatisfied choice group, enable its
+% highest-priority member; otherwise pass the BWU through unchanged.
+
+use:seed_choice_group_term(RepoEntry, Term, BWU_In, BWU_Out) :-
+    BWU_In = use_state(En, Dis),
+    ( use:choice_group_needs_seed(RepoEntry, En, Dis, Term, Flag) ->
+        use:apply_requse_fix(enable(Flag), BWU_In, BWU_Out)
+    ; BWU_Out = BWU_In
+    ).
+
+
+%! use:choice_group_needs_seed(+RepoEntry, +En, +Dis, +Term, -Flag)
+%
+% True when Term is a top-level choice group (any_of `||` or
+% exactly_one_of `^^`) with no satisfied member under the current
+% Enable/Disable state, binding Flag to the member to enable.
+% at_most_one_of is excluded (zero members is a valid assignment, so it
+% never needs seeding); nested choices inside conditionals are excluded
+% to keep empty-BWU speculation conservative.
+
+use:choice_group_needs_seed(RepoEntry, En, Dis, any_of_group(Deps), Flag) :-
+    \+ ( member(D, Deps), use:requse_term_ok_with_bwu(RepoEntry, En, Dis, D) ),
+    use:requse_pick_satisfying_flag(RepoEntry, Deps, Flag).
+use:choice_group_needs_seed(RepoEntry, En, Dis, exactly_one_of_group(Deps), Flag) :-
+    \+ ( member(D, Deps), use:requse_term_ok_with_bwu(RepoEntry, En, Dis, D) ),
+    use:requse_pick_satisfying_flag(RepoEntry, Deps, Flag).
 
 
 %! use:stabilize_required_use_loop(+RepoEntry, +AllReqUse, +BWU_In, -BWU_Out, +Limit)
@@ -1242,15 +1297,15 @@ use:stabilize_requse_term(RepoEntry, Term, use_state(En0, Dis0), use_state(EnOut
 % Computes a list of enable(Flag)/disable(Flag) fixes for a violated
 % REQUIRED_USE term.
 
-use:requse_term_fixes(_RepoEntry, _En, _Dis, any_of_group(Deps), [enable(Flag)]) :-
-    use:requse_pick_satisfying_flag(Deps, Flag), !.
+use:requse_term_fixes(RepoEntry, _En, _Dis, any_of_group(Deps), [enable(Flag)]) :-
+    use:requse_pick_satisfying_flag(RepoEntry, Deps, Flag), !.
 use:requse_term_fixes(RepoEntry, En, Dis, exactly_one_of_group(Deps), []) :-
     findall(1, (member(D, Deps), use:requse_term_ok_with_bwu(RepoEntry, En, Dis, D)), Sat),
     length(Sat, N), N > 1, !.
 use:requse_term_fixes(RepoEntry, En, Dis, exactly_one_of_group(Deps), [enable(Flag)]) :-
     findall(1, (member(D, Deps), use:requse_term_ok_with_bwu(RepoEntry, En, Dis, D)), Sat),
     length(Sat, 0),
-    use:requse_pick_satisfying_flag(Deps, Flag), !.
+    use:requse_pick_satisfying_flag(RepoEntry, Deps, Flag), !.
 use:requse_term_fixes(RepoEntry, En, Dis,
                   use_conditional_group(positive, Use, _, SubDeps), Fixes) :-
     use:requse_flag_is_positive(RepoEntry, En, Dis, Use),
@@ -1276,18 +1331,32 @@ use:requse_term_fixes(RepoEntry, En, Dis, at_most_one_of_group(Deps), []) :-
 use:requse_term_fixes(_RepoEntry, _En, _Dis, _, []).
 
 
-%! use:requse_pick_satisfying_flag(+Deps, -Flag)
+%! use:requse_pick_satisfying_flag(+RepoEntry, +Deps, -Flag)
 %
-% Pick a flag from a REQUIRED_USE group to enable.  Prefers flags
-% already in USE defaults; falls back to the last flag in the list.
+% Pick a flag from a REQUIRED_USE choice group to enable. Preference
+% order: (1) a member already enabled in the global USE configuration,
+% (2) a member declared `+` (default-on) in the package's own IUSE --
+% the package's preferred backend, (3) the last listed member.
 
-use:requse_pick_satisfying_flag(Deps, Flag) :-
+use:requse_pick_satisfying_flag(RepoEntry, Deps, Flag) :-
     findall(F, (member(required(F), Deps), atom(F), \+ F = minus(_)), Flags),
     Flags \== [],
     ( member(F, Flags), preference:global_use(F) ->
         Flag = F
+    ; member(F, Flags), use:entry_iuse_plus_default(RepoEntry, F) ->
+        Flag = F
     ; last(Flags, Flag)
     ).
+
+
+%! use:entry_iuse_plus_default(+RepoEntry, +Flag)
+%
+% True when Flag is declared with a `+` (default-on) IUSE default for
+% the entry.
+
+use:entry_iuse_plus_default(RepoEntry, Flag) :-
+    use:entry_iuse_info(RepoEntry, iuse_info(_IuseSet, PlusSet)),
+    memberchk(Flag, PlusSet).
 
 
 %! use:requse_flag_is_positive(+RepoEntry, +Enable, +Disable, +Use)

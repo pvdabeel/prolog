@@ -821,11 +821,27 @@ candidate:required_use_term_has_choice(use_conditional_group(_, _, _, SubDeps)) 
 % before || ( aqua wayland X ) picks a global flag. Only packages with
 % choice-shaped REQUIRED_USE need an extra stabilize here; target.pl
 % already stabilizes the root :run/:install candidate.
+%
+% Empty-BWU case (portage-ng#87/#88): a dependency pulled with no
+% bracketed USE directives still needs REQUIRED_USE choice resolution
+% when its own `|| ( ... )` / `^^ ( ... )` has no satisfied member under
+% the profile defaults (e.g. headless `-X -wayland -aqua` vs
+% gui-libs/gtk `|| ( aqua wayland X )`). Without this, the package's
+% preferred backend is never enabled, its conditional `dep[flag?]`
+% edges (e.g. cairo[X?]) contribute nothing, and the build is planned
+% with the backend off -> cascading unsatisfied_constraints. We gate the
+% extra work behind the cheap entry_has_choice_required_use/2 scan to
+% preserve the empty-BWU fast path for the (vast) majority of edges.
 
 candidate:grouped_dep_stabilize_bwu(Repo://Entry, CtxIn, CtxOut) :-
   use:context_build_with_use_state(CtxIn, BWU0),
   ( BWU0 == use_state([], [])
-  -> CtxOut = CtxIn
+  -> ( candidate:entry_has_choice_required_use(Repo, Entry),
+       use:stabilize_required_use(Repo://Entry, BWU0, BWU2),
+       BWU2 \== BWU0
+     -> feature_unification:unify([build_with_use:BWU2], CtxIn, CtxOut)
+     ; CtxOut = CtxIn
+     )
   ; use:verify_required_use_with_bwu(Repo://Entry, BWU0)
   -> CtxOut = CtxIn
   ; use:build_with_use_resolve_required_use(BWU0, Repo://Entry, BWU1),

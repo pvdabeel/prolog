@@ -1389,6 +1389,56 @@ test(list_form_disable_assumed, [true(Dis == [z])]) :-
 :- end_tests(use_bwu_requirements).
 
 
+% REQUIRED_USE choice-group seeding (portage-ng#87/#88): when a package is
+% pulled with an empty build_with_use but its own `|| ( ... )` / `^^ ( ... )`
+% choice group has no satisfied member under the profile defaults, the
+% resolver must seed the highest-priority member so the package (and its
+% conditional dep[flag?] edges) build with the chosen backend. We exercise
+% the profile-independent logic directly using a non-existent entry (so
+% effective USE is empty and entry_iuse_plus_default is empty), forcing the
+% deterministic "last member" fallback.
+
+:- begin_tests(rules_required_use_choice_seed).
+
+test(pick_falls_back_to_last_member, [true(F == z3)]) :-
+  use:requse_pick_satisfying_flag(portage://'nonexistent-pkg-0',
+      [required(z1), required(z2), required(z3)], F).
+
+test(any_of_unsatisfied_needs_seed, [true(F == z3)]) :-
+  use:choice_group_needs_seed(portage://'nonexistent-pkg-0', [], [],
+      any_of_group([required(z1), required(z2), required(z3)]), F).
+
+test(any_of_already_satisfied_no_seed, [fail]) :-
+  use:choice_group_needs_seed(portage://'nonexistent-pkg-0', [z2], [],
+      any_of_group([required(z1), required(z2), required(z3)]), _).
+
+test(exactly_one_unsatisfied_needs_seed, [true(F == z3)]) :-
+  use:choice_group_needs_seed(portage://'nonexistent-pkg-0', [], [],
+      exactly_one_of_group([required(z1), required(z2), required(z3)]), F).
+
+test(at_most_one_never_seeds, [fail]) :-
+  use:choice_group_needs_seed(portage://'nonexistent-pkg-0', [], [],
+      at_most_one_of_group([required(z1), required(z2), required(z3)]), _).
+
+test(seed_term_enables_chosen_flag, [true(Out == use_state([z3], []))]) :-
+  use:seed_choice_group_term(portage://'nonexistent-pkg-0',
+      any_of_group([required(z1), required(z2), required(z3)]),
+      use_state([], []), Out).
+
+test(seed_term_passthrough_when_satisfied, [true(Out == use_state([z2], []))]) :-
+  use:seed_choice_group_term(portage://'nonexistent-pkg-0',
+      any_of_group([required(z1), required(z2), required(z3)]),
+      use_state([z2], []), Out).
+
+% A plain required()/conditional term must NOT be seeded from empty BWU
+% (only choice groups are), preserving the documented samba-safe behavior.
+test(plain_required_not_seeded, [fail]) :-
+  use:choice_group_needs_seed(portage://'nonexistent-pkg-0', [], [],
+      required(z1), _).
+
+:- end_tests(rules_required_use_choice_seed).
+
+
 :- begin_tests(use_candidate_bwu_memo).
 
 test(merge_empty_ctx_with_memo, [true(B == use_state([wayland],[]))]) :-
