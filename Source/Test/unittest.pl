@@ -1436,6 +1436,17 @@ test(plain_required_not_seeded, [fail]) :-
   use:choice_group_needs_seed(portage://'nonexistent-pkg-0', [], [],
       required(z1), _).
 
+% The seed loop must seed the choice group but leave conditional terms
+% (e.g. net-fs/samba's `gpg? ( addc )`) untouched, so it never flips a
+% flag away from the profile default and poisons the build_with_use.
+test(seed_loop_ignores_conditional_terms,
+     [true(Out == use_state([z3], []))]) :-
+  use:seed_choice_groups_loop(portage://'nonexistent-pkg-0',
+      [ use_conditional_group(positive, gpg, portage://'nonexistent-pkg-0',
+                              [required(addc)]),
+        any_of_group([required(z1), required(z2), required(z3)]) ],
+      use_state([], []), Out, 5).
+
 :- end_tests(rules_required_use_choice_seed).
 
 

@@ -1224,10 +1224,43 @@ use:stabilize_required_use(Repo://Entry, BWU_In, BWU_Out) :-
 % a positive `suggestion(use_change)`).
 
 use:stabilize_required_use_seed(RepoEntry, AllReqUse, BWU_In, BWU_Out) :-
-    foldl(use:seed_choice_group_term(RepoEntry), AllReqUse, BWU_In, BWUSeed),
+    use:seed_choice_groups_loop(RepoEntry, AllReqUse, BWU_In, BWUSeed, 5),
     ( BWUSeed == BWU_In ->
         BWU_Out = BWU_In
-    ; use:stabilize_required_use_loop(RepoEntry, AllReqUse, BWUSeed, BWU_Out, 5)
+    ; use:verify_required_use_with_bwu(RepoEntry, BWUSeed) ->
+        BWU_Out = BWUSeed
+    ; % Seeding the choice group alone cannot satisfy the full REQUIRED_USE
+      % (e.g. net-fs/samba's `gpg? ( addc )` chain, where forcing the python
+      % single-target leaves a conditional that only the prover's use_change
+      % machinery can resolve). Committing a non-empty-but-inconsistent BWU
+      % would push the entry down the strict verification path and hard-fail
+      % it; instead leave the BWU empty so the proof proceeds exactly as for
+      % a package whose choice group was already satisfied by the profile,
+      % surfacing a graceful suggestion(use_change) downstream.
+      BWU_Out = BWU_In
+    ).
+
+
+%! use:seed_choice_groups_loop(+RepoEntry, +AllReqUse, +BWU_In, -BWU_Out, +Limit)
+%
+% Fixed-point iteration restricted to choice-group seeding. Unlike
+% stabilize_required_use_loop/5 (used on the non-empty BWU path), this
+% deliberately does NOT apply conditional/required fixes: from an empty
+% BWU those would flip flags away from the profile defaults and trigger
+% the `gpg? ( addc )`-style chain effects called out above. Seeding a
+% choice group can, however, satisfy or unsatisfy another choice group,
+% so we re-run until the choice-group seed reaches a fixpoint (or Limit
+% is hit). Conditional implications of the committed choice are left to
+% the prover's use_change machinery, exactly as for a package whose
+% choice group was already satisfied by the profile.
+
+use:seed_choice_groups_loop(_RepoEntry, _AllReqUse, BWU, BWU, 0) :- !.
+use:seed_choice_groups_loop(RepoEntry, AllReqUse, BWU_In, BWU_Out, Limit) :-
+    foldl(use:seed_choice_group_term(RepoEntry), AllReqUse, BWU_In, BWU_Mid),
+    ( BWU_Mid == BWU_In ->
+        BWU_Out = BWU_In
+    ; Limit1 is Limit - 1,
+      use:seed_choice_groups_loop(RepoEntry, AllReqUse, BWU_Mid, BWU_Out, Limit1)
     ).
 
 
