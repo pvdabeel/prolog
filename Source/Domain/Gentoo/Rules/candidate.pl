@@ -786,11 +786,32 @@ candidate:grouped_dep_use_and_slot(gd(_Action, C, N, PackageDeps1, SlotReq, Cont
   ),
   use:candidate_satisfies_use_deps(ContextDep, FoundRepo://Candidate, MergedUse),
   dependency:process_build_with_use(MergedUse, ContextDep, NewContext0, Constraints, FoundRepo://Candidate),
-  candidate:grouped_dep_stabilize_bwu(FoundRepo://Candidate, NewContext0, NewContext),
-  use:check_bwu_ed_conflict(C, N, NewContext),
+  candidate:grouped_dep_stabilize_bwu(FoundRepo://Candidate, NewContext0, NewContext1),
+  candidate:grouped_dep_apply_equality_pins(FoundRepo://Candidate, NewContext1, NewContext),
+  use:check_bwu_ed_conflict_pv(C, N, ContextDep, MergedUse, NewContext),
   use:unify_memo_bwu_into_context(C, N, NewContext, NewContextMemo),
   slotmeta:query_search_slot_constraint(SlotReq, FoundRepo://Candidate, SlotMeta),
   dependency:process_slot(SlotReq, SlotMeta, C, N, FoundRepo://Candidate, NewContextMemo, NewerContext0).
+
+
+%! candidate:grouped_dep_apply_equality_pins(+RepoEntry, +CtxIn, -CtxOut) is det.
+%
+% Back-propagate USE-equal pins (portage-ng#87/#88): when this dependency
+% candidate has its own `provider[F=]` / `provider[!F=]` edges and the
+% provider is already pinned in the cross-dep BWU memo, adopt the matching
+% flag value so the candidate follows the provider's resolved USE (e.g.
+% cairo pinned [X] -> dev-cpp/cairomm builds with X to honour cairo[X=]).
+% A no-op when nothing is pinned or the pin clashes with the candidate's
+% existing build_with_use (left for the conflict machinery to report).
+
+candidate:grouped_dep_apply_equality_pins(Repo://Entry, CtxIn, CtxOut) :-
+  use:context_build_with_use_state(CtxIn, BWU0),
+  ranking:apply_equality_pins(Repo://Entry, BWU0, BWU1),
+  ( BWU1 == BWU0
+  -> CtxOut = CtxIn
+  ; ( select(build_with_use:_, CtxIn, Ctx1) -> true ; Ctx1 = CtxIn ),
+    feature_unification:unify([build_with_use:BWU1], Ctx1, CtxOut)
+  ).
 
 
 %! candidate:entry_has_choice_required_use(+Repo, +Entry) is semidet.

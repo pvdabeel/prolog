@@ -1555,23 +1555,114 @@ use:replace_candidate_bwu(C, N, BWU) :-
 
 %! use:accumulate_candidate_bwu(+C, +N, +BWU)
 %
-% Merge BWU from a dependency edge into the per-(C,N) memo.  Fails on
+% Merge a forcing (HARD) BWU from a dependency edge into the per-(C,N)
+% memo.  Convenience wrapper over accumulate_candidate_bwu_pv/4 used by
+% the seed path (ranking:seed_accumulate_bwu), where seeded directives
+% are context-independent `[F]`/`[-F]` (i.e. always HARD).  Fails on
 % enable/disable conflicts.  Does not run REQUIRED_USE verification (the
 % provider entry is not fixed yet on grouped_dep edges).
 
 use:accumulate_candidate_bwu(_C, _N, use_state([], [])) :- !.
 use:accumulate_candidate_bwu(C, N, BWU) :-
-    ( memo:candidate_bwu_(C, N, OldBWU) ->
-        ( feature_unification:val_hook(OldBWU, BWU, MergedBWU) ->
-            use:replace_candidate_bwu(C, N, MergedBWU)
-        ; use:compute_ed_conflict_desc(OldBWU, BWU, ViolDesc),
-          ( \+ memo:requse_violation_(C, N, _) ->
-              assertz(memo:requse_violation_(C, N, ViolDesc))
-          ; true
-          ),
-          fail
-        )
-    ; assertz(memo:candidate_bwu_(C, N, BWU))
+    use:accumulate_candidate_bwu_pv(C, N, BWU, use_state([], [])).
+
+
+%! use:accumulate_candidate_bwu_pv(+C, +N, +HardState, +EqState)
+%
+% Provenance-aware accumulation of a dependency edge's build_with_use
+% into the per-(C,N) cross-dep memo (portage-ng#87/#88).  HardState holds
+% the forcing directives (`[F]`/`[F?]`/`[!F]`/`[!F?]` and seeded/pinned
+% flags); EqState holds the following directives (`[F=]`/`[!F=]`).
+%
+% HARD and EQ contributions are accumulated in separate memos, and the
+% effective `candidate_bwu_/3` is recomputed as "HARD beats EQ": a flag a
+% USE-equal consumer wants OFF yields to another consumer that hard-
+% requires it ON (and vice versa), instead of being reported as an
+% irreconcilable conflict.  Genuine conflicts remain: HARD-vs-HARD (two
+% hard consumers disagree) and EQ-vs-EQ (two `=` consumers disagree with
+% no hard determination) still fail and record a violation descriptor.
+
+use:accumulate_candidate_bwu_pv(_C, _N, use_state([], []), use_state([], [])) :- !.
+use:accumulate_candidate_bwu_pv(C, N, HardState, EqState) :-
+    use:current_bwu_component(candidate_bwu_hard_, C, N, OldHard),
+    use:current_bwu_component(candidate_bwu_eq_, C, N, OldEq),
+    ( use:merge_bwu_state(OldHard, HardState, NewHard),
+      use:merge_bwu_state(OldEq, EqState, NewEq),
+      use:combine_hard_eq_bwu(NewHard, NewEq, Effective)
+    ->
+        use:store_bwu_component(candidate_bwu_hard_, C, N, NewHard),
+        use:store_bwu_component(candidate_bwu_eq_, C, N, NewEq),
+        use:replace_candidate_bwu(C, N, Effective)
+    ;
+        use:record_bwu_pv_conflict(C, N, OldHard, HardState, OldEq, EqState),
+        fail
+    ).
+
+
+%! use:current_bwu_component(+Memo, +C, +N, -State)
+%
+% Read a HARD/EQ provenance component memo for (C,N); empty when unset.
+
+use:current_bwu_component(candidate_bwu_hard_, C, N, State) :-
+    ( memo:candidate_bwu_hard_(C, N, State0) -> State = State0
+    ; State = use_state([], [])
+    ).
+use:current_bwu_component(candidate_bwu_eq_, C, N, State) :-
+    ( memo:candidate_bwu_eq_(C, N, State0) -> State = State0
+    ; State = use_state([], [])
+    ).
+
+
+%! use:store_bwu_component(+Memo, +C, +N, +State)
+%
+% Replace a HARD/EQ provenance component memo for (C,N) (no-op for empty).
+
+use:store_bwu_component(candidate_bwu_hard_, C, N, State) :-
+    retractall(memo:candidate_bwu_hard_(C, N, _)),
+    ( State == use_state([], []) -> true ; assertz(memo:candidate_bwu_hard_(C, N, State)) ).
+use:store_bwu_component(candidate_bwu_eq_, C, N, State) :-
+    retractall(memo:candidate_bwu_eq_(C, N, _)),
+    ( State == use_state([], []) -> true ; assertz(memo:candidate_bwu_eq_(C, N, State)) ).
+
+
+%! use:merge_bwu_state(+A, +B, -Merged)
+%
+% Union two use_state/2 BWU components; fails on enable/disable conflict.
+
+use:merge_bwu_state(A, B, Merged) :-
+    feature_unification:val_hook(A, B, Merged).
+
+
+%! use:combine_hard_eq_bwu(+Hard, +Eq, -Effective)
+%
+% Combine the HARD and EQ components into an effective BWU where HARD
+% wins: an EQ-following flag that contradicts a HARD-forced flag is
+% dropped (the `=` consumer must follow, handled by back-propagation via
+% ranking:apply_equality_pins/3).  Fails only on a residual conflict
+% (two EQ consumers disagreeing on a flag HARD does not determine).
+
+use:combine_hard_eq_bwu(use_state(HEn, HDis), use_state(EEn, EDis), use_state(En, Dis)) :-
+    ord_subtract(EEn, HDis, EEn1),
+    ord_subtract(EDis, HEn, EDis1),
+    ord_union(HEn, EEn1, En),
+    ord_union(HDis, EDis1, Dis),
+    ord_intersection(En, Dis, []).
+
+
+%! use:record_bwu_pv_conflict(+C, +N, +OldHard, +HardState, +OldEq, +EqState)
+%
+% Record a use-flag conflict descriptor for the (C,N) memo when HARD/EQ
+% accumulation cannot be reconciled (HARD-vs-HARD or EQ-vs-EQ).
+
+use:record_bwu_pv_conflict(C, N, OldHard, HardState, OldEq, EqState) :-
+    OldHard = use_state(OHEn, OHDis), HardState = use_state(HEn, HDis),
+    OldEq = use_state(OEEn, OEDis), EqState = use_state(EEn, EDis),
+    ord_union(OHEn, HEn, AllHEn0), ord_union(AllHEn0, OEEn, AllEn0), ord_union(AllEn0, EEn, AllEn),
+    ord_union(OHDis, HDis, AllHDis0), ord_union(AllHDis0, OEDis, AllDis0), ord_union(AllDis0, EDis, AllDis),
+    ord_intersection(AllEn, AllDis, Conflicts),
+    ( \+ memo:requse_violation_(C, N, _) ->
+        assertz(memo:requse_violation_(C, N, use_flag_conflict(Conflicts, AllEn, AllDis)))
+    ; true
     ).
 
 
@@ -1634,16 +1725,79 @@ use:check_bwu_cross_dep(C, N, RepoEntry, BWU) :-
 % Cleans up candidate_bwu_ memos.  Called at proof initialization.
 
 use:clear_bwu_cross_dep_memos :-
-    retractall(memo:candidate_bwu_(_, _, _)).
+    retractall(memo:candidate_bwu_(_, _, _)),
+    retractall(memo:candidate_bwu_hard_(_, _, _)),
+    retractall(memo:candidate_bwu_eq_(_, _, _)).
 
 
 %! use:check_bwu_ed_conflict(+C, +N, +Context)
 %
 % Lightweight Enable/Disable conflict check for grouped_package_dependency.
+% Treats the whole context BWU as forcing (HARD); used where no edge
+% directive provenance is available.
 
 use:check_bwu_ed_conflict(C, N, Context) :-
     use:context_build_with_use_state(Context, BWU),
     use:accumulate_candidate_bwu(C, N, BWU).
+
+
+%! use:check_bwu_ed_conflict_pv(+C, +N, +ParentCtx, +UseDeps, +Context)
+%
+% Provenance-aware Enable/Disable conflict check (portage-ng#87/#88).
+% Splits the dependency edge's effective BWU (in Context) into a HARD
+% component and a USE-equal (EQ) component derived from UseDeps, so that
+% the cross-dep aggregation can let HARD requirements win over `=`
+% following constraints (see accumulate_candidate_bwu_pv/4).  EqState is
+% resolved from the `[F=]`/`[!F=]` directives against the consumer's
+% ParentCtx; the HARD component is everything else in the edge BWU
+% (plain/optional brackets plus any seeded or equality-pinned flags).
+
+use:check_bwu_ed_conflict_pv(C, N, ParentCtx, UseDeps, Context) :-
+    use:context_build_with_use_state(Context, FullBWU),
+    use:edge_eq_state(ParentCtx, UseDeps, EqState),
+    use:split_hard_from_full(FullBWU, EqState, HardState),
+    use:accumulate_candidate_bwu_pv(C, N, HardState, EqState).
+
+
+%! use:edge_eq_state(+ParentCtx, +UseDeps, -EqState)
+%
+% Resolve only the USE-equal directives (`[F=]`/`[!F=]`) of an edge into
+% a build_with_use state against the consumer's ParentCtx.
+
+use:edge_eq_state(ParentCtx, UseDeps, EqState) :-
+    include(use:is_eq_directive, UseDeps, EqDeps),
+    use:directives_to_bwu(ParentCtx, EqDeps, EqState).
+
+
+%! use:is_eq_directive(+Directive)
+%
+% True for the bidirectional USE-equal directives.
+
+use:is_eq_directive(use(equal(_), _)).
+use:is_eq_directive(use(inverse(_), _)).
+
+
+%! use:directives_to_bwu(+ParentCtx, +Directives, -State)
+%
+% Fold a list of bracketed USE directives into a normalized
+% build_with_use state, resolving each against ParentCtx.
+
+use:directives_to_bwu(ParentCtx, Directives, State) :-
+    use:empty_use_state(Empty),
+    foldl(use:process_bwu_directive(ParentCtx), Directives, Empty, State0),
+    use:normalize_build_with_use(State0, State).
+
+
+%! use:split_hard_from_full(+FullBWU, +EqState, -HardState)
+%
+% HardState is FullBWU with the EQ-only flags removed, so the forcing
+% (HARD) component excludes flags contributed solely by `=` following
+% constraints.
+
+use:split_hard_from_full(use_state(FEn, FDis), use_state(QEn, QDis),
+                         use_state(HEn, HDis)) :-
+    ord_subtract(FEn, QEn, HEn),
+    ord_subtract(FDis, QDis, HDis).
 
 
 %! use:compute_ed_conflict_desc(+OldBWU, +NewBWU, -ViolDesc)

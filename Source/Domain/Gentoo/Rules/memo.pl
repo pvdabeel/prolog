@@ -60,7 +60,9 @@ heuristic:cleanup_state/0 during reprove retries.
 :- thread_local memo:keyword_suggestion_cache_/3. % keyword_suggestion_cache_(C, N, SuggestedKw)
 :- thread_local memo:requse_violation_/3.        % requse_violation_(C, N, ViolDesc)
 :- thread_local memo:slot_conflict_/3.          % slot_conflict_(C, N, Entries)
-:- thread_local memo:candidate_bwu_/3.          % candidate_bwu_(C, N, BWU)
+:- thread_local memo:candidate_bwu_/3.          % candidate_bwu_(C, N, BWU) -- effective (HARD beats EQ)
+:- thread_local memo:candidate_bwu_hard_/3.     % candidate_bwu_hard_(C, N, BWU) -- forcing directives ([F]/[F?]/[!F]/[!F?])
+:- thread_local memo:candidate_bwu_eq_/3.       % candidate_bwu_eq_(C, N, BWU) -- following directives ([F=]/[!F=])
 
 
 %! memo:clear_caches
@@ -85,4 +87,6 @@ clear_caches :-
   retractall(memo:keyword_suggestion_cache_(_, _, _)),
   retractall(memo:requse_violation_(_, _, _)),
   retractall(memo:slot_conflict_(_, _, _)),
-  retractall(memo:candidate_bwu_(_, _, _)).
+  retractall(memo:candidate_bwu_(_, _, _)),
+  retractall(memo:candidate_bwu_hard_(_, _, _)),
+  retractall(memo:candidate_bwu_eq_(_, _, _)).
