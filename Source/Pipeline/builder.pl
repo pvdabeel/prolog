@@ -417,7 +417,6 @@ builder:execute_plan([], _PlanStep, _NumSteps, C, F, S, C, F, S).
 builder:execute_plan([Step|Rest], PlanStep, NumSteps, C0, F0, S0, C, F, S) :-
   builder:execute_step(Step, PlanStep, NumSteps, C0, F0, S0, C1, F1, S1, HasJobs),
   ( HasJobs == true -> PlanStep1 is PlanStep + 1 ; PlanStep1 = PlanStep ),
-  builder:maybe_reactivate_toolchain(Step),
   resume:flush_done_to_disk,
   ( F1 > F0
   -> ( builder:should_continue_on_failure ->
@@ -501,82 +500,6 @@ builder:clear_step_state :-
   retractall(builder:slot_outcome(_, _)),
   fetch:clear_speed_tracking,
   retractall(builder:exec_phase_state(_, _, _)).
-
-
-%! builder:maybe_reactivate_toolchain(+Step) is det.
-%
-% After a plan step that merged a toolchain package (gcc/clang/binutils/
-% glibc), re-activate the toolchain on the live root before the next step
-% runs. This is the between-steps boundary that makes a freshly rebuilt
-% compiler visible to later packages' `pkg_setup` probes (portage-ng#86):
-% the bare `ebuild` CLI never reactivates the toolchain the way `emerge`
-% does. Gated on a live-merge build and config:toolchain_reactivation/1;
-% the actual `gcc-config`/`env-update` execution (and host-command
-% tolerance) lives in ebuild_exec:reactivate_toolchain/1.
-
-builder:maybe_reactivate_toolchain(Step) :-
-  ( builder:toolchain_reactivation_enabled,
-    builder:step_toolchain_merge(Step, WithCompiler)
-  -> ebuild_exec:reactivate_toolchain(WithCompiler)
-  ;  true
-  ).
-
-
-%! builder:toolchain_reactivation_enabled is semidet.
-%
-% True when toolchain reactivation is configured on AND the `merge` phase
-% is actually live (a real install into ${ROOT}, not a stub/pretend run).
-
-builder:toolchain_reactivation_enabled :-
-  ( current_predicate(config:toolchain_reactivation/1)
-  -> config:toolchain_reactivation(true)
-  ;  true
-  ),
-  config:build_live_phases(LivePhases),
-  memberchk(merge, LivePhases),
-  current_predicate(ebuild_exec:reactivate_toolchain/1).
-
-
-%! builder:step_toolchain_merge(+Step, -WithCompiler) is semidet.
-%
-% Succeeds when Step contains an install-family action on a toolchain
-% package, binding WithCompiler to `true` if any of them is a compiler
-% (gcc/clang) and `false` otherwise (binutils/glibc -- env-update only).
-
-builder:step_toolchain_merge(Step, WithCompiler) :-
-  findall(Kind,
-          ( member(rule(Repo://Entry:Action?{_Ctx}, _Body), Step),
-            builder:is_install_action(Action),
-            cache:ordered_entry(Repo, Entry, C, N, _Ver),
-            builder:toolchain_cn(C, N, Kind)
-          ),
-          Kinds),
-  Kinds \== [],
-  ( memberchk(compiler, Kinds) -> WithCompiler = true ; WithCompiler = false ).
-
-
-%! builder:is_install_action(+Action) is semidet.
-%
-% True for the actions that perform a merge into the VDB / live root.
-
-builder:is_install_action(install).
-builder:is_install_action(update).
-builder:is_install_action(downgrade).
-builder:is_install_action(reinstall).
-
-
-%! builder:toolchain_cn(+Category, +Name, -Kind) is semidet.
-%
-% Recognises toolchain packages whose merge requires reactivating the
-% live environment. Kind is `compiler` for packages that need a
-% `gcc-config` re-select (so the `/usr/bin` + ccache-masquerade wrappers
-% follow the new compiler) and `runtime` for the rest (env-update only).
-
-builder:toolchain_cn('sys-devel', gcc, compiler).
-builder:toolchain_cn('llvm-core', clang, compiler).
-builder:toolchain_cn('sys-devel', clang, compiler).
-builder:toolchain_cn('sys-devel', binutils, runtime).
-builder:toolchain_cn('sys-libs', glibc, runtime).
 
 
 % -----------------------------------------------------------------------------

@@ -745,28 +745,83 @@ ebuild_exec:with_portage_pkg_merge_lock(_, Goal) :-
   call(Goal).
 
 
-%! ebuild_exec:reactivate_toolchain(+WithCompiler) is det.
+%! ebuild_exec:maybe_reactivate_toolchain(+Action, +Repo, +Entry, +Outcome) is det.
 %
-% Re-activate the toolchain on the live root after a merge, mirroring what
-% `emerge` does between merges (the bare `ebuild` CLI never does this).
-% When WithCompiler is `true` (a gcc/clang package was merged in the step),
-% re-selects the current gcc profile via `gcc-config` so the `/usr/bin`
-% compiler wrappers and the ccache masquerade point at the just-merged
-% compiler; then always runs `env-update` to regenerate `/etc/profile.env`
-% and the `ld.so.cache`. This is what makes a freshly rebuilt
-% `sys-devel/gcc[objc]` actually visible to a later package's `pkg_setup`
-% Objective-C probe under `FEATURES=ccache` (portage-ng#86).
+% Post-merge domain hook (sibling of maybe_inject_built/5): after a
+% successful merge of a toolchain package, re-activate the toolchain on the
+% live root, mirroring what `emerge` does between merges (the bare `ebuild`
+% CLI never does this). A freshly rebuilt `sys-devel/gcc[objc]` is otherwise
+% invisible to a later package's `pkg_setup` Objective-C probe under
+% `FEATURES=ccache` (portage-ng#86).
+%
+% Fires only for a completed (`done`) install-family action whose (C,N) is a
+% recognised toolchain package (toolchain_cn/3). Gated by
+% config:toolchain_reactivation/1 (default true). Always succeeds; the
+% reactivation is fully guarded so it can never turn a successful merge into
+% a failure. Keeping the policy here (not in Pipeline/builder) keeps the
+% generic plan orchestrator free of Gentoo toolchain knowledge.
+
+ebuild_exec:maybe_reactivate_toolchain(Action, Repo, Entry, done) :-
+  memberchk(Action, [install, reinstall, update, downgrade]),
+  ( current_predicate(config:toolchain_reactivation/1)
+  -> config:toolchain_reactivation(true)
+  ;  true
+  ),
+  cache:ordered_entry(Repo, Entry, C, N, _Ver),
+  ebuild_exec:toolchain_cn(C, N, Kind),
+  !,
+  ( Kind == compiler -> WithCompiler = true ; WithCompiler = false ),
+  ebuild_exec:reactivate_toolchain(WithCompiler, Repo://Entry).
+
+ebuild_exec:maybe_reactivate_toolchain(_Action, _Repo, _Entry, _Outcome).
+
+
+%! ebuild_exec:toolchain_cn(+Category, +Name, -Kind) is semidet.
+%
+% Recognises toolchain packages whose merge requires reactivating the live
+% environment. Kind is `compiler` for packages that need a `gcc-config`
+% re-select (so the `/usr/bin` + ccache-masquerade wrappers follow the new
+% compiler) and `runtime` for the rest (env-update only).
+
+ebuild_exec:toolchain_cn('sys-devel', gcc, compiler).
+ebuild_exec:toolchain_cn('llvm-core', clang, compiler).
+ebuild_exec:toolchain_cn('sys-devel', clang, compiler).
+ebuild_exec:toolchain_cn('sys-devel', binutils, runtime).
+ebuild_exec:toolchain_cn('sys-libs', glibc, runtime).
+
+
+%! ebuild_exec:reactivate_toolchain(+WithCompiler, +RepoEntry) is det.
+%
+% When WithCompiler is `true` (a gcc/clang merge), re-selects the current
+% gcc profile via `gcc-config` so the `/usr/bin` compiler wrappers and the
+% ccache masquerade point at the just-merged compiler; then always runs
+% `env-update` to regenerate `/etc/profile.env` and the `ld.so.cache`.
 %
 % Serialized under the `portage_pkg_merge` mutex (never overlaps a merge)
 % and fully tolerant of a host where these commands do not exist: the
-% `command -v` guards make it a silent no-op (e.g. macOS standalone). All
-% output is discarded so the build display is undisturbed.
+% `command -v` guards make it a silent no-op (e.g. macOS standalone). A
+% trace line (plus the gcc-config/env-update output) is appended to
+% config:build_log_dir/'toolchain-reactivation.log' so a run can be
+% confirmed to have fired; the build display itself is left undisturbed.
 
-ebuild_exec:reactivate_toolchain(WithCompiler) :-
-  ( WithCompiler == true
-  -> Script = 'if command -v gcc-config >/dev/null 2>&1; then p=$(gcc-config -c 2>/dev/null); [ -n "$p" ] && gcc-config "$p" >/dev/null 2>&1; fi; if command -v env-update >/dev/null 2>&1; then env-update >/dev/null 2>&1; fi; true'
-  ;  Script = 'if command -v env-update >/dev/null 2>&1; then env-update >/dev/null 2>&1; fi; true'
+ebuild_exec:reactivate_toolchain(WithCompiler, RepoEntry) :-
+  ( ebuild_exec:reactivation_log_path(LogPath)
+  -> format(atom(Redir), ' >>~w 2>&1', [LogPath]),
+     format(atom(Header),
+            'printf "[reactivate %s] %s WithCompiler=~w\\n" "$(date -u +%%FT%%TZ)" "~w">>~w; ',
+            [WithCompiler, RepoEntry, LogPath])
+  ;  Redir = ' >/dev/null 2>&1',
+     Header = ''
   ),
+  ( WithCompiler == true
+  -> format(atom(Body),
+            'if command -v gcc-config >/dev/null 2>&1; then p=$(gcc-config -c 2>/dev/null); [ -n "$p" ] && gcc-config "$p"~w; fi; if command -v env-update >/dev/null 2>&1; then env-update~w; fi; true',
+            [Redir, Redir])
+  ;  format(atom(Body),
+            'if command -v env-update >/dev/null 2>&1; then env-update~w; fi; true',
+            [Redir])
+  ),
+  atom_concat(Header, Body, Script),
   catch(
     ebuild_exec:with_portage_pkg_merge_lock(merge,
       ( process_create(path(sh), ['-c', Script],
@@ -775,6 +830,18 @@ ebuild_exec:reactivate_toolchain(WithCompiler) :-
       )),
     _Error,
     true).
+
+
+%! ebuild_exec:reactivation_log_path(-LogPath) is semidet.
+%
+% Path of the toolchain-reactivation trace log, under the build log dir.
+% Fails when no build log dir is configured (then reactivation is silent).
+
+ebuild_exec:reactivation_log_path(LogPath) :-
+  current_predicate(config:build_log_dir/1),
+  config:build_log_dir(Dir),
+  catch(make_directory_path(Dir), _, true),
+  atomic_list_concat([Dir, '/', 'toolchain-reactivation.log'], LogPath).
 
 
 %! ebuild_exec:log_phase_header(+LogPath, +Phase) is det.
@@ -1016,11 +1083,17 @@ ebuild_exec:poll_phase_spinning(Pid, Phase, Callback, ExitCode) :-
 %   ;  Outcome = failed(unmerge_old)
 %   ).
 
-ebuild_exec:execute(uninstall, Repo, Entry, Ctx, Outcome) :-
+% Public entry: dispatch to the right execution path, then run the
+% domain post-merge hook (toolchain reactivation) once Outcome is known.
+ebuild_exec:execute(Action, Repo, Entry, Ctx, Outcome) :-
+  ebuild_exec:execute_dispatch(Action, Repo, Entry, Ctx, Outcome),
+  ebuild_exec:maybe_reactivate_toolchain(Action, Repo, Entry, Outcome).
+
+ebuild_exec:execute_dispatch(uninstall, Repo, Entry, Ctx, Outcome) :-
   !,
   ebuild_exec:execute_phases(uninstall, Repo, Entry, Ctx, Outcome).
 
-ebuild_exec:execute(run, _Repo, _Entry, _Ctx, done) :- !.
+ebuild_exec:execute_dispatch(run, _Repo, _Entry, _Ctx, done) :- !.
 
 % Binpkg fast-path: for build-shaped actions, ask binpkg_exec whether a
 % USE-compatible binpkg variant exists. If so, short-circuit through
@@ -1028,7 +1101,7 @@ ebuild_exec:execute(run, _Repo, _Entry, _Ctx, done) :- !.
 % full source build phase sequence. Falls through to the source path
 % silently if no candidate fits (or if config:use_binpkg is false, or
 % the binpkg repo is not registered).
-ebuild_exec:execute(Action, Repo, Entry, Ctx, Outcome) :-
+ebuild_exec:execute_dispatch(Action, Repo, Entry, Ctx, Outcome) :-
   memberchk(Action, [install, reinstall, update, downgrade]),
   binpkg_exec:available_for(Repo, Entry, Ctx, BinpkgEntryId),
   ( binpkg_exec:execute(Action, Repo, Entry, BinpkgEntryId, Ctx, BinOutcome),
@@ -1038,7 +1111,7 @@ ebuild_exec:execute(Action, Repo, Entry, Ctx, Outcome) :-
   ),
   !.
 
-ebuild_exec:execute(Action, Repo, Entry, Ctx, Outcome) :-
+ebuild_exec:execute_dispatch(Action, Repo, Entry, Ctx, Outcome) :-
   ebuild_exec:execute_phases(Action, Repo, Entry, Ctx, Outcome).
 
 
@@ -1064,10 +1137,17 @@ ebuild_exec:execute_phases(Action, Repo, Entry, Ctx, Outcome) :-
 % The merge phase handles replacement of old versions internally.
 
 :- meta_predicate ebuild_exec:execute_with_progress(+, +, +, +, 2, -).
+:- meta_predicate ebuild_exec:execute_with_progress_dispatch(+, +, +, +, 2, -).
+
+% Public entry: dispatch to the right execution path, then run the domain
+% post-merge hook (toolchain reactivation) once Outcome is known.
+ebuild_exec:execute_with_progress(Action, Repo, Entry, Ctx, PhaseCallback, Outcome) :-
+  ebuild_exec:execute_with_progress_dispatch(Action, Repo, Entry, Ctx, PhaseCallback, Outcome),
+  ebuild_exec:maybe_reactivate_toolchain(Action, Repo, Entry, Outcome).
 
 % Disabled: see execute/5 comment above.
 %
-% ebuild_exec:execute_with_progress(Action, Repo, Entry, Ctx, PhaseCallback, Outcome) :-
+% ebuild_exec:execute_with_progress_dispatch(Action, Repo, Entry, Ctx, PhaseCallback, Outcome) :-
 %   memberchk(Action, [update, downgrade]),
 %   !,
 %   ( ebuild_exec:unmerge_old(Repo, Ctx)
@@ -1081,7 +1161,7 @@ ebuild_exec:execute_phases(Action, Repo, Entry, Ctx, Outcome) :-
 % terminal directly (binpkg_exec doesn't currently log to a file --
 % qmerge's output is short and self-explanatory: "Installing app-misc/jq-1.8.1
 % to /").
-ebuild_exec:execute_with_progress(Action, Repo, Entry, Ctx, PhaseCallback, Outcome) :-
+ebuild_exec:execute_with_progress_dispatch(Action, Repo, Entry, Ctx, PhaseCallback, Outcome) :-
   memberchk(Action, [install, reinstall, update, downgrade]),
   binpkg_exec:available_for(Repo, Entry, Ctx, BinpkgEntryId),
   catch(call(PhaseCallback, qmerge, active), _, true),
@@ -1094,7 +1174,7 @@ ebuild_exec:execute_with_progress(Action, Repo, Entry, Ctx, PhaseCallback, Outco
   ),
   !.
 
-ebuild_exec:execute_with_progress(Action, Repo, Entry, Ctx, PhaseCallback, Outcome) :-
+ebuild_exec:execute_with_progress_dispatch(Action, Repo, Entry, Ctx, PhaseCallback, Outcome) :-
   ebuild_exec:execute_phases_sequential(Action, Repo, Entry, Ctx, PhaseCallback, Outcome).
 
 
