@@ -1372,14 +1372,36 @@ use:requse_term_fixes(_RepoEntry, _En, _Dis, _, []).
 % the package's preferred backend, (3) the last listed member.
 
 use:requse_pick_satisfying_flag(RepoEntry, Deps, Flag) :-
-    findall(F, (member(required(F), Deps), atom(F), \+ F = minus(_)), Flags),
-    Flags \== [],
+    findall(F, (member(required(F), Deps), atom(F), \+ F = minus(_)), AllFlags),
+    AllFlags \== [],
+    % Never seed a profile-masked / force-disabled flag: the profile strips
+    % it back off at build time, so the ebuild would run with neither member
+    % of the choice group set and die on its own REQUIRED_USE check (e.g.
+    % ^^ ( elogind systemd ) on a non-systemd profile where `systemd` is
+    % use-masked -- the only buildable choice is elogind). When every
+    % candidate is masked the group is genuinely unsatisfiable, so fall back
+    % to the full list and let the normal domain-assumption path report it.
+    include(use:requse_flag_seedable(RepoEntry), AllFlags, Seedable),
+    ( Seedable == [] -> Flags = AllFlags ; Flags = Seedable ),
     ( member(F, Flags), preference:global_use(F) ->
         Flag = F
     ; member(F, Flags), use:entry_iuse_plus_default(RepoEntry, F) ->
         Flag = F
     ; last(Flags, Flag)
     ).
+
+
+%! use:requse_flag_seedable(+RepoEntry, +Flag) is semidet.
+%
+% True when Flag can actually be enabled for the entry, i.e. the profile
+% does not force it off via a global USE mask or a package-level USE mask.
+% Used to keep REQUIRED_USE choice-group seeding from picking a member the
+% profile will strip back off (which would guarantee a build-time
+% REQUIRED_USE violation).
+
+use:requse_flag_seedable(RepoEntry, Flag) :-
+    \+ preference:profile_masked_use_flag(Flag),
+    \+ catch(preference:profile_use_hard(RepoEntry, Flag, negative, _), _, fail).
 
 
 %! use:entry_iuse_plus_default(+RepoEntry, +Flag)

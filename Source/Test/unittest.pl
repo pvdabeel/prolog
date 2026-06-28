@@ -1447,6 +1447,40 @@ test(seed_loop_ignores_conditional_terms,
         any_of_group([required(z1), required(z2), required(z3)]) ],
       use_state([], []), Out, 5).
 
+% A profile-masked member must never be seeded: the profile strips it back
+% off at build time, so seeding it guarantees a REQUIRED_USE failure (e.g.
+% ^^ ( elogind systemd ) on a non-systemd profile where `systemd` is
+% use-masked -> the seeder must pick elogind). portage-ng#91.
+test(masked_member_excluded_from_seed,
+     [setup(assertz(preference:local_profile_masked_use_flag(z3))),
+      cleanup(retract(preference:local_profile_masked_use_flag(z3))),
+      true(F == z2)]) :-
+  use:requse_pick_satisfying_flag(portage://'nonexistent-pkg-0',
+      [required(z1), required(z2), required(z3)], F).
+
+test(seedable_false_for_masked_flag,
+     [setup(assertz(preference:local_profile_masked_use_flag(z3))),
+      cleanup(retract(preference:local_profile_masked_use_flag(z3))),
+      fail]) :-
+  use:requse_flag_seedable(portage://'nonexistent-pkg-0', z3).
+
+test(seedable_true_for_unmasked_flag, [true]) :-
+  use:requse_flag_seedable(portage://'nonexistent-pkg-0', z1).
+
+% When every member is masked the group is genuinely unsatisfiable; the
+% seeder falls back to the full list (last member) rather than failing, so
+% the normal domain-assumption path still reports it.
+test(all_masked_falls_back_to_full_list,
+     [setup(( assertz(preference:local_profile_masked_use_flag(z1)),
+              assertz(preference:local_profile_masked_use_flag(z2)),
+              assertz(preference:local_profile_masked_use_flag(z3)) )),
+      cleanup(( retract(preference:local_profile_masked_use_flag(z1)),
+                retract(preference:local_profile_masked_use_flag(z2)),
+                retract(preference:local_profile_masked_use_flag(z3)) )),
+      true(F == z3)]) :-
+  use:requse_pick_satisfying_flag(portage://'nonexistent-pkg-0',
+      [required(z1), required(z2), required(z3)], F).
+
 :- end_tests(rules_required_use_choice_seed).
 
 
