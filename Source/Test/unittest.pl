@@ -1484,6 +1484,60 @@ test(all_masked_falls_back_to_full_list,
 :- end_tests(rules_required_use_choice_seed).
 
 
+% Sub-slot (:=) ABI rebuild propagation helpers (portage-ng#89).
+:- begin_tests(pipeline_subslot_rebuild).
+
+% A := dependency (any_same_slot) binds to the provider's sub-slot in any slot.
+test(any_same_slot_binds_any_slot, [true]) :-
+  pipeline:subslot_bound_slotspec([any_same_slot], '0').
+
+test(any_same_slot_binds_other_slot, [true]) :-
+  pipeline:subslot_bound_slotspec([any_same_slot], '2').
+
+% A :slot= dependency binds only when the slot matches the changed provider.
+test(slot_equal_binds_matching_slot, [true]) :-
+  pipeline:subslot_bound_slotspec([slot('0'), equal], '0').
+
+test(slot_equal_rejects_other_slot, [fail]) :-
+  pipeline:subslot_bound_slotspec([slot('1'), equal], '0').
+
+% A :slot/subslot= dependency binds on slot match (sub-slot is the trigger).
+test(slot_subslot_equal_binds_matching_slot, [true]) :-
+  pipeline:subslot_bound_slotspec([slot('0'), subslot('1.2'), equal], '0').
+
+% A plain slot / sub-slot dependency without `=` is NOT a rebuild trigger.
+test(plain_slot_not_bound, [fail]) :-
+  pipeline:subslot_bound_slotspec([slot('0')], '0').
+
+test(plain_slot_subslot_not_bound, [fail]) :-
+  pipeline:subslot_bound_slotspec([slot('0'), subslot('1.2')], '0').
+
+test(any_different_slot_not_bound, [fail]) :-
+  pipeline:subslot_bound_slotspec([any_different_slot], '0').
+
+test(empty_slot_not_bound, [fail]) :-
+  pipeline:subslot_bound_slotspec([], '0').
+
+% The consumer rebuild goal is a same-version :update that replaces the VDB
+% entry and carries the subslot_change reason so the printer renders the note
+% and the prover re-walks deps (ordering the rebuild after the provider).
+test(consumer_goal_shape,
+     [true(Goal == portage://'dev-x/c-1':update?{[replaces(pkg://'dev-x/c-1'),
+              rebuild_reason(subslot_change('dev-x'/p, '0', '1'))]})]) :-
+  pipeline:subslot_consumer_goal(
+      c('dev-x/c-1', portage, 'dev-x'/p, '0', '1'), Goal).
+
+% A goal list with no `pkg`/tree entries (synthetic) targets no real CN, and
+% an empty plan changes no provider, so the augmentation finds nothing.
+test(no_changed_providers_on_empty_plan, [true(Changed == [])]) :-
+  pipeline:subslot_changed_providers([], Changed).
+
+test(extra_goals_fails_without_changes, [fail]) :-
+  pipeline:subslot_extra_goals([], [], _).
+
+:- end_tests(pipeline_subslot_rebuild).
+
+
 :- begin_tests(use_candidate_bwu_memo).
 
 test(merge_empty_ctx_with_memo, [true(B == use_state([wayland],[]))]) :-

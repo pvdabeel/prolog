@@ -150,6 +150,14 @@ plan:print_newuse_note_if_any(update, Context) :-
   message:color(orange),
   message:print(' (changed-use)'),
   message:color(normal).
+plan:print_newuse_note_if_any(update, Context) :-
+  memberchk(rebuild_reason(subslot_change(Provider, _Old, _New)), Context),
+  !,
+  message:color(orange),
+  message:print(' (abi-rebuild: '),
+  plan:format_blocker_origin(Provider),
+  message:print(')'),
+  message:color(normal).
 plan:print_newuse_note_if_any(_Action, _Context).
 
 plan:print_blocker_note_if_any(ps(_, Notes, _), Action, Repository, Entry) :-

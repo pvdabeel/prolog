@@ -184,6 +184,19 @@ pipeline:prove_plan_with_fallback(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, 
 % scheduler state).
 
 pipeline:prove_plan_with_fallback(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, SCCs, FallbackUsed) :-
+  pipeline:prove_plan_with_fallback_base(Goals, Proof0, Model0, Plan0, Triggers0, SCCs0, Fallback0),
+  pipeline:subslot_rebuild_loop(Goals,
+                                Proof0, Model0, Plan0, Triggers0, SCCs0, Fallback0,
+                                ProofAVL, ModelAVL, Plan, TriggersAVL, SCCs, FallbackUsed).
+
+
+%! pipeline:prove_plan_with_fallback_base(+Goals, -Proof, -Model, -Plan, -Triggers, -SCCs, -FallbackUsed)
+%
+% The bare 5-tier fallback pipeline, without the sub-slot ABI rebuild
+% augmentation. Used internally by prove_plan_with_fallback/7 (both for the
+% initial proof and for each re-proof of an augmented goal set).
+
+pipeline:prove_plan_with_fallback_base(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, SCCs, FallbackUsed) :-
   pipeline:with_fallback(
     pipeline:prove_plan(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, SCCs),
     FallbackUsed).
@@ -208,6 +221,191 @@ pipeline:prove_plan_basic(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, SCCs) :-
   scheduler:schedule(ProofAVL, TriggersAVL, Plan0, Remainder0, Plan, _Remainder, SCCs),
   sampler:phase_walltime(T3),
   sampler:phase_record(T0, T1, T2, T3).
+
+
+% -----------------------------------------------------------------------------
+%  Sub-slot (:=) ABI rebuild propagation (portage-ng#89)
+% -----------------------------------------------------------------------------
+%
+% Native equivalent of Gentoo's @preserved-rebuild / haskell-updater pass.
+% When a transaction changes a provider's sub-slot (e.g. a dev-haskell/*
+% library rebuilt with a new GHC ABI hash, or dev-lang/ocaml with a new ABI),
+% the already-installed reverse-deps that bound to it through `:=` / `:slot=`
+% break ghc-pkg check / findlib's registry and must be rebuilt before the next
+% consumer configures. This is transaction-driven: it inspects the freshly
+% computed plan, finds providers whose sub-slot differs from the installed
+% copy, pulls in the installed `:=`-consumers as same-version `:update`
+% rebuilds, and re-proves so they are scheduled after the provider. The loop
+% iterates to a fixpoint (a rebuilt consumer keeps its version and therefore
+% its sub-slot, so the closure terminates quickly).
+
+%! pipeline:subslot_rebuild_suspended is semidet.
+%
+% Dynamic flag. When asserted, the sub-slot rebuild augmentation is skipped.
+% Set by the bulk per-entry test harnesses (test_stats) so they keep their
+% single-entry semantics and performance; real plan paths (merge / build /
+% pretend / writer) leave it unset and get the augmentation.
+
+:- dynamic pipeline:subslot_rebuild_suspended/0.
+
+
+%! pipeline:subslot_rebuild_enabled is semidet.
+%
+% True when the augmentation should run: config:subslot_rebuild/1 is not
+% false (defaults to enabled when unset) and it is not suspended.
+
+pipeline:subslot_rebuild_enabled :-
+  \+ pipeline:subslot_rebuild_suspended,
+  ( catch(config:subslot_rebuild(Bool), _, fail) -> Bool == true ; true ).
+
+
+%! pipeline:subslot_rebuild_loop(+Goals, +P0,+M0,+Pl0,+T0,+SCCs0,+FB0, -P,-M,-Pl,-T,-SCCs,-FB)
+%
+% Augmentation fixpoint around prove_plan_with_fallback_base/7. If the plan
+% changed a `:=` provider's sub-slot and there are installed consumers not yet
+% targeted, append them as rebuild goals and re-prove; otherwise pass the
+% current proof artefacts through unchanged. Any error in detection degrades
+% gracefully to passthrough so planning is never broken by this pass.
+
+pipeline:subslot_rebuild_loop(Goals, P0, M0, Pl0, T0, SCCs0, FB0, P, M, Pl, T, SCCs, FB) :-
+  ( pipeline:subslot_rebuild_enabled,
+    catch(pipeline:subslot_extra_goals(Pl0, Goals, Extra), _, fail),
+    Extra \== []
+  -> append(Goals, Extra, Goals1),
+     pipeline:prove_plan_with_fallback_base(Goals1, P1, M1, Pl1, T1, SCCs1, FB1),
+     pipeline:subslot_rebuild_loop(Goals1, P1, M1, Pl1, T1, SCCs1, FB1, P, M, Pl, T, SCCs, FB)
+  ;  P = P0, M = M0, Pl = Pl0, T = T0, SCCs = SCCs0, FB = FB0
+  ).
+
+
+%! pipeline:subslot_extra_goals(+Plan, +ExistingGoals, -ExtraGoals) is semidet.
+%
+% Fails when the plan changes no `:=` provider's sub-slot (the cheap common
+% case). Otherwise binds ExtraGoals to the installed `:=`-consumer rebuilds
+% not already present in ExistingGoals (possibly []).
+
+pipeline:subslot_extra_goals(Plan, ExistingGoals, ExtraGoals) :-
+  pipeline:subslot_changed_providers(Plan, Changed),
+  Changed \== [],
+  pipeline:goals_target_cns(ExistingGoals, TargetedCNs),
+  pipeline:subslot_affected_consumers(Changed, TargetedCNs, ExtraGoals).
+
+
+%! pipeline:subslot_changed_providers(+Plan, -Changed) is det.
+%
+% Collects prov(C, N, Slot, OldSub, NewSub) for every merge action in the
+% plan whose new sub-slot differs from the installed copy in the same slot.
+
+pipeline:subslot_changed_providers(Plan, Changed) :-
+  findall(prov(C, N, Slot, OldSub, NewSub),
+          ( pipeline:plan_merge_target(Plan, Repo, Entry),
+            cache:ordered_entry(Repo, Entry, C, N, _),
+            slotmeta:entry_slot_default(Repo, Entry, Slot),
+            sets:entry_subslot(Repo://Entry, NewSub),
+            cache:ordered_entry(pkg, OldEntry, C, N, _),
+            slotmeta:entry_slot_default(pkg, OldEntry, Slot),
+            sets:entry_subslot(pkg://OldEntry, OldSub),
+            OldSub \== NewSub
+          ),
+          Changed0),
+  sort(Changed0, Changed).
+
+
+%! pipeline:plan_merge_target(+Plan, -Repo, -Entry) is nondet.
+%
+% Enumerates the merge-shaped rules (install / update / upgrade / downgrade)
+% in a scheduled plan (a list of steps, each a list of rule/2 terms).
+
+pipeline:plan_merge_target(Plan, Repo, Entry) :-
+  member(Step, Plan),
+  member(rule(Repo://Entry:Action?{_Ctx}, _Body), Step),
+  memberchk(Action, [install, update, upgrade, downgrade]).
+
+
+%! pipeline:subslot_affected_consumers(+Changed, +TargetedCNs, -ExtraGoals) is det.
+%
+% Finds the installed reverse-deps that bound to a changed provider through
+% a sub-slot operator and turns each (once, deduplicated by VDB entry) into a
+% same-version `:update` rebuild goal carrying rebuild_reason(subslot_change/3).
+
+pipeline:subslot_affected_consumers(Changed, TargetedCNs, ExtraGoals) :-
+  findall(c(Entry, TreeRepo, C/N, OldSub, NewSub),
+          ( member(prov(C, N, Slot, OldSub, NewSub), Changed),
+            pipeline:subslot_consumer_of(C, N, Slot, TargetedCNs, Entry, TreeRepo)
+          ),
+          Raw),
+  sort(1, @<, Raw, Unique),
+  findall(Goal,
+          ( member(Cm, Unique), pipeline:subslot_consumer_goal(Cm, Goal) ),
+          ExtraGoals).
+
+
+%! pipeline:subslot_consumer_of(+C, +N, +Slot, +TargetedCNs, -ICEntry, -TreeRepo) is nondet.
+%
+% True for an installed package ICEntry (with a matching tree ebuild in
+% TreeRepo) that is not C/N itself, not already targeted, and whose tree
+% *DEPEND declares a sub-slot-bound (`:=` / `:slot=`) dependency on C/N in
+% slot Slot.
+
+pipeline:subslot_consumer_of(C, N, Slot, TargetedCNs, ICEntry, TreeRepo) :-
+  vdb:installed_entry(ICEntry),
+  cache:ordered_entry(pkg, ICEntry, ICC, ICN, _),
+  \+ ( ICC == C, ICN == N ),
+  \+ memberchk(ICC-ICN, TargetedCNs),
+  cache:ordered_entry(TreeRepo, ICEntry, ICC, ICN, _),
+  TreeRepo \== pkg,
+  once(( member(Key, [rdepend, depend, bdepend, pdepend]),
+         cache:entry_metadata(TreeRepo, ICEntry, Key, Dep),
+         candidate:dep_contains_pkg_dep_on(Dep, C, N, _Op, _V, SlotReq),
+         pipeline:subslot_bound_slotspec(SlotReq, Slot)
+       )).
+
+
+%! pipeline:subslot_bound_slotspec(+SlotReq, +Slot) is semidet.
+%
+% True when a parsed dependency slot restriction binds the consumer to the
+% provider's sub-slot (a rebuild trigger) and is compatible with Slot:
+%   `:=`       -> [any_same_slot]            (binds, any slot)
+%   `:slot=`   -> [slot(S),equal]            (binds, requires S == Slot)
+%   `:s/ss=`   -> [slot(S),subslot(_),equal] (binds, requires S == Slot)
+
+pipeline:subslot_bound_slotspec([any_same_slot], _Slot) :- !.
+pipeline:subslot_bound_slotspec(SlotReq, Slot) :-
+  memberchk(equal, SlotReq),
+  ( member(slot(S), SlotReq)
+  -> slotmeta:canon_slot(S, Sc), Sc == Slot
+  ;  true
+  ).
+
+
+%! pipeline:subslot_consumer_goal(+Consumer, -Goal) is det.
+%
+% Builds the rebuild goal: a same-version `:update` of the installed consumer
+% that re-resolves its dependencies (so the changed provider edge orders the
+% rebuild after the provider) and carries the subslot_change reason.
+
+pipeline:subslot_consumer_goal(c(Entry, TreeRepo, Provider, OldSub, NewSub),
+                               TreeRepo://Entry:update?{[replaces(pkg://Entry),
+                                                        rebuild_reason(subslot_change(Provider, OldSub, NewSub))]}).
+
+
+%! pipeline:goals_target_cns(+Goals, -CNs) is det.
+%
+% Collects the Category-Name pairs that the goal list already targets, so the
+% augmentation never re-adds a consumer that is already being built.
+
+pipeline:goals_target_cns(Goals, CNs) :-
+  findall(C-N,
+          ( member(Goal, Goals), pipeline:goal_target_cn(Goal, C-N) ),
+          CNs0),
+  sort(CNs0, CNs).
+
+
+%! pipeline:goal_target_cn(+Goal, -CN) is semidet.
+
+pipeline:goal_target_cn(Repo://Entry:_Action?{_Ctx}, C-N) :-
+  cache:ordered_entry(Repo, Entry, C, N, _),
+  !.
 
 
 % =============================================================================
@@ -237,8 +435,20 @@ pipeline:test_stats(Repository) :-
 % Same as pipeline:test_stats/1 with explicit Style.
 % Uses prove_plan_with_fallback for full-pipeline proving with the
 % canonical 5-tier fallback chain, then prints via printer:print/5.
+%
+% The sub-slot ABI rebuild augmentation (portage-ng#89) is suspended for the
+% duration so per-entry proving keeps its single-target semantics and speed.
 
 pipeline:test_stats(Repository, Style) :-
+  setup_call_cleanup(
+    assertz(pipeline:subslot_rebuild_suspended),
+    pipeline:test_stats_run(Repository, Style),
+    retractall(pipeline:subslot_rebuild_suspended)).
+
+
+%! pipeline:test_stats_run(+Repository, +Style) is det
+
+pipeline:test_stats_run(Repository, Style) :-
   config:proving_target(Action),
   aggregate_all(count, (Repository:entry(_E)), ExpectedTotal),
   sampler:reset('Pipeline', ExpectedTotal),

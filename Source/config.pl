@@ -1356,6 +1356,27 @@ config:deconflict_collisions(override).
 config:toolchain_reactivation(true).
 
 
+%! config:subslot_rebuild(?Bool)
+%
+% When true, the resolver propagates sub-slot (`:=`) ABI changes to
+% already-installed reverse-dependencies -- the native equivalent of
+% Gentoo's `@preserved-rebuild` / `haskell-updater` pass. After a plan is
+% computed, any provider whose sub-slot changes versus the installed copy
+% (e.g. a `dev-haskell/*` library rebuilt with a new GHC ABI hash, or
+% `dev-lang/ocaml` with a new ABI) triggers same-version rebuilds of the
+% installed packages that bound to it through a `:=` / `:slot=` dependency.
+% Those consumers are re-emitted as `:update` rebuilds (carrying
+% `rebuild_reason(subslot_change(...))`) and re-proven so they are scheduled
+% after the provider, keeping `ghc-pkg check` / OCaml's findlib registry
+% consistent before the next consumer configures (portage-ng#89).
+%
+% The pass is transaction-driven: it only fires when the plan itself changes
+% a `:=` provider's sub-slot, so for the common non-Haskell/non-OCaml case it
+% is a cheap plan scan that adds nothing. Set to `false` to disable.
+
+config:subslot_rebuild(true).
+
+
 %! config:features_test_enabled is semidet.
 %
 % True iff FEATURES (env > make.conf > fallback) contains 'test' with
