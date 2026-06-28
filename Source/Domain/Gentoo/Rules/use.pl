@@ -1628,15 +1628,26 @@ use:shared_dep_use_forcing_enabled :-
 % `provider[flag]` but the provider (C,N) is *already committed* in the
 % current proof pass (its :install was proved before this HARD flag was
 % accumulated), so the committed USE cannot include it. Learn a persistent
-% `bwu_force(C,N)` for the missing HARD flags and reprove so the provider is
-% rebuilt with them (applied via apply_learned_bwu_force/4). Otherwise a no-op,
-% so resolution continues normally.
+% `bwu_force(C,N)` for the missing HARD flags so the provider is rebuilt with
+% them on the next attempt (applied via apply_learned_bwu_force/4). Otherwise a
+% no-op, so resolution continues normally.
+%
+% Throws prover_reprove(bwu_force(C,N,Flags)) on the first newly-learned force
+% so the provider is re-proved with the flag applied. Re-proving incrementally
+% (one force, full re-proof, which then exposes the next force) is what reaches
+% full convergence on deep stacks: applying all discovered forces at once
+% follows a different, less complete trajectory. The learned force persists
+% across passes (it survives clear_bwu_cross_dep_memos/0) and
+% apply_learned_bwu_force/4 re-applies it on whatever pass proves the provider
+% next, including the final reprove-disabled fallback.
 %
 % Narrow + self-limiting: fires only for an already-committed provider, only
 % for HARD (forcing) enable flags that are seedable (not profile-masked) and
-% not default-on, and at most once per newly-learned flag set (learned-store
-% dedup via Added). EQ (`[flag=]`) flags never force a rebuild -- they follow
-% via ranking:apply_equality_pins/3.
+% not default-on, USE_EXPAND excluded, and at most once per newly-learned flag
+% set (learned-store dedup via Added). A per-(C,N) seen-set dedup
+% (memo:bwu_force_seen_/3) skips the expensive per-edge recomputation when the
+% provider's HARD set is unchanged within a pass. EQ (`[flag=]`) flags never
+% force a rebuild -- they follow via ranking:apply_equality_pins/3.
 
 use:maybe_force_shared_dep_use(C, N, RepoEntry) :-
     ( use:shared_dep_use_forcing_enabled,
@@ -1644,14 +1655,39 @@ use:maybe_force_shared_dep_use(C, N, RepoEntry) :-
       cnselect:snapshot_selected_cn_candidates(C, N, _Committed),
       memo:candidate_bwu_hard_(C, N, use_state(HardEn, _)),
       HardEn \== [],
-      use:shared_dep_force_flags(RepoEntry, HardEn, ForceEn),
-      ForceEn \== [],
-      prover:learn(bwu_force(C, N), use_state(ForceEn, []), Added),
-      Added == true
+      \+ use:bwu_force_already_seen(C, N, HardEn)
     ->
-        throw(prover_reprove(bwu_force(C, N, ForceEn)))
+        use:mark_bwu_force_seen(C, N, HardEn),
+        ( use:shared_dep_force_flags(RepoEntry, HardEn, ForceEn),
+          ForceEn \== [],
+          prover:learn(bwu_force(C, N), use_state(ForceEn, []), Added),
+          Added == true
+        ->
+            throw(prover_reprove(bwu_force(C, N, ForceEn)))
+        ; true
+        )
     ; true
     ).
+
+
+%! use:bwu_force_already_seen(+C, +N, +HardEn) is semidet.
+%
+% True when the shared-dep USE forcing pass already processed this exact HARD
+% enable set for (C,N) in the current proof pass, so it can skip recomputation.
+% The HARD memo is a canonical ord-set union, so == comparison is reliable.
+
+use:bwu_force_already_seen(C, N, HardEn) :-
+    memo:bwu_force_seen_(C, N, Seen),
+    Seen == HardEn.
+
+
+%! use:mark_bwu_force_seen(+C, +N, +HardEn) is det.
+%
+% Record the HARD enable set just processed for (C,N) (one entry per pair).
+
+use:mark_bwu_force_seen(C, N, HardEn) :-
+    retractall(memo:bwu_force_seen_(C, N, _)),
+    assertz(memo:bwu_force_seen_(C, N, HardEn)).
 
 
 %! use:shared_dep_force_flags(+RepoEntry, +HardEn, -ForceEn) is det.
@@ -1885,7 +1921,8 @@ use:check_bwu_cross_dep(C, N, RepoEntry, BWU) :-
 use:clear_bwu_cross_dep_memos :-
     retractall(memo:candidate_bwu_(_, _, _)),
     retractall(memo:candidate_bwu_hard_(_, _, _)),
-    retractall(memo:candidate_bwu_eq_(_, _, _)).
+    retractall(memo:candidate_bwu_eq_(_, _, _)),
+    retractall(memo:bwu_force_seen_(_, _, _)).
 
 
 %! use:check_bwu_ed_conflict(+C, +N, +Context)
