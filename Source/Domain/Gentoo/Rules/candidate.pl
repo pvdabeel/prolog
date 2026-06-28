@@ -709,18 +709,32 @@ candidate:grouped_dep_slot_lock(gd(_Action, _C, _N, _PackageDeps, _SlotReq, _Con
 %
 % Enumerates candidate entries respecting slot constraints and CN-consistency.
 %
-% For explicit slot/subslot deps (cat/pkg:0/0.16, :=0/0.16, etc.), we must
-% NOT blindly reuse an existing selected_cn(C,N) choice that may point at a
-% different slot/subslot (otherwise the dep degrades into a bogus
-% "non-existent, assumed ..." domain assumption). Such deps therefore skip
-% selected_cn reuse and enumerate fresh candidates; full version/domain
-% verification still happens downstream (PreVerified = false).
+% For explicit slot/subslot deps (cat/pkg:0/0.16, :=0/0.16, etc.) we first
+% try to reuse an *already-selected* selected_cn(C,N) candidate, but only
+% when it is verified compatible with this edge's slot AND version/domain
+% constraints (cnselect:selected_cn_candidate_compatible/7). Reuse is
+% committed (deterministic) so the prover cannot backtrack into alternative
+% fresh candidates that then fail downstream and degrade into spurious
+% `unsatisfied_constraints` assumptions — the multi-consumer cascade that
+% turned the whole Qt/KDE stack to exit-2 even though the shared provider
+% (e.g. dev-qt/qtbase-6.11.1) was already pinned and satisfied every edge
+% (portage-ng#91). We must still NOT blindly reuse an *incompatible*
+% slot/subslot selection (that degrades into a bogus "non-existent" domain
+% assumption); the compatibility check guards against this, and any edge
+% without a compatible pin falls through to fresh enumeration with full
+% downstream verification (PreVerified = false).
 
-candidate:grouped_dep_find_candidate(gd(Action, C, N, _PackageDeps, SlotReq, Context), _SsLock,
-                                     FoundRepo://Candidate, false) :-
+candidate:grouped_dep_find_candidate(gd(Action, C, N, PackageDeps1, SlotReq, Context), _SsLock,
+                                     FoundRepo://Candidate, PreVerified) :-
   SlotReq = [slot(_)|_],
   !,
-  acceptance:accepted_keyword_candidate(Action, C, N, SlotReq, _Ss0, Context, FoundRepo://Candidate).
+  ( cnselect:selected_cn_candidate_compatible(Action, C, N, SlotReq, PackageDeps1, Context,
+                                              FoundRepo://Candidate)
+  -> PreVerified = true
+  ;  PreVerified = false,
+     acceptance:accepted_keyword_candidate(Action, C, N, SlotReq, _Ss0, Context,
+                                           FoundRepo://Candidate)
+  ).
 candidate:grouped_dep_find_candidate(gd(Action, C, N, PackageDeps1, SlotReq, Context), _SsLock,
                                      FoundRepo://Candidate, true) :-
   cnselect:selected_cn_candidate_compatible(Action, C, N, SlotReq, PackageDeps1, Context, FoundRepo://Candidate),
