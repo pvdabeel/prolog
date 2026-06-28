@@ -190,6 +190,7 @@ warning:print_blockers_section(BlockerAssumptions) :-
     nl,
     forall(member(line(Strength, Phase, BlockAtom, RequiredBy), Lines),
            warning:print_blocker_line(Strength, Phase, BlockAtom, RequiredBy)),
+    warning:print_deconfliction_note(BlockerAssumptions),
     nl
   ).
 warning:print_blockers_section(BlockerAssumptions) :-
@@ -199,14 +200,16 @@ warning:print_blockers_section(BlockerAssumptions) :-
   nl,
   forall(member(Content, BlockerAssumptions),
          ( warning:print_assumption_detail(rule(Content, [])),
-           nl )).
+           nl )),
+  warning:print_deconfliction_note(BlockerAssumptions).
 warning:print_blockers_section(BlockerAssumptions) :-
   nl,
   message:header('Blockers added during proving & planning:'),
   nl,
   forall(member(Content, BlockerAssumptions),
          ( warning:print_assumption_detail(rule(Content, [])),
-           nl )).
+           nl )),
+  warning:print_deconfliction_note(BlockerAssumptions).
 
 %! warning:blocker_assumption_line(+Content, -Strength, -Phase, -BlockAtom, -RequiredBy)
 %
@@ -259,6 +262,58 @@ warning:print_blocker_line(Strength, Phase, BlockAtom, RequiredBy) :-
   format('  [blocks B] ~w (~w blocker, phase: ~w, required by: ~w)~n',
          [BlockAtom, StrengthLabel, Phase, RequiredBy]),
   message:color(normal).
+
+
+%! warning:deconfliction_mode(-Mode)
+%
+% Resolves config:deconflict_collisions/1 (off|report|override), defaulting
+% to `override` when unset. Mirrors ebuild_exec:deconflict_mode/1.
+
+warning:deconfliction_mode(Mode) :-
+  ( catch(config:deconflict_collisions(M), _, fail), ground(M) ->
+      Mode = M
+  ; Mode = override
+  ).
+
+
+%! warning:has_soft_blocker(+BlockerAssumptions) is semidet.
+%
+% True when at least one blocker assumption is a soft (weak) blocker.
+% Weak blockers against an installed package are exactly the ones the
+% merge-time deconfliction (collision-override) applies to.
+
+warning:has_soft_blocker(BlockerAssumptions) :-
+  member(Content, BlockerAssumptions),
+  warning:blocker_assumption_line(Content, Strength, _, _, _),
+  Strength \== strong,
+  !.
+
+
+%! warning:print_deconfliction_note(+BlockerAssumptions)
+%
+% When collision deconfliction is enabled (config:deconflict_collisions \=
+% off) and there is at least one soft blocker, appends a note to the
+% blockers section explaining how those blockers are handled at merge time.
+% This connects the plan-stage blocker display to the build-time
+% collision-override action (portage-ng#90), so the reader understands the
+% build will proceed rather than be refused the way traditional emerge does.
+
+warning:print_deconfliction_note(BlockerAssumptions) :-
+  ( warning:deconfliction_mode(Mode),
+    Mode \== off,
+    warning:has_soft_blocker(BlockerAssumptions)
+  ->
+    message:color(darkgray),
+    ( Mode == override ->
+        format('  -> soft blockers against installed packages are deconflicted at merge time:~n', []),
+        format('     the merge is retried with FEATURES=-collision-protect -protect-owned so the~n', []),
+        format('     package overwrites the conflicting file(s) and the build proceeds (#90).~n', [])
+    ;   format('  -> soft blockers are reported only (config:deconflict_collisions = ~w); a real~n', [Mode]),
+        format('     file collision will abort the merge. Set override to deconflict (#90).~n', [])
+    ),
+    message:color(normal)
+  ; true
+  ).
 
 
 % -----------------------------------------------------------------------------
