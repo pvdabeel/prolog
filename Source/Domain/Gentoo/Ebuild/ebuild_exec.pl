@@ -770,8 +770,11 @@ ebuild_exec:maybe_reactivate_toolchain(Action, Repo, Entry, done) :-
   cache:ordered_entry(Repo, Entry, C, N, _Ver),
   ebuild_exec:toolchain_cn(C, N, Kind),
   !,
-  ( Kind == compiler -> WithCompiler = true ; WithCompiler = false ),
-  ebuild_exec:reactivate_toolchain(WithCompiler, Repo://Entry).
+  ( Kind == compiler,
+    ebuild_exec:gcc_profile_major(Repo, Entry, Major)
+  -> ebuild_exec:reactivate_toolchain(gcc(Major), Repo://Entry)
+  ;  ebuild_exec:reactivate_toolchain(runtime, Repo://Entry)
+  ).
 
 ebuild_exec:maybe_reactivate_toolchain(_Action, _Repo, _Entry, _Outcome).
 
@@ -779,23 +782,47 @@ ebuild_exec:maybe_reactivate_toolchain(_Action, _Repo, _Entry, _Outcome).
 %! ebuild_exec:toolchain_cn(+Category, +Name, -Kind) is semidet.
 %
 % Recognises toolchain packages whose merge requires reactivating the live
-% environment. Kind is `compiler` for packages that need a `gcc-config`
-% re-select (so the `/usr/bin` + ccache-masquerade wrappers follow the new
-% compiler) and `runtime` for the rest (env-update only).
+% environment. Kind is `compiler` for gcc (needs a `gcc-config` re-select so
+% the `/usr/bin` + ccache-masquerade wrappers follow the just-merged
+% compiler) and `runtime` for the rest (env-update only). clang is `runtime`
+% here: it is activated via `eselect`, not `gcc-config`, and #86 is a gcc
+% concern.
 
 ebuild_exec:toolchain_cn('sys-devel', gcc, compiler).
-ebuild_exec:toolchain_cn('llvm-core', clang, compiler).
-ebuild_exec:toolchain_cn('sys-devel', clang, compiler).
+ebuild_exec:toolchain_cn('llvm-core', clang, runtime).
+ebuild_exec:toolchain_cn('sys-devel', clang, runtime).
 ebuild_exec:toolchain_cn('sys-devel', binutils, runtime).
 ebuild_exec:toolchain_cn('sys-libs', glibc, runtime).
 
 
-%! ebuild_exec:reactivate_toolchain(+WithCompiler, +RepoEntry) is det.
+%! ebuild_exec:gcc_profile_major(+Repo, +Entry, -Major) is semidet.
 %
-% When WithCompiler is `true` (a gcc/clang merge), re-selects the current
-% gcc profile via `gcc-config` so the `/usr/bin` compiler wrappers and the
-% ccache masquerade point at the just-merged compiler; then always runs
-% `env-update` to regenerate `/etc/profile.env` and the `ld.so.cache`.
+% The gcc-config profile major for the just-merged gcc, i.e. its SLOT main
+% component (gcc's SLOT is its major version, and the gcc-config profile is
+% named `${CHOST}-${Major}`). Falls back to the leading numeric component of
+% the version when the slot is unavailable.
+
+ebuild_exec:gcc_profile_major(Repo, Entry, Major) :-
+  ( catch(query:search(slot(Slot), Repo://Entry), _, fail), Slot \== ''
+  -> ( atomic_list_concat([M|_], '/', Slot) -> Major = M ; Major = Slot )
+  ;  catch(query:search(version(V), Repo://Entry), _, fail),
+     ( atomic_list_concat([M|_], '.', V) -> Major = M ; Major = V )
+  ),
+  Major \== '',
+  !.
+
+
+%! ebuild_exec:reactivate_toolchain(+Kind, +RepoEntry) is det.
+%
+% Kind is `gcc(Major)` for a gcc merge or `runtime` otherwise. For a gcc
+% merge, select the gcc-config profile of the *just-merged* gcc -- the
+% `${CHOST}-${Major}` profile, NOT the currently-active one -- so the
+% `/usr/bin` compiler wrappers and the ccache masquerade follow the compiler
+% the plan just built (e.g. gcc-16[objc], while gcc-15 was active). Selecting
+% the current profile (an earlier mistake) would re-pin the old compiler and
+% leave a `gcc[objc]` rebuild invisible to gnustep-make's ObjC probe
+% (portage-ng#86). Then always run `env-update` to regenerate
+% `/etc/profile.env` and the `ld.so.cache`.
 %
 % Serialized under the `portage_pkg_merge` mutex (never overlaps a merge)
 % and fully tolerant of a host where these commands do not exist: the
@@ -804,24 +831,23 @@ ebuild_exec:toolchain_cn('sys-libs', glibc, runtime).
 % config:build_log_dir/'toolchain-reactivation.log' so a run can be
 % confirmed to have fired; the build display itself is left undisturbed.
 
-ebuild_exec:reactivate_toolchain(WithCompiler, RepoEntry) :-
+ebuild_exec:reactivate_toolchain(Kind, RepoEntry) :-
   ( ebuild_exec:reactivation_log_path(LogPath)
   -> format(atom(Redir), ' >>~w 2>&1', [LogPath]),
-     format(atom(Header),
-            'printf "[reactivate %s] %s WithCompiler=~w\\n" "$(date -u +%%FT%%TZ)" "~w">>~w; ',
-            [WithCompiler, RepoEntry, LogPath])
+     format(atom(Marker), 'echo "[reactivate] ~w ~w" >>~w; ', [Kind, RepoEntry, LogPath])
   ;  Redir = ' >/dev/null 2>&1',
-     Header = ''
+     Marker = ''
   ),
-  ( WithCompiler == true
-  -> format(atom(Body),
-            'if command -v gcc-config >/dev/null 2>&1; then p=$(gcc-config -c 2>/dev/null); [ -n "$p" ] && gcc-config "$p"~w; fi; if command -v env-update >/dev/null 2>&1; then env-update~w; fi; true',
-            [Redir, Redir])
-  ;  format(atom(Body),
-            'if command -v env-update >/dev/null 2>&1; then env-update~w; fi; true',
-            [Redir])
+  ( Kind = gcc(Major)
+  -> format(atom(GccCmd),
+            'if command -v gcc-config >/dev/null 2>&1; then cur=$(gcc-config -c 2>/dev/null); chost=$(echo "$cur" | sed "s/-[0-9.]*$//"); if [ -n "$chost" ] && gcc-config "$chost-~w"~w; then :; elif [ -n "$cur" ]; then gcc-config "$cur"~w; fi; fi; ',
+            [Major, Redir, Redir])
+  ;  GccCmd = ''
   ),
-  atom_concat(Header, Body, Script),
+  format(atom(EnvCmd),
+         'if command -v env-update >/dev/null 2>&1; then env-update~w; fi; true',
+         [Redir]),
+  atomic_list_concat([Marker, GccCmd, EnvCmd], Script),
   catch(
     ebuild_exec:with_portage_pkg_merge_lock(merge,
       ( process_create(path(sh), ['-c', Script],
