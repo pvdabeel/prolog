@@ -1570,17 +1570,120 @@ use:describe_required_use_violation(Repo://Entry, use_state(Enable, Disable), De
 % Used when resolving a provider's :install/:run entry so early proofs without
 % bracket USE still pick up requirements discovered later in the proof.
 
-use:merge_memo_candidate_bwu(C, N, BWU0, BWU0) :-
-    \+ memo:candidate_bwu_(C, N, _),
-    !.
 use:merge_memo_candidate_bwu(C, N, BWU0, BWU) :-
-    memo:candidate_bwu_(C, N, BAgg),
-    ( BWU0 == use_state([], []) ->
-        BWU = BAgg
-    ; feature_unification:val_hook(BWU0, BAgg, BWU) ->
-        true
-    ; BWU = BWU0
+    ( memo:candidate_bwu_(C, N, BAgg) ->
+        ( BWU0 == use_state([], []) ->
+            BWU1 = BAgg
+        ; feature_unification:val_hook(BWU0, BAgg, BWU1) ->
+            true
+        ; BWU1 = BWU0
+        )
+    ; BWU1 = BWU0
+    ),
+    use:apply_learned_bwu_force(C, N, BWU1, BWU).
+
+
+%! use:apply_learned_bwu_force(+C, +N, +BWU0, -BWU) is det.
+%
+% Union any persistent `bwu_force(C,N)` learned during an earlier reprove
+% attempt into BWU0 (portage-ng#91 sub-mechanism B). The learned store
+% survives `clear_bwu_cross_dep_memos/0` (unlike the per-pass candidate_bwu_
+% memo), so a HARD flag a consumer required *after* this provider was first
+% committed (e.g. qtbase[icu]) is re-applied here on the re-proof, forcing the
+% provider's :install to build with the flag. A no-op when nothing is learned.
+
+use:apply_learned_bwu_force(C, N, use_state(En0, Dis0), use_state(En, Dis)) :-
+    ( prover:learned(bwu_force(C, N), use_state(ForceEn0, _)),
+      ForceEn0 \== []
+    ->
+        % HARD beats EQ: a forced enable overrides any soft/following disable,
+        % so drop the forced flags from the disable set and add them to enables
+        % rather than unioning via val_hook (which would treat enable-vs-disable
+        % as an irreconcilable conflict and lose the force).
+        sort(ForceEn0, ForceEn),
+        sort(En0, En0s),
+        sort(Dis0, Dis0s),
+        ord_subtract(Dis0s, ForceEn, Dis),
+        ord_union(En0s, ForceEn, En)
+    ; En = En0, Dis = Dis0
     ).
+
+
+%! use:shared_dep_use_forcing_enabled is semidet.
+%
+% Gate for the shared-dependency HARD-USE forcing pass (portage-ng#91
+% sub-mechanism B). Enabled by default; set config:shared_dep_use_forcing(false)
+% to disable.
+
+use:shared_dep_use_forcing_enabled :-
+    ( current_predicate(config:shared_dep_use_forcing/1) ->
+        config:shared_dep_use_forcing(true)
+    ; true
+    ).
+
+
+%! use:maybe_force_shared_dep_use(+C, +N, +RepoEntry) is det.
+%
+% portage-ng#91 sub-mechanism B. Detect that a consumer hard-requires
+% `provider[flag]` but the provider (C,N) is *already committed* in the
+% current proof pass (its :install was proved before this HARD flag was
+% accumulated), so the committed USE cannot include it. Learn a persistent
+% `bwu_force(C,N)` for the missing HARD flags and reprove so the provider is
+% rebuilt with them (applied via apply_learned_bwu_force/4). Otherwise a no-op,
+% so resolution continues normally.
+%
+% Narrow + self-limiting: fires only for an already-committed provider, only
+% for HARD (forcing) enable flags that are seedable (not profile-masked) and
+% not default-on, and at most once per newly-learned flag set (learned-store
+% dedup via Added). EQ (`[flag=]`) flags never force a rebuild -- they follow
+% via ranking:apply_equality_pins/3.
+
+use:maybe_force_shared_dep_use(C, N, RepoEntry) :-
+    ( use:shared_dep_use_forcing_enabled,
+      cnselect:cn_domain_reprove_enabled,
+      cnselect:snapshot_selected_cn_candidates(C, N, _Committed),
+      memo:candidate_bwu_hard_(C, N, use_state(HardEn, _)),
+      HardEn \== [],
+      use:shared_dep_force_flags(RepoEntry, HardEn, ForceEn),
+      ForceEn \== [],
+      prover:learn(bwu_force(C, N), use_state(ForceEn, []), Added),
+      Added == true
+    ->
+        throw(prover_reprove(bwu_force(C, N, ForceEn)))
+    ; true
+    ).
+
+
+%! use:shared_dep_force_flags(+RepoEntry, +HardEn, -ForceEn) is det.
+%
+% From the accumulated HARD enable flags, keep those a committed provider
+% would not already carry: not default-on (`+`) in IUSE, and seedable (the
+% profile does not force them off). These are the flags worth forcing a
+% provider rebuild for.
+
+use:shared_dep_force_flags(RepoEntry, HardEn, ForceEn) :-
+    findall(F,
+            ( member(F, HardEn),
+              \+ use:is_use_expand_flag(F),
+              \+ use:entry_iuse_plus_default(RepoEntry, F),
+              use:requse_flag_seedable(RepoEntry, F)
+            ),
+            ForceEn0),
+    sort(ForceEn0, ForceEn).
+
+
+%! use:is_use_expand_flag(+Flag) is semidet.
+%
+% True when Flag is a USE_EXPAND-derived flag (e.g. python_targets_python3_14,
+% abi_x86_64, cpu_flags_x86_sse2). These are managed by their eclasses /
+% multilib handling, so the shared-dep HARD-USE forcing pass leaves them to the
+% normal resolution path rather than learning a persistent bwu_force for them.
+
+use:is_use_expand_flag(Flag) :-
+    eapi:use_expand(Prefix),
+    atom_concat(Prefix, '_', PrefixUnderscore),
+    atom_concat(PrefixUnderscore, _, Flag),
+    !.
 
 
 %! use:unify_memo_bwu_into_context(+C, +N, +Ctx0, -Ctx) is det.

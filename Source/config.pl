@@ -901,6 +901,33 @@ config:proving_target(run).
 config:reprove_max_retries(20).
 
 
+%! config:shared_dep_use_forcing(?Bool)
+%
+% When true, the resolver folds a consumer's HARD bracketed USE requirement
+% (`dep[flag]`, an unconditional/forcing directive -- NOT a following `[flag=]`)
+% onto an already-committed shared provider and reproves so the provider is
+% rebuilt with that flag enabled, instead of degrading the consumer to a
+% `unsatisfied_constraints` domain assumption (portage-ng#91 sub-mechanism B).
+%
+% The canonical case is the KDE-Frameworks stack: `dev-qt/qtbase` is committed
+% (its `:install` proved) before `kde-frameworks/kcoreaddons` and ~21 siblings
+% are resolved, and those need `>=dev-qt/qtbase-6.10.1:6 [ dbus? icu network ]`,
+% i.e. `qtbase[icu]`. Because `icu` is not a profile/IUSE default and arrived
+% after qtbase was committed `-icu`, the consumers degrade. With this flag the
+% resolver learns a persistent `bwu_force(C,N)` for the missing HARD flag and
+% reproves; on the next attempt qtbase's `:install` builds with `icu` and the
+% cascade clears.
+%
+% Scope is deliberately narrow (and self-limiting): it fires only when the
+% provider is *already* committed in the current proof pass (so its USE was
+% frozen before the flag arrived), only for HARD (forcing) flags that are
+% seedable (not profile-masked) and not already default-on, and at most once
+% per (provider, flag-set) via the learned-store dedup. Set to `false` to
+% disable.
+
+config:shared_dep_use_forcing(true).
+
+
 %! config:avoid_reinstall(?Bool)
 %
 % If a package is already installed, when this config item is set to true,

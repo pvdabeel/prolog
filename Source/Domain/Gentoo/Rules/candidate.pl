@@ -803,6 +803,7 @@ candidate:grouped_dep_use_and_slot(gd(_Action, C, N, PackageDeps1, SlotReq, Cont
   candidate:grouped_dep_stabilize_bwu(FoundRepo://Candidate, NewContext0, NewContext1),
   candidate:grouped_dep_apply_equality_pins(FoundRepo://Candidate, NewContext1, NewContext),
   use:check_bwu_ed_conflict_pv(C, N, ContextDep, MergedUse, NewContext),
+  use:maybe_force_shared_dep_use(C, N, FoundRepo://Candidate),
   use:unify_memo_bwu_into_context(C, N, NewContext, NewContextMemo),
   slotmeta:query_search_slot_constraint(SlotReq, FoundRepo://Candidate, SlotMeta),
   dependency:process_slot(SlotReq, SlotMeta, C, N, FoundRepo://Candidate, NewContextMemo, NewerContext0).

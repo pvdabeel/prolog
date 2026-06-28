@@ -128,6 +128,14 @@ heuristic:handle_reprove(cn_domain(C, N, Domain, Candidates, Reasons), Added) :-
   ; Added = false
   ),
   !.
+heuristic:handle_reprove(bwu_force(_C, _N, _Flags), true) :-
+  % portage-ng#91 sub-mechanism B: the forced shared-dep USE flag(s) were
+  % already stored in the learned constraint store by the throw site
+  % (use:maybe_force_shared_dep_use/3), so just confirm progress so the
+  % bounded reprove loop re-proves with the flag applied. The throw site only
+  % fires when prover:learn reports Added==true, so this never loops on an
+  % already-learned flag set.
+  !.
 heuristic:handle_reprove(_, false).
 
 
