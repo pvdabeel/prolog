@@ -1085,7 +1085,38 @@ build:summary(Completed, Failed, Stubs) :-
   build:summary_collect(Completed, Failed, Stubs, Parts),
   build:print_summary_parts(Parts),
   format('.~n~n', []),
+  build:print_deconfliction_summary,
   flush_output.
+
+
+%! build:print_deconfliction_summary is det.
+%
+% After the build summary, report any collision-override deconflictions that
+% were applied during this build (portage-ng#90). Each listed package merged
+% only because collision protection was disabled so it could overwrite files
+% owned by another installed package -- the merge succeeded where traditional
+% emerge would have refused at the blocker stage. Reading the record
+% (ebuild_exec:collision_override_applied/2) makes the action visible in the
+% build summary in addition to the per-build-log marker.
+
+build:print_deconfliction_summary :-
+  ( current_predicate(ebuild_exec:collision_override_applied/2),
+    findall(Id, ebuild_exec:collision_override_applied(Id, _), Ids0),
+    sort(Ids0, Ids),
+    Ids \== []
+  ->
+    length(Ids, N),
+    message:color(yellow),
+    ( N =:= 1 -> Word = 'package' ; Word = 'packages' ),
+    format('Deconfliction: collision protection was disabled to merge ~d ~w over~n', [N, Word]),
+    format('               files owned by other installed packages (portage-ng#90):~n', []),
+    message:color(darkgray),
+    forall(member(Id, Ids),
+           format('  - ~w~n', [Id])),
+    message:color(normal),
+    nl
+  ; true
+  ).
 
 build:summary_collect(Completed, Failed, Stubs, Parts) :-
   ( Completed > 0 -> CP = [completed-Completed] ; CP = [] ),
