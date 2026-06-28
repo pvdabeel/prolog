@@ -1068,7 +1068,7 @@ binpkg_exec:execute_inner(SrcRepo, SrcEntry, BinpkgEntryId, Ctx, Outcome) :-
   -> Outcome = failed(missing_ebuild(EbuildPath))
   ; binpkg_extract:prepare_builddir(GpkgPath, InnerName, BuildDir)
   -> ebuild_exec:collect_use_string(SrcRepo, SrcEntry, Ctx, UseString),
-     binpkg_exec:run_qmerge(EbuildPath, GpkgPath, BuildDir, UseString, ExitCode),
+     binpkg_exec:run_qmerge(BinpkgEntryId, EbuildPath, GpkgPath, BuildDir, UseString, ExitCode),
      ( ExitCode =:= 0
      -> Outcome = done
      ;  Outcome = failed(qmerge_exit(ExitCode))
@@ -1134,30 +1134,87 @@ binpkg_exec:inner_name_for(BinpkgEntryId, InnerName) :-
 %  qmerge invocation
 % -----------------------------------------------------------------------------
 
-%! binpkg_exec:run_qmerge(+EbuildPath, +GpkgPath, +BuildDir, +UseString, -ExitCode) is det.
+%! binpkg_exec:run_qmerge(+Id, +EbuildPath, +GpkgPath, +BuildDir, +UseString, -ExitCode) is det.
 %
-% Spawns `ebuild --skip-manifest <EbuildPath> qmerge` with the canonical
-% binpkg env var set:
+% Spawns `ebuild --skip-manifest <EbuildPath> qmerge` (under the
+% portage_pkg_merge lock) with the canonical binpkg env var set:
 %   MERGE_TYPE=binary           tells ebuild.sh this is a binary merge
 %   PORTAGE_BINPKG_FILE=<gpkg>  binpkg path (used for VDB BINPKGMD5)
 %   PORTAGE_BUILDDIR=<dir>      where image/, build-info/, temp/ live
 %   USE=<planner USE>           planner's resolved USE (matches binpkg's)
 %
-% Stdout/stderr inherit the parent's terminal so qmerge's progress
-% messages flow through (matches `ebuild_exec:run_phases/4` style).
-% PATH and HOME are passed through but other environment is NOT
-% sanitized -- if the user has portage-related env vars set we honor
-% them, mirroring how `ebuild ... merge` already behaves under
-% `ebuild_exec`.
+% Id is the binpkg entry id (used for the deconfliction record). Under
+% config:deconflict_collisions=override the qmerge is recovered from a
+% collision-protect abort (see run_qmerge_deconflict/6); otherwise stdout/
+% stderr inherit the parent's terminal so qmerge's progress messages flow
+% through. PATH and HOME are passed through but other environment is NOT
+% sanitized -- if the user has portage-related env vars set we honor them,
+% mirroring how `ebuild ... merge` already behaves under `ebuild_exec`.
 
-binpkg_exec:run_qmerge(EbuildPath, GpkgPath, BuildDir, UseString, ExitCode) :-
+binpkg_exec:run_qmerge(Id, EbuildPath, GpkgPath, BuildDir, UseString, ExitCode) :-
   ebuild_exec:with_portage_pkg_merge_lock(qmerge,
-    binpkg_exec:run_qmerge_unlocked(EbuildPath, GpkgPath, BuildDir, UseString, ExitCode)).
+    binpkg_exec:run_qmerge_deconflict(Id, EbuildPath, GpkgPath, BuildDir, UseString, ExitCode)).
 
 
-%! binpkg_exec:run_qmerge_unlocked(+EbuildPath, +GpkgPath, +BuildDir, +UseString, -ExitCode) is det.
+%! binpkg_exec:run_qmerge_deconflict(+Id, +EbuildPath, +GpkgPath, +BuildDir, +UseString, -ExitCode) is det.
+%
+% Runs qmerge with collision deconfliction (portage-ng#90). When
+% config:deconflict_collisions/1 is `override` the qmerge output is captured
+% to a temp log and, if the merge aborts with Portage's collision-protect
+% signature, the qmerge is retried once with FEATURES=-collision-protect
+% -protect-owned so the binary package overwrites the conflicting file(s).
+% In any other mode the qmerge runs once with no override.
 
-binpkg_exec:run_qmerge_unlocked(EbuildPath, GpkgPath, BuildDir, UseString, ExitCode) :-
+binpkg_exec:run_qmerge_deconflict(Id, EbuildPath, GpkgPath, BuildDir, UseString, ExitCode) :-
+  ebuild_exec:deconflict_mode(override),
+  !,
+  setup_call_cleanup(
+    tmp_file_stream(text, LogPath, S0),
+    ( close(S0),
+      binpkg_exec:run_qmerge_unlocked(EbuildPath, GpkgPath, BuildDir, UseString, [], LogPath, ExitCode0),
+      ( ExitCode0 =\= 0,
+        ebuild_exec:collision_phase_error(LogPath, 0)
+      -> binpkg_exec:log_qmerge_collision_retry(Id, ExitCode0),
+         ( \+ ebuild_exec:collision_override_applied(Id, _)
+         -> assertz(ebuild_exec:collision_override_applied(Id, collision_protect))
+         ;  true
+         ),
+         binpkg_exec:run_qmerge_unlocked(EbuildPath, GpkgPath, BuildDir, UseString,
+                                         ['FEATURES'='-collision-protect -protect-owned'], LogPath, ExitCode)
+      ;  ExitCode = ExitCode0
+      )
+    ),
+    catch(delete_file(LogPath), _, true)).
+
+binpkg_exec:run_qmerge_deconflict(_Id, EbuildPath, GpkgPath, BuildDir, UseString, ExitCode) :-
+  binpkg_exec:run_qmerge_unlocked(EbuildPath, GpkgPath, BuildDir, UseString, [], inherit, ExitCode).
+
+
+%! binpkg_exec:log_qmerge_collision_retry(+Id, +ExitCode) is det.
+%
+% Prints a visible marker line when a qmerge is retried with collision
+% protection disabled (mirrors ebuild_exec:log_collision_retry/3, which
+% writes to the source-merge build log; qmerge has no per-build log so the
+% marker goes to the terminal).
+
+binpkg_exec:log_qmerge_collision_retry(Id, ExitCode) :-
+  catch(
+    format('~n=== qmerge ~w failed (exit ~w) with file-collision signature; retrying with FEATURES=-collision-protect -protect-owned (portage-ng#90 deconfliction) ===~n',
+           [Id, ExitCode]),
+    _, true).
+
+
+%! binpkg_exec:run_qmerge_unlocked(+EbuildPath, +GpkgPath, +BuildDir, +UseString, +ExtraEnv, +LogPath, -ExitCode) is det.
+%
+% Spawns `ebuild --skip-manifest <EbuildPath> qmerge`. When LogPath is the
+% atom `inherit` the child's stdout/stderr flow straight to the terminal
+% (live progress). Otherwise output is redirected to LogPath and then echoed
+% to the terminal, preserving the real exit code, so the log can be scanned
+% for the collision-protect signature. ExtraEnv (Name=Value pairs) extends
+% the binpkg env -- used by the deconfliction retry to inject FEATURES.
+
+binpkg_exec:run_qmerge_unlocked(EbuildPath, GpkgPath, BuildDir, UseString, ExtraEnv, inherit, ExitCode) :-
+  !,
   config:ebuild_command(EbuildCmd),
   process_create(
     path(EbuildCmd),
@@ -1166,5 +1223,18 @@ binpkg_exec:run_qmerge_unlocked(EbuildPath, GpkgPath, BuildDir, UseString, ExitC
      environment(['MERGE_TYPE'='binary',
                   'PORTAGE_BINPKG_FILE'=GpkgPath,
                   'PORTAGE_BUILDDIR'=BuildDir,
-                  'USE'=UseString])]),
+                  'USE'=UseString|ExtraEnv])]),
+  process_wait(Pid, exit(ExitCode)).
+
+binpkg_exec:run_qmerge_unlocked(EbuildPath, GpkgPath, BuildDir, UseString, ExtraEnv, LogPath, ExitCode) :-
+  config:ebuild_command(EbuildCmd),
+  process_create(
+    path(sh),
+    ['-c', '"$1" --skip-manifest "$2" qmerge >"$3" 2>&1; rc=$?; cat "$3"; exit $rc',
+     '_', EbuildCmd, EbuildPath, LogPath],
+    [process(Pid),
+     environment(['MERGE_TYPE'='binary',
+                  'PORTAGE_BINPKG_FILE'=GpkgPath,
+                  'PORTAGE_BUILDDIR'=BuildDir,
+                  'USE'=UseString|ExtraEnv])]),
   process_wait(Pid, exit(ExitCode)).
