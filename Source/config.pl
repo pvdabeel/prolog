@@ -1302,6 +1302,38 @@ config:build_serial_retry(true).
 config:build_transient_retry(true).
 
 
+%! config:deconflict_collisions(?Mode)
+%
+% Policy for how the builder reacts when a `merge` phase aborts due to
+% Portage's `pkg_preinst` collision-protect check (a file in the package's
+% image is already owned by a *different* installed package -- e.g.
+% `app-arch/hardlink` vs the installed `sys-apps/util-linux[hardlink]`
+% providing `/usr/bin/hardlink`, or `dev-libs/libiconv` vs `sys-libs/glibc`).
+% Traditional `emerge` refuses such a package at the resolver (blocker)
+% stage; portage-ng instead attempts the build and decides what to do at
+% merge time, which is what tinderbox-ng needs (it must exercise the build,
+% not stop at the plan). Modes:
+%
+%   - `off`      : never override; a collision aborts the merge as usual.
+%   - `report`   : do not override the merge, but record/surface the
+%                  collision as a deconfliction *assumption* (safe default
+%                  for real installs -- visible, non-destructive).
+%   - `override` : re-run the merge with `FEATURES=-collision-protect
+%                  -protect-owned` so the package overwrites the colliding
+%                  file(s) and the merge succeeds. The overwritten path ends
+%                  up listed in two packages' VDB CONTENTS (dual ownership) --
+%                  harmless in an ephemeral tinderbox OverlayFS session, which
+%                  is why this is the tinderbox default. The action is always
+%                  logged (build log marker) and recorded
+%                  (`ebuild_exec:collision_override_applied/2`) so it is never
+%                  silent.
+%
+% Default is `override` (tinderbox-oriented). A production deployment that
+% wants emerge-like safety should set this to `report` in its host config.
+
+config:deconflict_collisions(override).
+
+
 %! config:toolchain_reactivation(?Bool)
 %
 % When true, the Gentoo build domain (`ebuild_exec:maybe_reactivate_toolchain/4`,
