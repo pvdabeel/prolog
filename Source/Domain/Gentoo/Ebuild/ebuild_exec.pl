@@ -715,7 +715,23 @@ ebuild_exec:run_phase_logged_unlocked(EbuildPath, Phase, LogPath, UseString, Exi
 %! ebuild_exec:with_portage_pkg_merge_lock(+Phase, :Goal) is det.
 %
 % Serialize the `merge` phase (and binpkg `qmerge`) across parallel build
-% workers so concurrent installs do not race on `.pkg.portage_lockfile`.
+% workers. The image->live file copy is per-package and would be safe to
+% run concurrently, but the merge phase is not a pure copy: `pkg_preinst`
+% collision-protect reads the *live* filesystem, and `pkg_postinst` invokes
+% process-global, non-package-scoped updaters that read-modify-write shared
+% state -- `ldconfig` (`/etc/ld.so.cache`), `env-update` (`/etc/profile.env`,
+% `/etc/ld.so.conf`), the preserved-libs registry, and the mime/icon/schema
+% caches. `emerge` serializes the merge step by design (`--jobs N`
+% parallelizes compilation, never the merge into ${ROOT}); each `ebuild
+% qmerge`/`merge` invocation assumes it is the sole writer of that shared
+% state during its run. portage-ng's jobserver runs a plan step across N
+% worker threads, so without this mutex two postinsts could race on
+% `ld.so.cache` (last-writer-wins -> a just-installed library missing from
+% the cache -> a sibling package failing to link). This restores emerge's
+% invariant: build/compile/download stay parallel, only merge/qmerge
+% serialize. The race is timing-dependent (overlap + shared write target),
+% which is why it surfaced mainly on lib-heavy same-step waves like the KDE
+% Frameworks leaf set.
 
 :- meta_predicate ebuild_exec:with_portage_pkg_merge_lock(+, 0).
 
@@ -727,6 +743,38 @@ ebuild_exec:with_portage_pkg_merge_lock(qmerge, Goal) :-
   with_mutex(portage_pkg_merge, call(Goal)).
 ebuild_exec:with_portage_pkg_merge_lock(_, Goal) :-
   call(Goal).
+
+
+%! ebuild_exec:reactivate_toolchain(+WithCompiler) is det.
+%
+% Re-activate the toolchain on the live root after a merge, mirroring what
+% `emerge` does between merges (the bare `ebuild` CLI never does this).
+% When WithCompiler is `true` (a gcc/clang package was merged in the step),
+% re-selects the current gcc profile via `gcc-config` so the `/usr/bin`
+% compiler wrappers and the ccache masquerade point at the just-merged
+% compiler; then always runs `env-update` to regenerate `/etc/profile.env`
+% and the `ld.so.cache`. This is what makes a freshly rebuilt
+% `sys-devel/gcc[objc]` actually visible to a later package's `pkg_setup`
+% Objective-C probe under `FEATURES=ccache` (portage-ng#86).
+%
+% Serialized under the `portage_pkg_merge` mutex (never overlaps a merge)
+% and fully tolerant of a host where these commands do not exist: the
+% `command -v` guards make it a silent no-op (e.g. macOS standalone). All
+% output is discarded so the build display is undisturbed.
+
+ebuild_exec:reactivate_toolchain(WithCompiler) :-
+  ( WithCompiler == true
+  -> Script = 'if command -v gcc-config >/dev/null 2>&1; then p=$(gcc-config -c 2>/dev/null); [ -n "$p" ] && gcc-config "$p" >/dev/null 2>&1; fi; if command -v env-update >/dev/null 2>&1; then env-update >/dev/null 2>&1; fi; true'
+  ;  Script = 'if command -v env-update >/dev/null 2>&1; then env-update >/dev/null 2>&1; fi; true'
+  ),
+  catch(
+    ebuild_exec:with_portage_pkg_merge_lock(merge,
+      ( process_create(path(sh), ['-c', Script],
+                       [stdout(null), stderr(null), process(Pid)]),
+        process_wait(Pid, _Status)
+      )),
+    _Error,
+    true).
 
 
 %! ebuild_exec:log_phase_header(+LogPath, +Phase) is det.

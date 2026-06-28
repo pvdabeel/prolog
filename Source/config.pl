@@ -1302,6 +1302,27 @@ config:build_serial_retry(true).
 config:build_transient_retry(true).
 
 
+%! config:toolchain_reactivation(?Bool)
+%
+% When true, the builder re-activates the toolchain between plan steps
+% whenever a step merged a toolchain package (gcc/clang/binutils/glibc):
+% it runs `gcc-config` (regenerating the gcc + ccache-masquerade wrappers)
+% followed by `env-update` (regenerating `/etc/profile.env` and the
+% `ld.so.cache`). This mirrors what `emerge` does between merges and is
+% required so a freshly rebuilt compiler is actually active for the
+% `pkg_setup` probes of later packages -- e.g. `gnustep-base/gnustep-make`'s
+% Objective-C runtime probe after a `sys-devel/gcc[objc]` rebuild under
+% `FEATURES=ccache` (portage-ng#86). The bare `ebuild` CLI, unlike
+% `emerge`, never reactivates the toolchain on its own.
+%
+% The reactivation is serialized under the `portage_pkg_merge` mutex (so it
+% never overlaps a concurrent merge) and is tolerant of missing host
+% commands: on a non-Gentoo host (e.g. macOS standalone) `gcc-config` /
+% `env-update` are simply absent and the step is a silent no-op.
+
+config:toolchain_reactivation(true).
+
+
 %! config:features_test_enabled is semidet.
 %
 % True iff FEATURES (env > make.conf > fallback) contains 'test' with
