@@ -2067,9 +2067,12 @@ test(other_keyword_filtered_not_phantom, [fail]) :-
 % A phantom-reason grouped dep must still produce a domain assumption at the
 % prover (so the proof completes at tier 1 instead of cascading through all
 % five prove_with_fallback relaxation tiers, portage-ng#20 perf fallout). The
-% emitted assumption carries the assumption_reason tag so the scheduler /
-% printer classify it as phantom downstream (assumed_inner_phantom/1,
-% phantom_grouped_dep_assumption/3) and keep it out of concrete install waves.
+% emitted assumption carries the assumption_reason tag so the printer can
+% classify it downstream (phantom_grouped_dep_assumption/3). The scheduler
+% no longer filters aliasing on these tags: its assumed-dep alias is
+% existence-gated on a concrete planned action, which handles phantoms
+% naturally while preserving ordering edges to planned providers
+% (portage-ng#95).
 test(build_assumption_emits_phantom_with_reason_tag) :-
   assertz(memo:assumption_reason_cache_(install, 'dev-qt', qtbase, unsatisfied_constraints)),
   ( candidate:grouped_dep_build_assumption(install, 'dev-qt', qtbase, [], [], [], Conditions),
@@ -2261,6 +2264,37 @@ test(libglvnd_mesa_provider_consumer_not_cowaved) :-
   get_assoc(portage://'fake/libglvnd-1':run, Map1, WPRun),
   get_assoc(portage://'fake/mesa-1':install, Map1, WCInstall),
   WCInstall > WPRun.
+
+% Regression for portage-ng#95: a dep that degraded to a domain assumption
+% tagged `required_use_violation` (conflicting REQUIRED_USE on the provider)
+% must STILL alias to the concrete planned install of that provider. The
+% earlier `assumed_inner_phantom` guard skipped the alias unconditionally,
+% severing the qtbase BDEPEND ordering edge for KDE consumers (breeze-icons
+% and plasma-wayland-protocols configured before qtbase merged: "No Qt6
+% qtpaths executable found").
+test(requse_violation_assumed_dep_still_aliases) :-
+  Dep = assumed(grouped_package_dependency('dev-qt', qtbase, []):install
+                ?{[required_use_violation(dummy)]}),
+  scheduler:assumed_dep_alias_key(Dep, Key),
+  Key == 'install_phase'-'dev-qt'-qtbase.
+
+test(requse_violation_consumer_promoted_after_planned_provider) :-
+  AssumedDep = assumed(grouped_package_dependency('dev-qt', qtbase, []):install
+                       ?{[required_use_violation(dummy)]}),
+  Consumer = rule(portage://'fake/breeze-icons-1':install, [AssumedDep]),
+  Provider = rule(portage://'fake/qtbase-1':install, []),
+  AllRules = [Consumer, Provider],
+  % Violation: consumer initially waved BEFORE its (assumed) provider.
+  list_to_assoc([ (portage://'fake/breeze-icons-1':install)-1,
+                  (portage://'fake/qtbase-1':install)-2 ], Map0),
+  list_to_assoc([ ('install_phase'-'dev-qt'-qtbase)-(portage://'fake/qtbase-1':install) ],
+                 PkgHeadMap),
+  scheduler:plan_has_ordering_violation(AllRules, Map0, PkgHeadMap),
+  empty_assoc(CfgMap),
+  repair_waves(AllRules, Map0, PkgHeadMap, pd(t, t), CfgMap, Map1),
+  get_assoc(portage://'fake/qtbase-1':install, Map1, WProvider),
+  get_assoc(portage://'fake/breeze-icons-1':install, Map1, WConsumer),
+  WConsumer > WProvider.
 
 :- end_tests(scheduler_install_configure_deps).
 

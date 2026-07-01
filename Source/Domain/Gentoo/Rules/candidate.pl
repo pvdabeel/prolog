@@ -1044,9 +1044,12 @@ candidate:grouped_dep_assemble_conditions(gd(Action, C, N, PackageDeps1, SlotReq
 % relaxation tiers per target — a ~5x proof-cost regression on heavy
 % packages (portage-ng#20 fallout). Instead the assumption is emitted and
 % tagged (assumption_reason / required_use_violation) so the prover
-% completes with a domain assumption, while the scheduler keeps the
-% phantom out of concrete install waves via assumed_inner_phantom/1
-% (the correct layer for plan correctness).
+% completes with a domain assumption; the printer classifies it as a
+% domain assumption downstream. The scheduler's assumed-dep aliasing
+% still orders the consumer after any concrete planned action for the
+% same package — that aliasing is existence-gated, so a true phantom
+% (provider absent from the plan) never inherits a wave, while a
+% provider that IS planned keeps its ordering edge (portage-ng#95).
 
 candidate:grouped_dep_build_assumption(Action, C, N, PackageDeps1, PackageDepsOrig, Context, Conditions) :-
   explanation:assumption_reason_for_grouped_dep(Action, C, N, PackageDepsOrig, Context, Reason),

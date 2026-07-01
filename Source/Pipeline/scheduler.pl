@@ -1043,31 +1043,29 @@ scheduler:add_pkg_head(Rule, In, Out) :-
 % per-dep form, with or without a `?{Ctx}` annotation), returns the
 % (PhaseClass-C-N) key under which a concrete planned action for the same
 % package would appear in `PkgWaveMap`. Fails for any other body element.
+%
+% No phantom-reason filtering happens here (portage-ng#95). Aliasing is
+% already existence-gated by the callers: an ordering edge only arises
+% when `PkgHeadMap` holds a concrete planned action for (PhaseClass,C,N).
+% In the genuine phantom scenarios (portage-ng#10, #14, #15 — the assumed
+% provider is NOT in the plan) that lookup fails and no edge is created
+% regardless. When a concrete planned action DOES exist the package is
+% really being installed, so the consumer must be ordered after it even
+% if its own dep literal degraded to an assumption. An earlier guard
+% (`assumed_inner_phantom`) skipped aliasing for `required_use_violation`
+% / phantom-reason tags unconditionally, which severed the qtbase BDEPEND
+% ordering edge for KDE consumers whenever conflicting REQUIRED_USE
+% forced their qtbase deps into assumptions while qtbase itself remained
+% concretely planned ("No Qt6 qtpaths executable found", portage-ng#95).
+% Phantom classification for reporting remains in the prover/printer
+% (`assumption_reason` / `required_use_violation` context tags).
 
 scheduler:assumed_dep_alias_key(assumed(Inner), Key) :-
-  \+ scheduler:assumed_inner_phantom(Inner),
   !,
   scheduler:assumed_inner_alias_key(Inner, Key).
 scheduler:assumed_dep_alias_key(assumed(Inner)?{_}, Key) :-
-  \+ scheduler:assumed_inner_phantom(Inner),
   !,
   scheduler:assumed_inner_alias_key(Inner, Key).
-
-
-%! scheduler:assumed_inner_phantom(+Inner) is semidet.
-%
-% Assumed deps tagged with a phantom reason (or REQUIRED_USE violation)
-% must not inherit a concrete install wave from another path.
-
-scheduler:assumed_inner_phantom(Inner) :-
-  explainer:term_ctx(Inner, Ctx),
-  memberchk(required_use_violation(_), Ctx),
-  !.
-scheduler:assumed_inner_phantom(Inner) :-
-  explainer:term_ctx(Inner, Ctx),
-  memberchk(assumption_reason(Reason), Ctx),
-  scheduler:assumed_inner_pkg(Inner, C, N),
-  explanation:phantom_grouped_dep_assumption(Reason, C, N).
 
 scheduler:assumed_inner_alias_key((Body:Action)?{_}, PhaseClass-C-N) :-
   !,

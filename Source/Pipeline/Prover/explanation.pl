@@ -162,9 +162,12 @@ explanation:target_ctx(Target, Ctx) :-
 %   - `unsatisfied_constraints`: fallback when no specific reason can be isolated
 %
 % `phantom_grouped_dep_assumption/3` classifies reasons where a domain
-% assumption must not stand in for a real install (portage-ng#10, #14,
-% #15). The prover fails `grouped_dep_build_assumption/7`; the scheduler
-% must not alias the assumed dep to a concrete wave.
+% assumption stands in for an install that will not happen (portage-ng#10,
+% #14, #15). Classification only — used for reporting/diagnostics. The
+% scheduler does NOT consult it for wave aliasing: its assumed-dep alias
+% is existence-gated on a concrete planned action for the same package,
+% which keeps true phantoms out of concrete waves while preserving
+% ordering edges to providers that ARE planned (portage-ng#95).
 
 %! explanation:phantom_grouped_dep_assumption(+Reason, +C, +N) is semidet.
 %
