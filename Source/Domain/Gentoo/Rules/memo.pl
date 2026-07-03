@@ -64,6 +64,7 @@ heuristic:cleanup_state/0 during reprove retries.
 :- thread_local memo:candidate_bwu_hard_/3.     % candidate_bwu_hard_(C, N, BWU) -- forcing directives ([F]/[F?]/[!F]/[!F?])
 :- thread_local memo:candidate_bwu_eq_/3.       % candidate_bwu_eq_(C, N, BWU) -- following directives ([F=]/[!F=])
 :- thread_local memo:bwu_force_seen_/3.         % bwu_force_seen_(C, N, HardEn) -- last HARD set processed by the shared-dep USE forcing pass (#91 sub-mechanism B)
+:- thread_local memo:bwu_force_pending_/3.      % bwu_force_pending_(C, N, ForceEn) -- forces learned this pass, awaiting the end-of-pass batched reprove (#94)
 
 
 %! memo:clear_caches

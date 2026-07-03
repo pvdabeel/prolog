@@ -1570,6 +1570,200 @@ test(seed_run_before_install_phase, [true(M == use_state([dbus],[]))]) :-
 :- end_tests(use_candidate_bwu_memo).
 
 
+% Deferred shared-dep USE-force flush (portage-ng#94): newly-learned forces
+% are recorded in memo:bwu_force_pending_/3 instead of aborting the pass;
+% heuristic:reprove_pending/1 reports them after the pass completes and
+% prover:deferred_reprove_pending/3 turns them into a single batched reprove.
+
+:- begin_tests(bwu_force_deferred_flush).
+
+test(record_and_report_pending, [true(Pending == [bwu_force('dev-qt', qtbase, [icu, wayland])])]) :-
+  use:clear_bwu_cross_dep_memos,
+  use:record_bwu_force_pending('dev-qt', qtbase, [icu, wayland]),
+  heuristic:reprove_pending(bwu_force_flush(Pending)).
+
+test(record_replaces_previous_pending_for_same_cn, [true(Pending == [bwu_force('dev-qt', qtbase, [icu, wayland])])]) :-
+  use:clear_bwu_cross_dep_memos,
+  use:record_bwu_force_pending('dev-qt', qtbase, [icu]),
+  use:record_bwu_force_pending('dev-qt', qtbase, [icu, wayland]),
+  heuristic:reprove_pending(bwu_force_flush(Pending)).
+
+test(no_pending_after_clear, [fail]) :-
+  use:clear_bwu_cross_dep_memos,
+  use:record_bwu_force_pending('dev-qt', qtbase, [icu]),
+  use:clear_bwu_cross_dep_memos,
+  heuristic:reprove_pending(_).
+
+test(handle_reprove_confirms_flush_progress, [true(Added == true)]) :-
+  heuristic:handle_reprove(bwu_force_flush([bwu_force('dev-qt', qtbase, [icu])]), Added).
+
+test(deferred_reprove_pending_reports_flush_within_budget,
+     [true(Info == bwu_force_flush([bwu_force('dev-qt', qtbase, [icu])])),
+      cleanup(use:clear_bwu_cross_dep_memos)]) :-
+  use:clear_bwu_cross_dep_memos,
+  use:record_bwu_force_pending('dev-qt', qtbase, [icu]),
+  prover:deferred_reprove_pending(0, 20, Info).
+
+test(deferred_reprove_pending_fails_when_budget_exhausted,
+     [fail, cleanup(use:clear_bwu_cross_dep_memos)]) :-
+  use:clear_bwu_cross_dep_memos,
+  use:record_bwu_force_pending('dev-qt', qtbase, [icu]),
+  prover:deferred_reprove_pending(20, 20, _).
+
+test(deferred_reprove_pending_fails_when_nothing_pending, [fail]) :-
+  use:clear_bwu_cross_dep_memos,
+  prover:deferred_reprove_pending(0, 20, _).
+
+:- end_tests(bwu_force_deferred_flush).
+
+
+% Conflict-driven partial restart (non-chronological backtracking): after a
+% completed pass reports a deferred conflict, the prover prunes only the
+% affected literals (domain seeds + dependents-closure over Triggers) from the
+% completed artifacts and resumes proving from that state.  Generic machinery
+% lives in prover.pl; seeds, obligation anchors and constraint scoping are
+% domain hooks in heuristic.pl.
+
+:- begin_tests(partial_restart).
+
+test(triggers_closure_transitive, [true(Keys == [a, b, c])]) :-
+  list_to_assoc([a-[b], b-[c], d-[e]], Triggers),
+  prover:triggers_closure([a], Triggers, Affected),
+  assoc_to_keys(Affected, Keys).
+
+test(triggers_closure_handles_shared_dependents, [true(Keys == [a, b, c])]) :-
+  list_to_assoc([a-[b, c], b-[c], c-[]], Triggers),
+  prover:triggers_closure([a], Triggers, Affected),
+  assoc_to_keys(Affected, Keys).
+
+test(prune_model_removes_affected_plain_assumed_naf_keys, [true(Keys == [c])]) :-
+  list_to_assoc([a-ctx1, assumed(b)-ctx2, naf(a)-ctx3, c-ctx4], Model),
+  list_to_assoc([a-true, b-true], Affected),
+  prover:prune_model(Model, Affected, RModel),
+  assoc_to_keys(RModel, Keys).
+
+test(prune_proof_removes_affected_entries,
+     [true(Keys == [obligation_done(pdepend_none(c)), rule(c)])]) :-
+  list_to_assoc([rule(a)-v1,
+                 assumed(rule(b))-v2,
+                 cycle_path(a)-v3,
+                 obligation_pending(b)-v4,
+                 obligation_done(pdepend(a, bwu))-v5,
+                 obligation_done(pdepend_none(c))-v6,
+                 rule(c)-v7], Proof),
+  list_to_assoc([a-true, b-true], Affected),
+  prover:prune_proof(Proof, Affected, bwu_force_flush([]), RProof),
+  assoc_to_keys(RProof, Keys).
+
+test(prune_triggers_drops_affected_keys_and_dependents, [true(Pairs == [b-[c]])]) :-
+  list_to_assoc([a-[b, c], b-[a, c]], Triggers),
+  list_to_assoc([a-true], Affected),
+  prover:prune_triggers(Triggers, Affected, RTriggers),
+  assoc_to_list(RTriggers, Pairs).
+
+test(restart_seed_matches_pending_provider_actions,
+     [setup(( retractall(cache:ordered_entry(fakerepo, _, _, _, _)),
+              assertz(cache:ordered_entry(fakerepo, 'cat/pkg-1.0', cat, pkg, v)),
+              assertz(cache:ordered_entry(fakerepo, 'cat/other-1.0', cat, other, v)) )),
+      cleanup(retractall(cache:ordered_entry(fakerepo, _, _, _, _)))]) :-
+  Info = bwu_force_flush([bwu_force(cat, pkg, [icu])]),
+  heuristic:restart_seed(Info, fakerepo://'cat/pkg-1.0':install),
+  heuristic:restart_seed(Info, fakerepo://'cat/pkg-1.0':run),
+  \+ heuristic:restart_seed(Info, fakerepo://'cat/other-1.0':install),
+  \+ heuristic:restart_seed(Info, grouped_dep(cat, pkg, []):install).
+
+test(restart_obligation_head_maps_pdepend_keys) :-
+  heuristic:restart_obligation_head(pdepend(fakerepo://'cat/pkg-1.0':install, bwu), Core1),
+  Core1 == (fakerepo://'cat/pkg-1.0':install),
+  heuristic:restart_obligation_head(pdepend_none(fakerepo://'cat/pkg-1.0':install), Core2),
+  Core2 == (fakerepo://'cat/pkg-1.0':install).
+
+test(restart_drop_constraint_scopes_use_slot_selected,
+     [setup(( retractall(cache:ordered_entry(fakerepo, _, _, _, _)),
+              assertz(cache:ordered_entry(fakerepo, 'cat/pkg-1.0', cat, pkg, v)) )),
+      cleanup(retractall(cache:ordered_entry(fakerepo, _, _, _, _)))]) :-
+  list_to_assoc([(fakerepo://'cat/pkg-1.0':install)-true], Affected),
+  heuristic:restart_constraint_scope(bwu_force_flush([]), Affected, Scope),
+  heuristic:restart_drop_constraint(Scope, use(fakerepo://'cat/pkg-1.0')),
+  heuristic:restart_drop_constraint(Scope, slot(cat, pkg, '0')),
+  heuristic:restart_drop_constraint(Scope, selected_cn(cat, pkg)),
+  \+ heuristic:restart_drop_constraint(Scope, use(fakerepo://'cat/other-1.0')),
+  \+ heuristic:restart_drop_constraint(Scope, slot(cat, other, '0')),
+  \+ heuristic:restart_drop_constraint(Scope, cn_domain(cat, pkg, '0')),
+  \+ heuristic:restart_drop_constraint(Scope, blocked_cn(cat, pkg)).
+
+test(partial_restart_state_prunes_provider_and_dependents,
+     [setup(( retractall(cache:ordered_entry(fakerepo, _, _, _, _)),
+              assertz(cache:ordered_entry(fakerepo, 'cat/pkg-1.0', cat, pkg, v)),
+              assertz(cache:ordered_entry(fakerepo, 'cat/consumer-1.0', cat, consumer, v)),
+              assertz(cache:ordered_entry(fakerepo, 'cat/bystander-1.0', cat, bystander, v)) )),
+      cleanup(retractall(cache:ordered_entry(fakerepo, _, _, _, _)))]) :-
+  Provider  = (fakerepo://'cat/pkg-1.0':install),
+  Consumer  = (fakerepo://'cat/consumer-1.0':run),
+  Bystander = (fakerepo://'cat/bystander-1.0':run),
+  list_to_assoc([Provider-[], Consumer-[], Bystander-[]], Model),
+  list_to_assoc([rule(Provider)-(dep(0, [])?[]),
+                 rule(Consumer)-(dep(1, [Provider])?[]),
+                 rule(Bystander)-(dep(0, [])?[])], Proof),
+  list_to_assoc([Provider-[Consumer]], Triggers),
+  list_to_assoc([use(fakerepo://'cat/pkg-1.0')-u1,
+                 use(fakerepo://'cat/bystander-1.0')-u2,
+                 selected_cn(cat, pkg)-s1,
+                 cn_domain(cat, pkg, '0')-d1], Cons),
+  Info = bwu_force_flush([bwu_force(cat, pkg, [icu])]),
+  prover:partial_restart_state(Info, Proof, Model, Cons, Triggers,
+                               RProof, RModel, RCons, RTrig),
+  assoc_to_keys(RModel, [Bystander]),
+  assoc_to_keys(RProof, [rule(Bystander)]),
+  assoc_to_keys(RTrig, []),
+  assoc_to_keys(RCons, [use(fakerepo://'cat/bystander-1.0'), cn_domain(cat, pkg, '0')]).
+
+test(begin_pass_clears_per_pass_memos_for_both_kinds,
+     [cleanup(use:clear_bwu_cross_dep_memos)]) :-
+  forall(member(Kind, [fresh, resume]),
+         ( use:clear_bwu_cross_dep_memos,
+           assertz(memo:candidate_bwu_('dev-qt', qtbase, use_state([icu], []))),
+           use:record_bwu_force_pending('dev-qt', qtbase, [icu]),
+           heuristic:begin_pass(Kind),
+           \+ memo:candidate_bwu_(_, _, _),
+           \+ memo:bwu_force_pending_(_, _, _)
+         )).
+
+test(mark_resume_pass_consumed_by_next_begin_pass) :-
+  prover:mark_resume_pass,
+  nb_current(prover_resume_pass, true),
+  prover:begin_pass,
+  nb_current(prover_resume_pass, false).
+
+test(restart_prior_proven_witnesses_cycle_free_pruned_literals,
+     [cleanup(nb_delete(prover_restart_prior_proven))]) :-
+  % clean: plain key, no assumed marker -> witnessed
+  % broken: plain key AND assumed key (cycle-break) -> not witnessed
+  % gone:  affected but not in the model -> not witnessed
+  list_to_assoc([clean-ctx1, broken-ctx2, assumed(broken)-ctx3], Model),
+  list_to_assoc([clean-true, broken-true, gone-true], Affected),
+  prover:restart_note_prior_proven(Model, Affected),
+  prover:restart_prior_proven(clean),
+  \+ prover:restart_prior_proven(broken),
+  \+ prover:restart_prior_proven(gone),
+  \+ prover:restart_prior_proven(unrelated).
+
+test(begin_pass_fresh_drops_prior_proven_witness) :-
+  list_to_assoc([lit-ctx], Model),
+  list_to_assoc([lit-true], Affected),
+  prover:restart_note_prior_proven(Model, Affected),
+  prover:restart_prior_proven(lit),
+  % resume pass keeps the witness set
+  prover:mark_resume_pass,
+  prover:begin_pass,
+  prover:restart_prior_proven(lit),
+  % fresh pass drops it
+  prover:begin_pass,
+  \+ prover:restart_prior_proven(lit).
+
+:- end_tests(partial_restart).
+
+
 :- begin_tests(equality_use_pin_propagation).
 
 test(equal_provider_enabled_enables_self, [true(Mode == enable)]) :-

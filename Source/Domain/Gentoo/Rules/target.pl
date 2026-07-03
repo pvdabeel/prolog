@@ -379,20 +379,31 @@ candidate:resolve(grouped_dep(C,N,PackageDeps):Action?{Context}, Conditions) :-
   candidate:augment_package_deps_with_self_rdepend(Action, C, N, Context, PackageDeps, PackageDeps1),
   candidate:grouped_dep_select_and_build(Action, C, N, PackageDeps1, Context, Conditions).
 
+% The `\+ memo:bwu_force_pending_(C, N, _)` guards below suppress conflict
+% learning for a dependency whose provider has a shared-dep USE force pending
+% in the current pass (portage-ng#94): the failure is transient (the provider
+% will be rebuilt with the forced flag on the end-of-pass flush reprove), so
+% narrowing the parent or rejecting candidates now would learn a wrong,
+% persistent exclusion. If the dep still fails on the flush re-proof there is
+% no pending force and these clauses fire normally.
+
 candidate:resolve(grouped_dep(C,N,PackageDeps):Action?{Context}, _) :-
   candidate:augment_package_deps_with_self_rdepend(Action, C, N, Context, PackageDeps, PackageDeps1),
   \+ memo:requse_violation_(C, N, _),
+  \+ memo:bwu_force_pending_(C, N, _),
   cnselect:maybe_learn_wildcard_domain(C, N, PackageDeps1, Context),
   fail.
 
 candidate:resolve(grouped_dep(C,N,PackageDeps):_Action?{Context}, _) :-
   candidate:augment_package_deps_with_self_rdepend(_, C, N, Context, PackageDeps, PackageDeps1),
   \+ memo:requse_violation_(C, N, _),
+  \+ memo:bwu_force_pending_(C, N, _),
   cnselect:maybe_learn_parent_narrowing(C, N, PackageDeps1, Context),
   fail.
 candidate:resolve(grouped_dep(C,N,PackageDeps):Action?{Context}, _) :-
   candidate:augment_package_deps_with_self_rdepend(Action, C, N, Context, PackageDeps, PackageDeps1),
   \+ memo:requse_violation_(C, N, _),
+  \+ memo:bwu_force_pending_(C, N, _),
   cnselect:maybe_request_grouped_dep_reprove(Action, C, N, PackageDeps1, Context),
   fail.
 

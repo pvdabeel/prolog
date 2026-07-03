@@ -135,15 +135,106 @@ prover:prove(Target, InProof, OutProof, InModel, OutModel, InCons, OutCons, InTr
 % `prover_reprove(Info)` exceptions and delegates to the domain
 % hook `heuristic:handle_reprove/2` to process the conflict.  Retries
 % with expanded reject sets up to MaxRetries.
+%
+% After a pass COMPLETES, the domain is additionally consulted for
+% *deferred* conflicts (`heuristic:reprove_pending/1`): conflicts the
+% domain chose to learn mid-pass without aborting, batching them into a
+% single retry (e.g. shared-dep USE forces, portage-ng#94). Because the
+% pass completed, its Proof/Model/Constraints/Triggers are intact and
+% the retry can be a *partial restart* (non-chronological backtracking):
+% only the literals affected by the conflict are pruned and re-derived,
+% everything else is resumed as-is (see "Conflict-driven partial
+% restart" below). When the retry budget is exhausted the completed
+% proof is accepted as-is (it is exactly what the final
+% reprove-disabled pass would recompute).
 
 prover:prove_with_retries(Target, InProof, OutProof, InModel, OutModel, InCons, OutCons, InTriggers, OutTriggers, Attempt, MaxRetries) :-
   catch(
-    prover:prove_once(Target, InProof, OutProof, InModel, OutModel, InCons, OutCons, InTriggers, OutTriggers),
-    prover_reprove(Info),
+    ( prover:prove_once(Target, InProof, Proof1, InModel, Model1, InCons, Cons1, InTriggers, Trig1),
+      Outcome = completed
+    ),
+    prover_reprove(ThrownInfo),
+    Outcome = thrown(ThrownInfo)
+  ),
+  ( Outcome == completed ->
+      ( prover:deferred_reprove_pending(Attempt, MaxRetries, Info) ->
+          prover:reprove_from_completed(
+            Target, InProof, OutProof, InModel, OutModel, InCons, OutCons, InTriggers, OutTriggers,
+            Attempt, MaxRetries, Info, Proof1, Model1, Cons1, Trig1
+          )
+      ; OutProof = Proof1, OutModel = Model1, OutCons = Cons1, OutTriggers = Trig1
+      )
+  ; Outcome = thrown(Info0),
     prover:handle_reprove(
       Target, InProof, OutProof, InModel, OutModel, InCons, OutCons, InTriggers, OutTriggers,
-      Attempt, MaxRetries, Info
+      Attempt, MaxRetries, Info0
     )
+  ).
+
+
+%! prover:deferred_reprove_pending(+Attempt, +MaxRetries, -Info) is semidet
+%
+% Consult the domain for conflicts deferred during the pass that just
+% completed. Succeeds with the domain's Info term when a deferred
+% conflict is pending and retry budget remains; fails otherwise,
+% accepting the completed proof.
+
+prover:deferred_reprove_pending(Attempt, MaxRetries, Info) :-
+  Attempt < MaxRetries,
+  current_predicate(heuristic:reprove_pending/1),
+  heuristic:reprove_pending(Info).
+
+
+%! prover:reprove_from_completed(+Target, +InProof, -OutProof, +InModel, -OutModel, +InCons, -OutCons, +InTriggers, -OutTriggers, +Attempt, +MaxRetries, +Info, +Proof1, +Model1, +Cons1, +Trig1) is det
+%
+% Retry after a COMPLETED pass reported a deferred conflict.  The
+% completed pass artifacts (Proof1/Model1/Cons1/Trig1) are available, so
+% after the domain confirms progress (`heuristic:handle_reprove/2`) the
+% retry prefers a partial restart from the pruned artifacts over a full
+% restart from the original inputs.  A resumed pass that itself throws a
+% mid-pass conflict falls back to the classical full-restart path from
+% the ORIGINAL inputs, so thrown conflicts keep their existing
+% semantics regardless of how the previous pass was restarted.
+
+prover:reprove_from_completed(Target, InProof, OutProof, InModel, OutModel, InCons, OutCons, InTriggers, OutTriggers,
+                              Attempt, MaxRetries, Info, Proof1, Model1, Cons1, Trig1) :-
+  ( current_predicate(heuristic:handle_reprove/2),
+    heuristic:handle_reprove(Info, Added),
+    Added == true
+  ->
+    Attempt1 is Attempt + 1,
+    ( prover:partial_restart_state(Info, Proof1, Model1, Cons1, Trig1, RProof, RModel, RCons, RTrig) ->
+        flag(prover_partial_restarts, PR, PR + 1),
+        catch(
+          ( prover:mark_resume_pass,
+            prover:prove_once(Target, RProof, Proof2, RModel, Model2, RCons, Cons2, RTrig, Trig2),
+            Resumed = completed
+          ),
+          prover_reprove(ThrownInfo),
+          Resumed = thrown(ThrownInfo)
+        ),
+        ( Resumed == completed ->
+            ( prover:deferred_reprove_pending(Attempt1, MaxRetries, Info2) ->
+                prover:reprove_from_completed(
+                  Target, InProof, OutProof, InModel, OutModel, InCons, OutCons, InTriggers, OutTriggers,
+                  Attempt1, MaxRetries, Info2, Proof2, Model2, Cons2, Trig2
+                )
+            ; OutProof = Proof2, OutModel = Model2, OutCons = Cons2, OutTriggers = Trig2
+            )
+        ; Resumed = thrown(Info3),
+          prover:handle_reprove(
+            Target, InProof, OutProof, InModel, OutModel, InCons, OutCons, InTriggers, OutTriggers,
+            Attempt1, MaxRetries, Info3
+          )
+        )
+    ; flag(prover_full_restarts, FR, FR + 1),
+      prover:prove_with_retries(
+        Target, InProof, OutProof, InModel, OutModel, InCons, OutCons, InTriggers, OutTriggers, Attempt1, MaxRetries
+      )
+    )
+  ; % The domain recorded no progress for the deferred conflict: accept
+    % the completed pass (re-proving would recompute the same result).
+    OutProof = Proof1, OutModel = Model1, OutCons = Cons1, OutTriggers = Trig1
   ).
 
 
@@ -181,14 +272,52 @@ prover:handle_reprove(Target, InProof, OutProof, InModel, OutModel, InCons, OutC
 
 prover:prove_once(Target, InProof, OutProof, InModel, OutModel, InCons, OutCons, InTriggers, OutTriggers) :-
   prover:debug_hook(Target, InProof, InModel, InCons),
-  ( current_predicate(use:clear_bwu_cross_dep_memos/0) ->
-      use:clear_bwu_cross_dep_memos
-  ; true
-  ),
+  prover:begin_pass,
   prover:with_cycle_stack(
     prover:prove_recursive(Target, InProof, OutProof, InModel, OutModel, InCons, OutCons, InTriggers, RawTriggers)
   ),
   prover:dedup_triggers(RawTriggers, OutTriggers).
+
+
+%! prover:begin_pass is det
+%
+% Per-pass initialization dispatch.  Determines whether the pass about
+% to run is a `fresh` pass (full restart or first attempt) or a `resume`
+% pass (partial restart from pruned artifacts, see
+% `prover:partial_restart_state/9`) and notifies the domain through the
+% `heuristic:begin_pass/1` hook so it can scope its per-pass state
+% clearing accordingly.  Falls back to the legacy
+% `use:clear_bwu_cross_dep_memos/0` call for a fresh pass when the hook
+% is not installed.
+
+prover:begin_pass :-
+  ( nb_current(prover_resume_pass, true) ->
+      nb_setval(prover_resume_pass, false),
+      Kind = resume
+  ; Kind = fresh,
+    % A fresh pass has no pre-restart witness pass; drop any
+    % prior-proven set left over from an earlier partial restart.
+    ( nb_current(prover_restart_prior_proven, _) ->
+        nb_delete(prover_restart_prior_proven)
+    ; true
+    )
+  ),
+  ( current_predicate(heuristic:begin_pass/1) ->
+      heuristic:begin_pass(Kind)
+  ; Kind == fresh,
+    current_predicate(use:clear_bwu_cross_dep_memos/0) ->
+      use:clear_bwu_cross_dep_memos
+  ; true
+  ).
+
+
+%! prover:mark_resume_pass is det
+%
+% Mark the next `prove_once/9` pass as a resumed (partial restart) pass.
+% Consumed (reset) by `prover:begin_pass/0`.
+
+prover:mark_resume_pass :-
+  nb_setval(prover_resume_pass, true).
 
 
 %! prover:reprove_max_retries(-Max) is det
@@ -298,6 +427,280 @@ prover:assuming(Literal, Goal) :-
 prover:assuming(Literal) :-
   atom_concat('prover_assuming_', Literal, Key),
   nb_current(Key, true).
+
+
+% -----------------------------------------------------------------------------
+% Conflict-driven partial restart (non-chronological backtracking)
+% -----------------------------------------------------------------------------
+
+% When a completed pass reports a deferred conflict, a classical retry
+% throws away the whole pass and re-proves from the original inputs,
+% even though the conflict typically invalidates only a small region of
+% the proof.  The partial restart instead:
+%
+%   1. asks the domain which model literals the conflict invalidates
+%      (`heuristic:restart_seed/2` — e.g. every action literal of a
+%      provider whose USE flags were force-changed),
+%   2. computes the AFFECTED SET: the transitive dependents-closure of
+%      the seeds over the Triggers index (every literal whose derivation
+%      could observe the invalidated ones — by construction this
+%      includes the proof targets, so the resumed pass re-reaches every
+%      pruned literal that is still needed),
+%   3. prunes the affected literals from Proof/Model/Triggers and asks
+%      the domain which accumulated constraints belong to the affected
+%      region (`heuristic:restart_constraint_scope/3` +
+%      `heuristic:restart_drop_constraint/2`),
+%   4. resumes proving from the pruned artifacts: unaffected literals
+%      hit the `proven` fast path, affected ones re-derive with the
+%      conflict resolution (e.g. learned USE forces) applied.
+%
+% The mechanism is fully generic: what constitutes a seed, an affected
+% constraint, or per-pass domain state to preserve on resume is decided
+% by the heuristic hooks.  Without those hooks (or with
+% config:reprove_partial_restart(false)) the prover falls back to the
+% classical full restart.
+
+
+%! prover:partial_restart_state(+Info, +Proof, +Model, +Cons, +Trig, -RProof, -RModel, -RCons, -RTrig) is semidet
+%
+% Compute pruned artifacts for a partial restart after a deferred
+% conflict Info.  Fails (falling back to a full restart) when partial
+% restart is disabled, the domain does not provide the seed hook, or no
+% seed literal is found in the Model.
+
+prover:partial_restart_state(Info, Proof, Model, Cons, Trig, RProof, RModel, RCons, RTrig) :-
+  prover:partial_restart_enabled,
+  current_predicate(heuristic:restart_seed/2),
+  prover:restart_seeds(Info, Model, Seeds),
+  Seeds \== [],
+  prover:triggers_closure(Seeds, Trig, Affected),
+  prover:prune_model(Model, Affected, RModel),
+  prover:prune_proof(Proof, Affected, Info, RProof),
+  prover:prune_triggers(Trig, Affected, RTrig),
+  prover:prune_constraints(Cons, Affected, Info, RCons),
+  prover:restart_note_prior_proven(Model, Affected),
+  !.
+
+
+%! prover:restart_note_prior_proven(+Model, +Affected) is det
+%
+% Record which pruned literals the pre-restart pass proved WITHOUT a
+% cycle-break.  A literal qualifies when the prior Model holds its
+% plain key and NO `assumed(Core)` marker: a cycle-break records
+% `assumed(Core)` first and the plain key is still added when the
+% literal's outer derivation completes, so the plain key alone is not
+% a cycle-free witness.  The resumed pass consults this set when it
+% detects a cycle: the previous completed pass is a witness that the
+% literal is provable cycle-free, so a cycle re-detected on it during
+% the resume is an artifact of the altered traversal order (kept
+% literals short-circuit through the `proven` fast path, changing
+% which literals sit on the cycle stack) rather than a new structural
+% cycle, and is treated as benign.  Consumed via
+% `prover:restart_prior_proven/1`; reset on fresh passes by
+% `prover:begin_pass/0`.
+
+prover:restart_note_prior_proven(Model, Affected) :-
+  assoc_to_keys(Affected, Cores),
+  findall(Core-true,
+          ( member(Core, Cores),
+            get_assoc(Core, Model, _),
+            \+ get_assoc(assumed(Core), Model, _)
+          ),
+          Pairs),
+  ord_list_to_assoc(Pairs, PriorProven),
+  nb_setval(prover_restart_prior_proven, PriorProven).
+
+
+%! prover:restart_prior_proven(+Lit) is semidet
+%
+% True when Lit was proven without a cycle-break by the completed pass
+% that preceded the current partial restart (see
+% `prover:restart_note_prior_proven/2`).
+
+prover:restart_prior_proven(Lit) :-
+  nb_current(prover_restart_prior_proven, PriorProven),
+  get_assoc(Lit, PriorProven, _).
+
+
+%! prover:partial_restart_enabled is semidet
+%
+% Partial restart is enabled unless config:reprove_partial_restart(false).
+
+prover:partial_restart_enabled :-
+  ( current_predicate(config:reprove_partial_restart/1),
+    config:reprove_partial_restart(Enabled)
+  ->
+    Enabled == true
+  ; true
+  ).
+
+
+%! prover:restart_seeds(+Info, +Model, -Seeds) is det
+%
+% Collect the model keys the domain marks as invalidated by the
+% deferred conflict Info (`heuristic:restart_seed/2`).  The domain
+% classifies the unwrapped core (assumed/naf wrappers stripped), but
+% the seed is the EXACT model key: the Triggers index is keyed by the
+% canonical body-literal core, which for a failed dependency edge is
+% the `assumed(...)`-wrapped literal itself, so the closure must start
+% from the exact key to reach the consumers of that edge.
+
+prover:restart_seeds(Info, Model, Seeds) :-
+  findall(Key,
+          ( gen_assoc(Key, Model, _),
+            prover:restart_core(Key, Core),
+            heuristic:restart_seed(Info, Core)
+          ),
+          Seeds0),
+  sort(Seeds0, Seeds).
+
+
+%! prover:restart_core(+Key, -Core) is det
+%
+% Strip `assumed/1` and `naf/1` wrappers from a Proof/Model key,
+% yielding the underlying literal core used in the Triggers index.
+
+prover:restart_core(assumed(Key0), Core) :- !, prover:restart_core(Key0, Core).
+prover:restart_core(naf(Key0), Core)     :- !, prover:restart_core(Key0, Core).
+prover:restart_core(Core, Core).
+
+
+%! prover:triggers_closure(+Seeds, +Triggers, -Affected) is det
+%
+% Transitive dependents-closure of Seeds over the Triggers index
+% (literal core -> list of dependent head cores).  Affected is an AVL
+% mapping every reached core (seeds included) to `true`.
+
+prover:triggers_closure(Seeds, Triggers, Affected) :-
+  empty_assoc(Empty),
+  prover:closure_add(Seeds, Empty, Visited0, _Fresh),
+  prover:triggers_closure_(Seeds, Triggers, Visited0, Affected).
+
+prover:triggers_closure_([], _Triggers, Affected, Affected) :- !.
+prover:triggers_closure_([Core|Worklist], Triggers, Visited0, Affected) :-
+  ( get_assoc(Core, Triggers, Dependents) -> true ; Dependents = [] ),
+  prover:closure_add(Dependents, Visited0, Visited1, Fresh),
+  append(Fresh, Worklist, Worklist1),
+  prover:triggers_closure_(Worklist1, Triggers, Visited1, Affected).
+
+
+%! prover:closure_add(+Cores, +Visited0, -Visited, -Fresh) is det
+%
+% Add unvisited cores to the visited set, returning the newly added ones.
+
+prover:closure_add([], Visited, Visited, []) :- !.
+prover:closure_add([Core|Cores], Visited0, Visited, Fresh) :-
+  ( get_assoc(Core, Visited0, _) ->
+      Visited1 = Visited0,
+      Fresh = Fresh1
+  ; put_assoc(Core, Visited0, true, Visited1),
+    Fresh = [Core|Fresh1]
+  ),
+  prover:closure_add(Cores, Visited1, Visited, Fresh1).
+
+
+%! prover:restart_affected(+Affected, +Key) is semidet
+%
+% True when a Proof/Model/Triggers key is in the affected set, either
+% as the exact key or through its unwrapped core (`assumed/1`, `naf/1`
+% stripped).  The exact-key check matches seeds that ARE wrapped model
+% keys (e.g. assumed dependency literals with embedded context); the
+% core check matches bookkeeping keys (cycle-break `assumed(Lit)`
+% markers, `naf(Lit)`) that wrap a closure member.
+
+prover:restart_affected(Affected, Key) :-
+  ( get_assoc(Key, Affected, _) ->
+      true
+  ; prover:restart_core(Key, Core),
+    Core \== Key,
+    get_assoc(Core, Affected, _)
+  ).
+
+
+%! prover:prune_model(+Model, +Affected, -RModel) is det
+%
+% Remove affected literals (plain, `assumed/1` and `naf/1` keys) from
+% the Model AVL.
+
+prover:prune_model(Model, Affected, RModel) :-
+  assoc_to_list(Model, Pairs),
+  exclude(prover:model_pair_affected(Affected), Pairs, Kept),
+  ord_list_to_assoc(Kept, RModel).
+
+prover:model_pair_affected(Affected, Key-_Value) :-
+  prover:restart_affected(Affected, Key).
+
+
+%! prover:prune_proof(+Proof, +Affected, +Info, -RProof) is det
+%
+% Remove affected entries from the Proof AVL: `rule/1` (and
+% `assumed(rule/1)`) entries, `cycle_path/1` witnesses and
+% `obligation_pending/1` markers whose core is affected, plus
+% `obligation_done/1` markers whose anchor literal (resolved through the
+% domain hook `heuristic:restart_obligation_head/2`) is affected, so
+% obligations re-fire when their anchor re-proves.
+
+prover:prune_proof(Proof, Affected, Info, RProof) :-
+  assoc_to_list(Proof, Pairs),
+  exclude(prover:proof_pair_affected(Affected, Info), Pairs, Kept),
+  ord_list_to_assoc(Kept, RProof).
+
+prover:proof_pair_affected(Affected, _Info, Key-_Value) :-
+  ( Key = rule(Inner)               -> prover:restart_affected(Affected, Inner)
+  ; Key = assumed(rule(Inner))      -> prover:restart_affected(Affected, Inner)
+  ; Key = cycle_path(Inner)         -> prover:restart_affected(Affected, Inner)
+  ; Key = obligation_pending(Inner) -> prover:restart_affected(Affected, Inner)
+  ; Key = obligation_done(OKey)     ->
+      current_predicate(heuristic:restart_obligation_head/2),
+      heuristic:restart_obligation_head(OKey, Inner),
+      prover:restart_affected(Affected, Inner)
+  ; fail
+  ).
+
+
+%! prover:prune_triggers(+Triggers, +Affected, -RTriggers) is det
+%
+% Remove affected keys from the Triggers index and filter affected
+% heads out of the dependent lists of the kept keys.  The resumed pass
+% re-adds the real edges as affected rules re-derive.
+
+prover:prune_triggers(Triggers, Affected, RTriggers) :-
+  assoc_to_list(Triggers, Pairs),
+  prover:prune_trigger_pairs(Pairs, Affected, Kept),
+  ord_list_to_assoc(Kept, RTriggers).
+
+prover:prune_trigger_pairs([], _Affected, []) :- !.
+prover:prune_trigger_pairs([Core-Dependents|Pairs], Affected, Kept) :-
+  ( get_assoc(Core, Affected, _) ->
+      Kept = Kept1
+  ; exclude(prover:restart_affected(Affected), Dependents, Dependents1),
+    Kept = [Core-Dependents1|Kept1]
+  ),
+  prover:prune_trigger_pairs(Pairs, Affected, Kept1).
+
+
+%! prover:prune_constraints(+Cons, +Affected, +Info, -RCons) is det
+%
+% Drop accumulated constraints belonging to the affected region.  Which
+% constraint keys those are is domain knowledge: the domain first
+% derives an opaque scope term from the affected set
+% (`heuristic:restart_constraint_scope/3`), then classifies each key
+% (`heuristic:restart_drop_constraint/2`).  Without the hooks all
+% constraints are kept.
+
+prover:prune_constraints(Cons, Affected, Info, RCons) :-
+  ( current_predicate(heuristic:restart_constraint_scope/3),
+    current_predicate(heuristic:restart_drop_constraint/2),
+    heuristic:restart_constraint_scope(Info, Affected, Scope)
+  ->
+    assoc_to_list(Cons, Pairs),
+    exclude(prover:constraint_pair_dropped(Scope), Pairs, Kept),
+    ord_list_to_assoc(Kept, RCons)
+  ; RCons = Cons
+  ).
+
+prover:constraint_pair_dropped(Scope, Key-_Value) :-
+  heuristic:restart_drop_constraint(Scope, Key).
 
 
 % -----------------------------------------------------------------------------
@@ -468,8 +871,15 @@ prover:prove_recursive(Full, Proof, NewProof, Model, NewModel, Constraints, NewC
           \+ prover:assumed_proving(Lit, Proof) ->
 
           prover:cycle_path_for(Lit, CyclePath),
-          ( current_predicate(heuristic:cycle_benign/2),
-            heuristic:cycle_benign(Lit, CyclePath) ->
+          ( ( current_predicate(heuristic:cycle_benign/2),
+              heuristic:cycle_benign(Lit, CyclePath)
+            ; % Partial-restart witness: the completed pass that preceded
+              % this resume proved Lit without a cycle-break, so this cycle
+              % is an artifact of the resumed traversal order (kept
+              % literals short-circuit via the `proven` fast path, changing
+              % the cycle-stack contents), not a new structural cycle.
+              prover:restart_prior_proven(Lit)
+            ) ->
 
               % Benign cycle: the domain classifies this cycle as harmless
               % based on the cycle path (e.g. RDEPEND-mediated cycles that

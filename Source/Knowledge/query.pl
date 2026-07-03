@@ -46,6 +46,20 @@ An implementation of a query language for the knowledge base
 % time is spent here, with up to 88% of calls being redundant (same result as a
 % previous call).  However, correct caching requires accounting for all the above
 % mutable state, not just the context R.
+%
+% UPDATE (portage-ng#94 follow-up): a guarded per-pass memo handling all four
+% hazards (exact-context key, per-pass clearing, an OR-choice-group snapshot
+% signature, variant bypass) was built and benchmarked, then dropped: it was
+% plan- and assumption-identical but yielded only ~40% hit rate, ~6% on the
+% heaviest meta packages, and NO full-tree walltime change (2m50s A/B). The
+% "88% redundant" calls are mostly the same (Ebuild, Phase) re-queried under
+% monotonically GROWING build_with_use contexts (e.g. qtbase:install with up
+% to 23 distinct BWU states in one kde-apps-meta proof) as ctx-union
+% re-derives consumers; each is a genuinely different input whose context is
+% embedded in the output, so an exact-key cache cannot capture it. Exploiting
+% the remaining redundancy would need projection-keyed caching plus
+% re-contextualisation of the stored model, or prover-level incremental
+% re-derivation -- not another exact-key cache.
 
 % =============================================================================
 %  QUERY MACROS

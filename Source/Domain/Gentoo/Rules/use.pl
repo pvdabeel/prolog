@@ -1632,14 +1632,22 @@ use:shared_dep_use_forcing_enabled :-
 % them on the next attempt (applied via apply_learned_bwu_force/4). Otherwise a
 % no-op, so resolution continues normally.
 %
-% Throws prover_reprove(bwu_force(C,N,Flags)) on the first newly-learned force
-% so the provider is re-proved with the flag applied. Re-proving incrementally
-% (one force, full re-proof, which then exposes the next force) is what reaches
-% full convergence on deep stacks: applying all discovered forces at once
-% follows a different, less complete trajectory. The learned force persists
-% across passes (it survives clear_bwu_cross_dep_memos/0) and
-% apply_learned_bwu_force/4 re-applies it on whatever pass proves the provider
-% next, including the final reprove-disabled fallback.
+% Deferred flush (portage-ng#94): a newly-learned force does NOT abort the
+% pass. It is recorded in memo:bwu_force_pending_/3 and the pass continues --
+% because the force is already in the learned store, apply_learned_bwu_force/4
+% folds it into every subsequent BWU merge of the same pass (including this
+% very edge via unify_memo_bwu_into_context/4), so the provider's :install is
+% re-derived with the flag through the prover's ctx-union mechanism and the
+% rest of the closure keeps resolving instead of degrading. When the pass
+% completes, heuristic:reprove_pending/1 reports the pending forces and the
+% prover runs ONE clean re-proof with all of them applied from the start.
+% Deeper forces only exposed by that re-proof are learned on the next pass,
+% so the incremental "satisfy -> re-resolve -> expose next" loop that
+% guarantees convergence on deep stacks is preserved -- but at one full pass
+% per *level* of the cascade instead of one aborted pass per *flag*
+% (app-text/ktikz: 14 reproves -> 2). This replaced the original
+% throw(prover_reprove(bwu_force(...)))-per-flag design, which doubled
+% prover:test_stats on KDE/GNOME stacks.
 %
 % Narrow + self-limiting: fires only for an already-committed provider, only
 % for HARD (forcing) enable flags that are seedable (not profile-masked) and
@@ -1663,11 +1671,34 @@ use:maybe_force_shared_dep_use(C, N, RepoEntry) :-
           prover:learn(bwu_force(C, N), use_state(ForceEn, []), Added),
           Added == true
         ->
-            throw(prover_reprove(bwu_force(C, N, ForceEn)))
+            use:record_bwu_force_pending(C, N, ForceEn)
         ; true
         )
     ; true
     ).
+
+
+%! use:record_bwu_force_pending(+C, +N, +ForceEn) is det.
+%
+% Record a newly-learned shared-dep USE force for the end-of-pass batched
+% reprove (portage-ng#94). One fact per (C,N); a second learn for the same
+% pair within a pass replaces the pending set with the merged flags.
+
+use:record_bwu_force_pending(C, N, ForceEn) :-
+    retractall(memo:bwu_force_pending_(C, N, _)),
+    assertz(memo:bwu_force_pending_(C, N, ForceEn)).
+
+
+%! use:bwu_force_pending_any(-Pending) is semidet.
+%
+% True when the current pass learned at least one new shared-dep USE force.
+% Pending lists the (C,N)-force triples, for reprove diagnostics.
+
+use:bwu_force_pending_any(Pending) :-
+    findall(bwu_force(C, N, ForceEn),
+            memo:bwu_force_pending_(C, N, ForceEn),
+            Pending),
+    Pending \== [].
 
 
 %! use:bwu_force_already_seen(+C, +N, +HardEn) is semidet.
@@ -1922,7 +1953,8 @@ use:clear_bwu_cross_dep_memos :-
     retractall(memo:candidate_bwu_(_, _, _)),
     retractall(memo:candidate_bwu_hard_(_, _, _)),
     retractall(memo:candidate_bwu_eq_(_, _, _)),
-    retractall(memo:bwu_force_seen_(_, _, _)).
+    retractall(memo:bwu_force_seen_(_, _, _)),
+    retractall(memo:bwu_force_pending_(_, _, _)).
 
 
 %! use:check_bwu_ed_conflict(+C, +N, +Context)

@@ -60,6 +60,23 @@ and obligation filtering.
   * heuristic:proof_obligation/4
     Produces extra PDEPEND goals after proving a literal.
 
+== Partial restart hooks (non-chronological backtracking) ==
+
+  * heuristic:begin_pass/1
+    Per-pass state clearing, scoped to fresh vs resumed passes.
+
+  * heuristic:restart_seed/2
+    Marks the model literals a deferred conflict invalidates.
+
+  * heuristic:restart_obligation_head/2
+    Maps an obligation-done key to its anchor literal.
+
+  * heuristic:restart_constraint_scope/3
+    Derives the constraint-pruning scope from the affected set.
+
+  * heuristic:restart_drop_constraint/2
+    Classifies which accumulated constraints to drop on restart.
+
 */
 
 :- module(heuristic, [obligation_candidate/1,
@@ -128,15 +145,33 @@ heuristic:handle_reprove(cn_domain(C, N, Domain, Candidates, Reasons), Added) :-
   ; Added = false
   ),
   !.
-heuristic:handle_reprove(bwu_force(_C, _N, _Flags), true) :-
-  % portage-ng#91 sub-mechanism B: the forced shared-dep USE flag(s) were
-  % already stored in the learned constraint store by the throw site
-  % (use:maybe_force_shared_dep_use/3), so just confirm progress so the
-  % bounded reprove loop re-proves with the flag applied. The throw site only
-  % fires when prover:learn reports Added==true, so this never loops on an
-  % already-learned flag set.
+heuristic:handle_reprove(bwu_force_flush(_Pending), true) :-
+  % portage-ng#91 sub-mechanism B / portage-ng#94: end-of-pass batched flush
+  % of the shared-dep USE forces learned during the pass that just completed
+  % (see heuristic:reprove_pending/1). The forces are already in the learned
+  % constraint store (use:maybe_force_shared_dep_use/3); confirming progress
+  % makes the bounded reprove loop run one clean re-proof with all of them
+  % applied from the start. Each flush corresponds to at least one
+  % prover:learn with Added==true, so the loop terminates once a pass learns
+  % nothing new.
   !.
 heuristic:handle_reprove(_, false).
+
+
+%! heuristic:reprove_pending(-Info)
+%
+% Domain hook called by the prover after a proof pass COMPLETES
+% (prover:deferred_reprove_pending/3). Succeeds when the pass deferred
+% at least one conflict that warrants a re-proof; Info is passed to
+% heuristic:handle_reprove/2 exactly like a thrown prover_reprove(Info).
+%
+% Currently the only deferred conflict class is the shared-dep HARD-USE
+% force (portage-ng#94): use:maybe_force_shared_dep_use/3 records newly
+% learned forces in memo:bwu_force_pending_/3 instead of aborting the
+% pass, and this hook flushes them as a single batched reprove.
+
+heuristic:reprove_pending(bwu_force_flush(Pending)) :-
+  use:bwu_force_pending_any(Pending).
 
 
 %! heuristic:reprove_exhausted
@@ -182,6 +217,152 @@ cleanup_state :-
       nb_delete(rules_reprove_saved_state)
   ; true
   ),
+  !.
+
+
+% =============================================================================
+%  Partial restart hooks (non-chronological backtracking, domain side)
+% =============================================================================
+
+%! heuristic:begin_pass(+Kind)
+%
+% Per-pass state clearing, called by prover:begin_pass/0 at the start of
+% every prove_once/9 pass. Kind is `fresh` (first attempt or full
+% restart) or `resume` (partial restart from pruned artifacts).
+%
+% Both kinds clear the same per-pass cross-dep memos. This is safe for
+% a resumed pass because every contributor to a forced provider's
+% candidate_bwu_ accumulation is a direct consumer of that provider,
+% hence a trigger-dependent, hence in the affected set: all of them
+% re-derive on the resumed pass and re-contribute their bracketed-USE
+% state in the same relative order as a full restart. Keeping the
+% completed pass's accumulation instead was tried and diverged in the
+% genuinely-conflicted case (enable/disable USE conflicts surfaced as
+% unsatisfied-constraint assumptions rather than the REQUIRED_USE
+% violations a full restart converges to, because the provider saw the
+% whole conflicting accumulation at once instead of progressively).
+
+heuristic:begin_pass(fresh) :-
+  use:clear_bwu_cross_dep_memos.
+heuristic:begin_pass(resume) :-
+  use:clear_bwu_cross_dep_memos.
+
+
+%! heuristic:restart_seed(+Info, +Core) is semidet
+%
+% Marks the model literal cores invalidated by a deferred conflict.
+% For the shared-dep USE-force flush every action literal (install,
+% run, download, ...) of a forced (C,N) provider is a seed: its
+% committed build_with_use state predates the force, so the literal
+% (and, through the prover's dependents-closure, everything that could
+% observe it) must re-derive with the force applied.
+%
+% Grouped-dependency literals naming a forced (C,N) are seeds as well.
+% Proven ones are already reached through the provider's trigger edges,
+% but ASSUMED ones (domain assumptions from a failed resolution) are
+% not: their consumers depend on the `assumed(grouped_package_dependency
+% (...))` literal, and no trigger edge links the provider's action
+% literals to it. Those failed resolutions read the learned bwu_force
+% store, so the flush invalidates them (and, through the closure, their
+% consumers) even though the provider itself never proved.
+
+heuristic:restart_seed(bwu_force_flush(Pending), Repo://Entry:_Action) :-
+  !,
+  cache:ordered_entry(Repo, Entry, C, N, _),
+  memberchk(bwu_force(C, N, _), Pending).
+heuristic:restart_seed(bwu_force_flush(Pending), Lit0) :-
+  heuristic:strip_ctx(Lit0, Lit),
+  ( Lit = grouped_package_dependency(_Strength, C, N, _Deps):_Action ->
+      true
+  ; Lit = grouped_package_dependency(C, N, _Deps2):_Action2 ->
+      true
+  ; fail
+  ),
+  memberchk(bwu_force(C, N, _), Pending).
+
+
+%! heuristic:restart_obligation_head(+ObligationKey, -Core) is semidet
+%
+% Maps an obligation_done key (see heuristic:proof_obligation/4) to the
+% anchor literal that produced it, so the prover can invalidate the
+% marker when the anchor is affected by a partial restart and PDEPEND
+% expansion re-fires on the re-proof.
+
+heuristic:restart_obligation_head(pdepend(AnchorCore, _B), AnchorCore).
+heuristic:restart_obligation_head(pdepend_none(AnchorCore), AnchorCore).
+
+
+%! heuristic:restart_constraint_scope(+Info, +Affected, -Scope)
+%
+% Derives the constraint-pruning scope from the affected-literal set of
+% a partial restart: the set of affected Repo://Entry ids and their
+% (C,N) pairs. Computed once per restart; consulted per constraint key
+% by heuristic:restart_drop_constraint/2.
+
+heuristic:restart_constraint_scope(_Info, Affected, scope(Entries, CNs)) :-
+  assoc_to_keys(Affected, Keys),
+  heuristic:restart_scope_pairs(Keys, Entries0, CNs0),
+  sort(Entries0, Entries),
+  sort(CNs0, CNs).
+
+
+%! heuristic:restart_scope_pairs(+Keys, -Entries, -CNs)
+%
+% Collect Repo://Entry ids and C-N pairs from the affected keys that
+% are action literals; other keys (grouped deps, constraints) add
+% nothing. Keys are unwrapped first: cycle-break and domain-assumption
+% keys wrap the action literal in assumed/1 (possibly with an embedded
+% `?{Context}`), naf/1 wraps blocker literals.
+
+heuristic:restart_scope_pairs([], [], []).
+heuristic:restart_scope_pairs([Key0|Keys], Entries, CNs) :-
+  heuristic:restart_scope_core(Key0, Key),
+  ( Key = Repo://Entry:_Action ->
+      Entries = [Repo://Entry|Entries1],
+      ( cache:ordered_entry(Repo, Entry, C, N, _) ->
+          CNs = [C-N|CNs1]
+      ; CNs = CNs1
+      )
+  ; Entries = Entries1,
+    CNs = CNs1
+  ),
+  heuristic:restart_scope_pairs(Keys, Entries1, CNs1).
+
+
+%! heuristic:restart_scope_core(+Key, -Core) is det
+%
+% Recursively strip assumed/1, naf/1 and `?{Context}` wrappers from an
+% affected-set key, yielding the bare literal core.
+
+heuristic:restart_scope_core(assumed(Key0), Core) :- !, heuristic:restart_scope_core(Key0, Core).
+heuristic:restart_scope_core(naf(Key0), Core)     :- !, heuristic:restart_scope_core(Key0, Core).
+heuristic:restart_scope_core(Key0?{_Ctx}, Core)   :- !, heuristic:restart_scope_core(Key0, Core).
+heuristic:restart_scope_core(Core, Core).
+
+
+%! heuristic:restart_drop_constraint(+Scope, +ConstraintKey) is semidet
+%
+% Classifies which accumulated constraint keys belong to the affected
+% region of a partial restart and must be dropped (they are re-emitted
+% verbatim or re-derived when the affected literals re-prove):
+%
+%   - use(Repo://E): the REQUIRED_USE model of an affected entry; the
+%     forced flags can change it, and stale entries would be unioned
+%     with (and can contradict) the re-derived model.
+%   - slot(C,N,S) / selected_cn(C,N): the version selection records of
+%     an affected (C,N); re-established by the re-proof.
+%
+% Everything else is kept: cn_domain domains are monotone narrowings
+% that stay valid, and blocker constraints are unrelated to USE forces.
+
+heuristic:restart_drop_constraint(scope(Entries, _CNs), use(RepoEntry)) :-
+  ord_memberchk(RepoEntry, Entries),
+  !.
+heuristic:restart_drop_constraint(scope(_Entries, CNs), slot(C, N, _S)) :-
+  ord_memberchk(C-N, CNs),
+  !.
+heuristic:restart_drop_constraint(scope(_Entries, CNs), selected_cn(C, N)) :-
+  ord_memberchk(C-N, CNs),
   !.
 
 
