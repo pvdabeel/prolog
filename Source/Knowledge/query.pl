@@ -14,52 +14,59 @@ An implementation of a query language for the knowledge base
 
 :- module(query,[]).
 
-% dep_model_cache_ removed — model(dependency) queries are not cached.
+% model(dependency) queries are cached per proof with a hazard-encoded key
+% (memo:dep_model_cache_/5, gated by config:dep_model_cache/1).
 %
-% A cache (dep_model_cache_) was attempted but removed because the output
-% of model construction depends on mutable proof state beyond the explicit
-% context argument R:
+% The output of model construction depends on mutable proof state beyond
+% the explicit context argument.  Instead of clearing the cache whenever
+% that state might change (the approach of two earlier, abandoned attempts),
+% every mutable input is ENCODED IN THE CACHE KEY, so entries stay valid
+% for the whole proof (across fallback tiers, reprove passes and partial
+% restarts).  The hazards and their key encodings:
 %
-%   1. Context R (build_with_use:use_state(Pos,Neg)) — the same (Ebuild,Phase)
+%   1. Context (build_with_use:use_state(Pos,Neg)) — the same (Ebuild,Phase)
 %      is reached through different dependency paths that impose different USE
 %      requirements (e.g. qtbase reached with [concurrent,dbus,...] vs [gui]).
+%      -> the full (ground) context term is part of the key.  This also means
+%      no re-contextualisation is needed on a hit: the cached output embeds
+%      exactly the keyed context.
 %
-%   2. prover:assuming(keyword_acceptance) / prover:assuming(unmask) — these
-%      nb_setval flags change between fallback attempts in prove_with_fallback.
-%      any_of_config_dep_ok calls acceptance:accepted_keyword_candidate, which
-%      checks these flags.  A cached model from the strict attempt may be wrong
-%      in the unmask attempt (previously-unsatisfiable OR branches become viable).
+%   2. prover:assuming(keyword_acceptance) / assuming(unmask) / assuming
+%      (conflicts) / assuming(blockers) — nb_setval flags that change between
+%      fallback tiers.  any_of_config_dep_ok calls
+%      acceptance:accepted_keyword_candidate, which checks these flags.
+%      -> encoded as a 4-bit term in the key (dep_model_assuming_bits/1).
 %
-%   3. memo:selected_cn_snap_/3 — evolves DURING a single proof attempt as
-%      packages are selected.  any_of_group:config calls prioritize_deps_keep_all
-%      -> dep_snapshot_selected -> selected_cn_snap_.  Since any_of_group:config
-%      takes the first satisfiable dep (member + cut), different ordering can lock
-%      a different OR branch into the model.
+%   3. memo_selected_cn_snap — evolves DURING a single proof attempt as
+%      packages are selected.  any_of_group:config calls
+%      prioritize_deps_keep_all -> dep_snapshot_selected, so the snapshot
+%      can reorder OR branches and lock a different choice into the model.
+%      -> per-entry choice-group C/N pairs are extracted once from the dep
+%      metadata (memo:dep_model_choice_cns_/3) and their snapshot presence
+%      bits form a signature in the key (dep_model_choice_sig/3).  Entries
+%      without choice groups get signature 0 and are immune to this hazard.
 %
 %   4. variant:use_override/2 and variant:branch_prefer/1 — thread_local state
 %      active only during variant exploration; affects effective_use_for_entry
-%      and OR group ordering respectively.
+%      and OR group ordering.
+%      -> cache bypassed entirely while variant state is active (key = none).
 %
-% Despite the name, every call recomputes: goal-expanded query:search (findall
-% over cache:entry_metadata + prover:prove_model for USE conditionals) followed
-% by group_dependencies (findall + group_by).  Profiling shows 25-30% of proving
-% time is spent here, with up to 88% of calls being redundant (same result as a
-% previous call).  However, correct caching requires accounting for all the above
-% mutable state, not just the context R.
+% Remaining inputs (VDB installed state, /etc/portage preferences, profile,
+% keyword/license/mask config, favour/avoid flags) are constant within one
+% proof; the cache is thread_local and cleared by memo:clear_caches at the
+% start of each proof run, so cross-proof drift cannot leak.
 %
-% UPDATE (portage-ng#94 follow-up): a guarded per-pass memo handling all four
-% hazards (exact-context key, per-pass clearing, an OR-choice-group snapshot
-% signature, variant bypass) was built and benchmarked, then dropped: it was
-% plan- and assumption-identical but yielded only ~40% hit rate, ~6% on the
-% heaviest meta packages, and NO full-tree walltime change (2m50s A/B). The
-% "88% redundant" calls are mostly the same (Ebuild, Phase) re-queried under
-% monotonically GROWING build_with_use contexts (e.g. qtbase:install with up
-% to 23 distinct BWU states in one kde-apps-meta proof) as ctx-union
-% re-derives consumers; each is a genuinely different input whose context is
-% embedded in the output, so an exact-key cache cannot capture it. Exploiting
-% the remaining redundancy would need projection-keyed caching plus
-% re-contextualisation of the stored model, or prover-level incremental
-% re-derivation -- not another exact-key cache.
+% Why this is worth it: profiling shows 25-30% of proving time in these
+% queries.  Two earlier caches failed to produce wall-clock wins because
+% they were cleared per pass to dodge hazards 2/3, capturing only ~6% of
+% calls on heavy meta packages.  Measurement on kde-apps-meta (2718 calls,
+% 995 distinct (entry,phase) pairs) shows the redundancy is CROSS-PASS:
+% an exact-key cache valid across passes hits 58.9%.  Projection-keyed
+% variants (guard-flag / conditional-flip projections of the BWU context)
+% were also measured and add only ~3pp over the exact key — the distinct
+% BWU states are genuinely different inputs, since the flags consumers
+% force are exactly the flags gating conditionals — so the simple exact
+% key is used.
 
 % =============================================================================
 %  QUERY MACROS
@@ -933,6 +940,150 @@ compile_query_compound(all(dependency(D,fetchonly)):A?{C}, Repo://Id,
 
 % 10. some model queries are rewritten
 
+% -----------------------------------------------------------------------------
+%  Dependency-model cache key (hazard encoding)
+% -----------------------------------------------------------------------------
+
+%! query:dep_model_key(+Repo, +Id, +Context, -Key) is det
+%
+% Compute the hazard-encoded cache key for a model(dependency) query, or
+% `none` when the query must not be cached (cache disabled, variant
+% exploration active, or non-ground context).  See the comment block at
+% the top of this file for the hazard taxonomy.
+
+query:dep_model_key(Repo, Id, Context, Key) :-
+  ( query:dep_model_cache_enabled,
+    \+ query:dep_model_variant_active,
+    ground(Context)
+  ->
+    query:dep_model_assuming_bits(Bits),
+    query:dep_model_choice_sig(Repo, Id, Sig),
+    Key = key(Context, Bits, Sig)
+  ; Key = none
+  ).
+
+
+%! query:dep_model_cache_enabled is semidet
+%
+% Gate for the dependency-model cache; config:dep_model_cache(false)
+% disables it.
+
+query:dep_model_cache_enabled :-
+  ( current_predicate(config:dep_model_cache/1) ->
+      config:dep_model_cache(true)
+  ; true
+  ).
+
+
+%! query:dep_model_variant_active is semidet
+%
+% True while variant-exploration thread-local state is active (hazard 4);
+% the cache is bypassed entirely in that case.
+
+query:dep_model_variant_active :-
+  current_predicate(variant:use_override/2),
+  ( variant:use_override(_, _) -> true ; variant:branch_prefer(_) ),
+  !.
+
+
+%! query:dep_model_assuming_bits(-Bits) is det
+%
+% Snapshot of the prover:assuming flags that influence config-phase
+% model construction (hazard 2), as a compact key component.
+
+query:dep_model_assuming_bits(bits(K, U, C, B)) :-
+  ( prover:assuming(keyword_acceptance) -> K = 1 ; K = 0 ),
+  ( prover:assuming(unmask)             -> U = 1 ; U = 0 ),
+  ( prover:assuming(conflicts)          -> C = 1 ; C = 0 ),
+  ( prover:assuming(blockers)           -> B = 1 ; B = 0 ).
+
+
+%! query:dep_model_choice_sig(+Repo, +Id, -Sig) is det
+%
+% Snapshot-presence signature over the entry's choice-group member C/N
+% pairs (hazard 3).  0 when the entry's dep metadata contains no choice
+% groups (the common case); otherwise the list of selected_cn snapshot
+% presence bits in the (sorted, static) order of the pairs.
+
+query:dep_model_choice_sig(Repo, Id, Sig) :-
+  query:dep_model_choice_cns(Repo, Id, CNs),
+  ( CNs == [] ->
+      Sig = 0
+  ; findall(Bit,
+            ( member(C-N, CNs),
+              ( cnselect:snapshot_selected_cn_candidates(C, N, _) -> Bit = 1 ; Bit = 0 )
+            ),
+            Sig)
+  ).
+
+
+%! query:dep_model_choice_cns(+Repo, +Id, -CNs) is det
+%
+% Sorted list of C-N pairs occurring inside choice groups (any_of,
+% exactly_one_of, at_most_one_of) anywhere in the entry's dependency
+% metadata.  Static per entry; memoized in memo:dep_model_choice_cns_/3.
+
+query:dep_model_choice_cns(Repo, Id, CNs) :-
+  ( memo:dep_model_choice_cns_(Repo, Id, Cached) ->
+      CNs = Cached
+  ; findall(CN,
+            ( member(Kind, [depend, rdepend, bdepend, cdepend, idepend, pdepend]),
+              cache:entry_metadata(Repo, Id, Kind, Term),
+              query:dep_model_choice_cn(Term, CN)
+            ),
+            CNs0),
+    sort(CNs0, CNs1),
+    assertz(memo:dep_model_choice_cns_(Repo, Id, CNs1)),
+    CNs = CNs1
+  ).
+
+
+%! query:dep_model_choice_cn(+Term, -CN) is nondet
+%
+% Enumerate C-N pairs of package deps inside choice groups of a dep AST
+% term.  Descends group wrappers; only package deps that sit under a
+% choice group are yielded.
+
+query:dep_model_choice_cn(any_of_group(Deps), CN) :-
+  member(D, Deps),
+  query:dep_model_cn_under(D, CN).
+query:dep_model_choice_cn(exactly_one_of_group(Deps), CN) :-
+  member(D, Deps),
+  query:dep_model_cn_under(D, CN).
+query:dep_model_choice_cn(at_most_one_of_group(Deps), CN) :-
+  member(D, Deps),
+  query:dep_model_cn_under(D, CN).
+query:dep_model_choice_cn(all_of_group(Deps), CN) :-
+  member(D, Deps),
+  query:dep_model_choice_cn(D, CN).
+query:dep_model_choice_cn(use_conditional_group(_, _, _, Deps), CN) :-
+  member(D, Deps),
+  query:dep_model_choice_cn(D, CN).
+
+
+%! query:dep_model_cn_under(+Term, -CN) is nondet
+%
+% All package-dep C-N pairs in a subtree (used for choice-group members,
+% which may themselves be nested groups).
+
+query:dep_model_cn_under(package_dependency(_, _, C, N, _, _, _, _), C-N).
+query:dep_model_cn_under(all_of_group(Deps), CN) :-
+  member(D, Deps),
+  query:dep_model_cn_under(D, CN).
+query:dep_model_cn_under(any_of_group(Deps), CN) :-
+  member(D, Deps),
+  query:dep_model_cn_under(D, CN).
+query:dep_model_cn_under(exactly_one_of_group(Deps), CN) :-
+  member(D, Deps),
+  query:dep_model_cn_under(D, CN).
+query:dep_model_cn_under(at_most_one_of_group(Deps), CN) :-
+  member(D, Deps),
+  query:dep_model_cn_under(D, CN).
+query:dep_model_cn_under(use_conditional_group(_, _, _, Deps), CN) :-
+  member(D, Deps),
+  query:dep_model_cn_under(D, CN).
+
+
 compile_query_compound(model(FullModel,required_use(Model),build_with_use(Input)), Repo://Id,
   ( findall(ReqUse,
             cache:entry_metadata(Repo,Id,required_use,ReqUse),
@@ -984,7 +1135,13 @@ compile_query_compound(model(required_use(Model)), Repo://Id,
             Model) ) ) :- !.
 
 compile_query_compound(model(dependency(Merged,run)):config?{Context}, Repo://Id,
-  ( ( memberchk(self(Repo://Id), Context)
+  ( query:dep_model_key(Repo, Id, Context, CacheKey),
+    ( CacheKey \== none,
+      memo:dep_model_cache_(Repo, Id, run, CacheKey, CachedMerged)
+    ->
+      Merged = CachedMerged
+    ;
+    ( memberchk(self(Repo://Id), Context)
       -> CtxSelf = Context
       ;  CtxSelf = [self(Repo://Id)|Context]
     ),
@@ -1002,10 +1159,20 @@ compile_query_compound(model(dependency(Merged,run)):config?{Context}, Repo://Id
             ( CtxIn == {} -> CtxOut = [] ; CtxOut = CtxIn )
           ),
           Model0),
-  query:group_dependencies(Model0, Merged) ) ) :- !.
+  query:group_dependencies(Model0, Merged),
+  ( CacheKey == none
+    -> true
+    ;  assertz(memo:dep_model_cache_(Repo, Id, run, CacheKey, Merged))
+  ) ) ) ) :- !.
 
 compile_query_compound(model(dependency(Merged,pdepend)):config?{Context}, Repo://Id,
-  ( ( memberchk(self(Repo://Id), Context)
+  ( query:dep_model_key(Repo, Id, Context, CacheKey),
+    ( CacheKey \== none,
+      memo:dep_model_cache_(Repo, Id, pdepend, CacheKey, CachedMerged)
+    ->
+      Merged = CachedMerged
+    ;
+    ( memberchk(self(Repo://Id), Context)
       -> CtxSelf = Context
       ;  CtxSelf = [self(Repo://Id)|Context]
     ),
@@ -1022,10 +1189,20 @@ compile_query_compound(model(dependency(Merged,pdepend)):config?{Context}, Repo:
             ( CtxIn == {} -> CtxOut = [] ; CtxOut = CtxIn )
           ),
           Model0),
-  query:group_dependencies(Model0, Merged) ) ) :- !.
+  query:group_dependencies(Model0, Merged),
+  ( CacheKey == none
+    -> true
+    ;  assertz(memo:dep_model_cache_(Repo, Id, pdepend, CacheKey, Merged))
+  ) ) ) ) :- !.
 
 compile_query_compound(model(dependency(Merged,install)):config?{Context}, Repo://Id,
-  ( ( memberchk(self(Repo://Id), Context)
+  ( query:dep_model_key(Repo, Id, Context, CacheKey),
+    ( CacheKey \== none,
+      memo:dep_model_cache_(Repo, Id, install, CacheKey, CachedMerged)
+    ->
+      Merged = CachedMerged
+    ;
+    ( memberchk(self(Repo://Id), Context)
       -> CtxSelf = Context
       ;  CtxSelf = [self(Repo://Id)|Context]
     ),
@@ -1046,10 +1223,20 @@ compile_query_compound(model(dependency(Merged,install)):config?{Context}, Repo:
              ( CtxIn == {} -> CtxOut = [] ; CtxOut = CtxIn )
            ),
           Model0),
-  query:group_dependencies(Model0, Merged) ) ) :- !.
+  query:group_dependencies(Model0, Merged),
+  ( CacheKey == none
+    -> true
+    ;  assertz(memo:dep_model_cache_(Repo, Id, install, CacheKey, Merged))
+  ) ) ) ) :- !.
 
 compile_query_compound(model(dependency(Merged,fetchonly)):config?{Context}, Repo://Id,
-  ( ( memberchk(self(Repo://Id), Context)
+  ( query:dep_model_key(Repo, Id, Context, CacheKey),
+    ( CacheKey \== none,
+      memo:dep_model_cache_(Repo, Id, fetchonly, CacheKey, CachedMerged)
+    ->
+      Merged = CachedMerged
+    ;
+    ( memberchk(self(Repo://Id), Context)
       -> CtxSelf = Context
       ;  CtxSelf = [self(Repo://Id)|Context]
     ),
@@ -1071,7 +1258,11 @@ compile_query_compound(model(dependency(Merged,fetchonly)):config?{Context}, Rep
             ( CtxIn == {} -> CtxOut = [] ; CtxOut = CtxIn )
           ),
           Model0),
-  query:group_dependencies(Model0, Merged) ) ) :- !.
+  query:group_dependencies(Model0, Merged),
+  ( CacheKey == none
+    -> true
+    ;  assertz(memo:dep_model_cache_(Repo, Id, fetchonly, CacheKey, Merged))
+  ) ) ) ) :- !.
 
 
 % 11. qualified_target queries, generated by --merge, --unmerge and --info

@@ -1764,6 +1764,67 @@ test(begin_pass_fresh_drops_prior_proven_witness) :-
 :- end_tests(partial_restart).
 
 
+:- begin_tests(dep_model_cache).
+
+% Hazard-encoded cache key for model(dependency) queries (see the design
+% comment at the top of Source/Knowledge/query.pl).
+
+test(choice_cn_extraction_only_inside_choice_groups) :-
+  T1 = any_of_group([package_dependency(install,no,'dev-lang','python',none,version_none,[],[]),
+                     all_of_group([package_dependency(install,no,'dev-lang','pypy',none,version_none,[],[])])]),
+  findall(CN, query:dep_model_choice_cn(T1, CN), CNs1),
+  msort(CNs1, ['dev-lang'-'pypy', 'dev-lang'-'python']),
+  % package deps NOT under a choice group are not choice CNs
+  T2 = all_of_group([package_dependency(install,no,'sys-libs','zlib',none,version_none,[],[])]),
+  findall(CN2, query:dep_model_choice_cn(T2, CN2), []),
+  % choice group nested under a conditional is still found
+  T3 = use_conditional_group(positive, foo, r://e,
+         [exactly_one_of_group([package_dependency(install,no,'app-misc','a',none,version_none,[],[])])]),
+  findall(CN3, query:dep_model_choice_cn(T3, CN3), ['app-misc'-'a']).
+
+test(choice_sig_reflects_snapshot_presence,
+     [setup(( empty_assoc(Empty), nb_setval(memo_selected_cn_snap, Empty),
+              retractall(memo:dep_model_choice_cns_(_, _, _)),
+              assertz(memo:dep_model_choice_cns_(testrepo, 'x/y-1', ['dev-lang'-'python'])) )),
+      cleanup(retractall(memo:dep_model_choice_cns_(_, _, _)))]) :-
+  query:dep_model_choice_sig(testrepo, 'x/y-1', [0]),
+  cnselect:record_selected_cn_snapshot('dev-lang', 'python', [selected(portage,'dev-lang/python-3.13',run,v,'3.13')]),
+  query:dep_model_choice_sig(testrepo, 'x/y-1', [1]).
+
+test(choice_sig_zero_without_choice_groups,
+     [setup(( retractall(memo:dep_model_choice_cns_(_, _, _)),
+              assertz(memo:dep_model_choice_cns_(testrepo, 'x/z-1', [])) )),
+      cleanup(retractall(memo:dep_model_choice_cns_(_, _, _)))]) :-
+  query:dep_model_choice_sig(testrepo, 'x/z-1', 0).
+
+test(assuming_bits_reflect_prover_scopes) :-
+  query:dep_model_assuming_bits(bits(0, 0, 0, 0)),
+  prover:assuming(conflicts, query:dep_model_assuming_bits(bits(0, 0, 1, 0))),
+  prover:assuming(keyword_acceptance,
+    prover:assuming(blockers, query:dep_model_assuming_bits(bits(1, 0, 0, 1)))),
+  query:dep_model_assuming_bits(bits(0, 0, 0, 0)).
+
+test(key_none_for_nonground_context) :-
+  query:dep_model_key(testrepo, 'x/y-1', [build_with_use:use_state([_Var], [])], none).
+
+test(key_none_while_variant_active,
+     [setup(assertz(variant:branch_prefer(package_dependency(install,no,'a','b',none,version_none,[],[])))),
+      cleanup(retractall(variant:branch_prefer(_)))]) :-
+  query:dep_model_key(testrepo, 'x/y-1', [build_with_use:use_state([], [])], none).
+
+test(key_encodes_context_bits_and_sig,
+     [setup(( empty_assoc(Empty), nb_setval(memo_selected_cn_snap, Empty),
+              retractall(memo:dep_model_choice_cns_(_, _, _)),
+              assertz(memo:dep_model_choice_cns_(testrepo, 'x/y-1', ['dev-lang'-'python'])) )),
+      cleanup(retractall(memo:dep_model_choice_cns_(_, _, _)))]) :-
+  Ctx = [build_with_use:use_state([icu], [])],
+  query:dep_model_key(testrepo, 'x/y-1', Ctx, key(Ctx, bits(0,0,0,0), [0])),
+  prover:assuming(unmask,
+    query:dep_model_key(testrepo, 'x/y-1', Ctx, key(Ctx, bits(0,1,0,0), [0]))).
+
+:- end_tests(dep_model_cache).
+
+
 :- begin_tests(equality_use_pin_propagation).
 
 test(equal_provider_enabled_enables_self, [true(Mode == enable)]) :-
