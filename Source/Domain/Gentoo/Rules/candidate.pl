@@ -432,12 +432,15 @@ candidate:eligible(Repo://Entry:annotate?{_}) :-
 
 candidate:eligible(Repo://Entry:_Action?{_}) :-
   ( query:search(masked(true), Repo://Entry) ->
-      prover:assuming(unmask)
+      ( prover:assuming(unmask) -> true
+      ; memo:visibility_override_(Repo, Entry)
+      )
   ; true
   ),
   ( acceptance:entry_has_accepted_keyword(Repo://Entry) ->
       true
-  ; prover:assuming(keyword_acceptance)
+  ; prover:assuming(keyword_acceptance) -> true
+  ; memo:visibility_override_(Repo, Entry)
   ).
 
 
@@ -1028,6 +1031,86 @@ candidate:grouped_dep_assemble_conditions(gd(Action, C, N, PackageDeps1, SlotReq
 
 
 % -----------------------------------------------------------------------------
+%  Phase 4b: Last-resort concretization of visibility-hidden deps (#14)
+% -----------------------------------------------------------------------------
+
+%! candidate:grouped_dep_concretize_hidden(+Action, +C, +N, +PackageDeps, +PackageDepsOrig, +Context, -Conditions) is semidet.
+%
+% Called when regular selection failed. When the diagnosed failure
+% reason is purely a visibility filter (masked / keyword_filtered),
+% retries the selection with the matching prover:assuming flags scoped
+% to the selection call, and records a memo:visibility_override_/2 fact
+% for the chosen candidate so its own :install/:run eligibility checks
+% pass for the remainder of this proof. The dep is thereby planned as a
+% concrete install carrying the unmask / accept-keyword suggestion
+% (tagged inside grouped_dep_select_and_build by
+% grouped_dep_tag_suggestions), instead of the verify-only phantom that
+% let consumers build without their provider (portage-ng#14:
+% acct-user/buildbot merged while its keyword-filtered acct-group was
+% only "assumed accepted" — useradd failed in preinst).
+%
+% This deliberately happens in-place at the current relaxation tier: an
+% earlier attempt that failed such deps up the pipeline:with_fallback
+% ladder instead sent heavy meta-packages (kde-plasma/plasma-meta)
+% through multiple full proof attempts and into timeouts. Committed
+% choice (once/1): if the chosen candidate's subtree later fails, the
+% prover retries resolve/2 and lands on the assumption clause below —
+% i.e. worst case equals the old phantom behaviour.
+
+candidate:grouped_dep_concretize_hidden(Action, C, N, PackageDeps1, PackageDepsOrig, Context, Conditions) :-
+  explanation:assumption_reason_for_grouped_dep(Action, C, N, PackageDepsOrig, Context, Reason),
+  candidate:hidden_reason_flags(Reason, Flags),
+  once(( candidate:with_assuming_flags(Flags,
+             once(candidate:grouped_dep_select_and_build(Action, C, N, PackageDeps1, Context, Conditions)))
+       ; candidate:with_assuming_flags([keyword_acceptance, unmask],
+             once(candidate:grouped_dep_select_and_build(Action, C, N, PackageDeps1, Context, Conditions)))
+       )),
+  candidate:record_visibility_override(C, N, Conditions).
+
+
+%! candidate:hidden_reason_flags(+Reason, -Flags) is semidet.
+%
+% Maps a visibility-only failure reason to the prover:assuming flags
+% that lift it. Fails for any other reason (version conflicts,
+% REQUIRED_USE, missing, unsatisfied_constraints, ...), so
+% concretization never fires for failures that relaxing visibility
+% cannot fix.
+
+candidate:hidden_reason_flags(keyword_filtered, [keyword_acceptance]).
+candidate:hidden_reason_flags(masked,           [unmask]).
+
+
+%! candidate:with_assuming_flags(+Flags, :Goal) is nondet.
+%
+% Runs Goal with each prover:assuming flag in Flags active, restoring
+% them afterwards (nested prover:assuming/2 scopes).
+
+candidate:with_assuming_flags([], Goal) :-
+  call(Goal).
+candidate:with_assuming_flags([F|Fs], Goal) :-
+  prover:assuming(F, candidate:with_assuming_flags(Fs, Goal)).
+
+
+%! candidate:record_visibility_override(+C, +N, +Conditions) is det.
+%
+% Extracts the selected candidate from the assembled conditions
+% (selected_cn constraint) and records a visibility override for it, so
+% the candidate's own ebuild-level rules pass candidate:eligible/1
+% outside the scoped assuming flags. Cleared by memo:clear_caches at
+% the start of each proof run.
+
+candidate:record_visibility_override(C, N, Conditions) :-
+  ( memberchk(constraint(selected_cn(C,N):{ordset(Sels)}), Conditions),
+    memberchk(selected(Repo, Entry, _A, _V, _S), Sels)
+  ->
+    ( memo:visibility_override_(Repo, Entry) -> true
+    ; assertz(memo:visibility_override_(Repo, Entry))
+    )
+  ; true
+  ).
+
+
+% -----------------------------------------------------------------------------
 %  Phase 5: Assumption fallback with diagnostics
 % -----------------------------------------------------------------------------
 
@@ -1050,6 +1133,13 @@ candidate:grouped_dep_assemble_conditions(gd(Action, C, N, PackageDeps1, SlotReq
 % same package — that aliasing is existence-gated, so a true phantom
 % (provider absent from the plan) never inherits a wave, while a
 % provider that IS planned keeps its ordering edge (portage-ng#95).
+%
+% Note that purely visibility-caused failures (masked /
+% keyword_filtered) normally never reach this clause anymore: the
+% grouped_dep_concretize_hidden/7 resolve clause above plans them as
+% concrete installs with an unmask / accept-keyword suggestion
+% (portage-ng#14). This assumption path remains their fallback when
+% even the visibility-relaxed selection fails.
 
 candidate:grouped_dep_build_assumption(Action, C, N, PackageDeps1, PackageDepsOrig, Context, Conditions) :-
   explanation:assumption_reason_for_grouped_dep(Action, C, N, PackageDepsOrig, Context, Reason),

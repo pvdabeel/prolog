@@ -172,9 +172,12 @@ candidate:goal_expansion(eligible(Repo://Id:Action?{_}), Expanded) :-
   -> query:compile_query_compound(ebuild(Id), Repo://Id, Expanded)
   ;  query:compile_query_compound(masked(true), Repo://Id, Masked),
      Expanded =
-       ( ( Masked -> prover:assuming(unmask) ; true ),
+       ( ( Masked -> ( prover:assuming(unmask) -> true
+                     ; memo:visibility_override_(Repo, Id) )
+         ; true ),
          ( acceptance:entry_has_accepted_keyword(Repo://Id) -> true
-         ; prover:assuming(keyword_acceptance) ) )
+         ; prover:assuming(keyword_acceptance) -> true
+         ; memo:visibility_override_(Repo, Id) ) )
   ).
 
 candidate:goal_expansion(resolve(_Repo://_Id:Action?{Context}, Conditions), Expanded) :-

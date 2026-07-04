@@ -57,6 +57,7 @@ heuristic:cleanup_state/0 during reprove retries.
 :- thread_local memo:eff_use_cache_/4.          % eff_use_cache_(Repo, Entry, Use, State)
 :- thread_local memo:self_use_cache_/4.         % self_use_cache_(Repo, Entry, Use, State)
 :- thread_local memo:assumption_reason_cache_/4. % assumption_reason_cache_(Action, C, N, Reason)
+:- thread_local memo:visibility_override_/2.    % visibility_override_(Repo, Entry) -- entry passes eligibility despite mask/keyword filtering (portage-ng#14 last-resort dep concretization)
 :- thread_local memo:keyword_suggestion_cache_/3. % keyword_suggestion_cache_(C, N, SuggestedKw)
 :- thread_local memo:requse_violation_/3.        % requse_violation_(C, N, ViolDesc)
 :- thread_local memo:slot_conflict_/3.          % slot_conflict_(C, N, Entries)
@@ -88,6 +89,7 @@ clear_caches :-
   retractall(memo:eff_use_cache_(_, _, _, _)),
   retractall(memo:self_use_cache_(_, _, _, _)),
   retractall(memo:assumption_reason_cache_(_, _, _, _)),
+  retractall(memo:visibility_override_(_, _)),
   retractall(memo:keyword_suggestion_cache_(_, _, _)),
   retractall(memo:requse_violation_(_, _, _)),
   retractall(memo:slot_conflict_(_, _, _)),

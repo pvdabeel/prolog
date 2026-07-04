@@ -160,6 +160,14 @@ acceptance:accepted_keyword_candidate(Action, C, N, SlotReq0, Ss0, Context, Foun
 %
 % Like query_keyword_candidate but accepts any candidate regardless of
 % keywords. Used when keyword_acceptance fallback is active.
+%
+% Binary-package repository entries are excluded: they carry no
+% KEYWORDS (so only these keyword-relaxed clauses could ever surface
+% them) and the resolver must not plan direct binpkg:// installs —
+% binpkg consumption is the builder's optimization
+% (binpkg_exec:available_for/4 substitutes a matching gpkg for a
+% source entry at execution time; there is no standalone binpkg build
+% strategy script).
 
 acceptance:query_keyword_candidate_any(Action, C, N, Context, FoundRepo://Candidate) :-
   ( Action \== run,
@@ -167,6 +175,7 @@ acceptance:query_keyword_candidate_any(Action, C, N, Context, FoundRepo://Candid
     query:search([category(C),name(N)], SelfRepo0://SelfEntry0)
   ->
     query:search([name(N),category(C)], FoundRepo://Candidate),
+    \+ acceptance:binpkg_repository(FoundRepo),
     \+ preference:masked(FoundRepo://Candidate),
     ( FoundRepo == SelfRepo0,
       Candidate == SelfEntry0
@@ -176,6 +185,7 @@ acceptance:query_keyword_candidate_any(Action, C, N, Context, FoundRepo://Candid
     ; true
     )
   ; query:search([name(N),category(C)], FoundRepo://Candidate),
+    \+ acceptance:binpkg_repository(FoundRepo),
     \+ preference:masked(FoundRepo://Candidate)
   ).
 
@@ -183,6 +193,8 @@ acceptance:query_keyword_candidate_any(Action, C, N, Context, FoundRepo://Candid
 %
 % Accepts masked candidates with any keyword. Used when the unmask
 % fallback is active to let masked packages through for full resolution.
+% Binary-package repository entries are excluded (see
+% query_keyword_candidate_any/5).
 
 acceptance:query_keyword_candidate_masked(Action, C, N, Context, FoundRepo://Candidate) :-
   ( Action \== run,
@@ -190,6 +202,7 @@ acceptance:query_keyword_candidate_masked(Action, C, N, Context, FoundRepo://Can
     query:search([category(C),name(N)], SelfRepo0://SelfEntry0)
   ->
     query:search([name(N),category(C),keyword(_)], FoundRepo://Candidate),
+    \+ acceptance:binpkg_repository(FoundRepo),
     ( FoundRepo == SelfRepo0,
       Candidate == SelfEntry0
     ->
@@ -197,8 +210,15 @@ acceptance:query_keyword_candidate_masked(Action, C, N, Context, FoundRepo://Can
       query:search(installed(true), FoundRepo://Candidate)
     ; true
     )
-  ; query:search([name(N),category(C),keyword(_)], FoundRepo://Candidate)
+  ; query:search([name(N),category(C),keyword(_)], FoundRepo://Candidate),
+    \+ acceptance:binpkg_repository(FoundRepo)
   ).
+
+%! acceptance:binpkg_repository(+Repo) is semidet.
+%
+% True when Repo is the registered binary-package repository.
+
+acceptance:binpkg_repository(binpkg).
 
 %! acceptance:accepted_keyword_slot_lock_arg(+C, +N, +SlotReq0, +Ss0, +Context, -SlotReq, -Ss, -LockKey)
 %

@@ -407,6 +407,24 @@ candidate:resolve(grouped_dep(C,N,PackageDeps):Action?{Context}, _) :-
   cnselect:maybe_request_grouped_dep_reprove(Action, C, N, PackageDeps1, Context),
   fail.
 
+% Last-resort concretization of visibility-hidden deps (portage-ng#14):
+% when selection failed only because every candidate is masked or
+% keyword-filtered, retry the selection with the matching assuming flags
+% scoped to the selection call and record a per-entry visibility
+% override so the chosen candidate's own :install/:run rules pass
+% eligibility. The dep is then planned as a real install (with the
+% unmask / accept-keyword suggestion tagged by
+% grouped_dep_tag_suggestions) instead of a verify-only phantom that
+% lets the consumer build without its provider (useradd: group does not
+% exist). This happens in-place at the current relaxation tier — no
+% ladder climb, so heavy meta-packages keep their tier-1 proof cost.
+
+candidate:resolve(grouped_dep(C,N,PackageDeps):Action?{Context}, Conditions) :-
+  candidate:augment_package_deps_with_self_rdepend(Action, C, N, Context, PackageDeps, PackageDeps1),
+  \+ memo:requse_violation_(C, N, _),
+  \+ memo:bwu_force_pending_(C, N, _),
+  candidate:grouped_dep_concretize_hidden(Action, C, N, PackageDeps1, PackageDeps, Context, Conditions).
+
 candidate:resolve(grouped_dep(C,N,PackageDeps):Action?{Context}, Conditions) :-
   candidate:augment_package_deps_with_self_rdepend(Action, C, N, Context, PackageDeps, PackageDeps1),
   candidate:grouped_dep_build_assumption(Action, C, N, PackageDeps1, PackageDeps, Context, Conditions).

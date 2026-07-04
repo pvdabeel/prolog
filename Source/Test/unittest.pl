@@ -2351,6 +2351,32 @@ test(build_assumption_emits_requse_violation_with_tag) :-
      fail
   ).
 
+% Visibility-hidden dep concretization (portage-ng#14): reason-to-flags
+% mapping only covers reasons that relaxing visibility can fix.
+test(hidden_reason_flags_keyword_filtered) :-
+  candidate:hidden_reason_flags(keyword_filtered, [keyword_acceptance]).
+
+test(hidden_reason_flags_masked) :-
+  candidate:hidden_reason_flags(masked, [unmask]).
+
+test(hidden_reason_flags_rejects_other_reasons, [fail]) :-
+  member(R, [unsatisfied_constraints, missing, version_conflict,
+             slot_unsatisfied, installed_required]),
+  candidate:hidden_reason_flags(R, _).
+
+% record_visibility_override extracts the selected candidate from the
+% assembled conditions and asserts a memo:visibility_override_/2 fact.
+test(record_visibility_override_asserts_selected,
+     [cleanup(retractall(memo:visibility_override_(_, _)))]) :-
+  Conditions = [constraint(selected_cn('acct-group', buildbot):{ordset([selected(qtest, 'acct-group/buildbot-0-r3', run, v, [])])})],
+  candidate:record_visibility_override('acct-group', buildbot, Conditions),
+  memo:visibility_override_(qtest, 'acct-group/buildbot-0-r3').
+
+test(record_visibility_override_noop_without_selection,
+     [cleanup(retractall(memo:visibility_override_(_, _)))]) :-
+  candidate:record_visibility_override('acct-group', buildbot, []),
+  \+ memo:visibility_override_(_, _).
+
 :- end_tests(phantom_grouped_dep_assumption).
 
 
@@ -3241,7 +3267,7 @@ test(issue59_version_domain_hook_matches_predicate) :-
 test(issue59_eligible_install_uses_masked_macro) :-
   candidate:goal_expansion(eligible(qtest://'dev-test/foo-1.0':install?{[]}), G),
   !,
-  G = ((Masked -> prover:assuming(unmask) ; true), _),
+  G = ((Masked -> (prover:assuming(unmask) -> true ; memo:visibility_override_(_, _)) ; true), _),
   query:compile_query_compound(masked(true), qtest://'dev-test/foo-1.0', MaskedExpected),
   Masked == MaskedExpected.
 
