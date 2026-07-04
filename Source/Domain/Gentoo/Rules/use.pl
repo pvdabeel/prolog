@@ -1803,16 +1803,19 @@ use:accumulate_candidate_bwu(C, N, BWU) :-
 % effective `candidate_bwu_/3` is recomputed as "HARD beats EQ": a flag a
 % USE-equal consumer wants OFF yields to another consumer that hard-
 % requires it ON (and vice versa), instead of being reported as an
-% irreconcilable conflict.  Genuine conflicts remain: HARD-vs-HARD (two
-% hard consumers disagree) and EQ-vs-EQ (two `=` consumers disagree with
-% no hard determination) still fail and record a violation descriptor.
+% irreconcilable conflict.  The EQ merge itself also ignores flags the
+% HARD component determines (merge_eq_states_under_hard/4, portage-ng#96):
+% two `=` consumers projecting opposite values is only a genuine conflict
+% when nothing hard-requires the flag.  Genuine conflicts remain:
+% HARD-vs-HARD (two hard consumers disagree) and EQ-vs-EQ on a
+% HARD-undetermined flag still fail and record a violation descriptor.
 
 use:accumulate_candidate_bwu_pv(_C, _N, use_state([], []), use_state([], [])) :- !.
 use:accumulate_candidate_bwu_pv(C, N, HardState, EqState) :-
     use:current_bwu_component(candidate_bwu_hard_, C, N, OldHard),
     use:current_bwu_component(candidate_bwu_eq_, C, N, OldEq),
     ( use:merge_bwu_state(OldHard, HardState, NewHard),
-      use:merge_bwu_state(OldEq, EqState, NewEq),
+      use:merge_eq_states_under_hard(NewHard, OldEq, EqState, NewEq),
       use:combine_hard_eq_bwu(NewHard, NewEq, Effective)
     ->
         use:store_bwu_component(candidate_bwu_hard_, C, N, NewHard),
@@ -1858,6 +1861,29 @@ use:merge_bwu_state(A, B, Merged) :-
     feature_unification:val_hook(A, B, Merged).
 
 
+%! use:merge_eq_states_under_hard(+Hard, +OldEq, +EqState, -NewEq)
+%
+% Union two EQ components, ignoring flags the HARD component already
+% determines (portage-ng#96).  Two `=` consumers projecting opposite
+% values onto a provider flag is only a genuine conflict when nothing
+% hard-requires the flag: once HARD fixes it, the effective BWU follows
+% HARD anyway ("HARD beats EQ") and each `=` consumer is brought in line
+% by back-propagation (ranking:apply_equality_pins/3), so the stale EQ
+% projections must not fail the merge (e.g. qtdeclarative[opengl=off]
+% vs a second consumer [opengl=on] after qtwayland hard-enabled opengl
+% on qtbase).  EQ-vs-EQ conflicts on HARD-undetermined flags still fail.
+
+use:merge_eq_states_under_hard(use_state(HEn, HDis), OldEq, EqState, NewEq) :-
+    ord_union(HEn, HDis, Determined),
+    OldEq = use_state(OEn, ODis),
+    EqState = use_state(En, Dis),
+    ord_subtract(OEn, Determined, OEn1),
+    ord_subtract(ODis, Determined, ODis1),
+    ord_subtract(En, Determined, En1),
+    ord_subtract(Dis, Determined, Dis1),
+    use:merge_bwu_state(use_state(OEn1, ODis1), use_state(En1, Dis1), NewEq).
+
+
 %! use:combine_hard_eq_bwu(+Hard, +Eq, -Effective)
 %
 % Combine the HARD and EQ components into an effective BWU where HARD
@@ -1872,6 +1898,50 @@ use:combine_hard_eq_bwu(use_state(HEn, HDis), use_state(EEn, EDis), use_state(En
     ord_union(HEn, EEn1, En),
     ord_union(HDis, EDis1, Dis),
     ord_intersection(En, Dis, []).
+
+
+%! use:reconcile_cross_dep_bwu(+C, +N, +OldBWU, +NewBWU, -Merged)
+%
+% Conflict-time reconciliation for check_bwu_cross_dep (portage-ng#96).
+% Called only after a plain val_hook merge of the memo effective (OldBWU)
+% and a fresh resolution (NewBWU) failed on enable/disable conflicts.
+% Both states mix provenances: the memo carries EQ-following and pin
+% snapshots taken before a provider flag flipped, and the fresh state may
+% carry stale `?{Context}` bracket values threaded through earlier proof
+% literals.  Resolve each conflicting flag by provenance:
+%
+%   - flags the HARD component memo determines keep the memo value
+%     (forcing consumers win; the fresh side's opposite value is a stale
+%     following snapshot),
+%   - all other conflicting flags take the FRESH value (newest snapshot
+%     wins: EQ/pin followers track mutable provider state).
+%
+% The result is verified against REQUIRED_USE by the caller, so genuine
+% unsatisfiable combinations still fail there; genuine HARD-vs-HARD
+% bracket conflicts are still detected on the grouped-dep edge path
+% (accumulate_candidate_bwu_pv/4).
+
+use:reconcile_cross_dep_bwu(C, N, use_state(OEn, ODis), use_state(NEn, NDis), Merged) :-
+    use:current_bwu_component(candidate_bwu_hard_, C, N, use_state(HEn, HDis)),
+    ord_intersection(OEn, NDis, C1),
+    ord_intersection(ODis, NEn, C2),
+    ord_union(C1, C2, Conflicts),
+    Conflicts \== [],
+    ord_subtract(OEn, Conflicts, OEn1), ord_subtract(ODis, Conflicts, ODis1),
+    ord_subtract(NEn, Conflicts, NEn1), ord_subtract(NDis, Conflicts, NDis1),
+    feature_unification:val_hook(use_state(OEn1, ODis1), use_state(NEn1, NDis1),
+                                 use_state(MEn0, MDis0)),
+    ord_intersection(Conflicts, HEn, ResEnH),
+    ord_intersection(Conflicts, HDis, ResDisH0),
+    ord_subtract(ResDisH0, ResEnH, ResDisH),
+    ord_union(ResEnH, ResDisH, HardDetermined),
+    ord_subtract(Conflicts, HardDetermined, Rest),
+    ord_intersection(Rest, NEn, ResEnF),
+    ord_intersection(Rest, NDis, ResDisF),
+    ord_union([MEn0, ResEnH, ResEnF], MEn),
+    ord_union([MDis0, ResDisH, ResDisF], MDis),
+    ord_intersection(MEn, MDis, []),
+    Merged = use_state(MEn, MDis).
 
 
 %! use:record_bwu_pv_conflict(+C, +N, +OldHard, +HardState, +OldEq, +EqState)
@@ -1910,11 +1980,21 @@ use:verify_candidate_satisfies_bwu_state(Repo://Entry, use_state(En, Dis)) :-
 %
 % Detects irreconcilable REQUIRED_USE conflicts across independent dependency
 % branches.  Uses a memo to track committed BWU per (C,N).
+%
+% When the plain merge of the memo effective and a fresh resolution fails
+% on enable/disable conflicts, reconcile_cross_dep_bwu/5 retries with
+% provenance-aware conflict resolution before reporting a violation
+% (portage-ng#96): both states carry snapshots of EQ-following / pin
+% flags taken at different times, and a since-flipped provider flag must
+% be refreshed (HARD memo value wins, otherwise the fresh value), not
+% reported as an irreconcilable conflict.
 
 use:check_bwu_cross_dep(C, N, RepoEntry, BWU) :-
     ( BWU \= use_state([], []) ->
         ( memo:candidate_bwu_(C, N, OldBWU) ->
-            ( feature_unification:val_hook(OldBWU, BWU, MergedBWU) ->
+            ( ( feature_unification:val_hook(OldBWU, BWU, MergedBWU)
+              ; use:reconcile_cross_dep_bwu(C, N, OldBWU, BWU, MergedBWU)
+              ) ->
                 ( use:verify_required_use_with_bwu(RepoEntry, MergedBWU) ->
                     use:replace_candidate_bwu(C, N, MergedBWU)
                 ; use:describe_required_use_violation(RepoEntry, MergedBWU, ViolDesc),
