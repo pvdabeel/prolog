@@ -103,8 +103,9 @@ load_common_modules        — SWI-Prolog libraries, OO context, config, OS,
 
 load_standalone_modules    — Full pipeline: KB (cache, repository, query),
                              Gentoo domain (version, rules, ebuild, VDB,
-                             preference), prover, planner, scheduler,
-                             printer, builder, grapher, writer, test
+                             preference, exceptions), prover, planner,
+                             scheduler, printer, builder, grapher, writer,
+                             test
 
 load_server_modules        — HTTP server, Pengines, sandbox
 

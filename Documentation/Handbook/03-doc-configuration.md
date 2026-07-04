@@ -71,6 +71,20 @@ The machine config file is where repositories are created and registered — cov
 | `config:reprove_max_retries/1` | `20` | Maximum iterative learn-and-restart retries when the prover encounters conflicts. |
 | `config:avoid_reinstall/1` | `false` | When `true`, verify already-installed packages instead of re-merging them. |
 
+### Building
+
+| **Setting** | **Default** | **Purpose** |
+|:---|:---|:---|
+| `config:build_transient_retry/1` | `true` | Retry a phase once when it fails with bash's PID-reuse race (`wait: pid N is not a child of this shell`). |
+| `config:build_serial_retry/1` | `true` | Retry a failed compile/test/install phase once with `MAKEOPTS=-j1` to rule out parallel-make races. |
+| `config:deconflict_collisions/1` | `override` | Merge-time file collision handling when a blocker atom is missing from metadata: `off` (fail as usual), `report` (fail, but surface the collision as a deconfliction assumption), or `override` (re-merge with collision protection disabled so the merge succeeds). |
+| `config:ghc_abi_repair/1` | `true` | Repair GHC ABI-hash breakage in-transaction: rebuild the packages listed by haskell-cabal's broken-package check, then re-run the failed phase (native `haskell-updater`). |
+| `config:subslot_rebuild/1` | `true` | Plan same-version rebuilds of installed reverse dependencies when a sub-slot (`:=`) dependency changes ABI (native `@preserved-rebuild`). |
+| `config:toolchain_reactivation/1` | `true` | Re-activate the toolchain right after a toolchain package merges, before dependent builds continue. |
+
+See [Chapter 15: Building and Execution](15-doc-building.md) for how the
+retry chain and the domain exception fixups work.
+
 ### Output
 
 | **Setting** | **Default** | **Purpose** |

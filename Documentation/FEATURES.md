@@ -123,6 +123,25 @@ colours, and log file locations.  The display refreshes in place.
 curl-based fetching with GLEP 75 mirror support, Manifest hash verification,
 and `mirror://` resolution.
 
+**Self-healing builds.**
+Failed phases pass through a signature-keyed retry chain: transient
+environment races (bash PID reuse, parallel-make scheduling) are retried
+automatically, and packaging exceptions are repaired in-transaction by a
+pluggable fixup registry (`Source/Domain/Gentoo/Exceptions/`).  Every recovery
+is logged and reported in the build summary -- never silent.
+
+**Native @preserved-rebuild and haskell-updater.**
+Sub-slot (`:=`) ABI changes trigger same-version rebuilds of installed reverse
+dependencies as part of the plan.  GHC ABI-hash breakage -- invisible to
+sub-slots -- is detected from haskell-cabal's broken-package check and repaired
+mid-build by rebuilding the broken packages before retrying the failed phase,
+where traditional emerge fails and defers to a manual haskell-updater run.
+
+**Collision deconfliction.**
+Merge-time file collisions caused by missing blocker atoms are recognised and
+resolved (configurable: off / report / override), letting tinderbox-style runs
+proceed where emerge would refuse at the plan stage.
+
 **Snapshots.**
 Before upgrading, `--snapshot` creates quickpkg-style binary archives of
 installed packages, enabling `--rollback` to a known-good state if an upgrade

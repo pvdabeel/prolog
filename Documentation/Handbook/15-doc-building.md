@@ -54,6 +54,127 @@ The builder uses `sh` to wrap `ebuild` calls with redirection for
 asynchronous, logged execution.
 
 
+## Build resilience: the per-phase retry chain
+
+A failed phase is not necessarily a failed build.  After every phase,
+`ebuild_exec` runs a chain of retry hooks, each keyed on a *signature*
+found in the log segment written by the failed phase (never earlier
+phases), so deterministic build failures never match and keep their
+original semantics.  The chain has two layers:
+
+1. **Environmental retries** (in `ebuild_exec.pl` itself) — failures
+   caused by the build environment, not by the package:
+
+   | **Retry** | **Signature** | **Recovery** | **Gate** |
+   | :--- | :--- | :--- | :--- |
+   | Transient (bash PID reuse) | `wait: pid N is not a child of this shell` | re-run the phase once | `config:build_transient_retry/1` |
+   | Serial make (parallel-make race) | failed compile/test/install phase | re-run with `MAKEOPTS=-j1` | `config:build_serial_retry/1` |
+
+2. **Domain exception fixups** (see next section) — failures caused by
+   a problem that should really be fixed at the ebuild or metadata
+   level.  The chain ends in a single generic dispatch,
+   `fixup:maybe_phase_retry/9`, which offers the failure to every
+   registered exception mechanism.
+
+Every retry appends a marker line to the build log, so a recovered
+build is never silent about how it recovered.
+
+
+## Domain exception fixups
+
+Some build failures are *packaging exceptions*: the build is failing
+because of a gap in the ebuild or its metadata, not because of the
+environment or the user's configuration.  Traditional emerge either
+refuses such packages up front or fails and defers to a manual repair
+tool.  portage-ng recovers them in-transaction through a small
+registry of **exception mechanisms** under
+`Source/Domain/Gentoo/Exceptions/`:
+
+- **`fixup.pl`** — the generic registry and dispatcher.  A mechanism
+  registers itself with three multifile hooks:
+  - `fixup:mechanism/1` — identity (load order is dispatch and
+    display order);
+  - `fixup:phase_retry_hook/10` — the repair-and-retry logic for a
+    failed phase;
+  - `fixup:mechanism_note/3` — the note printed above the affected
+    packages in the build summary.
+
+  Applied fixups are recorded via `fixup:record/3` and reported
+  generically by the build printer — adding a new exception mechanism
+  never touches the builder or the printer.
+
+### Collision deconfliction (`collision.pl`)
+
+Traditional emerge refuses, at the plan stage, to install a package
+whose files are owned by a different installed provider — it is told
+so by an explicit blocker atom in metadata (e.g. installed
+`sys-apps/util-linux[hardlink]` carries `!app-arch/hardlink`).  When
+that blocker atom is *missing*, the conflict only surfaces at merge
+time as Portage's `pkg_preinst` collision-protect abort.  Gated by
+`config:deconflict_collisions/1` (`off` | `report` | `override`), the
+mechanism recognises the collision signature and re-runs the merge
+with `FEATURES="-collision-protect -protect-owned"`, letting the
+package overwrite the colliding files.  The plan printer already
+announces this behaviour next to the soft-blocker list, and the build
+summary lists every package that needed it.  The same recovery is
+applied to binary-package `qmerge` merges.
+
+### GHC ABI repair (`ghcabi.pl`) — the native haskell-updater
+
+Gentoo encodes a Haskell package's identity in `ghc-pkg`'s ABI hash
+(the suffix in e.g. `bifunctors-5.6.3-9AmA3NO9963FDwV9BBcxcZ`), not in
+the ebuild sub-slot.  When a `dev-haskell` library is rebuilt, its
+installed reverse-dependencies keep referencing the old hash, and the
+next Haskell consumer aborts in `pkg_setup`/`configure` with
+haskell-cabal.eclass's check:
+
+```
+installed package semigroupoids-5.3.7 is broken due to missing package
+bifunctors-5.6.3-9AmA3NO9963FDwV9BBcxcZ
+ * Detected broken packages: semigroupoids-5.3.7 semialign-1.3
+ * //==-- Please, run 'haskell-updater' to fix broken packages --==//
+```
+
+Because the hash lives only in ghc-pkg's registry, there is no
+sub-slot delta for the resolver to observe, and traditional emerge
+fails the same configure and defers to a manual `haskell-updater`
+run.  portage-ng does better: gated by `config:ghc_abi_repair/1`, the
+mechanism parses the broken package list from the failed phase's log,
+rebuilds each broken package from source at its installed version and
+with its VDB-recorded USE configuration (never from a binary package —
+a stale binpkg ABI is exactly what may be broken), and re-runs the
+failed phase.  One additional bounded round covers cascading breakage
+exposed by the repair itself.
+
+The mechanism is bounded and observable: each package is rebuilt at
+most once per session (it can never loop), repairs are serialized
+across parallel build workers, and every repair leaves markers in
+both the consumer's and the rebuilt package's build logs plus an
+entry in the build summary.
+
+The OCaml/findlib registry has the analogous problem; its repair
+mechanism is tracked separately because findlib breakage lacks an
+equally crisp failure signature to key the retry on.
+
+### Build summary reporting
+
+At the end of a build, the printer renders one block per mechanism
+that applied fixups, using the mechanism's own note:
+
+```
+Total: 46 completed.
+
+Deconfliction: collision protection was disabled to merge 1 package over
+               files owned by other installed packages (portage-ng#90):
+  - app-arch/hardlink-0.3.2
+
+GHC ABI repair: 2 broken packages rebuilt in-transaction after a
+                dependency ABI-hash change (portage-ng#93, haskell-updater equivalent):
+  - dev-haskell/semialign-1.3
+  - dev-haskell/semigroupoids-5.3.7
+```
+
+
 ## Live build display
 
 During a `--merge` run, portage-ng keeps the terminal display
