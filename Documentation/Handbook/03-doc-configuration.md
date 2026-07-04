@@ -79,6 +79,7 @@ The machine config file is where repositories are created and registered — cov
 | `config:build_serial_retry/1` | `true` | Retry a failed compile/test/install phase once with `MAKEOPTS=-j1` to rule out parallel-make races. |
 | `config:deconflict_collisions/1` | `override` | Merge-time file collision handling when a blocker atom is missing from metadata: `off` (fail as usual), `report` (fail, but surface the collision as a deconfliction assumption), or `override` (re-merge with collision protection disabled so the merge succeeds). |
 | `config:ghc_abi_repair/1` | `true` | Repair GHC ABI-hash breakage in-transaction: rebuild the packages listed by haskell-cabal's broken-package check, then re-run the failed phase (native `haskell-updater`). |
+| `config:ocaml_abi_repair/1` | `true` | Repair OCaml/findlib ABI breakage in-transaction: map stale compiled-unit errors to their installed owners via the VDB, rebuild them, then re-run the failed phase. |
 | `config:subslot_rebuild/1` | `true` | Plan same-version rebuilds of installed reverse dependencies when a sub-slot (`:=`) dependency changes ABI (native `@preserved-rebuild`). |
 | `config:toolchain_reactivation/1` | `true` | Re-activate the toolchain right after a toolchain package merges, before dependent builds continue. |
 

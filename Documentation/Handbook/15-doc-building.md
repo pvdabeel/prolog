@@ -152,9 +152,33 @@ across parallel build workers, and every repair leaves markers in
 both the consumer's and the rebuilt package's build logs plus an
 entry in the build summary.
 
-The OCaml/findlib registry has the analogous problem; its repair
-mechanism is tracked separately because findlib breakage lacks an
-equally crisp failure signature to key the retry on.
+### OCaml ABI repair (`ocamlabi.pl`)
+
+OCaml has the same problem: package identity lives in the compiled
+interface digests (`.cmi` CRCs) checked by the compiler and in
+findlib's registry, not in the ebuild sub-slot.  Unlike Haskell there
+is no single eclass check enumerating the broken packages — a stale
+consumer fails with heterogeneous compiler and ocamlfind messages:
+
+```
+Error: The files /usr/lib64/ocaml/site-lib/res/res.cmi
+       and /usr/lib64/ocaml/stdlib.cmi
+       make inconsistent assumptions over interface Stdlib
+Error: Unbound module Camlp5
+ocamlfind: Package `camlp5' not found
+```
+
+Gated by `config:ocaml_abi_repair/1`, the mechanism extracts the
+stale compiled-unit paths and findlib package names from the failed
+phase's log, maps them to their installed owners through the VDB
+CONTENTS records (the active enumerator this domain lacks an eclass
+check for), rebuilds those owners from source at their installed
+version, and re-runs the failed phase — with the same boundedness
+guarantees as the GHC repair: at most one rebuild per package per
+session, at most two retry rounds, repairs serialized across workers,
+and markers in every involved build log plus the build summary.  The
+package being built and `dev-lang/ocaml` itself are never rebuild
+candidates.
 
 ### Build summary reporting
 

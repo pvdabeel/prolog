@@ -1446,6 +1446,34 @@ config:deconflict_collisions(override).
 config:ghc_abi_repair(true).
 
 
+%! config:ocaml_abi_repair(?Bool)
+%
+% When true, a configure/compile phase failure carrying an OCaml
+% stale-ABI signature (the compiler's "make inconsistent assumptions
+% over interface" / "is not a compiled interface" digest errors, an
+% "Error: Unbound module" abort, or an ocamlfind package-not-found
+% error) is recovered in-transaction (portage-ng#99): the stale
+% compiled-unit paths and findlib package names are extracted from the
+% failed phase's log, mapped to their installed owners through the VDB
+% CONTENTS records, and those owners are rebuilt from source at their
+% installed version before the failed phase is re-run. This is the
+% OCaml analogue of the GHC ABI repair (config:ghc_abi_repair/1,
+% portage-ng#93): OCaml package identity lives in the .cmi interface
+% digests and findlib's registry, not in the ebuild sub-slot, so the
+% sub-slot rebuild pass (config:subslot_rebuild/1, portage-ng#89)
+% cannot observe this class of breakage and traditional emerge simply
+% fails the build.
+%
+% Bounded: each stale owner is rebuilt at most once per session, the
+% failed phase is retried at most twice, and repairs are serialized
+% across build workers. Every repair leaves a marker in both the
+% consumer's and the rebuilt package's build logs and is recorded via
+% `fixup:record/3` (see Source/Domain/Gentoo/Exceptions/ocamlabi.pl).
+% Set to `false` to keep emerge-compatible behaviour (fail the build).
+
+config:ocaml_abi_repair(true).
+
+
 %! config:toolchain_reactivation(?Bool)
 %
 % When true, the Gentoo build domain (`ebuild_exec:maybe_reactivate_toolchain/4`,

@@ -11,7 +11,7 @@ See cache.pl for the datastructure. The actual data is contained in Knowledge/kb
 - `Source/Domain/Gentoo/eapi.pl`: a Prolog DCG grammar to read md5-cache syntax
 - `Source/Domain/Gentoo/rules.pl`: domain specific (Gentoo) specific rules handling dependencies, interpreting use flags, PDEPEND hooks, etc.
 - `Source/Domain/Gentoo/vdb.pl`: a repository containing information about installed ebuilds
-- `Source/Domain/Gentoo/Exceptions/fixup.pl`: generic registry/dispatcher for build-time domain exception fixups (multifile hooks `fixup:mechanism/1`, `fixup:phase_retry_hook/10`, `fixup:mechanism_note/3`; record via `fixup:record/3`); `collision.pl` (#90 collision deconfliction) and `ghcabi.pl` (#93 GHC ABI repair, native haskell-updater) register here
+- `Source/Domain/Gentoo/Exceptions/fixup.pl`: generic registry/dispatcher for build-time domain exception fixups (multifile hooks `fixup:mechanism/1`, `fixup:phase_retry_hook/10`, `fixup:mechanism_note/3`; record via `fixup:record/3`; shared same-version repair rebuild helper `fixup:repair_rebuild/4`); `collision.pl` (#90 collision deconfliction), `ghcabi.pl` (#93 GHC ABI repair, native haskell-updater) and `ocamlabi.pl` (#99 OCaml/findlib ABI repair) register here
 - `Source/Application/Performance/sampler.pl`: performance sampling and instrumentation (hook perf, test_stats counters, ctx_union sampling)
 - `Source/Application/System/subprocess.pl`: generic external process spawning and dns-sd interface
 - `Source/Application/interface.pl`: CLI option parsing, TTY init, request dispatching

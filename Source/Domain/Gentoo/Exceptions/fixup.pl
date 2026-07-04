@@ -95,6 +95,80 @@ fixup:clear :-
 
 
 % -----------------------------------------------------------------------------
+%  Same-version repair rebuild
+% -----------------------------------------------------------------------------
+
+%! fixup:installed_tree_entry(+Entry, -TreeRepo) is semidet.
+%
+% True when the installed VDB entry (Category/Name-Version) is still
+% carried at the same version by a tree repository, so it can be rebuilt
+% as-is. Fails when the installed version is gone from the tree (a
+% repair mechanism then skips the entry and the phase failure keeps its
+% original semantics).
+
+fixup:installed_tree_entry(Entry, TreeRepo) :-
+  cache:ordered_entry(TreeRepo, Entry, _, _, _),
+  TreeRepo \== pkg,
+  !.
+
+
+%! fixup:repair_rebuild_use(+TreeRepo, +Entry, -UseString) is det.
+%
+% USE string for a same-version repair rebuild: the flags recorded in the
+% VDB at install time, restricted to the tree ebuild's IUSE (positive for
+% recorded flags, negative for the rest), so the rebuild reproduces the
+% installed configuration. Falls back to the KB-derived base state when
+% the VDB USE file is unavailable.
+
+fixup:repair_rebuild_use(TreeRepo, Entry, UseString) :-
+  findall(Flag, kb:query(iuse(Flag, _:_), TreeRepo://Entry), Flags0),
+  sort(Flags0, Flags),
+  ( Flags \== [],
+    catch(vdb:read_metadata_file(Entry, 'USE', UseAtom), _, fail)
+  -> atomic_list_concat(Installed0, ' ', UseAtom),
+     sort(Installed0, Installed),
+     findall(Token,
+       ( member(F, Flags),
+         ( memberchk(F, Installed) -> Token = F ; atom_concat('-', F, Token) )
+       ),
+       Tokens),
+     atomic_list_concat(Tokens, ' ', UseString)
+  ;  ebuild_exec:collect_use_string(TreeRepo, Entry, [], UseString)
+  ).
+
+
+%! fixup:repair_rebuild(+TreeRepo, +Entry, +Marker, -ExitCode) is det.
+%
+% Rebuilds Entry from source (never the binpkg fast path -- a stale
+% binary package is exactly what a repair must not reinstall) and merges
+% it. The build portion runs unlocked; only the merge takes the
+% portage_pkg_merge mutex, so parallel workers' merges are not stalled
+% for the duration of the compile. Output goes to the package's own
+% build log, prefixed with the Marker line identifying the repairing
+% mechanism.
+
+fixup:repair_rebuild(TreeRepo, Entry, Marker, ExitCode) :-
+  ( ebuild_exec:ebuild_path(TreeRepo, Entry, EbuildPath),
+    ebuild_exec:ensure_log_dir,
+    ebuild_exec:build_log_path(Entry, LogPath),
+    fixup:repair_rebuild_use(TreeRepo, Entry, UseString)
+  -> catch(
+       ( open(LogPath, append, S),
+         format(S, '~n=== ~w ===~n', [Marker]),
+         close(S)
+       ), _, true),
+     ebuild_exec:run_phases_unlocked(EbuildPath,
+       [clean, setup, unpack, prepare, configure, compile, install], UseString, BuildEC),
+     ( BuildEC =:= 0
+     -> ebuild_exec:with_portage_pkg_merge_lock(merge,
+          ebuild_exec:run_phase_logged_unlocked(EbuildPath, merge, LogPath, UseString, ExitCode))
+     ;  ExitCode = BuildEC
+     )
+  ;  ExitCode = -1
+  ).
+
+
+% -----------------------------------------------------------------------------
 %  Per-phase retry dispatch
 % -----------------------------------------------------------------------------
 

@@ -132,10 +132,11 @@ is logged and reported in the build summary -- never silent.
 
 **Native @preserved-rebuild and haskell-updater.**
 Sub-slot (`:=`) ABI changes trigger same-version rebuilds of installed reverse
-dependencies as part of the plan.  GHC ABI-hash breakage -- invisible to
-sub-slots -- is detected from haskell-cabal's broken-package check and repaired
-mid-build by rebuilding the broken packages before retrying the failed phase,
-where traditional emerge fails and defers to a manual haskell-updater run.
+dependencies as part of the plan.  GHC ABI-hash and OCaml/findlib breakage --
+invisible to sub-slots -- are detected from their compiler failure signatures
+and repaired mid-build by rebuilding the broken packages before retrying the
+failed phase, where traditional emerge fails and defers to a manual
+haskell-updater run (or, for OCaml, to the user).
 
 **Collision deconfliction.**
 Merge-time file collisions caused by missing blocker atoms are recognised and
