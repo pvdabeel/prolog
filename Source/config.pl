@@ -1420,6 +1420,30 @@ config:build_transient_retry(true).
 config:deconflict_collisions(override).
 
 
+%! config:ghc_abi_repair(?Bool)
+%
+% When true, a setup/configure/compile phase failure carrying
+% haskell-cabal.eclass's broken-package signature ("Detected broken
+% packages: ...", "Please, run 'haskell-updater'") is recovered
+% in-transaction (portage-ng#93): the listed packages are rebuilt from
+% source at their installed version -- re-registering them in ghc-pkg's
+% database with ABI hashes consistent with their just-rebuilt
+% dependencies -- and the failed phase is re-run. This is the native
+% equivalent of Gentoo's haskell-updater, which traditional emerge
+% defers to a manual run (emerge fails the same configure and exits).
+% The GHC ABI hash lives only in ghc-pkg's registry, so the sub-slot
+% rebuild pass (config:subslot_rebuild/1, portage-ng#89) cannot observe
+% this class of breakage.
+%
+% Bounded: each broken package is rebuilt at most once per session, the
+% failed phase is retried at most twice, and repairs are serialized
+% across build workers. Every repair leaves a marker in both the
+% consumer's and the rebuilt package's build logs. Set to `false` to
+% keep emerge-compatible behaviour (fail and defer to haskell-updater).
+
+config:ghc_abi_repair(true).
+
+
 %! config:toolchain_reactivation(?Bool)
 %
 % When true, the Gentoo build domain (`ebuild_exec:maybe_reactivate_toolchain/4`,

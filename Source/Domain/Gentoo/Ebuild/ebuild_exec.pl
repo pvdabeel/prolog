@@ -783,6 +783,313 @@ ebuild_exec:maybe_collision_retry(EbuildPath, Entry, Phase, LogPath, UseString, 
 
 
 % =============================================================================
+%  GHC ABI-hash repair (portage-ng#93)
+% =============================================================================
+%
+% Gentoo encodes a Haskell package's identity in ghc-pkg's ABI hash (the
+% `-<hash>` suffix, e.g. bifunctors-5.6.3-9AmA3NO9963FDwV9BBcxcZ), NOT in the
+% ebuild sub-slot. When a dev-haskell/* library is rebuilt (new hash) its
+% installed reverse-dependencies keep referencing the old hash, and the next
+% Haskell consumer's pkg_setup/configure aborts with haskell-cabal.eclass's
+% check:
+%
+%   installed package semigroupoids-5.3.7 is broken due to missing package
+%   bifunctors-5.6.3-9AmA3NO9963FDwV9BBcxcZ
+%   * Detected broken packages: semigroupoids-5.3.7 semialign-1.3
+%   * //==-- Please, run 'haskell-updater' to fix broken packages --==//
+%
+% The sub-slot rebuild pass (portage-ng#89) cannot see this: there is no
+% sub-slot delta to observe (the hash lives only in ghc-pkg's registry).
+% Traditional emerge fails the same way and defers to a manual
+% haskell-updater run. We do better: gated by config:ghc_abi_repair/1, the
+% failure is recovered in-transaction by parsing the broken package list
+% from the log segment of the failed phase, rebuilding each broken package
+% from source at its installed version (re-registering it with a hash
+% consistent with the just-rebuilt dependency), and re-running the failed
+% phase. Cascading breakage (a repair rebuild bumping another consumer's
+% hash) is handled by one additional bounded round. Each package is
+% rebuilt at most once per session (ghc_abi_repair_applied/2), so the
+% mechanism can never loop; repairs are serialized under a dedicated mutex
+% so parallel workers hitting the same breakage don't rebuild twice.
+
+:- dynamic ebuild_exec:ghc_abi_repair_applied/2.
+
+:- mutex_create(ghc_abi_repair).
+
+
+%! ebuild_exec:ghc_abi_repair_enabled is semidet.
+
+ebuild_exec:ghc_abi_repair_enabled :-
+  ( catch(config:ghc_abi_repair(V), _, fail), ground(V)
+  -> V == true
+  ;  true
+  ).
+
+
+%! ebuild_exec:ghc_abi_retry_phase(+Phase) is semidet.
+%
+% Phases in which haskell-cabal.eclass runs its broken-package check
+% (ghc-package.eclass `checks`): pkg_setup and the configure path. A
+% compile failure can also surface it via a late `ghc-pkg` invocation.
+
+ebuild_exec:ghc_abi_retry_phase(setup).
+ebuild_exec:ghc_abi_retry_phase(configure).
+ebuild_exec:ghc_abi_retry_phase(compile).
+
+
+%! ebuild_exec:ghc_abi_phase_error(+LogPath, +SizeBefore, -Tokens) is semidet.
+%
+% True when the log content appended after byte offset SizeBefore (i.e. by
+% the phase that just failed) carries the haskell-updater broken-package
+% signature. Tokens is the parsed, deduplicated list of broken `name-ver`
+% atoms from the "Detected broken packages:" line(s). Only the trailing
+% 256KB of the segment is examined (the check output is emitted at the
+% point of the die).
+
+ebuild_exec:ghc_abi_phase_error(LogPath, SizeBefore, Tokens) :-
+  catch(
+    ( exists_file(LogPath),
+      size_file(LogPath, Size),
+      Size > SizeBefore,
+      Start is max(SizeBefore, Size - 262144),
+      Len is Size - Start,
+      setup_call_cleanup(
+        open(LogPath, read, S, [type(binary)]),
+        ( seek(S, Start, bof, _),
+          read_string(S, Len, Tail)
+        ),
+        close(S))
+    ),
+    _, fail),
+  sub_string(Tail, _, _, _, "haskell-updater"),
+  ebuild_exec:ghc_abi_broken_tokens(Tail, Tokens),
+  Tokens \== [],
+  !.
+
+
+%! ebuild_exec:ghc_abi_broken_tokens(+Tail, -Tokens) is det.
+%
+% Parses every "Detected broken packages:" line in Tail and returns the
+% union of the `name-ver` tokens listed after the colon. The eclass
+% output is colorized (einfo/eerror ANSI prefixes) but the token area
+% itself is plain text; tokens are validated by shape (must contain a
+% `-<digit>` version separator) so stray decorations never map to a
+% package.
+
+ebuild_exec:ghc_abi_broken_tokens(Tail, Tokens) :-
+  split_string(Tail, "\n", "\r", Lines),
+  findall(Token,
+    ( member(Line, Lines),
+      sub_string(Line, B, _, _, "Detected broken packages:"),
+      Skip is B + 25,
+      sub_string(Line, Skip, _, 0, Rest),
+      split_string(Rest, " \t", " \t", Parts),
+      member(P0, Parts),
+      ebuild_exec:ghc_abi_strip_ansi(P0, P),
+      P \== "",
+      atom_string(Token, P),
+      ebuild_exec:ghc_abi_pv_token(Token)
+    ),
+    Tokens0),
+  sort(Tokens0, Tokens).
+
+
+%! ebuild_exec:ghc_abi_strip_ansi(+Str, -Clean) is det.
+%
+% Truncates Str at the first ESC character, dropping any trailing ANSI
+% color/reset sequence the eclass output may have attached to a token.
+
+ebuild_exec:ghc_abi_strip_ansi(Str, Clean) :-
+  ( sub_string(Str, B, 1, _, "\u001b")
+  -> sub_string(Str, 0, B, _, Clean)
+  ;  Clean = Str
+  ).
+
+
+%! ebuild_exec:ghc_abi_pv_token(+Token) is semidet.
+%
+% Token looks like a `name-version` atom: it contains a `-` immediately
+% followed by a digit (the Gentoo name/version separator).
+
+ebuild_exec:ghc_abi_pv_token(Token) :-
+  sub_atom(Token, B, 1, _, '-'),
+  D is B + 1,
+  sub_atom(Token, D, 1, _, Ch),
+  char_type(Ch, digit),
+  !.
+
+
+%! ebuild_exec:ghc_abi_token_entry(+Token, -TreeRepo, -Entry) is semidet.
+%
+% Maps a broken `name-ver` token to the installed VDB entry
+% (Category/Name-Version) and a tree repository that still carries the
+% same version, so the package can be rebuilt as-is. Fails when the
+% installed version is gone from the tree (then the repair skips it and
+% the phase failure keeps its original semantics).
+
+ebuild_exec:ghc_abi_token_entry(Token, TreeRepo, Entry) :-
+  cache:ordered_entry(pkg, Entry, C, _N, _V),
+  atomic_list_concat([C, Token], '/', Entry),
+  cache:ordered_entry(TreeRepo, Entry, _, _, _),
+  TreeRepo \== pkg,
+  !.
+
+
+%! ebuild_exec:ghc_abi_rebuild_use(+TreeRepo, +Entry, -UseString) is det.
+%
+% USE string for a same-version repair rebuild: the flags recorded in the
+% VDB at install time, restricted to the tree ebuild's IUSE (positive for
+% recorded flags, negative for the rest), so the rebuild reproduces the
+% installed configuration. Falls back to the KB-derived base state when
+% the VDB USE file is unavailable.
+
+ebuild_exec:ghc_abi_rebuild_use(TreeRepo, Entry, UseString) :-
+  findall(Flag, kb:query(iuse(Flag, _:_), TreeRepo://Entry), Flags0),
+  sort(Flags0, Flags),
+  ( Flags \== [],
+    catch(vdb:read_metadata_file(Entry, 'USE', UseAtom), _, fail)
+  -> atomic_list_concat(Installed0, ' ', UseAtom),
+     sort(Installed0, Installed),
+     findall(Token,
+       ( member(F, Flags),
+         ( memberchk(F, Installed) -> Token = F ; atom_concat('-', F, Token) )
+       ),
+       Tokens),
+     atomic_list_concat(Tokens, ' ', UseString)
+  ;  ebuild_exec:collect_use_string(TreeRepo, Entry, [], UseString)
+  ).
+
+
+%! ebuild_exec:ghc_abi_rebuild(+TreeRepo, +Entry, -ExitCode) is det.
+%
+% Rebuilds Entry from source (never the binpkg fast path -- a stale
+% binpkg ABI is exactly what may be broken) and merges it. The build
+% portion runs unlocked; only the merge takes the portage_pkg_merge
+% mutex, so parallel workers' merges are not stalled for the duration of
+% the compile. Output goes to the package's own build log with a repair
+% marker.
+
+ebuild_exec:ghc_abi_rebuild(TreeRepo, Entry, ExitCode) :-
+  ( ebuild_exec:ebuild_path(TreeRepo, Entry, EbuildPath),
+    ebuild_exec:ensure_log_dir,
+    ebuild_exec:build_log_path(Entry, LogPath),
+    ebuild_exec:ghc_abi_rebuild_use(TreeRepo, Entry, UseString)
+  -> catch(
+       ( open(LogPath, append, S),
+         format(S, '~n=== ghc-abi repair rebuild (portage-ng#93) ===~n', []),
+         close(S)
+       ), _, true),
+     ebuild_exec:run_phases_unlocked(EbuildPath,
+       [clean, setup, unpack, prepare, configure, compile, install], UseString, BuildEC),
+     ( BuildEC =:= 0
+     -> ebuild_exec:with_portage_pkg_merge_lock(merge,
+          ebuild_exec:run_phase_logged_unlocked(EbuildPath, merge, LogPath, UseString, ExitCode))
+     ;  ExitCode = BuildEC
+     )
+  ;  ExitCode = -1
+  ).
+
+
+%! ebuild_exec:ghc_abi_repair_tokens(+Tokens, -RepairedCount) is det.
+%
+% Rebuilds every broken token not already repaired this session, under
+% the ghc_abi_repair mutex. Tokens whose rebuild fails on the first pass
+% get one more attempt after the others (ghc-pkg lists broken packages in
+% registry order, not dependency order, so an inter-broken dependency can
+% make the first pass fail). RepairedCount is the number of successful
+% rebuilds in this call; already-repaired tokens count as progress
+% (another worker fixed them after our phase failed), unmappable tokens
+% do not.
+
+ebuild_exec:ghc_abi_repair_tokens(Tokens, RepairedCount) :-
+  with_mutex(ghc_abi_repair,
+    ebuild_exec:ghc_abi_repair_tokens_locked(Tokens, RepairedCount)).
+
+ebuild_exec:ghc_abi_repair_tokens_locked(Tokens, RepairedCount) :-
+  partition([T]>>(ebuild_exec:ghc_abi_repair_applied(T, _)), Tokens, Done, Todo),
+  ebuild_exec:ghc_abi_repair_pass(Todo, Failed1),
+  ebuild_exec:ghc_abi_repair_pass(Failed1, Failed2),
+  length(Todo, NTodo),
+  length(Failed2, NFailed),
+  length(Done, NDone),
+  RepairedCount is NTodo - NFailed + NDone.
+
+ebuild_exec:ghc_abi_repair_pass([], []).
+ebuild_exec:ghc_abi_repair_pass([Token|Rest], Failed) :-
+  ( ebuild_exec:ghc_abi_repair_applied(Token, _)
+  -> Failed = MoreFailed
+  ;  ebuild_exec:ghc_abi_token_entry(Token, TreeRepo, Entry)
+  -> ebuild_exec:ghc_abi_rebuild(TreeRepo, Entry, EC),
+     ( EC =:= 0
+     -> assertz(ebuild_exec:ghc_abi_repair_applied(Token, Entry)),
+        Failed = MoreFailed
+     ;  Failed = [Token|MoreFailed]
+     )
+  ;  Failed = [Token|MoreFailed]
+  ),
+  ebuild_exec:ghc_abi_repair_pass(Rest, MoreFailed).
+
+
+%! ebuild_exec:log_ghc_abi_retry(+LogPath, +Phase, +ExitCode, +Tokens) is det.
+%
+% Writes a marker line to the failing consumer's build log so the repair
+% is visible when inspecting the build.
+
+ebuild_exec:log_ghc_abi_retry(LogPath, Phase, ExitCode, Tokens) :-
+  catch(
+    ( open(LogPath, append, S),
+      format(S, '~n=== ~w failed (exit ~w) with broken GHC packages ~w; rebuilding and retrying (portage-ng#93 ghc-abi repair) ===~n',
+             [Phase, ExitCode, Tokens]),
+      close(S)
+    ), _, true).
+
+
+%! ebuild_exec:maybe_ghc_abi_retry(+EbuildPath, +Phase, +LogPath, +UseString, :Callback, +SizeBefore, +ExitCode0, -ExitCode) is det.
+%
+% Per-phase retry hook for the sequential execution path. On a non-zero
+% exit of a setup/configure/compile phase whose log segment matches the
+% haskell-updater broken-package signature, rebuilds the broken packages
+% and re-runs the failed phase; a second bounded round handles cascading
+% breakage exposed by the repair itself. Otherwise passes ExitCode0
+% through unchanged. Runs last in the retry chain: the signature is
+% unrelated to make parallelism, PID reuse or file collisions.
+
+:- meta_predicate ebuild_exec:maybe_ghc_abi_retry(+, +, +, +, 2, +, +, -).
+
+ebuild_exec:maybe_ghc_abi_retry(_, _, _, _, _, _, 0, 0) :- !.
+
+ebuild_exec:maybe_ghc_abi_retry(EbuildPath, Phase, LogPath, UseString, Callback, SizeBefore, ExitCode0, ExitCode) :-
+  ( ebuild_exec:ghc_abi_repair_enabled,
+    ebuild_exec:ghc_abi_retry_phase(Phase)
+  -> ebuild_exec:ghc_abi_retry_loop(2, EbuildPath, Phase, LogPath, UseString, Callback, SizeBefore, ExitCode0, ExitCode)
+  ;  ExitCode = ExitCode0
+  ).
+
+
+%! ebuild_exec:ghc_abi_retry_loop(+RoundsLeft, +EbuildPath, +Phase, +LogPath, +UseString, :Callback, +SizeBefore, +ExitCode0, -ExitCode) is det.
+
+:- meta_predicate ebuild_exec:ghc_abi_retry_loop(+, +, +, +, +, 2, +, +, -).
+
+ebuild_exec:ghc_abi_retry_loop(0, _, _, _, _, _, _, ExitCode, ExitCode) :- !.
+
+ebuild_exec:ghc_abi_retry_loop(RoundsLeft, EbuildPath, Phase, LogPath, UseString, Callback, SizeBefore, ExitCode0, ExitCode) :-
+  ( ebuild_exec:ghc_abi_phase_error(LogPath, SizeBefore, Tokens),
+    ebuild_exec:ghc_abi_repair_tokens(Tokens, Repaired),
+    Repaired > 0
+  -> ebuild_exec:log_ghc_abi_retry(LogPath, Phase, ExitCode0, Tokens),
+     ebuild_exec:log_file_size(LogPath, SizeBefore1),
+     ebuild_exec:start_phase_async(EbuildPath, Phase, LogPath, UseString, Pid),
+     ebuild_exec:poll_phase_spinning(Pid, Phase, Callback, ExitCode1),
+     ( ExitCode1 =:= 0
+     -> ExitCode = 0
+     ;  RoundsLeft1 is RoundsLeft - 1,
+        ebuild_exec:ghc_abi_retry_loop(RoundsLeft1, EbuildPath, Phase, LogPath, UseString, Callback, SizeBefore1, ExitCode1, ExitCode)
+     )
+  ;  ExitCode = ExitCode0
+  ).
+
+
+% =============================================================================
 %  Phase execution
 % =============================================================================
 
@@ -1129,7 +1436,8 @@ ebuild_exec:run_phases_sequential(EbuildPath, Entry, [Phase|Rest], DisplayPhases
       ebuild_exec:poll_phase_progress(Pid, Phase, LogPath, SizeBefore, T0, ExpBytes, ExpSecs, Callback, ExitCode0),
       ebuild_exec:maybe_transient_retry(EbuildPath, Phase, LogPath, UseString, Callback, SizeBefore, ExitCode0, ExitCode1),
       ebuild_exec:maybe_serial_retry(EbuildPath, Phase, LogPath, UseString, Callback, ExitCode1, ExitCode2),
-      ebuild_exec:maybe_collision_retry(EbuildPath, Entry, Phase, LogPath, UseString, Callback, SizeBefore, ExitCode2, ExitCode) )),
+      ebuild_exec:maybe_collision_retry(EbuildPath, Entry, Phase, LogPath, UseString, Callback, SizeBefore, ExitCode2, ExitCode3),
+      ebuild_exec:maybe_ghc_abi_retry(EbuildPath, Phase, LogPath, UseString, Callback, SizeBefore, ExitCode3, ExitCode) )),
   get_time(T1),
   TotalSecs is T1 - T0,
   ebuild_exec:log_file_size(LogPath, SizeAfter),
@@ -1165,7 +1473,8 @@ ebuild_exec:run_phases_sequential(EbuildPath, Entry, [Phase|Rest], DisplayPhases
       ebuild_exec:poll_phase_spinning(Pid, Phase, Callback, ExitCode0),
       ebuild_exec:maybe_transient_retry(EbuildPath, Phase, LogPath, UseString, Callback, SizeBefore, ExitCode0, ExitCode1),
       ebuild_exec:maybe_serial_retry(EbuildPath, Phase, LogPath, UseString, Callback, ExitCode1, ExitCode2),
-      ebuild_exec:maybe_collision_retry(EbuildPath, Entry, Phase, LogPath, UseString, Callback, SizeBefore, ExitCode2, ExitCode) )),
+      ebuild_exec:maybe_collision_retry(EbuildPath, Entry, Phase, LogPath, UseString, Callback, SizeBefore, ExitCode2, ExitCode3),
+      ebuild_exec:maybe_ghc_abi_retry(EbuildPath, Phase, LogPath, UseString, Callback, SizeBefore, ExitCode3, ExitCode) )),
   get_time(T1),
   TotalSecs is T1 - T0,
   ebuild_exec:log_file_size(LogPath, SizeAfter),

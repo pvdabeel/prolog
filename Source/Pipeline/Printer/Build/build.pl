@@ -1086,6 +1086,7 @@ build:summary(Completed, Failed, Stubs) :-
   build:print_summary_parts(Parts),
   format('.~n~n', []),
   build:print_deconfliction_summary,
+  build:print_ghc_abi_repair_summary,
   flush_output.
 
 
@@ -1117,6 +1118,37 @@ build:print_deconfliction_summary :-
     nl
   ; true
   ).
+
+
+%! build:print_ghc_abi_repair_summary is det.
+%
+% After the build summary, report any GHC ABI repair rebuilds that were
+% applied during this build (portage-ng#93). Each listed package was
+% reported broken by haskell-cabal.eclass's ghc-pkg check (stale ABI hash
+% after a dependency rebuild) and was rebuilt in-transaction -- the native
+% haskell-updater equivalent. Reading the record
+% (ebuild_exec:ghc_abi_repair_applied/2) makes the action visible in the
+% build summary in addition to the per-build-log markers.
+
+build:print_ghc_abi_repair_summary :-
+  ( current_predicate(ebuild_exec:ghc_abi_repair_applied/2),
+    findall(Entry, ebuild_exec:ghc_abi_repair_applied(_, Entry), Entries0),
+    sort(Entries0, Entries),
+    Entries \== []
+  ->
+    length(Entries, N),
+    message:color(yellow),
+    ( N =:= 1 -> Word = 'package' ; Word = 'packages' ),
+    format('GHC ABI repair: ~d broken ~w rebuilt in-transaction after a~n', [N, Word]),
+    format('                dependency ABI-hash change (portage-ng#93, haskell-updater equivalent):~n', []),
+    message:color(darkgray),
+    forall(member(Entry, Entries),
+           format('  - ~w~n', [Entry])),
+    message:color(normal),
+    nl
+  ; true
+  ).
+
 
 build:summary_collect(Completed, Failed, Stubs, Parts) :-
   ( Completed > 0 -> CP = [completed-Completed] ; CP = [] ),
