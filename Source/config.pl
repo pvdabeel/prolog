@@ -1410,9 +1410,9 @@ config:build_transient_retry(true).
 %                  up listed in two packages' VDB CONTENTS (dual ownership) --
 %                  harmless in an ephemeral tinderbox OverlayFS session, which
 %                  is why this is the tinderbox default. The action is always
-%                  logged (build log marker) and recorded
-%                  (`ebuild_exec:collision_override_applied/2`) so it is never
-%                  silent.
+%                  logged (build log marker) and recorded (`fixup:record/3`,
+%                  see Source/Domain/Gentoo/Exceptions/collision.pl) so it is
+%                  never silent.
 %
 % Default is `override` (tinderbox-oriented). A production deployment that
 % wants emerge-like safety should set this to `report` in its host config.
@@ -1438,8 +1438,10 @@ config:deconflict_collisions(override).
 % Bounded: each broken package is rebuilt at most once per session, the
 % failed phase is retried at most twice, and repairs are serialized
 % across build workers. Every repair leaves a marker in both the
-% consumer's and the rebuilt package's build logs. Set to `false` to
-% keep emerge-compatible behaviour (fail and defer to haskell-updater).
+% consumer's and the rebuilt package's build logs and is recorded via
+% `fixup:record/3` (see Source/Domain/Gentoo/Exceptions/ghcabi.pl). Set
+% to `false` to keep emerge-compatible behaviour (fail and defer to
+% haskell-updater).
 
 config:ghc_abi_repair(true).
 

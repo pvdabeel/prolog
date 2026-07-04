@@ -1166,19 +1166,16 @@ binpkg_exec:run_qmerge(Id, EbuildPath, GpkgPath, BuildDir, UseString, ExitCode) 
 % In any other mode the qmerge runs once with no override.
 
 binpkg_exec:run_qmerge_deconflict(Id, EbuildPath, GpkgPath, BuildDir, UseString, ExitCode) :-
-  ebuild_exec:deconflict_mode(override),
+  collision:deconflict_mode(override),
   !,
   setup_call_cleanup(
     tmp_file_stream(text, LogPath, S0),
     ( close(S0),
       binpkg_exec:run_qmerge_unlocked(EbuildPath, GpkgPath, BuildDir, UseString, [], LogPath, ExitCode0),
       ( ExitCode0 =\= 0,
-        ebuild_exec:collision_phase_error(LogPath, 0)
+        collision:phase_error(LogPath, 0)
       -> binpkg_exec:log_qmerge_collision_retry(Id, ExitCode0),
-         ( \+ ebuild_exec:collision_override_applied(Id, _)
-         -> assertz(ebuild_exec:collision_override_applied(Id, collision_protect))
-         ;  true
-         ),
+         fixup:record(collision, Id, collision_protect),
          binpkg_exec:run_qmerge_unlocked(EbuildPath, GpkgPath, BuildDir, UseString,
                                          ['FEATURES'='-collision-protect -protect-owned'], LogPath, ExitCode)
       ;  ExitCode = ExitCode0
@@ -1193,9 +1190,9 @@ binpkg_exec:run_qmerge_deconflict(_Id, EbuildPath, GpkgPath, BuildDir, UseString
 %! binpkg_exec:log_qmerge_collision_retry(+Id, +ExitCode) is det.
 %
 % Prints a visible marker line when a qmerge is retried with collision
-% protection disabled (mirrors ebuild_exec:log_collision_retry/3, which
-% writes to the source-merge build log; qmerge has no per-build log so the
-% marker goes to the terminal).
+% protection disabled (mirrors collision:log_retry/3, which writes to the
+% source-merge build log; qmerge has no per-build log so the marker goes
+% to the terminal).
 
 binpkg_exec:log_qmerge_collision_retry(Id, ExitCode) :-
   catch(

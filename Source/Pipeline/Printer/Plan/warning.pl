@@ -267,7 +267,9 @@ warning:print_blocker_line(Strength, Phase, BlockAtom, RequiredBy) :-
 %! warning:deconfliction_mode(-Mode)
 %
 % Resolves config:deconflict_collisions/1 (off|report|override), defaulting
-% to `override` when unset. Mirrors ebuild_exec:deconflict_mode/1.
+% to `override` when unset. Mirrors collision:deconflict_mode/1 (the plan
+% printer is also loaded in modes that do not load the build-side
+% exception modules under Source/Domain/Gentoo/Exceptions/).
 
 warning:deconfliction_mode(Mode) :-
   ( catch(config:deconflict_collisions(M), _, fail), ground(M) ->
