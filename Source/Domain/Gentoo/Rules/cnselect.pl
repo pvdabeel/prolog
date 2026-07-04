@@ -430,9 +430,22 @@ cnselect:constraint_conflicting_candidates(Action, C, N, PackageDeps, Context, C
 % with already-selected candidates, throws a `prover_reprove/1` exception
 % requesting the prover to retry with the conflicting candidates rejected.
 % This is the main conflict-driven learning entry point for grouped deps.
+%
+% Visibility-only failures are exempt, like in parent narrowing above:
+% when the dep on (C,N) fails only because every candidate is masked /
+% keyword-filtered, rejecting the introducing origin (line "SourceC/
+% SourceN" below) permanently poisons it for the rest of the proof even
+% though a later pass may not need the hidden dep at all (portage-ng#91
+% sub-mechanism A: accountsservice[systemd]'s dep on profile-masked
+% systemd:0= origin-rejected accountsservice itself; the final elogind-
+% seeded pass then found accountsservice reject-listed and the whole
+% Cinnamon stack collapsed to phantoms). Falling through instead lets
+% grouped_dep_concretize_hidden plan the masked provider with a
+% POSITIVE unmask suggestion.
 
 cnselect:maybe_request_grouped_dep_reprove(Action, C, N, PackageDeps, Context) :-
   cn_domain_reprove_enabled,
+  \+ dep_failure_is_visibility_only(C, N, PackageDeps, Context),
   ( context_selected_cn_candidates(C, N, Context, SelectedCandidatesRaw) ->
       true
   ; snapshot_selected_cn_candidates(C, N, SelectedCandidates0) ->
@@ -720,6 +733,26 @@ cnselect:dep_target_selected_conflict(C, N, PackageDeps, Context) :-
   !.
 
 
+%! cnselect:dep_failure_is_visibility_only(+C, +N, +PackageDeps, +Context) is semidet.
+%
+% True when the failed dependency on (C,N) is unsatisfiable purely
+% because every candidate is hidden by a visibility filter (profile
+% mask or ACCEPT_KEYWORDS). Uses the same cached diagnosis as the
+% assumption fallback (explanation:assumption_reason_for_grouped_dep/6),
+% so the classification here always agrees with what the concretization
+% clause (grouped_dep_concretize_hidden/7) will accept.
+
+cnselect:dep_failure_is_visibility_only(C, N, PackageDeps, Context) :-
+  ( member(package_dependency(Phase, no, C, N, _, _, _, _), PackageDeps),
+    Phase \== pdepend
+  -> Action = Phase
+  ;  Action = run
+  ),
+  explanation:assumption_reason_for_grouped_dep(Action, C, N, PackageDeps, Context, Reason),
+  memberchk(Reason, [masked, keyword_filtered]),
+  !.
+
+
 %! cnselect:maybe_learn_parent_narrowing(+C, +N, +PackageDeps, +Context)
 %
 % When a dependency on (C,N) is unsatisfiable, learns to exclude the
@@ -730,11 +763,25 @@ cnselect:dep_target_selected_conflict(C, N, PackageDeps, Context) :-
 % Skipped when dep_target_selected_conflict/4 holds: a conflicting
 % pin on the child (C,N) is repaired by re-selecting the child via
 % maybe_request_grouped_dep_reprove/5, not by narrowing the parent.
+%
+% Also skipped when the dep's failure is purely a visibility filter
+% (masked / keyword_filtered): narrowing the parent cannot lift a
+% profile mask, and the learned exclusion poisons every other consumer
+% of the parent for the rest of the proof (portage-ng#91 sub-mechanism
+% A: sys-apps/systemd is profile-masked on a headless baseline, so each
+% systemd-USE consumer that reached this clause — dbus, at-spi2-core,
+% gtk+, gnome-settings-daemon, ... — got version-excluded in turn and
+% every edge onto it collapsed to a NEGATIVE `unsatisfied_constraints`
+% phantom). Yielding here lets resolution fall through to the
+% visibility-relaxed concretization (grouped_dep_concretize_hidden,
+% portage-ng#14), which plans the hidden dep concretely and surfaces a
+% single POSITIVE unmask / accept-keyword assumption instead.
 
 cnselect:maybe_learn_parent_narrowing(C, N, PackageDeps, Context) :-
   \+ is_pdepend_failure(PackageDeps, Context),
   \+ is_multislot_miss(C, N, PackageDeps, Context),
   \+ dep_target_selected_conflict(C, N, PackageDeps, Context),
+  \+ dep_failure_is_visibility_only(C, N, PackageDeps, Context),
   is_list(Context),
   memberchk(self(ParentRepo://ParentEntry), Context),
   cache:ordered_entry(ParentRepo, ParentEntry, ParentC, ParentN, _),
