@@ -108,7 +108,7 @@ are **in-place repairs**: they rebuild something mid-flight and re-run
 the failed phase.  The missing-provider mechanism is different — it
 **diagnoses but never repairs in place**: it records what it learned
 and lets the pipeline re-derive a fresh plan (see
-[Missing-provider feedback](#missing-provider-feedback-missing_providerpl--diagnose-learn-re-derive)
+[Missing-provider feedback](#missing-provider-feedback-diagnose-learn-re-derive)
 below).
 
 ### Collision deconfliction (`collision.pl`)
@@ -188,7 +188,7 @@ and markers in every involved build log plus the build summary.  The
 package being built and `dev-lang/ocaml` itself are never rebuild
 candidates.
 
-### Missing-provider feedback (`missing_provider.pl`) — diagnose, learn, re-derive
+### Missing-provider feedback: diagnose, learn, re-derive
 
 The three mechanisms above all repair reality in place: they rebuild a
 package mid-transaction and re-run the failed phase.  That pattern is

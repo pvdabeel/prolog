@@ -100,7 +100,7 @@ because of an *undeclared* build dependency — a command, header,
 library, or pkg-config module the ebuild needed but never listed in
 `BDEPEND` — the builder records the discovery and re-derives a plan that
 supplies it (see
-[Chapter 15: Missing-provider feedback](15-doc-building.md#missing-provider-feedback-missing_providerpl--diagnose-learn-re-derive)).
+[Chapter 15: Missing-provider feedback](15-doc-building.md#missing-provider-feedback-diagnose-learn-re-derive)).
 
 Because every discovery carries structured evidence — the missing
 symbol, the phase it surfaced in, the exit code, and the offending log
