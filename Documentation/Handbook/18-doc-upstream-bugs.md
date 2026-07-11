@@ -91,9 +91,50 @@ These drafts can be used as starting points for filing bugs with the
 Gentoo bug tracker.
 
 
+## Bug report drafts from build-time discoveries
+
+The prover-driven drafts above are generated at plan time from
+unsatisfiable dependencies.  A second source of drafts comes from the
+**missing-provider feedback loop** (portage-ng#102): when a build fails
+because of an *undeclared* build dependency — a command, header,
+library, or pkg-config module the ebuild needed but never listed in
+`BDEPEND` — the builder records the discovery and re-derives a plan that
+supplies it (see
+[Chapter 15: Missing-provider feedback](15-doc-building.md#missing-provider-feedback-missing_providerpl--diagnose-learn-re-derive)).
+
+Because every discovery carries structured evidence — the missing
+symbol, the phase it surfaced in, the exit code, and the offending log
+line — the printer proposes a bug report draft at the end of the build
+for each dependency worked around this session:
+
+```
+>>> Missing build dependencies discovered (bug report drafts)
+
+---
+Summary: sec-policy/selinux-base: missing BDEPEND=sys-apps/semodule-utils (command semodule_package not found)
+
+Affected package: portage://sec-policy/selinux-base
+Missing dependency: sys-apps/semodule-utils (build-time / BDEPEND)
+Observed:
+  command semodule_package not found during the compile phase (exit 127):
+    semodule_package: command not found
+Potential fix (suggestion):
+  Add BDEPEND="sys-apps/semodule-utils" to the ebuild or the responsible inherited eclass.
+  (discovered by portage-ng missing-provider feedback, portage-ng#102)
+```
+
+Unlike the prover-driven drafts (which report a dependency that *cannot*
+be satisfied), these report a dependency that *was* satisfied once
+portage-ng learned it — so the draft is a ready-to-file "add
+`BDEPEND=<provider>`" fix against the ebuild or its inherited eclass.
+Both kinds of draft are gated by `config:bugreport_drafts_enabled/1`.
+
+
 ## Further reading
 
 - [Chapter 14: Command-Line Interface](14-doc-cli.md) — `--upstream` and
   `--bugs` flags
 - [Chapter 9: Assumptions and Constraint Learning](09-doc-prover-assumptions.md) —
   how unsatisfiable dependencies are detected
+- [Chapter 15: Building and Execution](15-doc-building.md) — the
+  missing-provider feedback loop that produces build-time bug drafts

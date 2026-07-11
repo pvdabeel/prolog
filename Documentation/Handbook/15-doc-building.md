@@ -103,6 +103,14 @@ registry of **exception mechanisms** under
   generically by the build printer — adding a new exception mechanism
   never touches the builder or the printer.
 
+Mechanisms come in two flavours.  Most (collision, GHC ABI, OCaml ABI)
+are **in-place repairs**: they rebuild something mid-flight and re-run
+the failed phase.  The missing-provider mechanism is different — it
+**diagnoses but never repairs in place**: it records what it learned
+and lets the pipeline re-derive a fresh plan (see
+[Missing-provider feedback](#missing-provider-feedback-missing_providerpl--diagnose-learn-re-derive)
+below).
+
 ### Collision deconfliction (`collision.pl`)
 
 Traditional emerge refuses, at the plan stage, to install a package
@@ -180,6 +188,95 @@ and markers in every involved build log plus the build summary.  The
 package being built and `dev-lang/ocaml` itself are never rebuild
 candidates.
 
+### Missing-provider feedback (`missing_provider.pl`) — diagnose, learn, re-derive
+
+The three mechanisms above all repair reality in place: they rebuild a
+package mid-transaction and re-run the failed phase.  That pattern is
+wrong for a whole class of failures — a build that dies because a
+required *provider* is missing (a command, header, library, or
+pkg-config module that some package would supply but that the ebuild
+never declared as a dependency).  The canonical case is
+`sec-policy/selinux-base`, whose compile dies with
+
+```
+semodule_package: command not found
+```
+
+because `selinux-policy-2.eclass` never lists `sys-apps/semodule-utils`
+in `BDEPEND`.  portage-ng built exactly what it was told to; the
+dependency simply is not in the metadata, so the resolver never saw it.
+Repairing this in place would decide ordering imperatively in the
+builder, could not chase the provider's own transitive needs, would
+break the invariant that the plan equals `prove_plan(Goals, KB)`, and
+would forget the discovery so the next run fails again.
+
+So `missing_provider.pl` (portage-ng#102), gated by
+`config:missing_provider_feedback/1`, does the opposite of a repair:
+**it emits a structured diagnostic, that diagnostic becomes learned
+knowledge, the pipeline re-derives a fresh provable plan that orders the
+provider before the target, and the builder resumes that new plan.**
+Plans are derived, never patched.  It threads the failed phase's exit
+code through unchanged — the phase legitimately still failed.
+
+The diagnosis is split into two pluggable layers, each a multifile
+registry so new failure shapes and resolution strategies are added as
+clauses rather than by editing the dispatcher:
+
+- **Detector registry** (`missing_provider:detector/3`) normalises the
+  failed phase's log tail into a `symbol(Kind, Name)`.  Ships detectors
+  for missing commands (bash `command not found`, dash `not found`,
+  `env` exec failures), headers (`fatal error: X.h`), libraries
+  (`cannot find -lX`), sonames, pkg-config modules, and python/perl
+  modules.
+- **Resolver chain** (`missing_provider:provider_of/4`) maps a symbol to
+  a concrete `Category/Name` package: first the authoritative VDB
+  `CONTENTS` reverse-owner index (the `qfile`/`equery belongs`
+  equivalent, for providers that happen to be installed), then a small
+  curated seed table (for the common case where the provider is *not*
+  installed — that is precisely why the command was missing).  A symbol
+  that maps to no concrete in-tree package is written to an unresolved
+  backlog and the target fails cleanly — no guessing.
+
+A concrete discovery is recorded through the `feedback` module
+(`Source/Knowledge/feedback.pl`) as a durable `discovered_dep/4` fact,
+persisted to `Knowledge/feedback.pl` (gitignored, consulted at startup
+like the QLF cache) so a one-time runtime discovery becomes permanent
+knowledge.  The only resolver change is in `query.pl`, which unions
+`feedback:discovered_dep(Target, Provider, bdepend, _)` into the
+target's build-dependency model.  The mechanism also distinguishes an
+*undeclared* dependency (the upstream-gap case above — mint a discovery)
+from a *declared-but-unbuilt* one (a genuine resolver/scheduler ordering
+bug — logged loudly, never papered over).
+
+The control loop lives in the builder: `builder:build/1` is a bounded
+replan loop (`builder:build_loop/2`, capped by
+`config:missing_provider_max_replan/1`).  When a build pass fails *and*
+recorded a new discovery, the builder re-enters the pipeline; on the
+re-proof the provider is part of the closure, so the planner and
+scheduler order it — and its own transitive dependencies — before the
+target.  Everything already built satisfies from the VDB via the
+existing reconciliation fast path, so the retry pass only builds the
+provider and recompiles the target.  Walkthrough for the selinux case:
+
+1. `selinux-base` compile → `semodule_package: command not found`.
+2. `missing_provider` maps the command to `sys-apps/semodule-utils`,
+   records a `discovered_dep`, and persists it; the phase still fails.
+3. The wave ends with `selinux-base` failed; `build_loop` sees the new
+   discovery and re-enters the pipeline.
+4. `rules`/`query` now yield
+   `BDEPEND(selinux-base) ⊇ {sys-apps/semodule-utils}`; the prover
+   proves it, the scheduler orders `semodule-utils` (and its transitive
+   `sys-libs/libsepol`) first.
+5. Retry pass: the provider builds, `selinux-base` recompiles, and the
+   300+ downstream `selinux-*` packages never fail — the discovery is
+   persisted before their turn.
+
+Because the discovery carries structured evidence (the symbol, phase,
+exit code, and log excerpt), the printer proposes a Gentoo Bugzilla bug
+report draft at the end of the build for every dependency worked around
+this session — the record doubles as an upstream ebuild/eclass bug
+report (see [Chapter 18](18-doc-upstream-bugs.md)).
+
 ### Build summary reporting
 
 At the end of a build, the printer renders one block per mechanism
@@ -196,6 +293,28 @@ GHC ABI repair: 2 broken packages rebuilt in-transaction after a
                 dependency ABI-hash change (portage-ng#93, haskell-updater equivalent):
   - dev-haskell/semialign-1.3
   - dev-haskell/semigroupoids-5.3.7
+
+Missing provider: 1 package had an undeclared build dependency discovered at
+                  build time and learned as BDEPEND (portage-ng#102):
+  - sec-policy/selinux-base
+```
+
+Followed, for a missing-provider discovery, by the bug report draft:
+
+```
+>>> Missing build dependencies discovered (bug report drafts)
+
+---
+Summary: sec-policy/selinux-base: missing BDEPEND=sys-apps/semodule-utils (command semodule_package not found)
+
+Affected package: portage://sec-policy/selinux-base
+Missing dependency: sys-apps/semodule-utils (build-time / BDEPEND)
+Observed:
+  command semodule_package not found during the compile phase (exit 127):
+    semodule_package: command not found
+Potential fix (suggestion):
+  Add BDEPEND="sys-apps/semodule-utils" to the ebuild or the responsible inherited eclass.
+  (discovered by portage-ng missing-provider feedback, portage-ng#102)
 ```
 
 

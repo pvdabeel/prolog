@@ -19,6 +19,7 @@ and so on.
 - Multiple solutions and variant exploration
 - Progressive relaxation with actionable suggestions
 - Wave planning with optimal parallelism and SCC scheduling
+- Builder-to-prover feedback: undeclared build dependencies discovered at build time are learned and the plan is re-derived, never patched
 - Semantic search, LLM integration, distributed proving
 - Portage-compatible execution and pre-upgrade snapshots
 - Domain-agnostic reasoning core -- Gentoo-specific logic is a pluggable rules layer

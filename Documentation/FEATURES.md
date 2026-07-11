@@ -143,6 +143,20 @@ Merge-time file collisions caused by missing blocker atoms are recognised and
 resolved (configurable: off / report / override), letting tinderbox-style runs
 proceed where emerge would refuse at the plan stage.
 
+**Missing-provider feedback (derive, never patch).**
+When a build dies because a required provider is missing -- a command, header,
+library, or pkg-config module the ebuild never declared (e.g.
+`semodule_package: command not found`, an undeclared `BDEPEND` on
+`sys-apps/semodule-utils`) -- portage-ng does not inject a fix into the
+in-flight plan.  It diagnoses the missing provider (a detector registry over
+the failed phase's log), resolves it to a concrete package (the VDB
+reverse-owner index, then a curated seed table), records it as durable learned
+knowledge, and re-derives a fresh provable plan in which the provider is proved
+and ordered *before* the target.  The plan stays `= prove_plan(Goals, KB)`;
+everything already built satisfies from the VDB, so the retry pass only builds
+the newly discovered provider and its target.  Each discovery doubles as an
+upstream ebuild/eclass bug report.
+
 **Snapshots.**
 Before upgrading, `--snapshot` creates quickpkg-style binary archives of
 installed packages, enabling `--rollback` to a known-good state if an upgrade
@@ -163,7 +177,10 @@ outdated packages at a glance.
 **Bug search and report drafts.**
 `--bugs` and `--search-bugs` query the Gentoo Bugzilla REST API.  When the
 prover detects unsatisfiable dependencies, it generates structured bug report
-drafts with affected packages, constraints, and suggested fixes.
+drafts with affected packages, constraints, and suggested fixes.  The
+missing-provider feedback loop adds a second source of drafts: every undeclared
+build dependency discovered at build time is proposed as an
+"add `BDEPEND=<provider>`" report against the ebuild or its inherited eclass.
 
 **Interactive Prolog shell.**
 `--shell` drops into a live SWI-Prolog session with the full knowledge base
