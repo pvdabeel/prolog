@@ -1678,6 +1678,28 @@ test(restart_obligation_head_maps_pdepend_keys) :-
   heuristic:restart_obligation_head(pdepend_none(fakerepo://'cat/pkg-1.0':install), Core2),
   Core2 == (fakerepo://'cat/pkg-1.0':install).
 
+test(strip_ctx_strips_action_attached_context) :-
+  Lit = fakerepo://'cat/pkg-1.0':install?{[build_with_use:use_state([],[])]},
+  heuristic:strip_ctx(Lit, Core),
+  Core == (fakerepo://'cat/pkg-1.0':install),
+  heuristic:obligation_candidate(Lit).
+
+test(query_keyword_candidate_excludes_binpkg_repo,
+     [setup(( retractall(cache:ordered_entry(binpkg, _, _, _, _)),
+              retractall(cache:ordered_entry(portage, 'cat/pkg-1.0', _, _, _)),
+              retractall(cache:entry_metadata(binpkg, _, _, _)),
+              retractall(cache:entry_metadata(portage, 'cat/pkg-1.0', _, _)),
+              assertz(cache:ordered_entry(binpkg, 'cat/pkg-1.0-1', cat, pkg, v)),
+              assertz(cache:ordered_entry(portage, 'cat/pkg-1.0', cat, pkg, v)),
+              assertz(cache:entry_metadata(binpkg, 'cat/pkg-1.0-1', keywords, amd64)),
+              assertz(cache:entry_metadata(portage, 'cat/pkg-1.0', keywords, amd64)) )),
+      cleanup(( retractall(cache:ordered_entry(binpkg, _, _, _, _)),
+                retractall(cache:ordered_entry(portage, 'cat/pkg-1.0', _, _, _)),
+                retractall(cache:entry_metadata(binpkg, _, _, _)),
+                retractall(cache:entry_metadata(portage, 'cat/pkg-1.0', _, _)) ))]) :-
+  \+ acceptance:query_keyword_candidate(install, cat, pkg, amd64, [], binpkg://_),
+  acceptance:query_keyword_candidate(install, cat, pkg, amd64, [], portage://'cat/pkg-1.0').
+
 test(restart_drop_constraint_scopes_use_slot_selected,
      [setup(( retractall(cache:ordered_entry(fakerepo, _, _, _, _)),
               assertz(cache:ordered_entry(fakerepo, 'cat/pkg-1.0', cat, pkg, v)) )),

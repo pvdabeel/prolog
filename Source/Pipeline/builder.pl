@@ -578,6 +578,13 @@ builder:run_action(Action, Repo, Entry, Ctx, Outcome) :-
   !,
   ebuild_exec:execute(Action, Repo, Entry, Ctx, Outcome).
 
+builder:run_action(Action, Repo, Entry, Ctx, Outcome) :-
+  Repo == binpkg,
+  config:build_live_phases(LP), LP \= [],
+  predicate_property(binpkg_exec:execute(_,_,_,_,_,_), defined),
+  !,
+  builder:run_binpkg_action(Action, Entry, Ctx, Outcome).
+
 builder:run_action(_Action, Repo, _Entry, _Ctx, Outcome) :-
   Repo:get_type(Type),
   Type \= eapi,
@@ -591,10 +598,49 @@ builder:run_action(_Action, Repo, _Entry, _Ctx, Outcome) :-
 builder:run_action(_Action, _Repo, _Entry, _Ctx, stub).
 
 
+%! builder:run_binpkg_action(+Action, +BinpkgEntry, +Ctx, -Outcome) is det.
+%
+% Execute a plan step whose repository is `binpkg` (a direct
+% binpkg://… literal, not the ebuild_exec fast-path substitution).
+% Resolves the matching portage source ebuild for qmerge and delegates
+% to `binpkg_exec:execute/6`. Maps `run` to `install` (qmerge).
+
+builder:run_binpkg_action(Action, BinpkgEntry, Ctx, Outcome) :-
+  ( cache:ordered_entry(binpkg, BinpkgEntry, Cat, Name, Version),
+    cache:repository(portage),
+    cache:ordered_entry(portage, SrcEntry, Cat, Name, Version),
+    builder:binpkg_merge_action(Action, MergeAction)
+  -> binpkg_exec:execute(MergeAction, portage, SrcEntry, BinpkgEntry, Ctx, Outcome)
+  ;  Outcome = failed(no_source_ebuild)
+  ).
+
+
+%! builder:binpkg_merge_action(+Action, -MergeAction) is det.
+%
+% Only install-shaped actions drive qmerge; `run` on a binpkg entry is
+% treated as a binary merge (mirrors emerge's USEPKG install).
+
+builder:binpkg_merge_action(run, install) :- !.
+builder:binpkg_merge_action(Action, Action) :-
+  memberchk(Action, [install, reinstall, update, downgrade]).
+
+
 %! builder:run_action_with_phases(+Action, +Repo, +Entry, +Ctx, +TotalLines, +ExecLine, +ExecLineCount, +LogsLine, +PhaseList, +LogPath, +LineOff, +PlanStep, +NumSteps, +ActionIdx, -Outcome) is det.
 %
 % Execute a build action with inline phase progress tracking.
 % Uses exec lines with arrow-separated phases and a logs line below.
+
+builder:run_action_with_phases(Action, Repo, Entry, Ctx,
+                                TotalLines, _ExecLine, _ExecLineCount, _LogsLine, _PhaseList, _LogPath,
+                                LineOff, PlanStep, NumSteps, ActionIdx, Outcome) :-
+  Repo == binpkg,
+  config:build_live_phases(LP), LP \= [],
+  predicate_property(binpkg_exec:execute(_,_,_,_,_,_), defined),
+  !,
+  builder:run_binpkg_action(Action, Entry, Ctx, Outcome),
+  builder:outcome_to_status(Outcome, FinalStatus),
+  with_mutex(build_display,
+    build:update_slot(LineOff, TotalLines, FinalStatus, PlanStep, NumSteps, ActionIdx, Action, Repo://Entry)).
 
 builder:run_action_with_phases(Action, Repo, Entry, _Ctx,
                                 TotalLines, _ExecLine, _ExecLineCount, _LogsLine, _PhaseList, _LogPath,

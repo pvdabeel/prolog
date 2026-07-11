@@ -314,6 +314,7 @@ acceptance:query_keyword_candidate(Action, C, N, K, Context, FoundRepo://Candida
     query:search([category(C),name(N)], SelfRepo0://SelfEntry0)
   ->
     query:search([name(N),category(C),keyword(K)], FoundRepo://Candidate),
+    \+ acceptance:binpkg_repository(FoundRepo),
     \+ preference:masked(FoundRepo://Candidate),
     ( FoundRepo == SelfRepo0,
       Candidate == SelfEntry0
@@ -323,6 +324,7 @@ acceptance:query_keyword_candidate(Action, C, N, K, Context, FoundRepo://Candida
     ; true
     )
   ; query:search([name(N),category(C),keyword(K)], FoundRepo://Candidate),
+    \+ acceptance:binpkg_repository(FoundRepo),
     \+ preference:masked(FoundRepo://Candidate)
   ).
 

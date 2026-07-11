@@ -105,12 +105,34 @@ heuristic:merge_action(reinstall).
 
 %! heuristic:strip_ctx(+Literal, -Core) is det.
 %
-% Normalize an action literal by dropping a trailing `?{Context}` proof
-% context, yielding the bare core (e.g. `Repo://Entry:Action`).
-% Literals without a `?{Context}` wrapper pass through unchanged.
+% Normalize an action literal by dropping `?{Context}` proof-context
+% annotations, yielding the bare core (e.g. `Repo://Entry:Action`).
+% Mirrors the shapes handled by `prover:canon_literal/3` -- context may
+% attach to the action (`Repo://Entry:Action?{Ctx}`) rather than only at
+% the top level (`Core?{Ctx}`). Without this, PDEPEND proof obligations
+% silently skip every context-carrying merge literal (portage-ng#100).
 
-heuristic:strip_ctx(Core?{_Ctx}, Core) :- !.
-heuristic:strip_ctx(Core, Core).
+heuristic:strip_ctx(Literal, Core) :-
+  heuristic:strip_ctx_(Literal, Core),
+  !.
+
+heuristic:strip_ctx_(R://(L:A), R://L:A) :- !.
+heuristic:strip_ctx_(R://(L:A?{_}), R://L:A) :- !.
+heuristic:strip_ctx_(R://(L:A)?{_}, R://L:A) :- !.
+heuristic:strip_ctx_(R://(L:A?{_})?{_}, R://L:A) :- !.
+heuristic:strip_ctx_(R://(L), R://L) :- !.
+heuristic:strip_ctx_(R://(L?{_}), R://L) :- !.
+heuristic:strip_ctx_(R://(L)?{_}, R://L) :- !.
+heuristic:strip_ctx_(R://(L?{_})?{_}, R://L) :- !.
+heuristic:strip_ctx_(R://L:A, R://L:A) :- !.
+heuristic:strip_ctx_(R://L:A?{_}, R://L:A) :- !.
+heuristic:strip_ctx_(R://L, R://L) :- !.
+heuristic:strip_ctx_(R://L?{_}, R://L) :- !.
+heuristic:strip_ctx_(L:A, L:A) :- !.
+heuristic:strip_ctx_(L:A?{_}, L:A) :- !.
+heuristic:strip_ctx_(L, L) :- !.
+heuristic:strip_ctx_(L?{_}, L) :- !.
+heuristic:strip_ctx_(Literal, Literal).
 
 
 %! heuristic:obligation_candidate(+Literal)
