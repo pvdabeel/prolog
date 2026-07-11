@@ -1068,7 +1068,7 @@ def test65():
 
 
 def test66():
-    return dot("test66", "PDEPEND (post-merge) (XFAIL)", [
+    return dot("test66", "PDEPEND (post-merge)", [
         node("app", "app-1.0", ENTRY),
         node("lib", "lib-1.0"),
         node("plugin", "plugin-1.0"),

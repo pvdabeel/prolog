@@ -1195,8 +1195,6 @@ test:expect(overlay://'test65/app-1.0':run?{[]},
 % -----------------------------------------------------------------------------
 
 % test66: PDEPEND -- lib-1.0 has post-merge dep on plugin-1.0
-test:xfail(overlay://'test66/app-1.0':run?{[]},
-           'Regression: PDEPEND of a transitive dependency (lib) is not resolved; plugin missing from model (PDEPEND on the target itself works, see test79)').
 test:expect(overlay://'test66/app-1.0':run?{[]},
             [ test:must_have(overlay://'test66/app-1.0':run?{_}),
               test:must_have(overlay://'test66/lib-1.0':run?{_}),

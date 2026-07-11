@@ -75,7 +75,7 @@ The overlay repository itself is at [`Repository/Overlay/`](../../Repository/Ove
 | [63](#test63) | Cycle | REQUIRED_USE loop reproducer (openmpi-style) |
 | [64](#test64) | Cycle | USE-conditional churn reproducer (openmp-style) |
 | [65](#test65) | Installed | build_with_use reinstall semantics |
-| [66](#test66) | PDEPEND | Post-merge dependency resolution (XFAIL) **(XFAIL)** |
+| [66](#test66) | PDEPEND | Post-merge dependency resolution (transitive PDEPEND) |
 | [67](#test67) | BDEPEND | Build-only dependency (separate from DEPEND) |
 | [68](#test68) | Multi-slot | Co-installation of same CN in different slots |
 | [69](#test69) | Version | Operator >= (greater-or-equal) |
@@ -5217,21 +5217,17 @@ Total: 3 actions (1 download, 1 install, 1 run), grouped into 3 steps.
 </details>
 ---
 
-## test66 — Post-merge dependency resolution (XFAIL)
+## test66 — Post-merge dependency resolution
 
 **Category:** PDEPEND
-
-> **XFAIL** — expected to fail.
 
 This test case checks the prover's handling of PDEPEND (post-merge dependencies).
 The 'lib-1.0' package declares 'plugin-1.0' as a PDEPEND, meaning plugin-1.0
 should be resolved after lib-1.0's installation, not as a prerequisite.
 
-**Expected:** Currently expected to fail (XFAIL): the PDEPEND of a transitive
-dependency (lib, pulled in by the target app) is not resolved, so plugin-1.0 is
-missing from the model. PDEPEND on the proof target itself works (see test79).
-When fixed, all three packages should appear in the proof/plan, with plugin-1.0
+**Expected:** All three packages appear in the proof/plan, with plugin-1.0
 ordered after lib-1.0's install step via the PDEPEND proof obligation mechanism.
+PDEPEND on the proof target itself is covered separately (see test79).
 
 ![test66](test66/test66.svg)
 
