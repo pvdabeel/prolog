@@ -1086,6 +1086,7 @@ build:summary(Completed, Failed, Stubs) :-
   build:print_summary_parts(Parts),
   format('.~n~n', []),
   build:print_fixup_summary,
+  ( catch(warning:print_discovered_bugreport_drafts, _, true) -> true ; true ),
   flush_output.
 
 

@@ -727,6 +727,103 @@ warning:print_bugreport_group(group(Reason, RequiredBy, C, N, Constraints, Actio
   warning:bugreport_potential_fix(Reason, C, N, Constraints, RequiredBy),
   message:color(normal).
 
+% -----------------------------------------------------------------------------
+%  Discovered-dependency bug report drafts (portage-ng#102)
+% -----------------------------------------------------------------------------
+
+%! warning:print_discovered_bugreport_drafts is det.
+%
+% Renders a Gentoo Bugzilla bug report draft for every build dependency
+% discovered (and worked around) this session by the missing-provider
+% feedback mechanism (feedback:session_discovery/4). Gated by
+% config:bugreport_drafts_enabled/1. Each draft doubles as an upstream
+% ebuild/eclass bug report: the metadata was missing a BDEPEND that a
+% build proved was needed.
+
+warning:print_discovered_bugreport_drafts :-
+  ( catch(config:bugreport_drafts_enabled(true), _, fail),
+    feedback:session_discoveries(Discoveries),
+    Discoveries \== []
+  -> nl,
+     message:header('Missing build dependencies discovered (bug report drafts)'),
+     nl,
+     forall(member(discovery(Target, Provider, Kind, Evidence), Discoveries),
+            ( warning:print_discovered_bugreport(Target, Provider, Kind, Evidence),
+              nl ))
+  ;  true
+  ).
+
+
+%! warning:print_discovered_bugreport(+Target, +Provider, +Kind, +Evidence) is det.
+%
+% Prints one discovered-dependency draft: summary, affected package,
+% missing dependency, observed evidence (symbol/phase/exit/log line), and
+% the suggested fix (add the provider to BDEPEND).
+
+warning:print_discovered_bugreport(Target, Provider, _Kind, Evidence) :-
+  warning:discovered_evidence_fields(Evidence, SymKind, SymName, Phase, Exit, LogLine),
+  ( Target = _Repo://Entry -> true ; Entry = Target ),
+  message:color(darkgray),
+  message:print('---'), nl,
+  message:color(normal),
+  message:style(bold),
+  message:print('Summary: '),
+  message:style(normal),
+  format('~w: missing BDEPEND=~w (~w ~w not found)~n', [Entry, Provider, SymKind, SymName]),
+  nl,
+  message:style(bold),
+  message:print('Affected package: '),
+  message:style(normal),
+  message:color(darkgray),
+  message:print(Target),
+  message:color(normal),
+  nl,
+  message:style(bold),
+  message:print('Missing dependency: '),
+  message:style(normal),
+  message:color(darkgray),
+  format('~w (build-time / BDEPEND)~n', [Provider]),
+  message:color(normal),
+  message:style(bold),
+  message:print('Observed:'),
+  message:style(normal),
+  nl,
+  message:color(darkgray),
+  format('  ~w ~w not found during the ~w phase (exit ~w):~n', [SymKind, SymName, Phase, Exit]),
+  ( LogLine == '' -> true ; format('    ~w~n', [LogLine]) ),
+  message:color(normal),
+  message:style(bold),
+  message:print('Potential fix (suggestion):'),
+  message:style(normal),
+  nl,
+  message:color(darkgray),
+  format('  Add BDEPEND="~w" to the ebuild or the responsible inherited eclass.~n', [Provider]),
+  format('  (discovered by portage-ng missing-provider feedback, portage-ng#102)~n', []),
+  message:color(normal).
+
+
+%! warning:discovered_evidence_fields(+Evidence, -Kind, -Name, -Phase, -Exit, -LogLine) is det.
+%
+% Destructures the structured Evidence term recorded by
+% missing_provider:handle_symbol/6, tolerating a missing/odd shape.
+
+warning:discovered_evidence_fields(Evidence, Kind, Name, Phase, Exit, LogLine) :-
+  ( Evidence = evidence(symbol(Kind0, Name0), phase(Phase0), exit(Exit0), resolver(_), log(Log0))
+  -> Kind = Kind0, Name = Name0, Phase = Phase0, Exit = Exit0,
+     warning:evidence_log_atom(Log0, LogLine)
+  ;  Kind = unknown, Name = unknown, Phase = unknown, Exit = unknown, LogLine = ''
+  ).
+
+
+%! warning:evidence_log_atom(+Log, -Atom) is det.
+%
+% Normalizes a recorded log excerpt (string or atom) to a trimmed atom.
+
+warning:evidence_log_atom(Log, Atom) :-
+  ( string(Log) -> atom_string(Atom0, Log) ; Atom0 = Log ),
+  ( atom(Atom0) -> Atom = Atom0 ; Atom = '' ).
+
+
 %! warning:bugreport_summary(+Reason, +RequiredBy, +C, +N, -Summary)
 %
 % Builds a one-line summary atom for a bug report title.

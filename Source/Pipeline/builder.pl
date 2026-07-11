@@ -46,19 +46,37 @@ supporting concerns are split into sibling modules:
 
 %! builder:build(+Goals) is det.
 %
-% Top-level entry point. Proves goals, prints the plan, asks for
-% confirmation, persists the resume state, then hands off to the
-% shared run_plan/6 lifecycle.
+% Top-level entry point. Delegates to the bounded replan loop
+% (build_loop/2): each pass proves goals, prints the plan, and runs it;
+% if the pass fails AND recorded new missing-provider discoveries
+% (portage-ng#102), the plan is re-derived with the discovered providers
+% unioned into BDEPEND and re-run, so the provider is proved and ordered
+% before the target. Plans are derived, never patched.
 
 builder:build(Goals) :-
+  feedback:clear_session,
+  builder:build_loop(Goals, 0).
+
+
+%! builder:build_loop(+Goals, +Attempt) is det.
+%
+% One prove/print/confirm/run pass. Confirmation is asked only on the
+% first attempt; a replan re-runs non-interactively. On a failed pass
+% that grew the discovery store (builder:should_replan/4), re-enters with
+% Attempt+1, bounded by config:missing_provider_max_replan/1.
+
+builder:build_loop(Goals, Attempt) :-
   pipeline:prove_plan_with_fallback(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, SCCs, _FallbackUsed),
   printer:print(Goals, ModelAVL, ProofAVL, Plan, TriggersAVL, SCCs),
   nl,
-  ( builder:ask_confirmation
-  -> true
-  ;  message:inform('Aborted.'),
-     !,
-     fail
+  ( Attempt =:= 0
+  -> ( builder:ask_confirmation
+     -> true
+     ;  message:inform('Aborted.'),
+        !,
+        fail
+     )
+  ;  true
   ),
   builder:maybe_create_snapshot(Plan),
   resume:save_state(Goals, Plan),
@@ -67,8 +85,45 @@ builder:build(Goals) :-
   length(PreActions, PreCount),
   ( PreCount > 0 -> PreSteps = 1 ; PreSteps = 0 ),
   StartStep is PreSteps + 1,
+  feedback:discovery_count(Before),
   builder:run_plan(Plan, StartStep, [pre_actions(PreActions)],
-                   _Completed, _Failed, _Stubs).
+                   _Completed, Failed, _Stubs),
+  feedback:discovery_count(After),
+  ( builder:should_replan(Attempt, Failed, Before, After)
+  -> Next is Attempt + 1,
+     builder:announce_replan(Next),
+     builder:build_loop(Goals, Next)
+  ;  true
+  ).
+
+
+%! builder:should_replan(+Attempt, +Failed, +Before, +After) is semidet.
+%
+% True when the just-finished pass failed, recorded at least one new
+% missing-provider discovery, and the replan budget is not exhausted.
+% Discovery deduplication (feedback:record_discovery/4) guarantees After
+% only grows on a genuinely new discovery, so the loop terminates.
+
+builder:should_replan(Attempt, Failed, Before, After) :-
+  Failed > 0,
+  After > Before,
+  ( catch(config:missing_provider_max_replan(Max), _, fail), integer(Max)
+  -> true
+  ;  Max = 3
+  ),
+  Attempt < Max.
+
+
+%! builder:announce_replan(+Attempt) is det.
+%
+% Prints a banner before re-deriving the plan on a new discovery.
+
+builder:announce_replan(Attempt) :-
+  nl,
+  message:color(green),
+  format('>>> Re-deriving plan after missing-provider discovery (replan attempt ~d, portage-ng#102)~n', [Attempt]),
+  message:color(normal),
+  nl.
 
 
 %! builder:build_resume is det.

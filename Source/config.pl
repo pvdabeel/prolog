@@ -1474,6 +1474,39 @@ config:ghc_abi_repair(true).
 config:ocaml_abi_repair(true).
 
 
+%! config:missing_provider_feedback(?Bool)
+%
+% When true, a build phase that dies because a required command/file
+% provider is missing (e.g. `semodule_package: command not found`,
+% exit 127) is turned into learned knowledge rather than repaired in
+% place (portage-ng#102). The `missing_provider` exception mechanism
+% (Source/Domain/Gentoo/Exceptions/missing_provider.pl) scans the failed
+% phase's log for a missing-provider signature, resolves it to a concrete
+% package (via the VDB CONTENTS reverse-owner index and a small curated
+% seed table), and records a `feedback:discovered_dep/4`. The phase still
+% fails (the exit code is threaded through unchanged); the builder's
+% bounded replan loop (config:missing_provider_max_replan/1) then
+% re-derives a plan with the provider unioned into BDEPEND, so the
+% provider is proved and ordered before the target on the retry pass.
+%
+% Unlike the ABI repair mechanisms (ghc/ocaml), this one never rebuilds a
+% package in place: plans are derived, never patched. Set to `false` to
+% keep emerge-compatible behaviour (fail the build with no discovery).
+
+config:missing_provider_feedback(true).
+
+
+%! config:missing_provider_max_replan(?N)
+%
+% Upper bound on the number of times builder:build_loop/2 will re-derive
+% and re-run a plan after a build pass records new missing-provider
+% discoveries (portage-ng#102). Combined with discovery deduplication in
+% feedback:record_discovery/4, this guarantees the replan loop always
+% terminates. Must be a non-negative integer.
+
+config:missing_provider_max_replan(3).
+
+
 %! config:toolchain_reactivation(?Bool)
 %
 % When true, the Gentoo build domain (`ebuild_exec:maybe_reactivate_toolchain/4`,

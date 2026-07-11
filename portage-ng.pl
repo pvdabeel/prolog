@@ -113,6 +113,7 @@ init_knowledgebase :-
   config:systemconfig(Config),
   ensure_loaded(Config),
   kb:load,
+  feedback:load,
   preference:init.
 
 

@@ -1333,6 +1333,86 @@ test(existing_token, [true(V == [pkg://e1, pkg://e2])]) :-
 
 
 % =============================================================================
+%  Missing-provider feedback tests (portage-ng#102)
+% =============================================================================
+
+% -----------------------------------------------------------------------------
+%  Detector corpus: each signature variant normalizes to symbol(Kind, Name)
+% -----------------------------------------------------------------------------
+
+:- begin_tests(missing_provider_detectors).
+
+test(cmd_not_found_bash, [true(Sym == symbol(command, semodule_package)), nondet]) :-
+  missing_provider:detector(["/bin/sh: line 1: semodule_package: command not found"], Sym, _).
+
+test(cmd_not_found_prefix, [true(Sym == symbol(command, semodule_package)), nondet]) :-
+  missing_provider:detector(["make[1]: semodule_package: command not found"], Sym, _).
+
+test(cmd_not_found_dash, [true(Sym == symbol(command, checkmodule)), nondet]) :-
+  missing_provider:detector(["sh: 1: checkmodule: not found"], Sym, _).
+
+test(cmd_not_found_env, [true(Sym == symbol(command, gperf)), nondet]) :-
+  missing_provider:detector(["env: 'gperf': No such file or directory"], Sym, _).
+
+test(missing_header, [true(Sym == symbol(header, 'foo/bar.h')), nondet]) :-
+  missing_provider:detector(["main.c:3:10: fatal error: foo/bar.h: No such file or directory"], Sym, _).
+
+test(missing_lib, [true(Sym == symbol(lib, crypto)), nondet]) :-
+  missing_provider:detector(["/usr/bin/ld: cannot find -lcrypto"], Sym, _).
+
+test(missing_soname, [true(Sym == symbol(soname, 'libfoo.so.1')), nondet]) :-
+  missing_provider:detector(["prog: error while loading shared libraries: libfoo.so.1: cannot open shared object file: No such file"], Sym, _).
+
+test(pkgconfig_notfound, [true(Sym == symbol(pkgconfig, glib_2_0)), nondet]) :-
+  missing_provider:detector(["No package 'glib_2_0' found"], Sym, _).
+
+test(pkgconfig_searchpath, [true(Sym == symbol(pkgconfig, 'libssl')), nondet]) :-
+  missing_provider:detector(["Package libssl was not found in the pkg-config search path"], Sym, _).
+
+test(python_module, [true(Sym == symbol(python_module, setuptools)), nondet]) :-
+  missing_provider:detector(["ModuleNotFoundError: No module named 'setuptools'"], Sym, _).
+
+test(perl_module, [true(Sym == symbol(perl_module, 'Foo/Bar.pm')), nondet]) :-
+  missing_provider:detector(["Can't locate Foo/Bar.pm in @INC (you may need to install the Foo::Bar module)"], Sym, _).
+
+test(no_false_positive_on_prose, [fail]) :-
+  missing_provider:detector(["checking for a working compiler... yes", "configure: creating ./config.status"], symbol(command, _), _).
+
+:- end_tests(missing_provider_detectors).
+
+
+% -----------------------------------------------------------------------------
+%  Provider dependency term shape (unioned into BDEPEND)
+% -----------------------------------------------------------------------------
+
+:- begin_tests(missing_provider_provider_dep).
+
+test(unversioned_shape,
+     [true(Dep == package_dependency(install, no, 'sys-apps', 'semodule-utils', none, version_none, [], []))]) :-
+  feedback:provider_dep('sys-apps/semodule-utils', Dep).
+
+test(rejects_non_cn, [fail]) :-
+  feedback:provider_dep('semodule-utils', _).
+
+:- end_tests(missing_provider_provider_dep).
+
+
+% -----------------------------------------------------------------------------
+%  Curated seed resolver
+% -----------------------------------------------------------------------------
+
+:- begin_tests(missing_provider_resolver).
+
+test(seed_semodule, [true(P-C == 'sys-apps/semodule-utils'-curated_seed), nondet]) :-
+  missing_provider:provider_of(command, semodule_package, P, C).
+
+test(seed_unknown_fails, [fail]) :-
+  missing_provider:provider_of(command, this_command_has_no_provider_xyz, _, curated_seed).
+
+:- end_tests(missing_provider_resolver).
+
+
+% =============================================================================
 %  USE helper predicate tests
 % =============================================================================
 

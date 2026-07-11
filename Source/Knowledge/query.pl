@@ -1215,6 +1215,7 @@ compile_query_compound(model(dependency(Merged,install)):config?{Context}, Repo:
           ; cache:entry_metadata(Repo,Id,depend,Dep)
           ; cache:entry_metadata(Repo,Id,idepend,Dep)
           ; cache:entry_metadata(Repo,Id,rdepend,Dep)
+          ; feedback:discovered_bdepend_dep(Repo,Id,Dep)
           ),
           Deps),
   sort(Deps, DepsU),
