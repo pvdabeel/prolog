@@ -819,6 +819,27 @@ plan:print_pre_action_core(use_change(R, E, _C, _N, Changes), ShowUseFlags) :-
   ;  message:color(normal)
   ).
 
+plan:print_pre_action_core(kernel_config(Options, _Evidence), _ShowUseFlags) :-
+  plan:kernel_config_atom(Options, OptAtom),
+  message:bubble(orange, kernel),
+  message:color(green),
+  message:column(24, OptAtom),
+  message:color(normal).
+
+
+%! plan:kernel_config_atom(+Options, -Atom) is det.
+%
+% Human-readable rendering of a learned kernel-config option list, e.g.
+% "CONFIG_SECURITY_APPARMOR=y CONFIG_FOO=n" (portage-ng#105).
+
+plan:kernel_config_atom(Options, Atom) :-
+  findall(Tok,
+          ( member(config(Name, State), Options),
+            format(atom(Tok), '~w=~w', [Name, State]) ),
+          Toks),
+  atomic_list_concat(Toks, ' ', Atom).
+
+
 plan:format_use_change_flags(Changes, FlagsStr) :-
   findall(A, ( member(use_change(F, enable), Changes), atom_string(F, A) ), PosAtoms),
   findall(A, ( member(use_change(F, disable), Changes), format(atom(A), '-~w', [F]) ), NegAtoms),
