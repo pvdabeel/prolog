@@ -1507,6 +1507,43 @@ config:missing_provider_feedback(true).
 config:missing_provider_max_replan(3).
 
 
+%! config:kernel_config_repair(?Bool)
+%
+% When true, a build that dies in its `setup` phase because Gentoo's
+% linux-info.eclass `CONFIG_CHECK` found the kernel source configuration
+% missing (or carrying) a required option is turned into learned knowledge
+% rather than repaired in place (portage-ng#105). The `kernelconfig`
+% exception mechanism (Source/Domain/Gentoo/Exceptions/kernelconfig.pl)
+% parses the required `CONFIG_*` options from the failed phase's log and
+% records a `feedback:required_kernel_config/3`. The phase still fails (the
+% exit code is threaded through unchanged); the builder's bounded replan
+% loop (config:missing_provider_max_replan/1) then re-derives a plan
+% carrying a kernel-config-change pre-action ordered before the target,
+% and the builder applies the option to the kernel source .config
+% (scripts/config + `make olddefconfig`/`modules_prepare`) before the
+% packages build, so the CONFIG_CHECK passes.
+%
+% Like the missing-provider feedback (config:missing_provider_feedback/1),
+% this never rebuilds a package in place: plans are derived, never patched.
+% It unblocks userspace packages gated on a kernel option (apparmor, ...);
+% kernel-module packages that need a full kernel rebuild are only partly
+% helped (the option is set, but no kernel rebuild/reboot happens). Set to
+% `false` to keep emerge-compatible behaviour (fail the build).
+
+config:kernel_config_repair(true).
+
+
+%! config:kernel_source_dir(?Dir)
+%
+% Kernel source directory whose `.config` the linux-info `CONFIG_CHECK`
+% reads and the kernelconfig repair (config:kernel_config_repair/1,
+% portage-ng#105) edits. Defaults to the eselect-managed /usr/src/linux
+% symlink when unset; override per host if the active kernel tree lives
+% elsewhere.
+
+config:kernel_source_dir('/usr/src/linux').
+
+
 %! config:toolchain_reactivation(?Bool)
 %
 % When true, the Gentoo build domain (`ebuild_exec:maybe_reactivate_toolchain/4`,

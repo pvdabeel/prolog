@@ -26,6 +26,11 @@ gitignored like resume.pl / phase_stats.pl):
   - unresolved_diagnostic(Symbol, Evidence): a missing-provider signature
     that fired but could not be mapped to a concrete package. Kept as a
     maintainer backlog (extend the seed table / index); never guessed.
+  - required_kernel_config(Target, Options, Evidence): a set of kernel
+    CONFIG_* options a build's setup-phase CONFIG_CHECK required (learned
+    by the kernelconfig exception mechanism, portage-ng#105). Surfaced as a
+    plan pre-action ordered before the target and applied to the kernel
+    source .config, so the CONFIG_CHECK passes on the re-derived plan.
 */
 
 :- module(feedback, []).
@@ -36,7 +41,9 @@ gitignored like resume.pl / phase_stats.pl):
 
 :- dynamic feedback:discovered_dep/4.
 :- dynamic feedback:unresolved_diagnostic/2.
+:- dynamic feedback:required_kernel_config/3.
 :- dynamic feedback:session_discovery/4.
+:- dynamic feedback:session_kernel_config/3.
 :- dynamic feedback:loaded_/0.
 
 % -----------------------------------------------------------------------------
@@ -110,8 +117,9 @@ feedback:read_assert_terms(S) :-
   read_term(S, T, []),
   ( T == end_of_file
   -> true
-  ;  ( T = discovered_dep(_, _, _, _)   -> assertz(feedback:T)
-     ; T = unresolved_diagnostic(_, _)  -> assertz(feedback:T)
+  ;  ( T = discovered_dep(_, _, _, _)         -> assertz(feedback:T)
+     ; T = unresolved_diagnostic(_, _)        -> assertz(feedback:T)
+     ; T = required_kernel_config(_, _, _)     -> assertz(feedback:T)
      ; true
      ),
      feedback:read_assert_terms(S)
@@ -159,6 +167,28 @@ feedback:record_unresolved(Symbol, Evidence) :-
   ).
 
 
+%! feedback:record_kernel_config(+Target, +Options, +Evidence) is det.
+%
+% Records that Target (Repo://Entry) requires the kernel CONFIG_* Options
+% (a list of config(Name, State) with State in {y, n}), as learned from a
+% setup-phase CONFIG_CHECK failure (portage-ng#105). Deduplicated on
+% Target: the first learned option set for a target is kept and appended to
+% the persisted file so future runs plan the kernel-config change
+% proactively. Also marked in the session store for this build's summary.
+
+feedback:record_kernel_config(Target, Options, Evidence) :-
+  ( feedback:required_kernel_config(Target, _, _)
+  -> true
+  ;  assertz(feedback:required_kernel_config(Target, Options, Evidence)),
+     feedback:discovered_file(Path),
+     feedback:append_term(Path, required_kernel_config(Target, Options, Evidence))
+  ),
+  ( feedback:session_kernel_config(Target, _, _)
+  -> true
+  ;  assertz(feedback:session_kernel_config(Target, Options, Evidence))
+  ).
+
+
 %! feedback:append_term(+Path, +Term) is det.
 %
 % Appends a single quoted, period-terminated term to Path. Errors are
@@ -187,6 +217,26 @@ feedback:discovery_count(Count) :-
   aggregate_all(count, feedback:discovered_dep(_, _, _, _), Count).
 
 
+%! feedback:kernel_config_count(-Count) is det.
+%
+% Number of distinct targets with a learned kernel-config requirement.
+
+feedback:kernel_config_count(Count) :-
+  aggregate_all(count, feedback:required_kernel_config(_, _, _), Count).
+
+
+%! feedback:learned_count(-Count) is det.
+%
+% Total learned-knowledge count (discovered deps + kernel-config
+% requirements). The builder's replan loop uses this to detect whether a
+% build pass grew any learned store, and re-derive the plan if so.
+
+feedback:learned_count(Count) :-
+  feedback:discovery_count(D),
+  feedback:kernel_config_count(K),
+  Count is D + K.
+
+
 %! feedback:session_discoveries(-List) is det.
 %
 % Discoveries recorded in the current session, as
@@ -206,7 +256,34 @@ feedback:session_discoveries(List) :-
 % durable discovered_dep/4 store is untouched.
 
 feedback:clear_session :-
-  retractall(feedback:session_discovery(_, _, _, _)).
+  retractall(feedback:session_discovery(_, _, _, _)),
+  retractall(feedback:session_kernel_config(_, _, _)).
+
+
+%! feedback:session_kernel_configs(-List) is det.
+%
+% Kernel-config requirements learned in the current session, as
+% kernel_config(Target, Options, Evidence) terms. Used by the printer to
+% report only the requirements worked around this run.
+
+feedback:session_kernel_configs(List) :-
+  findall(kernel_config(T, O, E), feedback:session_kernel_config(T, O, E), List).
+
+
+%! feedback:plan_kernel_config_pre_actions(+Entries, -PreActions) is det.
+%
+% Given the tree entries in a derived plan (a list of Repo://Entry terms),
+% yields one kernel_config(Options, Evidence) pre-action per learned
+% kernel-config requirement whose target is in the plan. These are
+% prepended to the plan's pre-actions so the kernel-config change is
+% applied (and displayed) before the packages build.
+
+feedback:plan_kernel_config_pre_actions(Entries, PreActions) :-
+  findall(kernel_config(Options, Evidence),
+          ( member(Target, Entries),
+            feedback:required_kernel_config(Target, Options, Evidence) ),
+          PreActions0),
+  sort(PreActions0, PreActions).
 
 
 %! feedback:discovered_bdepend_dep(+Repo, +Id, -Dep) is nondet.

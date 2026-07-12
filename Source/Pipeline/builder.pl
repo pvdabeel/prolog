@@ -81,14 +81,17 @@ builder:build_loop(Goals, Attempt) :-
   builder:maybe_create_snapshot(Plan),
   resume:save_state(Goals, Plan),
   annotation:collect(ProofAVL, Annotations),
-  annotation:pre_actions(Annotations, PreActions),
+  annotation:pre_actions(Annotations, AnnPreActions),
+  builder:plan_entries(Plan, PlanEntries),
+  feedback:plan_kernel_config_pre_actions(PlanEntries, KcPreActions),
+  append(KcPreActions, AnnPreActions, PreActions),
   length(PreActions, PreCount),
   ( PreCount > 0 -> PreSteps = 1 ; PreSteps = 0 ),
   StartStep is PreSteps + 1,
-  feedback:discovery_count(Before),
+  feedback:learned_count(Before),
   builder:run_plan(Plan, StartStep, [pre_actions(PreActions)],
                    _Completed, Failed, _Stubs),
-  feedback:discovery_count(After),
+  feedback:learned_count(After),
   ( builder:should_replan(Attempt, Failed, Before, After)
   -> Next is Attempt + 1,
      builder:announce_replan(Next),
@@ -99,10 +102,11 @@ builder:build_loop(Goals, Attempt) :-
 
 %! builder:should_replan(+Attempt, +Failed, +Before, +After) is semidet.
 %
-% True when the just-finished pass failed, recorded at least one new
-% missing-provider discovery, and the replan budget is not exhausted.
-% Discovery deduplication (feedback:record_discovery/4) guarantees After
-% only grows on a genuinely new discovery, so the loop terminates.
+% True when the just-finished pass failed, grew the learned-knowledge
+% store (a new missing-provider discovery, portage-ng#102, or a new
+% kernel-config requirement, portage-ng#105), and the replan budget is not
+% exhausted. Both stores deduplicate on record, so After only grows on
+% genuinely new knowledge and the loop terminates.
 
 builder:should_replan(Attempt, Failed, Before, After) :-
   Failed > 0,
@@ -121,7 +125,7 @@ builder:should_replan(Attempt, Failed, Before, After) :-
 builder:announce_replan(Attempt) :-
   nl,
   message:color(green),
-  format('>>> Re-deriving plan after missing-provider discovery (replan attempt ~d, portage-ng#102)~n', [Attempt]),
+  format('>>> Re-deriving plan after build-time discovery (replan attempt ~d, portage-ng#102/#105)~n', [Attempt]),
   message:color(normal),
   nl.
 
@@ -197,6 +201,7 @@ builder:run_plan(Plan, StartStep, Opts, Completed, Failed, Stubs) :-
   NumSteps is PlanSteps + PreSteps,
   build:header(NumSteps, TotalActions),
   display:print_pre_action_step(PreActions, PreSteps),
+  builder:apply_kernel_config_pre_actions(PreActions),
   builder:num_workers(NumWorkers),
   jobserver:init(NumWorkers, builder:execute_build_job),
   builder:execute_plan(Plan, StartStep, NumSteps, 0, 0, 0, Completed, Failed0, Stubs),
@@ -211,6 +216,22 @@ builder:run_plan(Plan, StartStep, Opts, Completed, Failed, Stubs) :-
   retractall(builder:last_build_status(_, _, _)),
   assertz(builder:last_build_status(Completed, Failed, Stubs)),
   builder:alert.
+
+
+%! builder:apply_kernel_config_pre_actions(+PreActions) is det.
+%
+% Applies any kernel_config(Options, Evidence) pre-actions (learned via the
+% kernelconfig exception mechanism, portage-ng#105) to the kernel source
+% .config before the plan steps run, so a package's setup-phase
+% CONFIG_CHECK passes. Dispatched to the domain kernelconfig module, which
+% is only loaded in standalone mode; the builder stays generic and this is
+% a no-op when the mechanism is absent or no such pre-action was surfaced.
+
+builder:apply_kernel_config_pre_actions(PreActions) :-
+  ( current_predicate(kernelconfig:apply_planned/1)
+  -> catch(kernelconfig:apply_planned(PreActions), _, true)
+  ;  true
+  ).
 
 
 %! builder:alert is det.
@@ -327,6 +348,24 @@ builder:is_executable_rule(rule(_Repository://_Entry:annotate?{_Context}, _Body)
 builder:is_executable_rule(rule(_Repository://_Entry:_Action?{_Context}, _Body)) :- !.
 builder:is_executable_rule(rule(world(_Atom):_Action?{_Ctx}, _Body)) :- !.
 builder:is_executable_rule(_) :- fail.
+
+
+%! builder:plan_entries(+Plan, -Entries) is det.
+%
+% The sorted set of tree package entries (Repo://Entry) appearing in the
+% derived plan. Used to scope learned kernel-config requirements
+% (feedback:plan_kernel_config_pre_actions/2) to targets actually in this
+% plan, so an option learned for one package is only re-applied when that
+% package is (re)built.
+
+builder:plan_entries(Plan, Entries) :-
+  findall(Repo://Entry,
+          ( member(Step, Plan),
+            member(Rule, Step),
+            builder:is_executable_rule(Rule),
+            Rule = rule(Repo://Entry:_Action?{_Ctx}, _Body) ),
+          Entries0),
+  sort(Entries0, Entries).
 
 
 % -----------------------------------------------------------------------------
