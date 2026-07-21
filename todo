@@ -41,3 +41,39 @@ class = portage.sets.dbapi.ChangedDepsSet
 - Create portage-ng ebuild
    
 - Reimplement prefix the proper way
+
+
+Performance and readability (2026-07 audit)
+===========================================
+
+Measure first (before code changes):
+
+- Baseline Top-N packages with --profile: ctx_union share, dep-model hit rate, reprove counters
+  (prover:test_stats_pkgs + stats:test_stats_print_ctx_union_*; A/B config:dep_model_cache)
+
+Tier A performance (only if measured):
+
+- Specialized/indexed feature_unification:unify or narrower heuristic:should_union_ctx
+- Ranking overlap precompute + cheaper dep-model choice-sig (keep hazard-encoded cache key)
+- prove_recursive ctx-changed path: reuse sorted OldBody; share helpers with prove_model
+
+Tier B performance (if reprove-heavy packages dominate):
+
+- Incremental prune_model / prune_proof / prune_triggers (avoid full AVL rebuild)
+- Safer prover:learn store update (nb_setval whole-AVL deep-copy concern)
+
+Phase A readability (docs/style only):
+
+- Normalize chapter→section headers in Rules/*.pl (one ===== per file)
+- Fix printer.pl module-doc paths; qualify "context" in hot comments
+- Sync Handbook 11 submodule table with rules.pl; PlDoc gaps (rule/2, scheduler, unify)
+
+Phase B readability (helper extraction, same semantics):
+
+- Extract prove_recursive / prove_model case helpers
+- Unify heuristic:strip_ctx onto prover:canon_literal
+- Parameterize query.pl dep-model phase expansions
+
+Validate:
+
+- test_stats_pkgs + tinderbox-ng compare on vm-linux.local after any Tier A/B change
