@@ -305,18 +305,122 @@ If the validation literal fails (e.g. two members of an
 a different USE configuration or candidate version.
 
 When a disjunctive dependency group (`||`, `^^`, `exactly_one_of`) must
-*select* an alternative, the candidate layer ranks the members
-preferred-first.  Profile-forced targets dominate (via
-`is_preferred_dep/2`); among unforced alternatives the tiebreaker is a
-**family-agnostic** USE_EXPAND target rank
-(`candidate:use_expand_target_rank/2`).  It strips any
-`eapi:use_expand/1` prefix and packs the trailing version digits into
-the rank — `llvm_slot_20` → `20`, `python_single_target_python3_13` →
-`[3,13]`, `lua_single_target_lua5-4` → `[5,4]`, non-numeric like
-`luajit` → `0` — so the newest target wins uniformly across every
-USE_EXPAND family.  Earlier revisions hardcoded weights only for the
-`llvm_slot` and `lua5` families; that per-ecosystem code has been
-removed.
+*select* an alternative, the candidate layer ranks the members with
+`ranking:prioritize_deps_keep_all/3` and commits to the first arm that
+passes config checks (see [Any-of (`||`) arm selection](#any-of-arm-selection)
+below).  Profile-forced and installed preferences still dominate via
+`is_preferred_dep/2` inside the `Rank` key; USE_EXPAND target digits
+(`ranking:use_expand_target_rank/2`) contribute to `Rank` /
+`UEScore` — `llvm_slot_20` → `20`, `python_single_target_python3_13` →
+`[3,13]`, and so on.
+
+
+## Any-of (`||`) arm selection {#any-of-arm-selection}
+
+Gentoo ebuilds often write `|| ( arm1 arm2 … )`.  The PMS only requires
+that *at least one* arm is satisfiable; it does not say which arm to
+pick.  Wrong order locks the prover onto a suboptimal (or incompatible)
+branch — for example cabal’s
+`|| ( ( >=text-1.2.3 <text-1.3 ) ( >=text-2 <text-2.2 ) )` must prefer
+the text-2.x arm when that is the newest tree candidate
+(portage-ng#112).
+
+### Portage vs portage-ng entry points
+
+| | **Portage** | **portage-ng** |
+| :--- | :--- | :--- |
+| Mechanism | `dep_zapdeps` ordered `choice_bins` + intra-bin upgrade promotion (`lib/portage/dep/dep_check.py`) | `candidate:resolve(choice_group…)` → `ranking:prioritize_deps_keep_all/3` then first `any_of_config_dep_ok` |
+| Structure | Nine preference bins (lists) | One multi-key `keysort` (negated ints + original index) |
+| Graph reuse | Digraph `all_in_graph` | `selected_cn` snapshot (`SnapAll`) |
+
+Ranking *is* the preference policy: after the cut commits, later arms
+are not tried unless the proof backtracks for another reason.
+
+### Preference keys (highest first)
+
+Implemented in `ranking:dep_choice_scores/3` and assembled in
+`prioritize_deps_keep_all/3`.  Higher scores win; the original ebuild
+index `I` breaks remaining ties (left-to-right).
+
+| **Key** | **Intent** | **Emerge analogue** |
+| :--- | :--- | :--- |
+| `LicOk` | Prefer license-acceptable arms | Availability / license gate |
+| `UseSat` | Prefer arms needing no USE flip on the arm’s best candidate | `preferred_*` vs `unsat_use_*` |
+| `UseUnmasked` | Among USE-unsat arms, prefer flips that do not fight use.mask / use.force | `all_use_unmasked` (masked → `other`) |
+| `Rank` | Installed / preferred / `--favour` / `--avoid` / self-CN | `preferred_installed` + favour |
+| `SnapAll` | Prefer arms whose non-`virtual/` CNs are already in the proof snapshot | `all_in_graph` |
+| `SlotScore` | Prefer higher explicit package slot (`pkg:N`) | `want_update` / higher-slot promotion |
+| `NoDowngrade` | Demote arms whose newest admitted version is below installed or snap-selected | `downgrade_probe` → `other` |
+| `InstScore` | Prefer arms that reuse more installed CNs | `other_installed` / `_some` / `_any_slot` |
+| `Overlap` | Prefer arms that appear in several sibling `\|\|` groups | Soft stand-in for minimize-slots pressure |
+| `VerScore` | Prefer the arm that admits the newest tree version (same-CN ranges) | Intra-bin `has_upgrade and not has_downgrade` |
+| `UEScore` | Prefer USE_EXPAND profile alignment | Profile target preference |
+| index `I` | Stable left-to-right when all else equal | Ebuild order fallback |
+
+Worked examples:
+
+- `|| ( foo[a] foo[b] )` with `a` already effective → `UseSat` picks `foo[a]`.
+- Cabal text ranges (above) → `VerScore` picks the text-2.x arm.
+- `|| ( sys-devel/llvm:18 sys-devel/llvm:20 )` → `SlotScore` prefers `:20`.
+- An arm whose packages are already in `selected_cn` beats a fresh CN → `SnapAll`.
+
+`virtual/` atoms are skipped for `SnapAll`, `InstScore`, and
+`NoDowngrade` (Portage’s zero-cost treatment of virtuals in those
+checks).  Scores are computed once per arm per
+`prioritize_deps_keep_all/3` call, with a short-lived per-call cache for
+installed / reference-version lookups.  Ranking must not walk the
+ProofAVL; it only sees the proof-context list and memo snapshots
+(see also [Chapter 24](24-doc-performance.md)).
+
+### What we deliberately do not implement
+
+These Portage mechanisms are **design omissions**, not open bugs.  The
+inductive prover and planner already provide the effects they target.
+
+**Overlapping-`||` DNF (`_overlap_dnf`) and `minimize_slots` /
+`new_slot_count`.**
+Portage merges overlapping `||` groups that share a CP into DNF, then
+sorts bins by ascending new-slot count.  portage-ng does not rewrite
+the dep tree into DNF: expansion is exponential in overlapping width and
+does not belong on the per-`choice_group` hot path.  The prover already
+commits `selected_cn` / learned `cn_domain` across the proof; later `||`
+sites reuse those choices via `SnapAll` and constraint guards — the same
+“prefer packages already chosen” effect without a cross-product.
+`Overlap`, `InstScore`, and `SnapAll` cover the common “don’t pull a
+second redundant package” pressure.  Remaining edge cases (two
+overlapping `||`s neither yet selected) are rare relative to cost; if
+tinderbox surfaces one, prefer a targeted heuristic over full DNF.
+
+**Virtual expand (`_expand_new_virtuals`).**
+Portage expands new-style virtuals into a newest-first `||` of providers
+before zapdeps.  portage-ng already resolves virtuals through the
+virtual-provider path and `candidates_prefer_proven_providers/5`, and
+skips `virtual/` in the scores above.  A second expand-into-`||` pass
+would duplicate that work and fight proven-provider reuse.
+
+**Circular-dep demotion inside `||`.**
+Portage demotes arms that close a known cycle with the parent (or
+`--onlydeps` parent CP) into `other`.  portage-ng handles cycles in the
+prover, planner, and scheduler (cycle-break assumptions, wave remainder,
+SCC merge-sets) — see [Chapter 8](08-doc-prover.md),
+[Chapter 9](09-doc-prover-assumptions.md), and
+[Chapter 12](12-doc-planning.md).  Demoting at ranking time would
+second-guess cycle-break polarity and needs a parent circular map that
+the proof-context list does not carry.
+
+**Intra-choice `cp_map` slot consistency (Portage bug 600346).**
+Portage keeps a per-choice CP→slot map so several atoms in one choice
+stay slot-consistent.  portage-ng arms are usually a single atom or a
+same-CN `all_of_group` of version bounds; cross-CP multi-atom arms that
+need `cp_map` are uncommon.  Slot consistency is enforced later by
+`selected_cn`, slot constraints, and constraint guards.
+
+### Validation
+
+- PLUnit: `ranking_any_of_version_branch`, `ranking_any_of_preference_keys`
+  in `Source/Test/unittest.pl`.
+- Overlay suite (`||` / USE / slot cases) and tinderbox-ng compare on
+  USE-dep `||` and llvm/gcc/python slot packages.
 
 
 ## Slot operators

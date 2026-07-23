@@ -1767,6 +1767,145 @@ test(prefers_newer_even_when_listed_second,
 :- end_tests(ranking_any_of_version_branch).
 
 
+% ||-branch ranking: USE-sat, SnapAll, SlotScore, NoDowngrade (emerge bins).
+:- begin_tests(ranking_any_of_preference_keys).
+
+rap_foo_entry(qtest://'cat/foo-1.0').
+rap_foo_ver(version([1,0],'',4,0,[],0,'1.0')).
+
+rap_use_setup :-
+  rap_foo_entry(R://Id),
+  rap_foo_ver(V),
+  retractall(cache:ordered_entry(qtest, _, cat, foo, _)),
+  retractall(memo:iuse_info_cache_(qtest, Id, _)),
+  retractall(memo:effective_use_fact(qtest, Id, _)),
+  assertz(cache:ordered_entry(R, Id, cat, foo, V)),
+  assertz(memo:iuse_info_cache_(R, Id, iuse_info([a, b], []))),
+  assertz(memo:effective_use_fact(R, Id, [a])).
+
+rap_use_cleanup :-
+  rap_foo_entry(_://Id),
+  retractall(cache:ordered_entry(qtest, _, cat, foo, _)),
+  retractall(memo:iuse_info_cache_(qtest, Id, _)),
+  retractall(memo:effective_use_fact(qtest, Id, _)),
+  retractall(preference:local_profile_masked_use_flag(b)).
+
+rap_arm_use(Flag, package_dependency(run, no, cat, foo, none, version_none, [],
+                                     [use(enable(Flag), none)])).
+
+test(prefers_use_satisfied_arm,
+     [setup(rap_use_setup), cleanup(rap_use_cleanup)]) :-
+  rap_arm_use(a, Ba),
+  rap_arm_use(b, Bb),
+  ranking:prioritize_deps_keep_all([Bb, Ba], [], [First|_]),
+  First == Ba.
+
+test(prefers_use_unmasked_among_unsat,
+     [setup(( rap_use_setup,
+              rap_foo_entry(_://Id),
+              retractall(memo:effective_use_fact(qtest, Id, _)),
+              assertz(memo:effective_use_fact(qtest, Id, [])),
+              assertz(preference:local_profile_masked_use_flag(b)) )),
+      cleanup(rap_use_cleanup)]) :-
+  rap_arm_use(a, Ba),
+  rap_arm_use(b, Bb),
+  ranking:prioritize_deps_keep_all([Bb, Ba], [], [First|_]),
+  First == Ba.
+
+rap_snap_setup :-
+  empty_assoc(Empty),
+  nb_setval(memo_selected_cn_snap, Empty),
+  retractall(cache:ordered_entry(qtest, _, cat, _, _)),
+  assertz(cache:ordered_entry(qtest, 'cat/a-1', cat, a,
+                              version([1],'',4,0,[],0,'1'))),
+  assertz(cache:ordered_entry(qtest, 'cat/b-1', cat, b,
+                              version([1],'',4,0,[],0,'1'))),
+  assertz(cache:ordered_entry(qtest, 'cat/c-1', cat, c,
+                              version([1],'',4,0,[],0,'1'))),
+  cnselect:record_selected_cn_snapshot(cat, a,
+    [selected(qtest, 'cat/a-1', run, v, '0')]),
+  cnselect:record_selected_cn_snapshot(cat, b,
+    [selected(qtest, 'cat/b-1', run, v, '0')]).
+
+rap_snap_cleanup :-
+  empty_assoc(Empty),
+  nb_setval(memo_selected_cn_snap, Empty),
+  retractall(cache:ordered_entry(qtest, _, cat, _, _)).
+
+rap_pkg(N, package_dependency(run, no, cat, N, none, version_none, [], [])).
+
+test(prefers_snap_all_arm,
+     [setup(rap_snap_setup), cleanup(rap_snap_cleanup)]) :-
+  rap_pkg(a, A), rap_pkg(b, B), rap_pkg(c, C),
+  All = all_of_group([A, B]),
+  Partial = all_of_group([A, C]),
+  ranking:prioritize_deps_keep_all([Partial, All], [], [First|_]),
+  First == All.
+
+rap_slot_setup :-
+  retractall(cache:ordered_entry(qtest, _, cat, llvm, _)),
+  assertz(cache:ordered_entry(qtest, 'cat/llvm-18', cat, llvm,
+                              version([18],'',4,0,[],0,'18'))),
+  assertz(cache:ordered_entry(qtest, 'cat/llvm-20', cat, llvm,
+                              version([20],'',4,0,[],0,'20'))).
+
+rap_slot_cleanup :-
+  retractall(cache:ordered_entry(qtest, _, cat, llvm, _)).
+
+rap_slot_arm(Slot, package_dependency(run, no, cat, llvm, none, version_none,
+                                      [slot(Slot)], [])).
+
+test(prefers_higher_slot_arm,
+     [setup(rap_slot_setup), cleanup(rap_slot_cleanup)]) :-
+  rap_slot_arm(18, S18),
+  rap_slot_arm(20, S20),
+  ranking:prioritize_deps_keep_all([S18, S20], [], [First|_]),
+  First == S20.
+
+rap_text_setup :-
+  retractall(cache:ordered_entry(qtest, _, 'dev-haskell', text, _)),
+  assertz(cache:ordered_entry(qtest, 'dev-haskell/text-1.2.5.0-r1',
+                              'dev-haskell', text,
+                              version([1,2,5,0],'',4,0,[],1,'1.2.5.0-r1'))),
+  assertz(cache:ordered_entry(qtest, 'dev-haskell/text-2.1.1',
+                              'dev-haskell', text,
+                              version([2,1,1],'',4,0,[],0,'2.1.1'))),
+  empty_assoc(Empty),
+  nb_setval(memo_selected_cn_snap, Empty),
+  cnselect:record_selected_cn_snapshot('dev-haskell', text,
+    [selected(qtest, 'dev-haskell/text-2.1.1', run,
+              version([2,1,1],'',4,0,[],0,'2.1.1'), '0')]).
+
+rap_text_cleanup :-
+  retractall(cache:ordered_entry(qtest, _, 'dev-haskell', text, _)),
+  empty_assoc(Empty),
+  nb_setval(memo_selected_cn_snap, Empty).
+
+rap_text12(all_of_group([
+  package_dependency(run,no,'dev-haskell',text,greaterequal,
+                     version([1,2,3,0],'',4,0,[],0,'1.2.3.0'),[],[]),
+  package_dependency(run,no,'dev-haskell',text,smaller,
+                     version([1,3],'',4,0,[],0,'1.3'),[],[])])).
+
+rap_text2(all_of_group([
+  package_dependency(run,no,'dev-haskell',text,greaterequal,
+                     version([2,0],'',4,0,[],0,'2.0'),[],[]),
+  package_dependency(run,no,'dev-haskell',text,smaller,
+                     version([2,2],'',4,0,[],0,'2.2'),[],[])])).
+
+test(no_downgrade_demotes_older_arm,
+     [setup(rap_text_setup), cleanup(rap_text_cleanup)]) :-
+  rap_text12(B1), rap_text2(B2),
+  ranking:dep_choice_scores([], B1,
+    scores(_, _, _, _, ND1, _, _)),
+  ranking:dep_choice_scores([], B2,
+    scores(_, _, _, _, ND2, _, _)),
+  ND1 =:= 0,
+  ND2 =:= 1.
+
+:- end_tests(ranking_any_of_preference_keys).
+
+
 % CABAL_CORE_LIB_GHC_PV parse + match (portage-ng#112).
 :- begin_tests(ghcabi_cabal_core).
 

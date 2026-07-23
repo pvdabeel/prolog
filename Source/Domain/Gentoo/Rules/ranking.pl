@@ -14,9 +14,9 @@ Dependency ordering and ranking heuristics for the portage-ng resolver.
 Split out of candidate.pl (issue #64). Contains the dependency ordering
 heuristic (order_deps_for_proof/3, dep_priority/2), bracket-USE memo
 seeding, equality-USE pin propagation, choice-group ranking
-(prioritize_deps/2,3, prioritize_deps_keep_all/3, dep_rank/3),
-USE_EXPAND profile-match scoring, any_of_group preference helpers, and
-provider-reuse candidate reordering.
+(prioritize_deps/2,3, prioritize_deps_keep_all/3, dep_choice_scores/3,
+dep_rank/3), USE_EXPAND profile-match scoring, any_of_group preference
+helpers, and provider-reuse candidate reordering.
 */
 
 :- module(ranking, []).
@@ -360,37 +360,52 @@ ranking:prioritize_deps(Deps, Context, SortedDeps) :-
 
 %! ranking:prioritize_deps_keep_all(+Deps, +Context, -SortedDeps)
 %
-% Like prioritize_deps/3 but uses a multi-key ranking (license-ok,
-% intrinsic rank, overlap count, snapshot status, newest-available
-% version admitted by the branch, USE_EXPAND score) to break ties.
+% Like prioritize_deps/3 but uses a multi-key ranking approximating
+% emerge dep_zapdeps choice_bins. Keys (higher preferred; negated for
+% keysort), then original index I for stable left-to-right ties:
 %
-% The version-admitted key matters for Haskell-style `||` ranges over the
-% same CN (portage-ng#112): e.g. cabal's
-% `|| ( ( >=text-1.2.3 <text-1.3 ) ( >=text-2 <text-2.2 ) )` — equal ranks
-% used to keep ebuild order and lock text-1.2.5 before text-2.1.1 could be
-% tried. Preferring the branch that admits the newest tree candidate matches
-% emerge's newest-first selection for that CN.
+%   LicOk, UseSat, UseUnmasked, Rank, SnapAll, SlotScore,
+%   NoDowngrade, InstScore, Overlap, VerScore, UEScore, I
+%
+% See Documentation/Handbook/11-doc-rules.md ("Any-of (||) arm selection").
+% VerScore covers Haskell-style same-CN ranges (portage-ng#112).
 
 ranking:prioritize_deps_keep_all(Deps, Context, SortedDeps) :-
-  findall(NegLicOk-NegRank-NegOverlap-NegSnap-NegVerScore-NegUEScore-I-Dep,
+  setup_call_cleanup(
+    ( empty_assoc(Empty),
+      nb_setval(ranking_choice_cache, Empty)
+    ),
+    ranking:prioritize_deps_keep_all_body(Deps, Context, SortedDeps),
+    catch(nb_delete(ranking_choice_cache), _, true)
+  ).
+
+
+ranking:prioritize_deps_keep_all_body(Deps, Context, SortedDeps) :-
+  findall(NegLicOk-NegUseSat-NegUseUnmasked-NegRank-NegSnapAll-NegSlotScore-NegNoDowngrade-NegInstScore-NegOverlap-NegVerScore-NegUEScore-I-Dep,
           ( nth1(I, Deps, Dep),
             dep_rank(Context, Dep, Rank),
             dep_overlap_group_count(Context, Dep, OvRaw),
             ( OvRaw > 1 -> Overlap = OvRaw ; Overlap = 0 ),
-            ( dep_snapshot_selected(Dep) -> Snap = 1 ; Snap = 0 ),
             ( acceptance:dep_license_ok(Dep) -> LicOk = 1 ; LicOk = 0 ),
             dep_use_expand_profile_score(Dep, UEScore),
-            ranking:dep_max_candidate_version_score(Dep, VerScore),
+            ranking:dep_choice_scores(Context, Dep,
+              scores(UseSat, UseUnmasked, SnapAll, SlotScore,
+                     NoDowngrade, InstScore, VerScore)),
             NegLicOk is -LicOk,
+            NegUseSat is -UseSat,
+            NegUseUnmasked is -UseUnmasked,
             NegRank is -Rank,
+            NegSnapAll is -SnapAll,
+            NegSlotScore is -SlotScore,
+            NegNoDowngrade is -NoDowngrade,
+            NegInstScore is -InstScore,
             NegOverlap is -Overlap,
-            NegSnap is -Snap,
             NegVerScore is -VerScore,
             NegUEScore is -UEScore
           ),
           Ranked),
   keysort(Ranked, RankedSorted),
-  findall(Dep, member(_-_-_-_-_-_-_-Dep, RankedSorted), SortedDeps0),
+  findall(Dep, member(_-_-_-_-_-_-_-_-_-_-_-_-Dep, RankedSorted), SortedDeps0),
   ranking:boost_variant_preferred(SortedDeps0, SortedDeps),
   !.
 
@@ -409,6 +424,276 @@ ranking:boost_variant_preferred(Deps, Reordered) :-
   ).
 
 
+% -----------------------------------------------------------------------------
+%  Choice-group arm scores (emerge dep_zapdeps alignment)
+% -----------------------------------------------------------------------------
+
+%! ranking:dep_choice_scores(+Context, +Dep, -Scores) is det.
+%
+% Single-pass arm analysis for prioritize_deps_keep_all/3. Scores is
+% scores(UseSat, UseUnmasked, SnapAll, SlotScore, NoDowngrade, InstScore,
+% VerScore). Uses a per-call nb_setval cache (ranking_choice_cache) for
+% installed/snap lookups shared across arms.
+
+ranking:dep_choice_scores(Context, Dep,
+    scores(UseSat, UseUnmasked, SnapAll, SlotScore, NoDowngrade, InstScore, VerScore)) :-
+  ranking:dep_arm_package_atoms(Dep, Atoms),
+  ranking:dep_best_admitted(Dep, BestRE, BestVer, VerScore),
+  ranking:dep_use_sat_scores(Context, Atoms, BestRE, UseSat, UseUnmasked),
+  ranking:dep_snap_all_score(Atoms, SnapAll),
+  ranking:dep_slot_score(Atoms, SlotScore),
+  ranking:dep_no_downgrade_score(Dep, BestVer, NoDowngrade),
+  ranking:dep_inst_score(Atoms, InstScore),
+  !.
+
+
+%! ranking:dep_arm_package_atoms(+Dep, -Atoms) is det.
+%
+% Flatten package_dependency leaves from an || arm (all_of_group /
+% use_conditional_group recursion).
+
+ranking:dep_arm_package_atoms(package_dependency(Ph, St, C, N, O, V, S, U),
+                              [package_dependency(Ph, St, C, N, O, V, S, U)]) :- !.
+ranking:dep_arm_package_atoms(all_of_group(Deps), Atoms) :-
+  is_list(Deps),
+  !,
+  findall(A,
+          ( member(D, Deps),
+            ranking:dep_arm_package_atoms(D, As),
+            member(A, As)
+          ),
+          Atoms).
+ranking:dep_arm_package_atoms(use_conditional_group(_, _, _, Deps), Atoms) :-
+  is_list(Deps),
+  !,
+  ranking:dep_arm_package_atoms(all_of_group(Deps), Atoms).
+ranking:dep_arm_package_atoms(_, []).
+
+
+%! ranking:dep_blocker_strength(+Strength) is semidet.
+
+ranking:dep_blocker_strength(weak).
+ranking:dep_blocker_strength(strong).
+
+
+%! ranking:dep_use_sat_scores(+Context, +Atoms, +BestRE, -UseSat, -UseUnmasked) is det.
+%
+% UseSat=1 when bracket USE needs no change on BestRE (or no USE deps).
+% UseUnmasked=1 when required flips respect profile use.mask/force.
+% Neutral (1,1) when BestRE is unavailable so incomplete arms are not
+% demoted spuriously.
+
+ranking:dep_use_sat_scores(Context, Atoms, BestRE, UseSat, UseUnmasked) :-
+  findall(U,
+          ( member(package_dependency(_, Str, _, _, _, _, _, Us), Atoms),
+            \+ ranking:dep_blocker_strength(Str),
+            is_list(Us),
+            member(U, Us)
+          ),
+          UseDeps),
+  ( UseDeps == []
+  -> UseSat = 1,
+     UseUnmasked = 1
+  ; BestRE == none
+  -> UseSat = 1,
+     UseUnmasked = 1
+  ; catch(use:directives_to_bwu(Context, UseDeps, BWU), _,
+          BWU = use_state([], [])),
+    ( BWU = use_state([], [])
+    -> UseSat = 1,
+       UseUnmasked = 1
+    ; use:build_with_use_changes(BWU, BestRE, Changes),
+      ( Changes == [] -> UseSat = 1 ; UseSat = 0 ),
+      ( catch(use:bwu_respects_profile_hard(BestRE, BWU), _, fail)
+      -> UseUnmasked = 1
+      ; UseUnmasked = 0
+      )
+    )
+  ).
+
+
+%! ranking:dep_snap_all_score(+Atoms, -SnapAll) is det.
+%
+% 1 iff every non-blocker, non-virtual package atom's (C,N) is present
+% in the selected_cn snapshot (emerge all_in_graph stand-in).
+
+ranking:dep_snap_all_score([], 0) :- !.
+ranking:dep_snap_all_score(Atoms, SnapAll) :-
+  ( ranking:dep_snap_all_ok(Atoms)
+  -> SnapAll = 1
+  ; SnapAll = 0
+  ).
+
+
+ranking:dep_snap_all_ok(Atoms) :-
+  Atoms \== [],
+  forall(member(package_dependency(_, Str, C, N, _, _, _, _), Atoms),
+         ( ranking:dep_blocker_strength(Str) -> true
+         ; C == virtual -> true
+         ; cnselect:snapshot_selected_cn_candidates(C, N, _)
+         )).
+
+
+%! ranking:dep_slot_score(+Atoms, -SlotScore) is det.
+%
+% Max numeric explicit slot among arm atoms (llvm-style || slot prefer).
+
+ranking:dep_slot_score(Atoms, SlotScore) :-
+  findall(S,
+          ( member(package_dependency(_, Str, _, _, _, _, SlotReq, _), Atoms),
+            \+ ranking:dep_blocker_strength(Str),
+            ranking:slot_req_numeric_score(SlotReq, S),
+            S > 0
+          ),
+          Scores),
+  ( Scores == [] -> SlotScore = 0 ; max_list(Scores, SlotScore) ).
+
+
+%! ranking:slot_req_numeric_score(+SlotReq, -Score) is det.
+
+ranking:slot_req_numeric_score([slot(S)|_], Score) :-
+  ranking:slot_atom_numeric(S, Score),
+  !.
+ranking:slot_req_numeric_score(_, 0).
+
+
+%! ranking:slot_atom_numeric(+Slot, -N) is semidet.
+
+ranking:slot_atom_numeric(S, N) :-
+  integer(S),
+  !,
+  N = S.
+ranking:slot_atom_numeric(S, N) :-
+  atom(S),
+  atom_number(S, N),
+  !.
+ranking:slot_atom_numeric(S, N) :-
+  atom(S),
+  atom_codes(S, Codes),
+  ranking:take_digits(Codes, Digits, _),
+  Digits \== [],
+  number_codes(N, Digits).
+
+
+%! ranking:dep_no_downgrade_score(+Dep, +BestVer, -NoDowngrade) is det.
+%
+% 0 when the arm's newest admitted version is strictly below the highest
+% installed or snap-selected version for that CN (emerge downgrade demotion).
+
+ranking:dep_no_downgrade_score(Dep, BestVer, NoDowngrade) :-
+  BestVer \== version_none,
+  compound(BestVer),
+  ranking:dep_cn_version_domain(Dep, C, N, _),
+  C \== virtual,
+  ranking:reference_highest_version(C, N, RefVer),
+  RefVer \== version_none,
+  !,
+  ( BestVer @< RefVer -> NoDowngrade = 0 ; NoDowngrade = 1 ).
+ranking:dep_no_downgrade_score(_, _, 1).
+
+
+%! ranking:reference_highest_version(+C, +N, -Ver) is det.
+%
+% Highest of installed VDB version and snap-selected versions for (C,N).
+% Cached per prioritize_deps_keep_all/3 call. version_none if neither.
+
+ranking:reference_highest_version(C, N, Ver) :-
+  ( ranking:choice_cache_get(refver(C-N), Ver) -> true
+  ; ranking:lookup_reference_highest_version(C, N, Ver),
+    ranking:choice_cache_put(refver(C-N), Ver)
+  ).
+
+
+ranking:lookup_reference_highest_version(C, N, Ver) :-
+  findall(V, ranking:reference_version_candidate(C, N, V), Vers),
+  ( Vers == []
+  -> Ver = version_none
+  ; sort(Vers, Sorted),
+    last(Sorted, Ver)
+  ).
+
+
+ranking:reference_version_candidate(C, N, Ver) :-
+  catch(( knowledgebase:vdb_repository(VdbRepo),
+          query:search([name(N), category(C), installed(true)], VdbRepo://Id),
+          query:search(version(Ver), VdbRepo://Id)
+        ), _, fail).
+ranking:reference_version_candidate(C, N, Ver) :-
+  cnselect:snapshot_selected_cn_candidates(C, N, Cands),
+  member(Repo://Entry, Cands),
+  catch(query:search(version(Ver), Repo://Entry), _, fail).
+
+
+%! ranking:dep_inst_score(+Atoms, -InstScore) is det.
+%
+% Count of non-blocker, non-virtual atoms whose CN is installed (partial
+% other_installed fuzzy bin).
+
+ranking:dep_inst_score(Atoms, InstScore) :-
+  findall(1,
+          ( member(package_dependency(_, Str, C, N, _, _, _, _), Atoms),
+            \+ ranking:dep_blocker_strength(Str),
+            C \== virtual,
+            ranking:cn_is_installed(C, N)
+          ),
+          Hits),
+  length(Hits, InstScore).
+
+
+%! ranking:cn_is_installed(+C, +N) is semidet.
+
+ranking:cn_is_installed(C, N) :-
+  ( ranking:choice_cache_get(inst(C-N), Hit) -> Hit == true
+  ; ( catch(( knowledgebase:vdb_repository(VdbRepo),
+              query:search([name(N), category(C), installed(true)], VdbRepo://_)
+            ), _, fail)
+    -> ranking:choice_cache_put(inst(C-N), true),
+       true
+    ; ranking:choice_cache_put(inst(C-N), false),
+      fail
+    )
+  ).
+
+
+%! ranking:choice_cache_get(+Key, -Value) is semidet.
+%! ranking:choice_cache_put(+Key, +Value) is det.
+
+ranking:choice_cache_get(Key, Value) :-
+  nb_current(ranking_choice_cache, AVL),
+  get_assoc(Key, AVL, Value),
+  !.
+
+ranking:choice_cache_put(Key, Value) :-
+  ( nb_current(ranking_choice_cache, AVL0) -> true ; empty_assoc(AVL0) ),
+  put_assoc(Key, AVL0, Value, AVL1),
+  nb_setval(ranking_choice_cache, AVL1).
+
+
+%! ranking:dep_best_admitted(+Dep, -BestRE, -BestVer, -VerScore) is det.
+%
+% Newest tree version admitted by Dep's same-CN version domain, plus its
+% Repo://Entry (or none / version_none / 0 when not applicable).
+
+ranking:dep_best_admitted(Dep, BestRE, BestVer, VerScore) :-
+  ranking:dep_cn_version_domain(Dep, C, N, Domain),
+  \+ version_domain:domain_inconsistent(Domain),
+  !,
+  findall(Ver-(Repo://Entry),
+          ( cache:ordered_entry(Repo, Entry, C, N, Ver),
+            version_domain:domain_allows_candidate(Domain, Repo://Entry)
+          ),
+          Pairs),
+  ( Pairs == []
+  -> BestRE = none,
+     BestVer = version_none,
+     VerScore = 0
+  ; sort(Pairs, Sorted),
+    last(Sorted, BestVer-BestRE),
+    ranking:version_to_sort_score(BestVer, VerScore)
+  ).
+ranking:dep_best_admitted(_Dep, none, version_none, 0).
+
+
 %! ranking:dep_max_candidate_version_score(+Dep, -Score) is det.
 %
 % Score for ||-branch ordering: newest tree version admitted by Dep's
@@ -416,21 +701,7 @@ ranking:boost_variant_preferred(Deps, Reordered) :-
 % Returns 0 when Dep is not a pure version-bounded package branch.
 
 ranking:dep_max_candidate_version_score(Dep, Score) :-
-  ranking:dep_cn_version_domain(Dep, C, N, Domain),
-  \+ version_domain:domain_inconsistent(Domain),
-  !,
-  findall(Ver,
-          ( cache:ordered_entry(Repo, Entry, C, N, Ver),
-            version_domain:domain_allows_candidate(Domain, Repo://Entry)
-          ),
-          Vers),
-  ( Vers == []
-  -> Score = 0
-  ;  sort(Vers, Sorted),
-     last(Sorted, Best),
-     ranking:version_to_sort_score(Best, Score)
-  ).
-ranking:dep_max_candidate_version_score(_Dep, 0).
+  ranking:dep_best_admitted(Dep, _, _, Score).
 
 
 %! ranking:dep_cn_version_domain(+Dep, -C, -N, -Domain) is semidet.
@@ -477,10 +748,15 @@ ranking:dep_matches_prefer(Pref, Dep) :-
   Pref = package_dependency(_, _, PC, PN, _, _, _, _),
   Dep  = package_dependency(_, _, PC, PN, _, _, _, _).
 
-ranking:dep_snapshot_selected(package_dependency(_Phase,_Strength,C,N,_O,_V,_S,_U)) :-
-  cnselect:snapshot_selected_cn_candidates(C, N, _),
+%! ranking:dep_snapshot_selected(+Dep) is semidet.
+%
+% True when every non-virtual, non-blocker package atom in Dep is
+% already in the selected_cn snapshot (SnapAll=1).
+
+ranking:dep_snapshot_selected(Dep) :-
+  ranking:dep_arm_package_atoms(Dep, Atoms),
+  ranking:dep_snap_all_ok(Atoms),
   !.
-ranking:dep_snapshot_selected(_) :- fail.
 
 ranking:dep_overlap_group_count(Context, package_dependency(_,_,C,N,_,_,_,_), Count) :-
   memberchk(self(Repo://Ebuild), Context),

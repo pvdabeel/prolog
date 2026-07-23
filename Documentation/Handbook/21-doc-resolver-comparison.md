@@ -123,3 +123,11 @@ constraints as boolean satisfiability problems. portage-ng's approach is
 different: it uses proof search with domain narrowing rather than SAT
 encoding. The learned constraint store is analogous to CDCL's learned
 clauses, but expressed as version domains rather than boolean clauses.
+
+### Any-of (`||`) arm preference
+
+Portage’s `dep_zapdeps` `choice_bins` and portage-ng’s
+`ranking:prioritize_deps_keep_all/3` multi-key sort are compared in
+detail in [Chapter 11, Any-of (`||`) arm selection](11-doc-rules.md#any-of-arm-selection)
+(including why overlapping-`||` DNF, virtual expand, and circular
+demotion inside `||` are not mirrored as ranking keys).
