@@ -5,15 +5,15 @@ These are the packages that would be merged, in order:
 
 Calculating dependencies... done!
 
- └─step  1─┤ download  overlay://test60/windows-1.0
+ └─step  1─┤ download  overlay://test60/windows-2.0
              │ download  overlay://test60/web-1.0
              │ download  overlay://test60/os-1.0
              │ download  overlay://test60/db-1.0
              │ download  overlay://test60/app-1.0
 
- └─step  2─┤ install   overlay://test60/windows-1.0
+ └─step  2─┤ install   overlay://test60/windows-2.0
 
- └─step  3─┤ run       overlay://test60/windows-1.0 (blocked: soft by test60/app)
+ └─step  3─┤ run       overlay://test60/windows-2.0 (blocked: soft by test60/app)
 
  └─step  4─┤ install   overlay://test60/os-1.0
 
@@ -37,6 +37,9 @@ Total: 15 actions (5 downloads, 5 installs, 5 runs), grouped into 9 steps.
 >>> Blockers added during proving & planning:
 
   [blocks B] !<test60/windows-2.0 (soft blocker, phase: run, required by: overlay://test60/app-1.0)
+  -> soft blockers against installed packages are deconflicted at merge time:
+     the merge is retried with FEATURES=-collision-protect -protect-owned so the
+     package overwrites the conflicting file(s) and the build proceeds (#90).
 
 
 

@@ -69,7 +69,7 @@ The overlay repository itself is at [`Repository/Overlay/`](../../Repository/Ove
 | [57](#test57) | Virtual | Virtual-style ebuild (explicit dep) |
 | [58](#test58) | Virtual | PROVIDE-based virtual (XFAIL) **(XFAIL)** |
 | [59](#test59) | Regression | Any-of || selection regression (fixed) |
-| [60](#test60) | Blocker | Versioned soft blocker !<pkg-ver (XFAIL) **(XFAIL)** |
+| [60](#test60) | Blocker | Versioned soft blocker !<pkg-ver / newest `||` arm (fixed) |
 | [61](#test61) | Cycle | Mutual recursion with bracketed USE |
 | [62](#test62) | Cycle | Simple mutual cycle (termination) |
 | [63](#test63) | Cycle | REQUIRED_USE loop reproducer (openmpi-style) |
@@ -4719,20 +4719,19 @@ Total: 15 actions (5 downloads, 5 installs, 5 runs), grouped into 10 steps.
 </details>
 ---
 
-## test60 — Versioned soft blocker !<pkg-ver (XFAIL)
+## test60 — Versioned soft blocker !<pkg-ver / newest `||` arm
 
 **Category:** Blocker
 
-> **XFAIL** — expected to fail.
+This test case checks the handling of versioned soft blockers (`!<pkg-version`)
+together with an any-of version choice. The `app-1.0` package blocks any version
+of `windows` less than 2.0. The any-of group on `os-1.0` offers both
+`windows-1.0` and `windows-2.0`. The solver should select `windows-2.0` and
+avoid `windows-1.0`.
 
-This test case checks the handling of versioned soft blockers (!<pkg-version). The
-'app-1.0' package blocks any version of 'windows' less than 2.0. The any-of group
-on 'os-1.0' offers both windows-1.0 and windows-2.0 as choices. The solver should
-avoid windows-1.0 because it falls within the blocker's version range.
-
-**Expected:** Currently expected to fail (XFAIL): the versioned blocker is handled via
-assumptions rather than by steering the version choice. When fixed, the solver
-should select windows-2.0 and avoid windows-1.0.
+**Expected:** Select `windows-2.0` (emerge agrees). Portage-ng reaches this via
+newest-admitted `||` ranking (portage-ng#112 / emerge `dep_zapdeps` upgrade
+preference). Formerly XFAIL when left-to-right `||` order locked `windows-1.0`.
 
 ![test60](test60/test60.svg)
 
@@ -4767,15 +4766,15 @@ These are the packages that would be merged, in order:
 
 Calculating dependencies... done!
 
- └─step  1─┤ download  overlay://test60/windows-1.0
+ └─step  1─┤ download  overlay://test60/windows-2.0
              │ download  overlay://test60/web-1.0
              │ download  overlay://test60/os-1.0
              │ download  overlay://test60/db-1.0
              │ download  overlay://test60/app-1.0
 
- └─step  2─┤ install   overlay://test60/windows-1.0
+ └─step  2─┤ install   overlay://test60/windows-2.0
 
- └─step  3─┤ run       overlay://test60/windows-1.0 (blocked: soft by test60/app)
+ └─step  3─┤ run       overlay://test60/windows-2.0
 
  └─step  4─┤ install   overlay://test60/os-1.0
 
@@ -4793,14 +4792,6 @@ Calculating dependencies... done!
 
 Total: 15 actions (5 downloads, 5 installs, 5 runs), grouped into 9 steps.
        0.00 Kb to be downloaded.
-
-
-
->>> Blockers added during proving & planning:
-
-  [blocks B] !<test60/windows-2.0 (soft blocker, phase: run, required by: overlay://test60/app-1.0)
-
-
 
 ```
 

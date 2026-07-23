@@ -1132,9 +1132,10 @@ test:expect(overlay://'test59/web-1.0':run?{[]},
               )
             ]).
 
-% test60: versioned blocker !< must steer selection away from windows-1.0
-test:xfail(overlay://'test60/web-1.0':run?{[]},
-           'Regression: versioned blocker !< is handled via assumptions, not by steering version choice').
+% test60: || ( =windows-1.0 =windows-2.0 ) plus soft !<windows-2.0 on app.
+% Newest-admitted || ranking (portage-ng#112, emerge dep_zapdeps upgrade
+% preference) selects windows-2.0; the soft blocker alone used to leave
+% windows-1.0 and only record an assumption (former XFAIL).
 test:expect(overlay://'test60/web-1.0':run?{[]},
             [ test:must_have(overlay://'test60/windows-2.0':run?{_}),
               \+ test:must_have(overlay://'test60/windows-1.0':run?{_})
