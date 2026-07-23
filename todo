@@ -77,3 +77,44 @@ Phase B readability (helper extraction, same semantics):
 Validate:
 
 - test_stats_pkgs + tinderbox-ng compare on vm-linux.local after any Tier A/B change
+
+
+Emerge || / selection preferences still missing (2026-07, post-#112)
+====================================================================
+
+Context: Portage dep_zapdeps (lib/portage/dep/dep_check.py) uses ordered
+choice_bins; portage-ng flattens most of this into ranking:prioritize_deps_keep_all.
+Already mirrored: installed-first, newest-first candidates, same-CN newest
+|| arm (#112), USE_EXPAND profile/target score, selected_cn / proven virtual
+reuse. Source of truth for the emerge side is dep_zapdeps choice_bins +
+intra-bin upgrade promotion.
+
+High impact (real-tree || / slot / USE divergence):
+
+- USE-satisfied before USE-change bins (unsat_use_*; || ( foo[a] foo[b] );
+  demote arms that need use.mask / use.force flips — all_use_unmasked)
+- all_in_graph: prefer || arm whose packages are already in the digraph /
+  proof (beyond selected_cn + virtual proven-providers)
+- Slot upgrade + want_update: for || ( pkg:N … pkg:M ), prefer higher slot
+  under update/deep (llvm-style; emerge want_update / all_installed_slots)
+
+Medium impact:
+
+- minimize_slots / new_slot_count + overlapping-|| DNF (_overlap_dnf;
+  fewer redundant packages; preserve ebuild order when DNF not needed)
+- downgrade_probe demotion: avoid || arms that pull a lower version into a
+  slot conflict / below highest installed-or-in-graph in slot
+- Partial-installed fuzzy bins (other_installed / _some / _any_slot) when
+  not all_available
+- Virtual expand + zero-cost installed checks (_expand_new_virtuals)
+
+Low / niche:
+
+- Circular-dep demotion inside || (--onlydeps / circular_dependency map)
+- Intra-choice cp_map consistency when several atoms hit the same CP+slot
+  (emerge bug 600346)
+
+Validate after any of the above:
+
+- Overlay suite (esp. || / USE / slot cases) + tinderbox-ng compare on
+  vm-linux.local; watch USE-dep || and llvm/gcc/python slot || packages
