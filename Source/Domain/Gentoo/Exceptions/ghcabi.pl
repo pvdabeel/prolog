@@ -9,7 +9,8 @@
 
 /** <module> GHCABI
 GHC ABI-hash repair exception, the native haskell-updater (portage-ng#93),
-plus GHC boot-lib package-DB readiness (portage-ng#108).
+GHC boot-lib package-DB readiness (portage-ng#108), and prove-time
+CABAL_CORE_LIB_GHC_PV filtering against the selected GHC (portage-ng#112).
 
 Gentoo encodes a Haskell package's identity in ghc-pkg's ABI hash (the
 `-<hash>` suffix, e.g. bifunctors-5.6.3-9AmA3NO9963FDwV9BBcxcZ), NOT in the
@@ -389,6 +390,145 @@ ghcabi:boot_lib(process).
 ghcabi:boot_lib(time).
 ghcabi:boot_lib(unix).
 ghcabi:boot_lib(binary).
+
+
+% -----------------------------------------------------------------------------
+%  Prove-time CABAL_CORE_LIB_GHC_PV filter (portage-ng#112)
+% -----------------------------------------------------------------------------
+
+:- dynamic ghcabi:cabal_core_cache_/2.
+
+
+%! ghcabi:version_incompatible_with_selected_ghc(+C, +N, +RepoEntry) is semidet.
+%
+% True when RepoEntry declares a non-empty CABAL_CORE_LIB_GHC_PV that does
+% not cover the already-selected GHC, and another (C,N) candidate does
+% cover it. Mirrors haskell-cabal.eclass `cabal-is-dummy-lib`: the matching
+% sibling is the known-good (dummy) install for that GHC; the mismatched
+% older core-lib ebuild would attempt a real Cabal build against incompatible
+% boot libraries (text-1.2.5 vs ghc-9.8 → portage-ng#108/#112).
+%
+% Inactive when no GHC is selected yet, or when the entry has no
+% CABAL_CORE_LIB_GHC_PV (regular Haskell packages).
+
+ghcabi:version_incompatible_with_selected_ghc(C, N, Repo://Entry) :-
+  ghcabi:selected_ghc_numeric_version(GhcNumeric),
+  ghcabi:cabal_core_ghc_pvs(Repo://Entry, PVs),
+  PVs \== [],
+  \+ ghcabi:cabal_core_matches(PVs, GhcNumeric),
+  cache:ordered_entry(OtherRepo, OtherEntry, C, N, _),
+  OtherEntry \== Entry,
+  ghcabi:cabal_core_ghc_pvs(OtherRepo://OtherEntry, OtherPVs),
+  OtherPVs \== [],
+  ghcabi:cabal_core_matches(OtherPVs, GhcNumeric),
+  !.
+
+
+%! ghcabi:selected_ghc_numeric_version(-Numeric) is semidet.
+%
+% Numeric GHC version atom (e.g. `9.8.4`) from the selected_cn snapshot.
+
+ghcabi:selected_ghc_numeric_version(Numeric) :-
+  cnselect:snapshot_selected_cn_candidates('dev-lang', ghc, [GhcRepo://GhcEntry|_]),
+  cache:ordered_entry(GhcRepo, GhcEntry, _, _, Ver),
+  ghcabi:version_numeric_atom(Ver, Numeric),
+  !.
+
+
+%! ghcabi:version_numeric_atom(+Version, -Numeric) is semidet.
+
+ghcabi:version_numeric_atom(version(Nums, _, _, _, _, _, _), Numeric) :-
+  is_list(Nums),
+  Nums \== [],
+  atomic_list_concat(Nums, '.', Numeric).
+
+
+%! ghcabi:cabal_core_ghc_pvs(+RepoEntry, -PVs) is det.
+%
+% Reads CABAL_CORE_LIB_GHC_PV from the on-disk ebuild (not in md5-cache).
+% Memoized per entry. Returns [] when absent or unreadable.
+
+ghcabi:cabal_core_ghc_pvs(Repo://Entry, PVs) :-
+  ( ghcabi:cabal_core_cache_(Repo://Entry, Cached)
+  -> PVs = Cached
+  ;  ( catch(ghcabi:read_cabal_core_from_ebuild(Repo://Entry, Read), _, Read = [])
+     -> true
+     ;  Read = []
+     ),
+     assertz(ghcabi:cabal_core_cache_(Repo://Entry, Read)),
+     PVs = Read
+  ).
+
+
+%! ghcabi:read_cabal_core_from_ebuild(+RepoEntry, -PVs) is det.
+
+ghcabi:read_cabal_core_from_ebuild(Repo://Entry, PVs) :-
+  ebuild_exec:ebuild_path(Repo, Entry, Path),
+  exists_file(Path),
+  !,
+  setup_call_cleanup(
+    open(Path, read, S, [encoding(utf8)]),
+    ghcabi:scan_cabal_core_stream(S, PVs),
+    close(S)).
+ghcabi:read_cabal_core_from_ebuild(_, []).
+
+
+%! ghcabi:scan_cabal_core_stream(+Stream, -PVs) is det.
+
+ghcabi:scan_cabal_core_stream(S, PVs) :-
+  ( at_end_of_stream(S)
+  -> PVs = []
+  ;  read_line_to_string(S, Line),
+     ( ghcabi:parse_cabal_core_line(Line, PVs)
+     -> true
+     ;  ghcabi:scan_cabal_core_stream(S, PVs)
+     )
+  ).
+
+
+%! ghcabi:parse_cabal_core_line(+Line, -PVs) is semidet.
+%
+% Accepts `CABAL_CORE_LIB_GHC_PV="a b c"` (double or single quotes).
+
+ghcabi:parse_cabal_core_line(Line0, PVs) :-
+  ( string(Line0) -> Line = Line0 ; atom_string(Line0, Line) ),
+  split_string(Line, "", " \t", [Trimmed]),
+  sub_string(Trimmed, 0, _, _, "CABAL_CORE_LIB_GHC_PV"),
+  sub_string(Trimmed, EqFrom, 1, _, "="),
+  !,
+  AfterEq is EqFrom + 1,
+  sub_string(Trimmed, AfterEq, _, 0, Rhs0),
+  split_string(Rhs0, "", " \t", [Rhs1]),
+  string_length(Rhs1, Len),
+  Len >= 2,
+  sub_string(Rhs1, 0, 1, _, Q),
+  ( Q == "\"" ; Q == "'" ),
+  End is Len - 1,
+  sub_string(Rhs1, End, 1, 0, Q),
+  InnerLen is Len - 2,
+  sub_string(Rhs1, 1, InnerLen, _, Inner),
+  split_string(Inner, " \t", " \t", Parts),
+  exclude(ghcabi:empty_string, Parts, NonEmpty),
+  maplist(atom_string, PVs, NonEmpty),
+  !.
+
+
+ghcabi:empty_string("").
+
+
+%! ghcabi:cabal_core_matches(+PVs, +GhcNumeric) is semidet.
+%
+% True when GhcNumeric (e.g. `9.8.4`) matches a CABAL_CORE pattern using
+% the same glob semantics as haskell-cabal.eclass (`[[ a == pat ]]`).
+
+ghcabi:cabal_core_matches(PVs, GhcNumeric) :-
+  member(Pat0, PVs),
+  ( atom_concat('PM:', _, Pat0)
+  -> fail  % PM: patterns need the package-manager PV; numeric path is enough here
+  ;  Pat = Pat0
+  ),
+  wildcard_match(Pat, GhcNumeric),
+  !.
 
 
 %! ghcabi:recache_ghc_pkg(+BootLibs) is semidet.

@@ -361,10 +361,18 @@ ranking:prioritize_deps(Deps, Context, SortedDeps) :-
 %! ranking:prioritize_deps_keep_all(+Deps, +Context, -SortedDeps)
 %
 % Like prioritize_deps/3 but uses a multi-key ranking (license-ok,
-% intrinsic rank, overlap count, snapshot status) to break ties.
+% intrinsic rank, overlap count, snapshot status, newest-available
+% version admitted by the branch, USE_EXPAND score) to break ties.
+%
+% The version-admitted key matters for Haskell-style `||` ranges over the
+% same CN (portage-ng#112): e.g. cabal's
+% `|| ( ( >=text-1.2.3 <text-1.3 ) ( >=text-2 <text-2.2 ) )` — equal ranks
+% used to keep ebuild order and lock text-1.2.5 before text-2.1.1 could be
+% tried. Preferring the branch that admits the newest tree candidate matches
+% emerge's newest-first selection for that CN.
 
 ranking:prioritize_deps_keep_all(Deps, Context, SortedDeps) :-
-  findall(NegLicOk-NegRank-NegOverlap-NegSnap-NegUEScore-I-Dep,
+  findall(NegLicOk-NegRank-NegOverlap-NegSnap-NegVerScore-NegUEScore-I-Dep,
           ( nth1(I, Deps, Dep),
             dep_rank(Context, Dep, Rank),
             dep_overlap_group_count(Context, Dep, OvRaw),
@@ -372,15 +380,17 @@ ranking:prioritize_deps_keep_all(Deps, Context, SortedDeps) :-
             ( dep_snapshot_selected(Dep) -> Snap = 1 ; Snap = 0 ),
             ( acceptance:dep_license_ok(Dep) -> LicOk = 1 ; LicOk = 0 ),
             dep_use_expand_profile_score(Dep, UEScore),
+            ranking:dep_max_candidate_version_score(Dep, VerScore),
             NegLicOk is -LicOk,
             NegRank is -Rank,
             NegOverlap is -Overlap,
             NegSnap is -Snap,
+            NegVerScore is -VerScore,
             NegUEScore is -UEScore
           ),
           Ranked),
   keysort(Ranked, RankedSorted),
-  findall(Dep, member(_-_-_-_-_-_-Dep, RankedSorted), SortedDeps0),
+  findall(Dep, member(_-_-_-_-_-_-_-Dep, RankedSorted), SortedDeps0),
   ranking:boost_variant_preferred(SortedDeps0, SortedDeps),
   !.
 
@@ -397,6 +407,68 @@ ranking:boost_variant_preferred(Deps, Reordered) :-
   -> append(Front, Rest, Reordered)
   ;  Reordered = Deps
   ).
+
+
+%! ranking:dep_max_candidate_version_score(+Dep, -Score) is det.
+%
+% Score for ||-branch ordering: newest tree version admitted by Dep's
+% version constraints on a single (C,N), packed as a comparable integer.
+% Returns 0 when Dep is not a pure version-bounded package branch.
+
+ranking:dep_max_candidate_version_score(Dep, Score) :-
+  ranking:dep_cn_version_domain(Dep, C, N, Domain),
+  \+ version_domain:domain_inconsistent(Domain),
+  !,
+  findall(Ver,
+          ( cache:ordered_entry(Repo, Entry, C, N, Ver),
+            version_domain:domain_allows_candidate(Domain, Repo://Entry)
+          ),
+          Vers),
+  ( Vers == []
+  -> Score = 0
+  ;  sort(Vers, Sorted),
+     last(Sorted, Best),
+     ranking:version_to_sort_score(Best, Score)
+  ).
+ranking:dep_max_candidate_version_score(_Dep, 0).
+
+
+%! ranking:dep_cn_version_domain(+Dep, -C, -N, -Domain) is semidet.
+%
+% Succeeds when Dep is a package_dependency or an all_of_group whose
+% members are all package_dependency terms on the same (C,N).
+
+ranking:dep_cn_version_domain(package_dependency(Ph, St, C, N, O, V, S, U), C, N, Domain) :-
+  !,
+  version_domain:domain_from_packagedeps(Ph, C, N,
+    [package_dependency(Ph, St, C, N, O, V, S, U)], Domain).
+ranking:dep_cn_version_domain(all_of_group(Deps), C, N, Domain) :-
+  Deps \== [],
+  Deps = [package_dependency(_, _, C, N, _, _, _, _)|_],
+  forall(member(D, Deps),
+         D = package_dependency(_, _, C, N, _, _, _, _)),
+  !,
+  version_domain:domain_from_packagedeps(run, C, N, Deps, Domain).
+
+
+%! ranking:version_to_sort_score(+Version, -Score) is det.
+%
+% Packs the leading numeric components of a version/7 into a single
+% integer so keysort can prefer newer versions (via NegVerScore).
+
+ranking:version_to_sort_score(version(Nums, _, _, _, _, Rev, _), Score) :-
+  !,
+  ranking:version_nums_pad4(Nums, A, B, C, D),
+  ( integer(Rev) -> R = Rev ; R = 0 ),
+  Score is (((A * 1000 + B) * 1000 + C) * 1000 + D) * 1000 + R.
+ranking:version_to_sort_score(_, 0).
+
+
+ranking:version_nums_pad4([A,B,C,D|_], A, B, C, D) :- !.
+ranking:version_nums_pad4([A,B,C], A, B, C, 0) :- !.
+ranking:version_nums_pad4([A,B], A, B, 0, 0) :- !.
+ranking:version_nums_pad4([A], A, 0, 0, 0) :- !.
+ranking:version_nums_pad4([], 0, 0, 0, 0).
 
 
 %! ranking:dep_matches_prefer(+Preferred, +Dep) is semidet.

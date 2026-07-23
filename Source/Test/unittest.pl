@@ -1724,6 +1724,68 @@ test(use_dep_atom_sat_after_disable_sibling,
 :- end_tests(rules_use_dep_unsat).
 
 
+% ||-branch ranking prefers the arm that admits the newest tree version
+% (portage-ng#112 — cabal's text 1.2 vs 2.x OR).
+:- begin_tests(ranking_any_of_version_branch).
+
+rao_setup :-
+  retractall(cache:ordered_entry(qtest, _, 'dev-haskell', text, _)),
+  assertz(cache:ordered_entry(qtest, 'dev-haskell/text-1.2.5.0-r1',
+                              'dev-haskell', text,
+                              version([1,2,5,0],'',4,0,[],1,'1.2.5.0-r1'))),
+  assertz(cache:ordered_entry(qtest, 'dev-haskell/text-2.1.1',
+                              'dev-haskell', text,
+                              version([2,1,1],'',4,0,[],0,'2.1.1'))).
+
+rao_cleanup :-
+  retractall(cache:ordered_entry(qtest, _, 'dev-haskell', text, _)).
+
+rao_text12(all_of_group([
+  package_dependency(run,no,'dev-haskell',text,greaterequal,
+                     version([1,2,3,0],'',4,0,[],0,'1.2.3.0'),[],[]),
+  package_dependency(run,no,'dev-haskell',text,smaller,
+                     version([1,3],'',4,0,[],0,'1.3'),[],[])])).
+
+rao_text2(all_of_group([
+  package_dependency(run,no,'dev-haskell',text,greaterequal,
+                     version([2,0],'',4,0,[],0,'2.0'),[],[]),
+  package_dependency(run,no,'dev-haskell',text,smaller,
+                     version([2,2],'',4,0,[],0,'2.2'),[],[])])).
+
+test(prefers_newer_text_branch_first,
+     [setup(rao_setup), cleanup(rao_cleanup)]) :-
+  rao_text12(B1), rao_text2(B2),
+  ranking:prioritize_deps_keep_all([B1, B2], [], [First|_]),
+  First == B2.
+
+test(prefers_newer_even_when_listed_second,
+     [setup(rao_setup), cleanup(rao_cleanup)]) :-
+  rao_text12(B1), rao_text2(B2),
+  ranking:prioritize_deps_keep_all([B2, B1], [], [First|_]),
+  First == B2.
+
+:- end_tests(ranking_any_of_version_branch).
+
+
+% CABAL_CORE_LIB_GHC_PV parse + match (portage-ng#112).
+:- begin_tests(ghcabi_cabal_core).
+
+test(parse_quoted_list,
+     [true(PVs == ['9.0.2','9.2.8'])]) :-
+  ghcabi:parse_cabal_core_line('CABAL_CORE_LIB_GHC_PV="9.0.2 9.2.8"', PVs), !.
+
+test(match_exact) :-
+  ghcabi:cabal_core_matches(['9.8.2','9.8.4'], '9.8.4').
+
+test(match_glob) :-
+  ghcabi:cabal_core_matches(['9.8.*'], '9.8.4').
+
+test(nomatch_other_series, [fail]) :-
+  ghcabi:cabal_core_matches(['9.0.2','9.2.8'], '9.8.4').
+
+:- end_tests(ghcabi_cabal_core).
+
+
 % Sub-slot (:=) ABI rebuild propagation helpers (portage-ng#89).
 :- begin_tests(pipeline_subslot_rebuild).
 
