@@ -1661,45 +1661,65 @@ test(all_masked_falls_back_to_full_list,
 
 % Joint USE-dep / REQUIRED_USE / profile-hard fail-closed checks
 % (portage-ng#109/#111 — emerge use_dep_unsat class).
+%
+% KB-independent: synthetic qtest entry + memo:eff_use_cache_/4 (same pattern
+% as builder_base_use_state). CI has no Portage tree, so live acct-user/git
+% metadata must not be required.
 :- begin_tests(rules_use_dep_unsat).
+
+ude_entry(qtest://'acct-user/git-0').
+ude_requse(exactly_one_of_group([required(git), required(gitea),
+                                 required(gitolite)])).
+
+ude_setup :-
+  ude_entry(Repo://Id),
+  retractall(memo:eff_use_cache_(Repo, Id, _, _)),
+  retractall(cache:entry_metadata(Repo, Id, required_use, _)),
+  ude_requse(RU),
+  assertz(cache:entry_metadata(Repo, Id, required_use, RU)),
+  % Profile/default-on sibling (not HARD atom): positive via eff-use memo.
+  assertz(memo:eff_use_cache_(Repo, Id, git, positive)).
+
+ude_cleanup :-
+  ude_entry(Repo://Id),
+  retractall(memo:eff_use_cache_(Repo, Id, _, _)),
+  retractall(cache:entry_metadata(Repo, Id, required_use, _)).
 
 % Exactly-one-of with two positives: disable the non-HARD sibling.
 test(exactly_one_of_n_gt_1_disables_non_hard,
-     [true(Fixes == [disable(git)])]) :-
-  use:requse_term_fixes(portage://'acct-user/git-0-r3',
-                        [gitea], [],
-                        exactly_one_of_group([required(git), required(gitea),
-                                              required(gitolite)]),
-                        Fixes).
+     [setup(ude_setup), cleanup(ude_cleanup),
+      true(Fixes == [disable(git)])]) :-
+  ude_entry(E), ude_requse(RU),
+  use:requse_term_fixes(E, [gitea], [], RU, Fixes).
 
 % Two HARD enables in ^^ cannot be fixed by disable — Fixes fails.
-test(exactly_one_of_two_hard_unfixable, [fail]) :-
-  use:requse_term_fixes(portage://'acct-user/git-0-r3',
-                        [git, gitea], [],
-                        exactly_one_of_group([required(git), required(gitea),
-                                              required(gitolite)]),
-                        _).
+test(exactly_one_of_two_hard_unfixable,
+     [setup(ude_setup), cleanup(ude_cleanup), fail]) :-
+  ude_entry(E), ude_requse(RU),
+  use:requse_term_fixes(E, [git, gitea], [], RU, _).
 
 % HARD enable of a globally masked flag is use_dep_unsat.
 test(bwu_rejects_masked_hard_enable,
      [setup(assertz(preference:local_profile_masked_use_flag(gitea))),
       cleanup(retract(preference:local_profile_masked_use_flag(gitea))),
       fail]) :-
-  use:bwu_respects_profile_hard(portage://'acct-user/git-0-r3',
-                                use_state([gitea], [])).
+  ude_entry(E),
+  use:bwu_respects_profile_hard(E, use_state([gitea], [])).
 
 test(bwu_accepts_unmasked_hard_enable, [true]) :-
-  use:bwu_respects_profile_hard(portage://'acct-user/git-0-r3',
-                                use_state([gitea], [])).
+  ude_entry(E),
+  use:bwu_respects_profile_hard(E, use_state([gitea], [])).
 
 % Post-stabilize joint check: REQUIRED_USE ^^ with two HARD enables fails.
-test(use_dep_atom_unsat_on_hard_collision, [fail]) :-
-  use:use_dep_atom_satisfiable(portage://'acct-user/git-0-r3',
-                               use_state([git, gitea], [])).
+test(use_dep_atom_unsat_on_hard_collision,
+     [setup(ude_setup), cleanup(ude_cleanup), fail]) :-
+  ude_entry(E),
+  use:use_dep_atom_satisfiable(E, use_state([git, gitea], [])).
 
-test(use_dep_atom_sat_after_disable_sibling, [true]) :-
-  use:use_dep_atom_satisfiable(portage://'acct-user/git-0-r3',
-                               use_state([gitea], [git, gitolite])).
+test(use_dep_atom_sat_after_disable_sibling,
+     [setup(ude_setup), cleanup(ude_cleanup), true]) :-
+  ude_entry(E),
+  use:use_dep_atom_satisfiable(E, use_state([gitea], [git, gitolite])).
 
 :- end_tests(rules_use_dep_unsat).
 

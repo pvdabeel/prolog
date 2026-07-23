@@ -44,6 +44,30 @@ assumption:assumption_type('?'(Inner, '{}'(Ctx)), Type) :-
   assumption:assumption_reason_type(Reason, Type),
   !.
 
+% Read context tags before stripping ?{Ctx}. The unwrap clause below would
+% otherwise classify the bare grouped/package dependency as non_existent.
+assumption:assumption_type('?'(_Inner, '{}'(Ctx)), use_dep_unsat) :-
+  is_list(Ctx),
+  ( memberchk(use_dep_unsat(_), Ctx)
+  ; memberchk(required_use_violation(use_dep_unsat(_,_,_)), Ctx)
+  ),
+  !.
+
+assumption:assumption_type('?'(_Inner, '{}'(Ctx)), required_use_violation) :-
+  is_list(Ctx),
+  memberchk(required_use_violation(_), Ctx),
+  !.
+
+assumption:assumption_type('?'(_Inner, '{}'(Ctx)), slot_conflict) :-
+  is_list(Ctx),
+  memberchk(slot_conflict(_), Ctx),
+  !.
+
+assumption:assumption_type('?'(_Inner, '{}'(Ctx)), issue_with_model) :-
+  is_list(Ctx),
+  memberchk(issue_with_model(_), Ctx),
+  !.
+
 assumption:assumption_type('?'(Inner, _Ctx), Type) :-
   !,
   assumption:assumption_type(Inner, Type).
