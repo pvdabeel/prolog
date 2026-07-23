@@ -1394,7 +1394,102 @@ test(unversioned_shape,
 test(rejects_non_cn, [fail]) :-
   feedback:provider_dep('semodule-utils', _).
 
+test(usedep_shape,
+     [true(Dep == package_dependency(install, no, 'kde-frameworks', kwindowsystem, none, version_none, [],
+                                     [use(enable('X'), none)]))]) :-
+  feedback:provider_dep('kde-frameworks/kwindowsystem',
+                        [use(enable('X'), none)], Dep).
+
 :- end_tests(missing_provider_provider_dep).
+
+
+% USE-enable learning from build failures (portage-ng#110).
+:- begin_tests(useenable_detectors).
+
+test(kx11extras_header) :-
+  useenable:detector(
+    ["fatal error: KX11Extras: No such file or directory"],
+    symbol(kf_header, 'KX11Extras'), _).
+
+test(kstartupinfo_header) :-
+  useenable:detector(
+    ["error: KStartupInfo: No such file or directory"],
+    symbol(kf_header, 'KStartupInfo'), _).
+
+test(pimcommon_activities_header) :-
+  useenable:detector(
+    ["fatal error: KPim6PimCommonActivities: No such file or directory"],
+    symbol(kf_header, 'KPim6PimCommonActivities'), _).
+
+test(cmake_xdamage) :-
+  useenable:detector(
+    ["-- Looking for X11_Xdamage_LIB - NOTFOUND"],
+    symbol(cmake_lib, 'X11_Xdamage'), _).
+
+test(ignores_regular_header, [fail]) :-
+  useenable:detector(
+    ["fatal error: foo/bar.h: No such file or directory"],
+    symbol(kf_header, _), _).
+
+:- end_tests(useenable_detectors).
+
+
+:- begin_tests(useenable_seed).
+
+test(kx11extras_maps_to_kwindowsystem_x) :-
+  useenable:provides_usedep(kf_header, 'KX11Extras',
+                            'kde-frameworks/kwindowsystem',
+                            [use(enable('X'), none)]).
+
+test(activities_maps_to_pimcommon) :-
+  useenable:provides_usedep(kf_header, 'KPim6PimCommonActivities',
+                            'kde-apps/pimcommon',
+                            [use(enable(activities), none)]).
+
+test(xdamage_bare_cn) :-
+  useenable:provides_usedep(cmake_lib, 'X11_Xdamage',
+                            'x11-libs/libXdamage', []).
+
+:- end_tests(useenable_seed).
+
+
+% GHC boot-lib / ghc-pkg readiness (portage-ng#108).
+:- begin_tests(ghcabi_boot_dep).
+
+test(boot_dep_detects_cabal_missing,
+     [true(Libs == [bytestring, deepseq, 'ghc-prim', 'template-haskell'])]) :-
+  tmp_file(ghcboot, Path),
+  setup_call_cleanup(
+    ( open(Path, write, S),
+      format(S,
+"Error: setup: Encountered missing or private dependencies:~n\
+bytestring >=0.10.4 && <0.12,~n\
+deepseq >=1.1 && <1.5,~n\
+ghc-prim >=0.2 && <0.9,~n\
+template-haskell >=2.5 && <2.19~n", []),
+      close(S) ),
+    ghcabi:boot_dep_error(Path, 0, Libs),
+    catch(delete_file(Path), _, true)).
+
+test(boot_dep_ignores_unrelated_log, [fail]) :-
+  tmp_file(ghcboot2, Path),
+  setup_call_cleanup(
+    ( open(Path, write, S),
+      format(S, "configure: error: something else~n", []),
+      close(S) ),
+    ghcabi:boot_dep_error(Path, 0, _),
+    catch(delete_file(Path), _, true)).
+
+test(excluded_version_roundtrip,
+     [setup(( feedback:record_excluded_version('dev-haskell', text,
+                 version([1,2,5], '', 4, 0, [], 1, '1.2.5.0-r1'),
+                 evidence(test)) )),
+      cleanup(retractall(feedback:excluded_version('dev-haskell', text, _, _)))]) :-
+  feedback:excluded_version('dev-haskell', text, _, evidence(test)),
+  feedback:excluded_version_count(N),
+  N >= 1.
+
+:- end_tests(ghcabi_boot_dep).
 
 
 % -----------------------------------------------------------------------------
@@ -1562,6 +1657,51 @@ test(all_masked_falls_back_to_full_list,
       [required(z1), required(z2), required(z3)], F).
 
 :- end_tests(rules_required_use_choice_seed).
+
+
+% Joint USE-dep / REQUIRED_USE / profile-hard fail-closed checks
+% (portage-ng#109/#111 — emerge use_dep_unsat class).
+:- begin_tests(rules_use_dep_unsat).
+
+% Exactly-one-of with two positives: disable the non-HARD sibling.
+test(exactly_one_of_n_gt_1_disables_non_hard,
+     [true(Fixes == [disable(git)])]) :-
+  use:requse_term_fixes(portage://'acct-user/git-0-r3',
+                        [gitea], [],
+                        exactly_one_of_group([required(git), required(gitea),
+                                              required(gitolite)]),
+                        Fixes).
+
+% Two HARD enables in ^^ cannot be fixed by disable — Fixes fails.
+test(exactly_one_of_two_hard_unfixable, [fail]) :-
+  use:requse_term_fixes(portage://'acct-user/git-0-r3',
+                        [git, gitea], [],
+                        exactly_one_of_group([required(git), required(gitea),
+                                              required(gitolite)]),
+                        _).
+
+% HARD enable of a globally masked flag is use_dep_unsat.
+test(bwu_rejects_masked_hard_enable,
+     [setup(assertz(preference:local_profile_masked_use_flag(gitea))),
+      cleanup(retract(preference:local_profile_masked_use_flag(gitea))),
+      fail]) :-
+  use:bwu_respects_profile_hard(portage://'acct-user/git-0-r3',
+                                use_state([gitea], [])).
+
+test(bwu_accepts_unmasked_hard_enable, [true]) :-
+  use:bwu_respects_profile_hard(portage://'acct-user/git-0-r3',
+                                use_state([gitea], [])).
+
+% Post-stabilize joint check: REQUIRED_USE ^^ with two HARD enables fails.
+test(use_dep_atom_unsat_on_hard_collision, [fail]) :-
+  use:use_dep_atom_satisfiable(portage://'acct-user/git-0-r3',
+                               use_state([git, gitea], [])).
+
+test(use_dep_atom_sat_after_disable_sibling, [true]) :-
+  use:use_dep_atom_satisfiable(portage://'acct-user/git-0-r3',
+                               use_state([gitea], [git, gitolite])).
+
+:- end_tests(rules_use_dep_unsat).
 
 
 % Sub-slot (:=) ABI rebuild propagation helpers (portage-ng#89).
@@ -3711,6 +3851,9 @@ assumption_type_vector(negative,
 assumption_type_vector(negative,
   grouped_package_dependency(no, 'dev-libs', foo, []):install?{[assumption_reason(unsatisfied_constraints)]},
   unsatisfied_constraints_dependency).
+assumption_type_vector(negative,
+  grouped_package_dependency(no, 'acct-user', git, []):install?{[required_use_violation(use_dep_unsat(x, use_state([gitea], []), profile_hard_conflict))]},
+  use_dep_unsat).
 
 % CYCLE axis (benign, separate from domain assumptions)
 assumption_type_vector(cycle, cycle_break(foo),                                cycle_break).

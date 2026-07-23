@@ -125,7 +125,7 @@ builder:should_replan(Attempt, Failed, Before, After) :-
 builder:announce_replan(Attempt) :-
   nl,
   message:color(green),
-  format('>>> Re-deriving plan after build-time discovery (replan attempt ~d, portage-ng#102/#105)~n', [Attempt]),
+  format('>>> Re-deriving plan after build-time discovery (replan attempt ~d, portage-ng#102/#105/#110)~n', [Attempt]),
   message:color(normal),
   nl.
 

@@ -1332,9 +1332,24 @@ use:stabilize_requse_term(RepoEntry, Term, use_state(En0, Dis0), use_state(EnOut
 
 use:requse_term_fixes(RepoEntry, _En, _Dis, any_of_group(Deps), [enable(Flag)]) :-
     use:requse_pick_satisfying_flag(RepoEntry, Deps, Flag), !.
-use:requse_term_fixes(RepoEntry, En, Dis, exactly_one_of_group(Deps), []) :-
-    findall(1, (member(D, Deps), use:requse_term_ok_with_bwu(RepoEntry, En, Dis, D)), Sat),
-    length(Sat, N), N > 1, !.
+% Exactly-one-of with multiple members currently positive (portage-ng#111):
+% keep HARD-forced Enable flags; disable every other satisfied sibling so
+% stabilize can reach a legal ^^ assignment. When two HARD enables collide
+% Fixes stays empty and post-stabilize verify fails closed.
+use:requse_term_fixes(RepoEntry, En, Dis, exactly_one_of_group(Deps), Fixes) :-
+    findall(Flag,
+            ( member(required(Flag), Deps),
+              use:requse_term_ok_with_bwu(RepoEntry, En, Dis, required(Flag))
+            ),
+            SatFlags),
+    length(SatFlags, N), N > 1, !,
+    findall(disable(Other),
+            ( member(Other, SatFlags),
+              \+ memberchk(Other, En)
+            ),
+            Fixes0),
+    Fixes0 \== [],
+    Fixes = Fixes0.
 use:requse_term_fixes(RepoEntry, En, Dis, exactly_one_of_group(Deps), [enable(Flag)]) :-
     findall(1, (member(D, Deps), use:requse_term_ok_with_bwu(RepoEntry, En, Dis, D)), Sat),
     length(Sat, 0),
@@ -1484,6 +1499,43 @@ use:verify_required_use_with_bwu(Repo://Entry, use_state(Enable, Disable)) :-
                use:requse_term_ok_with_bwu(Repo://Entry, Enable, Disable, Term))
       )
     ).
+
+
+%! use:bwu_respects_profile_hard(+RepoEntry, +BWU) is semidet.
+%
+% True when no HARD build_with_use enable/disable contradicts a profile
+% use.mask / use.force (global or per-package). A HARD `[flag]` against a
+% masked flag is emerge's use_dep_unsat class (portage-ng#109/#111).
+
+use:bwu_respects_profile_hard(RepoEntry, use_state(Enable, Disable)) :-
+    forall(member(F, Enable),
+           ( \+ preference:profile_masked_use_flag(F),
+             \+ catch(preference:profile_use_hard(RepoEntry, F, negative, _), _, fail)
+           )),
+    forall(member(F, Disable),
+           \+ catch(preference:profile_use_hard(RepoEntry, F, positive, _), _, fail)).
+
+
+%! use:describe_use_dep_unsat(+RepoEntry, +BWU, -Description)
+%
+% Structured descriptor for a joint USE-dep / REQUIRED_USE / profile-hard
+% failure (emerge use_dep_unsat), used by the assumption printer.
+
+use:describe_use_dep_unsat(RepoEntry, BWU, use_dep_unsat(RepoEntry, BWU, Why)) :-
+    ( use:bwu_respects_profile_hard(RepoEntry, BWU)
+    -> use:describe_required_use_violation(RepoEntry, BWU, Why)
+    ; Why = profile_hard_conflict
+    ).
+
+
+%! use:use_dep_atom_satisfiable(+RepoEntry, +BWU) is semidet.
+%
+% Joint check after BWU resolve+stabilize: REQUIRED_USE holds and no HARD
+% flag fights profile use.mask/force. Fail closed = emerge use_dep_unsat.
+
+use:use_dep_atom_satisfiable(RepoEntry, BWU) :-
+    use:bwu_respects_profile_hard(RepoEntry, BWU),
+    use:verify_required_use_with_bwu(RepoEntry, BWU).
 
 
 %! use:requse_term_ok_with_bwu(+RepoEntry, +Enable, +Disable, +Term)

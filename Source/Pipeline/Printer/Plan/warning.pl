@@ -1236,6 +1236,21 @@ warning:print_requse_violation_detail(
     ; format('  (REQUIRED_USE constraint violated)~n', [])
     ).
 warning:print_requse_violation_detail(
+        use_dep_unsat(RepoEntry, use_state(Enable, Disable), Why)) :- !,
+    format('  No ebuild satisfies USE deps for ~w (use_dep_unsat)~n', [RepoEntry]),
+    ( Enable \== [] ->
+        format('  USE deps force:   ~w~n', [Enable])
+    ; true
+    ),
+    ( Disable \== [] ->
+        format('  USE deps disable: ~w~n', [Disable])
+    ; true
+    ),
+    ( Why == profile_hard_conflict ->
+        format('  conflicts with profile use.mask / use.force~n', [])
+    ; warning:print_requse_violation_detail(Why)
+    ).
+warning:print_requse_violation_detail(
         use_flag_conflict(Conflicts, Enable, Disable)) :- !,
     format('  Conflicting USE flags: ~w~n', [Conflicts]),
     format('  Required enabled by:  ~w~n', [Enable]),

@@ -8,7 +8,7 @@
 */
 
 /** <module> FEEDBACK
-Builder-to-prover learned-knowledge channel (portage-ng#102).
+Builder-to-prover learned-knowledge channel (portage-ng#102/#105/#110).
 
 When a build phase fails because a required provider (a command or file
 some package would supply) is missing, the diagnosis is not repaired in
@@ -17,12 +17,20 @@ fed back into the resolver. On the next proof pass rules unions the
 discovered provider into BDEPEND, so the provider is proved and ordered
 before the target (plans are derived, never patched).
 
-Two records are persisted (both plain-text term files under Knowledge/,
-gitignored like resume.pl / phase_stats.pl):
+Records persisted (plain-text term files under Knowledge/, gitignored
+like resume.pl / phase_stats.pl):
 
   - discovered_dep(Target, Provider, Kind, Evidence): a concrete provider
     that a build proved was needed but the metadata never declared. The
     structured Evidence doubles as an upstream ebuild bug report.
+  - discovered_usedep(Target, Provider, UseDeps, Evidence): Target needs
+    Provider with HARD bracketed USE deps (portage-ng#110). Unlike a bare
+    discovered_dep, re-adding an already-installed provider without USE
+    is a no-op; the usedeps force a rebuild with the missing flags.
+  - excluded_version(C, N, Ver, Evidence): a Category/Name/Version that
+    failed at configure against the live GHC boot library set
+    (portage-ng#108). Selection excludes this exact version on the next
+    prove so an alternate (e.g. text-2.1.1 over text-1.2.5.0) can win.
   - unresolved_diagnostic(Symbol, Evidence): a missing-provider signature
     that fired but could not be mapped to a concrete package. Kept as a
     maintainer backlog (extend the seed table / index); never guessed.
@@ -40,9 +48,13 @@ gitignored like resume.pl / phase_stats.pl):
 % =============================================================================
 
 :- dynamic feedback:discovered_dep/4.
+:- dynamic feedback:discovered_usedep/4.
+:- dynamic feedback:excluded_version/4.
 :- dynamic feedback:unresolved_diagnostic/2.
 :- dynamic feedback:required_kernel_config/3.
 :- dynamic feedback:session_discovery/4.
+:- dynamic feedback:session_usedep/4.
+:- dynamic feedback:session_excluded_version/4.
 :- dynamic feedback:session_kernel_config/3.
 :- dynamic feedback:loaded_/0.
 
@@ -118,6 +130,8 @@ feedback:read_assert_terms(S) :-
   ( T == end_of_file
   -> true
   ;  ( T = discovered_dep(_, _, _, _)         -> assertz(feedback:T)
+     ; T = discovered_usedep(_, _, _, _)      -> assertz(feedback:T)
+     ; T = excluded_version(_, _, _, _)       -> assertz(feedback:T)
      ; T = unresolved_diagnostic(_, _)        -> assertz(feedback:T)
      ; T = required_kernel_config(_, _, _)     -> assertz(feedback:T)
      ; true
@@ -164,6 +178,55 @@ feedback:record_unresolved(Symbol, Evidence) :-
   ;  assertz(feedback:unresolved_diagnostic(Symbol, Evidence)),
      feedback:unresolved_file(Path),
      feedback:append_term(Path, unresolved_diagnostic(Symbol, Evidence))
+  ).
+
+
+%! feedback:record_excluded_version(+C, +N, +Ver, +Evidence) is det.
+%
+% Records that Category/Name at Ver failed against the live GHC boot
+% library set (portage-ng#108) and must not be re-selected. Deduplicated
+% on (C, N, Ver). Persisted so the next prove (and future runs) skip it.
+
+feedback:record_excluded_version(C, N, Ver, Evidence) :-
+  ( feedback:excluded_version(C, N, Ver, _)
+  -> true
+  ;  assertz(feedback:excluded_version(C, N, Ver, Evidence)),
+     feedback:discovered_file(Path),
+     feedback:append_term(Path, excluded_version(C, N, Ver, Evidence))
+  ),
+  ( feedback:session_excluded_version(C, N, Ver, _)
+  -> true
+  ;  assertz(feedback:session_excluded_version(C, N, Ver, Evidence))
+  ).
+
+
+%! feedback:version_excluded(+C, +N, +RepoEntry) is semidet.
+%
+% True when RepoEntry is an excluded version of (C, N).
+
+feedback:version_excluded(C, N, Repo://Entry) :-
+  cache:ordered_entry(Repo, Entry, C, N, Ver),
+  feedback:excluded_version(C, N, Ver, _),
+  !.
+
+
+%! feedback:record_usedep(+Target, +Provider, +UseDeps, +Evidence) is det.
+%
+% Records that Target needs Provider with HARD UseDeps (a list of
+% use(enable(Flag), none) terms). Deduplicated on (Target, Provider,
+% UseDeps). Persisted alongside discovered_dep so future runs force the
+% provider USE proactively (portage-ng#110).
+
+feedback:record_usedep(Target, Provider, UseDeps, Evidence) :-
+  ( feedback:discovered_usedep(Target, Provider, UseDeps, _)
+  -> true
+  ;  assertz(feedback:discovered_usedep(Target, Provider, UseDeps, Evidence)),
+     feedback:discovered_file(Path),
+     feedback:append_term(Path, discovered_usedep(Target, Provider, UseDeps, Evidence))
+  ),
+  ( feedback:session_usedep(Target, Provider, UseDeps, _)
+  -> true
+  ;  assertz(feedback:session_usedep(Target, Provider, UseDeps, Evidence))
   ).
 
 
@@ -217,6 +280,22 @@ feedback:discovery_count(Count) :-
   aggregate_all(count, feedback:discovered_dep(_, _, _, _), Count).
 
 
+%! feedback:usedep_count(-Count) is det.
+%
+% Number of distinct discovered USE-dep edges (portage-ng#110).
+
+feedback:usedep_count(Count) :-
+  aggregate_all(count, feedback:discovered_usedep(_, _, _, _), Count).
+
+
+%! feedback:excluded_version_count(-Count) is det.
+%
+% Number of distinct GHC-incompatible versions excluded (portage-ng#108).
+
+feedback:excluded_version_count(Count) :-
+  aggregate_all(count, feedback:excluded_version(_, _, _, _), Count).
+
+
 %! feedback:kernel_config_count(-Count) is det.
 %
 % Number of distinct targets with a learned kernel-config requirement.
@@ -227,14 +306,17 @@ feedback:kernel_config_count(Count) :-
 
 %! feedback:learned_count(-Count) is det.
 %
-% Total learned-knowledge count (discovered deps + kernel-config
-% requirements). The builder's replan loop uses this to detect whether a
-% build pass grew any learned store, and re-derive the plan if so.
+% Total learned-knowledge count (discovered deps + usedeps + excluded
+% versions + kernel-config requirements). The builder's replan loop uses
+% this to detect whether a build pass grew any learned store, and
+% re-derive the plan if so.
 
 feedback:learned_count(Count) :-
   feedback:discovery_count(D),
+  feedback:usedep_count(U),
+  feedback:excluded_version_count(E),
   feedback:kernel_config_count(K),
-  Count is D + K.
+  Count is D + U + E + K.
 
 
 %! feedback:session_discoveries(-List) is det.
@@ -257,6 +339,8 @@ feedback:session_discoveries(List) :-
 
 feedback:clear_session :-
   retractall(feedback:session_discovery(_, _, _, _)),
+  retractall(feedback:session_usedep(_, _, _, _)),
+  retractall(feedback:session_excluded_version(_, _, _, _)),
   retractall(feedback:session_kernel_config(_, _, _)).
 
 
@@ -291,11 +375,16 @@ feedback:plan_kernel_config_pre_actions(Entries, PreActions) :-
 % Yields, for the tree entry Repo://Id, each discovered build-dependency
 % as a parsed package_dependency/8 term shaped exactly like an md5-cache
 % BDEPEND atom, so query.pl can union it into the install dependency
-% model. Only bdepend-kind discoveries are surfaced (build-time providers).
+% model. Surfaces bare discovered_dep (#102) and discovered_usedep (#110)
+% edges (the latter with non-empty UseDeps so BWU forcing rebuilds the
+% provider with the missing flags).
 
 feedback:discovered_bdepend_dep(Repo, Id, Dep) :-
   feedback:discovered_dep(Repo://Id, Provider, bdepend, _Evidence),
   feedback:provider_dep(Provider, Dep).
+feedback:discovered_bdepend_dep(Repo, Id, Dep) :-
+  feedback:discovered_usedep(Repo://Id, Provider, UseDeps, _Evidence),
+  feedback:provider_dep(Provider, UseDeps, Dep).
 
 
 %! feedback:provider_dep(+Provider, -Dep) is semidet.
@@ -305,7 +394,15 @@ feedback:discovered_bdepend_dep(Repo, Id, Dep) :-
 % `cat/name` BDEPEND atom (phase install, no blocker/operator/version/
 % slot/use).
 
-feedback:provider_dep(Provider, package_dependency(install, no, C, N, none, version_none, [], [])) :-
+feedback:provider_dep(Provider, Dep) :-
+  feedback:provider_dep(Provider, [], Dep).
+
+
+%! feedback:provider_dep(+Provider, +UseDeps, -Dep) is semidet.
+%
+% Like provider_dep/2 but fills the USE-dep slot (portage-ng#110).
+
+feedback:provider_dep(Provider, UseDeps, package_dependency(install, no, C, N, none, version_none, [], UseDeps)) :-
   atom(Provider),
   atomic_list_concat([C, N], '/', Provider),
   C \== '',

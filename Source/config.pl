@@ -1446,6 +1446,18 @@ config:deconflict_collisions(override).
 config:ghc_abi_repair(true).
 
 
+%! config:ghc_pkg_register(?Bool)
+%
+% When true, a successful merge of `dev-lang/ghc` triggers
+% `ghc-pkg recache` so GHC boot libraries are visible to subsequent
+% `dev-haskell/*` configures (portage-ng#108). Complements the reactive
+% ghcabi repair for Cabal "Encountered missing or private dependencies"
+% (bytestring / deepseq / ghc-prim / template-haskell). Default true;
+% silent no-op when `ghc-pkg` is not on PATH.
+
+config:ghc_pkg_register(true).
+
+
 %! config:ocaml_abi_repair(?Bool)
 %
 % When true, a configure/compile phase failure carrying an OCaml
@@ -1505,6 +1517,21 @@ config:missing_provider_feedback(true).
 % terminates. Must be a non-negative integer.
 
 config:missing_provider_max_replan(3).
+
+
+%! config:use_enable_feedback(?Bool)
+%
+% When true, a build phase that dies because a provider was built with
+% the wrong USE set (e.g. `KX11Extras: No such file` when
+% `kwindowsystem` was merged `-X`) is turned into learned knowledge
+% rather than repaired in place (portage-ng#110). The `useenable`
+% exception mechanism records a `feedback:discovered_usedep/4` with HARD
+% bracketed USE deps; the builder's bounded replan loop then re-derives
+% a plan that forces those flags and rebuilds the provider. Plans are
+% derived, never patched — no imperative package.use write from the
+% hook. Set to `false` to disable.
+
+config:use_enable_feedback(true).
 
 
 %! config:kernel_config_repair(?Bool)

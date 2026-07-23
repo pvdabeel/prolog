@@ -8,7 +8,8 @@
 */
 
 /** <module> GHCABI
-GHC ABI-hash repair exception, the native haskell-updater (portage-ng#93).
+GHC ABI-hash repair exception, the native haskell-updater (portage-ng#93),
+plus GHC boot-lib package-DB readiness (portage-ng#108).
 
 Gentoo encodes a Haskell package's identity in ghc-pkg's ABI hash (the
 `-<hash>` suffix, e.g. bifunctors-5.6.3-9AmA3NO9963FDwV9BBcxcZ), NOT in the
@@ -37,6 +38,16 @@ bounded round. Each package is rebuilt at most once per session
 (ghcabi:repair_applied_/2), so the mechanism can never loop; repairs are
 serialized under a dedicated mutex so parallel workers hitting the same
 breakage don't rebuild twice.
+
+A distinct failure class (portage-ng#108) is Cabal dying on GHC boot
+libraries that are not Portage packages at all:
+
+  Error: setup: Encountered missing or private dependencies:
+  bytestring >=0.10.4 && <0.12, deepseq ..., ghc-prim ..., template-haskell ...
+
+Those names have no ebuilds to `repair_rebuild`. Recovery is
+`ghc-pkg recache` (same post-merge hook as ebuild_exec:maybe_register_ghc_pkg/4)
+then retry the failed phase.
 
 Registered with the generic fixup registry (Source/Domain/Gentoo/
 Exceptions/fixup.pl); the builder and printer have no knowledge of this
@@ -256,35 +267,155 @@ ghcabi:log_retry(LogPath, Phase, ExitCode, Tokens) :-
 % handles cascading breakage exposed by the repair itself. Otherwise
 % passes ExitCode0 through unchanged.
 
-fixup:phase_retry_hook(ghcabi, EbuildPath, _Entry, Phase, LogPath, UseString, Callback, SizeBefore, ExitCode0, ExitCode) :-
+fixup:phase_retry_hook(ghcabi, EbuildPath, Entry, Phase, LogPath, UseString, Callback, SizeBefore, ExitCode0, ExitCode) :-
   ( ghcabi:repair_enabled,
     ghcabi:retry_phase(Phase)
-  -> ghcabi:retry_loop(2, EbuildPath, Phase, LogPath, UseString, Callback, SizeBefore, ExitCode0, ExitCode)
+  -> ghcabi:retry_loop(2, EbuildPath, Entry, Phase, LogPath, UseString, Callback, SizeBefore, ExitCode0, ExitCode)
   ;  ExitCode = ExitCode0
   ).
 
 
-%! ghcabi:retry_loop(+RoundsLeft, +EbuildPath, +Phase, +LogPath, +UseString, :Callback, +SizeBefore, +ExitCode0, -ExitCode) is det.
+%! ghcabi:retry_loop(+RoundsLeft, +EbuildPath, +Entry, +Phase, +LogPath, +UseString, :Callback, +SizeBefore, +ExitCode0, -ExitCode) is det.
 
-:- meta_predicate ghcabi:retry_loop(+, +, +, +, +, 2, +, +, -).
+:- meta_predicate ghcabi:retry_loop(+, +, +, +, +, +, 2, +, +, -).
 
-ghcabi:retry_loop(0, _, _, _, _, _, _, ExitCode, ExitCode) :- !.
+ghcabi:retry_loop(0, _, _, _, _, _, _, _, ExitCode, ExitCode) :- !.
 
-ghcabi:retry_loop(RoundsLeft, EbuildPath, Phase, LogPath, UseString, Callback, SizeBefore, ExitCode0, ExitCode) :-
+ghcabi:retry_loop(RoundsLeft, EbuildPath, Entry, Phase, LogPath, UseString, Callback, SizeBefore, ExitCode0, ExitCode) :-
   ( ghcabi:phase_error(LogPath, SizeBefore, Tokens),
     ghcabi:repair_tokens(Tokens, Repaired),
     Repaired > 0
   -> ghcabi:log_retry(LogPath, Phase, ExitCode0, Tokens),
-     ebuild_exec:log_file_size(LogPath, SizeBefore1),
-     ebuild_exec:start_phase_async(EbuildPath, Phase, LogPath, UseString, Pid),
-     ebuild_exec:poll_phase_spinning(Pid, Phase, Callback, ExitCode1),
-     ( ExitCode1 =:= 0
-     -> ExitCode = 0
-     ;  RoundsLeft1 is RoundsLeft - 1,
-        ghcabi:retry_loop(RoundsLeft1, EbuildPath, Phase, LogPath, UseString, Callback, SizeBefore1, ExitCode1, ExitCode)
-     )
+     ghcabi:rerun_phase(RoundsLeft, EbuildPath, Entry, Phase, LogPath, UseString, Callback, ExitCode)
+  ; ghcabi:boot_dep_error(LogPath, SizeBefore, BootLibs),
+    ghcabi:recache_ghc_pkg(BootLibs)
+  -> ghcabi:log_boot_recache(LogPath, Phase, ExitCode0, BootLibs),
+     fixup:record(ghcabi, Entry, boot_dep_recache(BootLibs)),
+     ghcabi:rerun_phase(RoundsLeft, EbuildPath, Entry, Phase, LogPath, UseString, Callback, ExitCode)
+  ; ghcabi:boot_dep_error(LogPath, SizeBefore, BootLibs),
+    % Recache already tried this session; the ebuild version is incompatible
+    % with the live GHC boot libs (e.g. text-1.2.5.0 vs ghc-9.8 bytestring).
+    % Exclude this version and let the builder re-derive (portage-ng#108).
+    ghcabi:exclude_failing_version(Entry, BootLibs, Phase, ExitCode0)
+  -> ExitCode = ExitCode0
   ;  ExitCode = ExitCode0
   ).
+
+
+%! ghcabi:exclude_failing_version(+Entry, +BootLibs, +Phase, +ExitCode) is semidet.
+%
+% Records feedback:excluded_version/4 for the failing tree entry so the
+% next prove skips it. Fails when the entry is not a tree package or the
+% exclusion was already known (no replan growth).
+
+ghcabi:exclude_failing_version(Entry, BootLibs, Phase, ExitCode) :-
+  cache:ordered_entry(Repo, Entry, C, N, Ver),
+  Repo \== pkg,
+  \+ feedback:excluded_version(C, N, Ver, _),
+  Evidence = evidence(boot_dep(BootLibs), phase(Phase), exit(ExitCode), entry(Entry)),
+  feedback:record_excluded_version(C, N, Ver, Evidence),
+  fixup:record(ghcabi, Entry, excluded_version(Ver)),
+  message:color(yellow),
+  format('>>> ghcabi: excluding ~w/~w-~w after GHC boot-lib mismatch; re-deriving plan (#108)~n',
+         [C, N, Ver]),
+  message:color(normal),
+  !.
+
+
+%! ghcabi:rerun_phase(+RoundsLeft, +EbuildPath, +Entry, +Phase, +LogPath, +UseString, :Callback, -ExitCode) is det.
+%
+% Re-runs the failed phase after a successful repair/recache step.
+
+:- meta_predicate ghcabi:rerun_phase(+, +, +, +, +, +, 2, -).
+
+ghcabi:rerun_phase(RoundsLeft, EbuildPath, Entry, Phase, LogPath, UseString, Callback, ExitCode) :-
+  ebuild_exec:log_file_size(LogPath, SizeBefore1),
+  ebuild_exec:start_phase_async(EbuildPath, Phase, LogPath, UseString, Pid),
+  ebuild_exec:poll_phase_spinning(Pid, Phase, Callback, ExitCode1),
+  ( ExitCode1 =:= 0
+  -> ExitCode = 0
+  ;  RoundsLeft1 is RoundsLeft - 1,
+     ghcabi:retry_loop(RoundsLeft1, EbuildPath, Entry, Phase, LogPath, UseString, Callback, SizeBefore1, ExitCode1, ExitCode)
+  ).
+
+
+%! ghcabi:boot_dep_error(+LogPath, +SizeBefore, -BootLibs) is semidet.
+%
+% True when the failed phase log carries Cabal's "Encountered missing or
+% private dependencies" signature naming at least one GHC boot library
+% (portage-ng#108). BootLibs is the list of matching boot-lib names.
+
+ghcabi:boot_dep_error(LogPath, SizeBefore, BootLibs) :-
+  catch(
+    ( exists_file(LogPath),
+      size_file(LogPath, Size),
+      Size > SizeBefore,
+      Start is max(SizeBefore, Size - 262144),
+      Len is Size - Start,
+      setup_call_cleanup(
+        open(LogPath, read, S, [type(binary)]),
+        ( seek(S, Start, bof, _),
+          read_string(S, Len, Tail)
+        ),
+        close(S))
+    ),
+    _, fail),
+  sub_string(Tail, _, _, _, "Encountered missing or private dependencies"),
+  findall(Lib,
+          ( ghcabi:boot_lib(Lib),
+            atom_string(Lib, LibS),
+            sub_string(Tail, _, _, _, LibS)
+          ),
+          BootLibs0),
+  sort(BootLibs0, BootLibs),
+  BootLibs \== [],
+  !.
+
+
+%! ghcabi:boot_lib(?Name) is nondet.
+%
+% GHC boot libraries that ship with the compiler (no Portage ebuild).
+
+ghcabi:boot_lib(bytestring).
+ghcabi:boot_lib(deepseq).
+ghcabi:boot_lib('ghc-prim').
+ghcabi:boot_lib('template-haskell').
+ghcabi:boot_lib(array).
+ghcabi:boot_lib(containers).
+ghcabi:boot_lib(directory).
+ghcabi:boot_lib(filepath).
+ghcabi:boot_lib(pretty).
+ghcabi:boot_lib(process).
+ghcabi:boot_lib(time).
+ghcabi:boot_lib(unix).
+ghcabi:boot_lib(binary).
+
+
+%! ghcabi:recache_ghc_pkg(+BootLibs) is semidet.
+%
+% Runs ghc-pkg recache once under the ghc_abi_repair mutex. Succeeds when
+% the command was attempted (even if ghc-pkg is absent — then the retry
+% will fail with the original exit and we stop). Deduplicated per session
+% via repair_applied_(ghc_pkg_recache, _).
+
+ghcabi:recache_ghc_pkg(BootLibs) :-
+  with_mutex(ghc_abi_repair,
+    ( ghcabi:repair_applied_(ghc_pkg_recache, _)
+    -> fail
+    ;  ebuild_exec:register_ghc_pkg(boot_dep(BootLibs)),
+       assertz(ghcabi:repair_applied_(ghc_pkg_recache, BootLibs))
+    )).
+
+
+%! ghcabi:log_boot_recache(+LogPath, +Phase, +ExitCode, +BootLibs) is det.
+
+ghcabi:log_boot_recache(LogPath, Phase, ExitCode, BootLibs) :-
+  catch(
+    ( open(LogPath, append, S),
+      format(S, '~n=== ~w failed (exit ~w) with missing GHC boot deps ~w; ghc-pkg recache and retry (portage-ng#108) ===~n',
+             [Phase, ExitCode, BootLibs]),
+      close(S)
+    ), _, true).
 
 
 % -----------------------------------------------------------------------------

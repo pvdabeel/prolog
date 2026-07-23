@@ -854,7 +854,7 @@ candidate:required_use_term_has_choice(use_conditional_group(_, _, _, SubDeps)) 
   candidate:required_use_term_has_choice(Sub).
 
 
-%! candidate:grouped_dep_stabilize_bwu(+RepoEntry, +CtxIn, -CtxOut) is det.
+%! candidate:grouped_dep_stabilize_bwu(+RepoEntry, +CtxIn, -CtxOut) is semidet.
 %
 % Bug B (clutter[introspection]): bracket USE can thread a partial BWU
 % before || ( aqua wayland X ) picks a global flag. Only packages with
@@ -871,6 +871,11 @@ candidate:required_use_term_has_choice(use_conditional_group(_, _, _, SubDeps)) 
 % with the backend off -> cascading unsatisfied_constraints. We gate the
 % extra work behind the cheap entry_has_choice_required_use/2 scan to
 % preserve the empty-BWU fast path for the (vast) majority of edges.
+%
+% Post-stabilize verification (portage-ng#109/#111): never unify a BWU
+% that still violates REQUIRED_USE or profile use.mask/force. Fail the
+% edge so selection falls through to a domain assumption (emerge's
+% use_dep_unsat class) instead of planning a doomed build.
 
 candidate:grouped_dep_stabilize_bwu(Repo://Entry, CtxIn, CtxOut) :-
   use:context_build_with_use_state(CtxIn, BWU0),
@@ -878,14 +883,33 @@ candidate:grouped_dep_stabilize_bwu(Repo://Entry, CtxIn, CtxOut) :-
   -> ( candidate:entry_has_choice_required_use(Repo, Entry),
        use:stabilize_required_use(Repo://Entry, BWU0, BWU2),
        BWU2 \== BWU0
-     -> feature_unification:unify([build_with_use:BWU2], CtxIn, CtxOut)
+     -> candidate:commit_stabilized_bwu(Repo://Entry, CtxIn, BWU2, CtxOut)
      ; CtxOut = CtxIn
      )
-  ; use:verify_required_use_with_bwu(Repo://Entry, BWU0)
+  ; use:use_dep_atom_satisfiable(Repo://Entry, BWU0)
   -> CtxOut = CtxIn
   ; use:build_with_use_resolve_required_use(BWU0, Repo://Entry, BWU1),
     use:stabilize_required_use(Repo://Entry, BWU1, BWU2),
-    feature_unification:unify([build_with_use:BWU2], CtxIn, CtxOut)
+    candidate:commit_stabilized_bwu(Repo://Entry, CtxIn, BWU2, CtxOut)
+  ).
+
+
+%! candidate:commit_stabilized_bwu(+RepoEntry, +CtxIn, +BWU, -CtxOut) is semidet.
+%
+% Unify BWU into the proof context only when the joint USE-dep check
+% passes. On failure, record a requse_violation_ memo (so the assumption
+% fallback can tag the domain assumption) and fail the edge.
+
+candidate:commit_stabilized_bwu(Repo://Entry, CtxIn, BWU, CtxOut) :-
+  ( use:use_dep_atom_satisfiable(Repo://Entry, BWU)
+  -> feature_unification:unify([build_with_use:BWU], CtxIn, CtxOut)
+  ; use:describe_use_dep_unsat(Repo://Entry, BWU, ViolDesc),
+    cache:ordered_entry(Repo, Entry, C, N, _),
+    ( \+ memo:requse_violation_(C, N, _) ->
+        assertz(memo:requse_violation_(C, N, ViolDesc))
+    ; true
+    ),
+    fail
   ).
 
 

@@ -779,6 +779,55 @@ ebuild_exec:maybe_reactivate_toolchain(Action, Repo, Entry, done) :-
 ebuild_exec:maybe_reactivate_toolchain(_Action, _Repo, _Entry, _Outcome).
 
 
+%! ebuild_exec:maybe_register_ghc_pkg(+Action, +Repo, +Entry, +Outcome) is det.
+%
+% Post-merge domain hook (portage-ng#108): after a successful merge of
+% `dev-lang/ghc`, run `ghc-pkg recache` so boot libraries (bytestring,
+% deepseq, ghc-prim, template-haskell, …) are visible to subsequent
+% `dev-haskell/*` configures. Needed especially on the binpkg/qmerge path
+% where package-DB registration can lag the merge. Gated by
+% config:ghc_pkg_register/1 (default true). Always succeeds; a missing
+% `ghc-pkg` is a silent no-op (e.g. macOS standalone).
+
+ebuild_exec:maybe_register_ghc_pkg(Action, Repo, Entry, done) :-
+  memberchk(Action, [install, reinstall, update, downgrade]),
+  ( current_predicate(config:ghc_pkg_register/1)
+  -> config:ghc_pkg_register(true)
+  ;  true
+  ),
+  cache:ordered_entry(Repo, Entry, 'dev-lang', ghc, _Ver),
+  !,
+  ebuild_exec:register_ghc_pkg(Repo://Entry).
+
+ebuild_exec:maybe_register_ghc_pkg(_Action, _Repo, _Entry, _Outcome).
+
+
+%! ebuild_exec:register_ghc_pkg(+RepoEntry) is det.
+%
+% Runs `ghc-pkg recache` under the portage_pkg_merge mutex. Fully guarded
+% so a host without ghc-pkg never turns a successful merge into a failure.
+
+ebuild_exec:register_ghc_pkg(RepoEntry) :-
+  ( ebuild_exec:reactivation_log_path(LogPath)
+  -> format(atom(Redir), ' >>~w 2>&1', [LogPath]),
+     format(atom(Marker), 'echo "[ghc-pkg-recache] ~w" >>~w; ', [RepoEntry, LogPath])
+  ;  Redir = ' >/dev/null 2>&1',
+     Marker = ''
+  ),
+  format(atom(Cmd),
+         'if command -v ghc-pkg >/dev/null 2>&1; then ghc-pkg recache~w; fi; true',
+         [Redir]),
+  atomic_list_concat([Marker, Cmd], Script),
+  catch(
+    ebuild_exec:with_portage_pkg_merge_lock(merge,
+      ( process_create(path(sh), ['-c', Script],
+                       [stdout(null), stderr(null), process(Pid)]),
+        process_wait(Pid, _Status)
+      )),
+    _Error,
+    true).
+
+
 %! ebuild_exec:toolchain_cn(+Category, +Name, -Kind) is semidet.
 %
 % Recognises toolchain packages whose merge requires reactivating the live
@@ -1112,10 +1161,12 @@ ebuild_exec:poll_phase_spinning(Pid, Phase, Callback, ExitCode) :-
 %   ).
 
 % Public entry: dispatch to the right execution path, then run the
-% domain post-merge hook (toolchain reactivation) once Outcome is known.
+% domain post-merge hooks (toolchain reactivation, ghc-pkg register)
+% once Outcome is known.
 ebuild_exec:execute(Action, Repo, Entry, Ctx, Outcome) :-
   ebuild_exec:execute_dispatch(Action, Repo, Entry, Ctx, Outcome),
-  ebuild_exec:maybe_reactivate_toolchain(Action, Repo, Entry, Outcome).
+  ebuild_exec:maybe_reactivate_toolchain(Action, Repo, Entry, Outcome),
+  ebuild_exec:maybe_register_ghc_pkg(Action, Repo, Entry, Outcome).
 
 ebuild_exec:execute_dispatch(uninstall, Repo, Entry, Ctx, Outcome) :-
   !,
@@ -1168,10 +1219,12 @@ ebuild_exec:execute_phases(Action, Repo, Entry, Ctx, Outcome) :-
 :- meta_predicate ebuild_exec:execute_with_progress_dispatch(+, +, +, +, 2, -).
 
 % Public entry: dispatch to the right execution path, then run the domain
-% post-merge hook (toolchain reactivation) once Outcome is known.
+% post-merge hooks (toolchain reactivation, ghc-pkg register) once Outcome
+% is known.
 ebuild_exec:execute_with_progress(Action, Repo, Entry, Ctx, PhaseCallback, Outcome) :-
   ebuild_exec:execute_with_progress_dispatch(Action, Repo, Entry, Ctx, PhaseCallback, Outcome),
-  ebuild_exec:maybe_reactivate_toolchain(Action, Repo, Entry, Outcome).
+  ebuild_exec:maybe_reactivate_toolchain(Action, Repo, Entry, Outcome),
+  ebuild_exec:maybe_register_ghc_pkg(Action, Repo, Entry, Outcome).
 
 % Disabled: see execute/5 comment above.
 %

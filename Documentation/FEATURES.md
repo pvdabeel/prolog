@@ -157,6 +157,14 @@ everything already built satisfies from the VDB, so the retry pass only builds
 the newly discovered provider and its target.  Each discovery doubles as an
 upstream ebuild/eclass bug report.
 
+**USE-enable feedback (derive, never patch).**
+When a build dies because a provider was merged with the wrong USE set (e.g.
+`KX11Extras: No such file` after `kwindowsystem` built `-X`), re-adding a bare
+`cat/name` BDEPEND is a no-op.  `useenable` learns a HARD `[flag]` usedep,
+records `discovered_usedep`, and re-derives so BWU forcing rebuilds the
+provider with the flag (portage-ng#110).  No imperative `package.use` write
+from the hook.
+
 **Snapshots.**
 Before upgrading, `--snapshot` creates quickpkg-style binary archives of
 installed packages, enabling `--rollback` to a known-good state if an upgrade

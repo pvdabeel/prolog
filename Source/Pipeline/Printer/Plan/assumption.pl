@@ -66,6 +66,13 @@ assumption:assumption_type(domain(X), Type) :-
   ; fail
   ).
 
+assumption:assumption_type(Term, use_dep_unsat) :-
+  explainer:term_ctx(Term, Ctx),
+  ( memberchk(use_dep_unsat(_), Ctx)
+  ; memberchk(required_use_violation(use_dep_unsat(_,_,_)), Ctx)
+  ),
+  !.
+
 assumption:assumption_type(Term, required_use_violation) :-
   explainer:term_ctx(Term, Ctx),
   memberchk(required_use_violation(_), Ctx),

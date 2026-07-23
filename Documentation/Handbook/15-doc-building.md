@@ -277,6 +277,27 @@ report draft at the end of the build for every dependency worked around
 this session — the record doubles as an upstream ebuild/eclass bug
 report (see [Chapter 18](18-doc-upstream-bugs.md)).
 
+### USE-enable feedback (diagnose → learn → re-derive)
+
+A closely related gap is when the provider *is* declared and even
+installed, but was built with the wrong USE set — e.g.
+`KX11Extras: No such file or directory` because
+`kde-frameworks/kwindowsystem` was merged `-X` on a headless profile
+(portage-ng#110).  Re-adding a bare `cat/name` BDEPEND (the #102 path)
+is a no-op: the package is already in the plan/VDB.  What is missing is
+a HARD `[flag]` usedep.
+
+`useenable.pl`, gated by `config:use_enable_feedback/1`, mirrors the
+#102 three seams: detect a compile/configure symbol, resolve it via a
+curated seed table to `Provider + HARD usedeps`, record a durable
+`feedback:discovered_usedep/4`, and let `builder:build_loop/2`
+re-derive.  On the next proof `query.pl` unions a
+`package_dependency(..., UseDeps)` edge so the existing BWU /
+`bwu_force` machinery rebuilds the provider with the flag.  Plans stay
+derived — the hook never writes `/etc/portage/package.use` itself
+(any `suggestion(use_change)` that the re-derived plan emits is a
+consequence of proving, not an imperative patch).
+
 ### Build summary reporting
 
 At the end of a build, the printer renders one block per mechanism
