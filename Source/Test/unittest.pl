@@ -1421,6 +1421,24 @@ test(pimcommon_activities_header) :-
     ["fatal error: KPim6PimCommonActivities: No such file or directory"],
     symbol(kf_header, 'KPim6PimCommonActivities'), _).
 
+% Real kaddressbook configure log: CMake find_package, not a fatal #include.
+test(pimcommon_activities_could_not_find) :-
+  useenable:detector(
+    ["-- Could NOT find KPim6PimCommonActivities (missing: KPim6PimCommonActivities_DIR)"],
+    symbol(kf_header, 'KPim6PimCommonActivities'), _).
+
+% Real kget compile log: GCC colors wrap the header token in CSI sequences.
+test(kx11extras_ansi_colored) :-
+  useenable:detector(
+    ["\u001b[01m\u001b[K/tmp/droptarget.cpp:37:10:\u001b[m\u001b[K \u001b[01;31m\u001b[Kfatal error: \u001b[m\u001b[KKX11Extras: No such file or directory"],
+    symbol(kf_header, 'KX11Extras'), _).
+
+test(strip_ansi_removes_embedded_csi) :-
+  useenable:strip_ansi(
+    "fatal error: \u001b[m\u001b[KKX11Extras: No such file",
+    Clean),
+  Clean == "fatal error: KX11Extras: No such file".
+
 test(cmake_xdamage) :-
   useenable:detector(
     ["-- Looking for X11_Xdamage_LIB - NOTFOUND"],
@@ -1429,6 +1447,11 @@ test(cmake_xdamage) :-
 test(ignores_regular_header, [fail]) :-
   useenable:detector(
     ["fatal error: foo/bar.h: No such file or directory"],
+    symbol(kf_header, _), _).
+
+test(ignores_unrelated_could_not_find, [fail]) :-
+  useenable:detector(
+    ["-- Could NOT find ReuseTool (missing: REUSETOOL_EXECUTABLE)"],
     symbol(kf_header, _), _).
 
 :- end_tests(useenable_detectors).

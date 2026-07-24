@@ -26,6 +26,12 @@ Resolution is curated only (no guessing): a small seed table maps
 compile/configure symbols to `Provider + HARD usedeps`. Unmapped
 symbols go to the unresolved backlog.
 
+Log scanning strips GCC/CMake ANSI CSI sequences before matching: colored
+`fatal error: <CSI>KX11Extras:` lines otherwise extract a garbage token and
+silently miss the seed (Cluster A false negatives on tinderbox-ng). CMake
+`Could NOT find Foo` is recognized in addition to `fatal error` / `*_LIB
+NOTFOUND`, so seeds like `KPim6PimCommonActivities` fire on real KF6 logs.
+
 Registered with the generic fixup registry
 (Source/Domain/Gentoo/Exceptions/fixup.pl).
 */
@@ -110,6 +116,7 @@ useenable:tree_entry(Entry, Repo, C, N) :-
 %! useenable:scan_log(+LogPath, +SizeBefore, -Lines) is det.
 %
 % Trailing log segment after SizeBefore (same window as missing_provider).
+% Each line is ANSI-stripped so GCC colorized diagnostics still match.
 
 useenable:scan_log(LogPath, SizeBefore, Lines) :-
   ( catch(
@@ -124,9 +131,51 @@ useenable:scan_log(LogPath, SizeBefore, Lines) :-
             read_string(S, Len, Tail) ),
           close(S)) ),
       _, fail)
-  -> split_string(Tail, "\n", "\r", Lines)
+  -> split_string(Tail, "\n", "\r", RawLines),
+     maplist(useenable:strip_ansi, RawLines, Lines)
   ;  Lines = []
   ).
+
+
+%! useenable:strip_ansi(+In, -Out) is det.
+%
+% Remove ECMA-48 CSI sequences (`ESC [ … final`) from a log line. GCC's
+% colored `fatal error:` diagnostics wrap the header token in SGR/`EL`
+% sequences; without stripping, extract_bare_header/2 keeps the ESC bytes
+% inside the token and kf_header_name/1 never matches.
+
+useenable:strip_ansi(In, Out) :-
+  ( string(In) -> Str = In
+  ; atom(In)   -> atom_string(In, Str)
+  ;               format(string(Str), '~w', [In])
+  ),
+  string_codes(Str, Codes),
+  useenable:strip_ansi_codes(Codes, Clean),
+  string_codes(Out, Clean).
+
+useenable:strip_ansi_codes([], []).
+useenable:strip_ansi_codes([0x1B, 0x5B|Rest], Out) :- !,
+  useenable:drop_csi(Rest, Rest2),
+  useenable:strip_ansi_codes(Rest2, Out).
+useenable:strip_ansi_codes([0x1B|Rest], Out) :- !,
+  useenable:drop_esc_residue(Rest, Rest2),
+  useenable:strip_ansi_codes(Rest2, Out).
+useenable:strip_ansi_codes([C|Rest], [C|Out]) :-
+  useenable:strip_ansi_codes(Rest, Out).
+
+% CSI parameter (0x30-3F) + intermediate (0x20-2F) bytes, then a final (0x40-7E).
+useenable:drop_csi([C|Rest], Rest2) :-
+  C >= 0x20, C =< 0x3F, !,
+  useenable:drop_csi(Rest, Rest2).
+useenable:drop_csi([C|Rest], Rest) :-
+  C >= 0x40, C =< 0x7E, !.
+useenable:drop_csi([], []).
+
+useenable:drop_esc_residue([], []).
+useenable:drop_esc_residue([C|Rest], Rest) :-
+  C >= 0x40, C =< 0x7E, !.
+useenable:drop_esc_residue([_|Rest], Rest2) :-
+  useenable:drop_esc_residue(Rest, Rest2).
 
 
 % -----------------------------------------------------------------------------
@@ -264,23 +313,38 @@ useenable:log_already_declared(Entry, Provider, UseDeps, symbol(Kind, Name)) :-
 %! useenable:detector(+Lines, -Symbol, -Line) is nondet.
 %
 % Normalizes a failed phase log into symbol(Kind, Name) + evidence line.
+% Input lines may still contain ANSI (unit tests / alternate callers); each
+% candidate is stripped before matching. Evidence Line is the cleaned text.
+
+useenable:detector(Lines, Symbol, Line) :-
+  member(Raw, Lines),
+  useenable:strip_ansi(Raw, Line),
+  useenable:detect_line(Line, Symbol).
+
+
+%! useenable:detect_line(+Line, -Symbol) is nondet.
+%
+% Match a single already-stripped log line.
 
 % KF6/Qt class header missing because provider USE is off:
 %   fatal error: KX11Extras: No such file or directory
-useenable:detector(Lines, symbol(kf_header, Name), Line) :-
-  member(Line, Lines),
+useenable:detect_line(Line, symbol(kf_header, Name)) :-
   sub_string(Line, _, _, _, "No such file"),
   useenable:extract_bare_header(Line, Name),
-  useenable:kf_header_name(Name),
-  !.
+  useenable:kf_header_name(Name).
 
-% CMake find_library / find_package style:
+% CMake find_package style (KF6 config packages):
+%   -- Could NOT find KPim6PimCommonActivities (missing: …_DIR)
+useenable:detect_line(Line, symbol(kf_header, Name)) :-
+  sub_string(Line, _, _, _, "Could NOT find"),
+  useenable:extract_could_not_find(Line, Name),
+  useenable:kf_header_name(Name).
+
+% CMake find_library style:
 %   X11_Xdamage_LIB NOTFOUND
-useenable:detector(Lines, symbol(cmake_lib, Name), Line) :-
-  member(Line, Lines),
+useenable:detect_line(Line, symbol(cmake_lib, Name)) :-
   sub_string(Line, _, _, _, "NOTFOUND"),
-  useenable:extract_cmake_lib(Line, Name),
-  !.
+  useenable:extract_cmake_lib(Line, Name).
 
 
 %! useenable:extract_bare_header(+Line, -Name) is semidet.
@@ -292,10 +356,27 @@ useenable:extract_bare_header(Line, Name) :-
   ( useenable:extract_between(Line, "fatal error: ", ":", Tok)
   ; useenable:extract_between(Line, "error: ", ": No such file", Tok)
   ),
-  atom_string(Name, Tok),
+  atom_string(Name0, Tok),
+  normalize_space(atom(Name), Name0),
+  Name \== '',
   \+ sub_atom(Name, _, _, 0, '.h'),
   \+ sub_atom(Name, _, _, 0, '.hpp'),
   \+ sub_atom(Name, _, _, 0, '.hh'),
+  \+ sub_atom(Name, _, _, _, '/').
+
+
+%! useenable:extract_could_not_find(+Line, -Name) is semidet.
+%
+% Pulls the package/component token from a CMake
+% `Could NOT find <Name> (missing: …)` diagnostic.
+
+useenable:extract_could_not_find(Line, Name) :-
+  ( useenable:extract_between(Line, "Could NOT find ", " (", Tok)
+  ; useenable:extract_between(Line, "Could NOT find ", " ", Tok)
+  ),
+  atom_string(Name0, Tok),
+  normalize_space(atom(Name), Name0),
+  Name \== '',
   \+ sub_atom(Name, _, _, _, '/').
 
 
