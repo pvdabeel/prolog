@@ -21,6 +21,15 @@ a multi-key ranking on admitted arms.
 **Owns:** `rules.pl` choice section, `Rules/ranking.pl`
 (`prioritize_deps_keep_all`), Handbook 11 “Any-of (`||`) arm selection”.
 
+**Diagnostics:** `--choice-log` via `portage-ng-dev` sets
+`-Dchoice_log=true` (compile-time) and arms `choicelog` at runtime (see
+`Source/Application/Performance/choicelog.pl`). Hot-path emit/wrap sites
+are `goal_expansion`'d to nothing when the define is absent. Records
+trying/succeeded/failed for `||` arms and alternative version binds,
+plus sparse reject/learn/reprove/assumption events. Dump goes to stderr
+after prove; `choicelog:events/1` returns the term list for shell or LLM
+use.
+
 **Invariants:**
 
 - Only **admitted** arms (visible + domain-feasible) enter ranking.

@@ -684,16 +684,59 @@ candidate:grouped_dep_select_and_build(Action, C, N, PackageDeps1, Context, Cond
   GD = gd(Action, C, N, PackageDeps1, SlotReq, Context),
   candidate:grouped_dep_slot_lock(GD, SsLock),
   candidate:grouped_dep_find_candidate(GD, SsLock, FoundRepo://Candidate, CandPreVerified),
-  candidate:grouped_dep_avoid_self(GD, FoundRepo://Candidate),
-  candidate:grouped_dep_verify_candidate(CandPreVerified, GD, FoundRepo://Candidate),
-  candidate:candidate_reverse_deps_compatible_with_parent(Context, FoundRepo://Candidate),
-  candidate:grouped_dep_use_and_slot(GD, FoundRepo://Candidate,
-                                     Constraints, SlotMeta, NewerContext0),
-  candidate:grouped_dep_tag_suggestions(FoundRepo://Candidate, NewerContext0, NewerContext),
-  candidate:grouped_dep_determine_action(GD, FoundRepo://Candidate,
-                                         SlotMeta, NewerContext, ActionGoal),
-  candidate:grouped_dep_assemble_conditions(GD, FoundRepo://Candidate, SlotMeta,
-                                            Constraints, ActionGoal, Conditions).
+  candidate:choicelog_version_wrap(CandPreVerified, GD, FoundRepo://Candidate,
+    ( candidate:grouped_dep_avoid_self(GD, FoundRepo://Candidate),
+      candidate:grouped_dep_verify_candidate(CandPreVerified, GD, FoundRepo://Candidate),
+      candidate:candidate_reverse_deps_compatible_with_parent(Context, FoundRepo://Candidate),
+      candidate:grouped_dep_use_and_slot(GD, FoundRepo://Candidate,
+                                         Constraints, SlotMeta, NewerContext0),
+      candidate:grouped_dep_tag_suggestions(FoundRepo://Candidate, NewerContext0, NewerContext),
+      candidate:grouped_dep_determine_action(GD, FoundRepo://Candidate,
+                                             SlotMeta, NewerContext, ActionGoal),
+      candidate:grouped_dep_assemble_conditions(GD, FoundRepo://Candidate, SlotMeta,
+                                                Constraints, ActionGoal, Conditions)
+    )).
+
+
+%! candidate:choicelog_version_wrap(+PreVerified, +GD, +Entry, :Goal) is nondet.
+%
+% When the choice log is armed and this is a fresh multi-candidate bind,
+% wrap Goal with trying/succeeded/failed version events. Otherwise run Goal.
+
+candidate:choicelog_version_wrap(true, _GD, _Entry, Goal) :-
+  !,
+  call(Goal).
+candidate:choicelog_version_wrap(false, GD, Entry, Goal) :-
+  ( choicelog:armed,
+    candidate:choicelog_version_data(GD, Entry, Data)
+  -> choicelog:do_wrap(version, Data, Goal)
+  ; call(Goal)
+  ).
+
+
+%! candidate:choicelog_version_data(+GD, +Entry, -Data) is semidet.
+%
+% Builds version-event Data for alternative multi-candidate binds only
+% (Index > 1). The first pick of a multi-candidate set is omitted to
+% keep the log focused on backtracks; singleton lists are skipped.
+
+candidate:choicelog_version_data(gd(Action, C, N, PackageDeps, SlotReq, Context),
+                                  FoundRepo://Candidate, Data) :-
+  candidate:grouped_dep_slot_lock(gd(Action, C, N, PackageDeps, SlotReq, Context), SsLock),
+  findall(E,
+          acceptance:accepted_keyword_candidate(Action, C, N, SlotReq, SsLock, Context, E),
+          Candidates),
+  length(Candidates, CandCount),
+  CandCount > 1,
+  choicelog:nth_member(Candidates, FoundRepo://Candidate, Index),
+  Index > 1,
+  choicelog:parent_summary(Context, Parent),
+  cache:ordered_entry(FoundRepo, Candidate, _, _, CandVer),
+  ( SlotReq = [slot(Slot)|_] -> true
+  ; SlotReq = [any_same_slot] -> Slot = ':='
+  ; Slot = '*'
+  ),
+  Data = version(Parent, C, N, CandVer, Slot, Index, CandCount).
 
 
 %! candidate:grouped_dep_slot_lock(+GD, -SsLock) is det.
@@ -1180,7 +1223,9 @@ candidate:grouped_dep_build_assumption(Action, C, N, PackageDeps1, PackageDepsOr
       feature_unification:unify([slot_conflict(SlotConflictDesc)], Ctx5, Ctx6)
   ; Ctx6 = Ctx5
   ),
-  Conditions = [assumed(grouped_package_dependency(C,N,PackageDeps1):Action?{Ctx6})].
+  Conditions = [assumed(grouped_package_dependency(C,N,PackageDeps1):Action?{Ctx6})],
+  Lit = grouped_package_dependency(C, N, PackageDeps1):Action,
+  choicelog:clog_emit(assumption, recorded, assumption(Reason, Lit)).
 
 
 %! candidate:grouped_dep_tag_assumption_suggestion(+C, +N, +PackageDeps, +Reason, +Ctx0, -Ctx) is det.

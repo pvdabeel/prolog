@@ -166,8 +166,10 @@ heuristic:handle_reprove(cn_domain(C, N, Domain, Candidates, Reasons), Added) :-
   ; AddedOrigins == true -> Added = true
   ; Added = false
   ),
+  choicelog:clog_emit(reject, recorded, reject(C, N, Domain, Candidates, Reasons)),
+  choicelog:clog_emit(reprove, recorded, reprove(cn_domain(C, N, Domain, Candidates, Reasons))),
   !.
-heuristic:handle_reprove(bwu_force_flush(_Pending), true) :-
+heuristic:handle_reprove(bwu_force_flush(Pending), true) :-
   % portage-ng#91 sub-mechanism B / portage-ng#94: end-of-pass batched flush
   % of the shared-dep USE forces learned during the pass that just completed
   % (see heuristic:reprove_pending/1). The forces are already in the learned
@@ -176,8 +178,11 @@ heuristic:handle_reprove(bwu_force_flush(_Pending), true) :-
   % applied from the start. Each flush corresponds to at least one
   % prover:learn with Added==true, so the loop terminates once a pass learns
   % nothing new.
+  choicelog:clog_emit(reprove, recorded, reprove(bwu_force_flush(Pending))),
   !.
-heuristic:handle_reprove(_, false).
+heuristic:handle_reprove(Info, false) :-
+  choicelog:clog_emit(reprove, recorded, reprove(Info)),
+  !.
 
 
 %! heuristic:reprove_pending(-Info)

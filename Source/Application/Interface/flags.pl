@@ -65,6 +65,12 @@ interface:process_flags :-
   (lists:memberchk(alert(true),            Options) -> asserta(preference:local_flag(alert)) ; true),
   (lists:memberchk(quiet(true),             Options) -> asserta(preference:local_flag(quiet)) ; true),
   (lists:memberchk(verbose(true),           Options) -> asserta(config:verbose(true)) ; true),
+  (lists:memberchk(choicelog(true),         Options)
+    -> ( asserta(config:choice_log(true)),
+         choicelog:arm,
+         choicelog:reset
+       )
+    ; true),
   (lists:memberchk(profile(true),           Options) -> set_prolog_flag(instrumentation, true) ; true),
   (lists:memberchk(logs(true),              Options) -> asserta(config:show_build_logs(true)) ; true),
   (lists:memberchk(ci(true),                Options) -> asserta(config:cli_ci(true)) ; true),

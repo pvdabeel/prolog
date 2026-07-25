@@ -215,6 +215,17 @@ sandbox:safe_primitive(sampler:ctx_distribution(_,_,_,_)).
 sandbox:safe_primitive(sampler:report_callsites(_)).
 sandbox:safe_primitive(sampler:report_callsites_sig(_)).
 
+sandbox:safe_primitive(choicelog:arm).
+sandbox:safe_primitive(choicelog:disarm).
+sandbox:safe_primitive(choicelog:armed).
+sandbox:safe_primitive(choicelog:reset).
+sandbox:safe_primitive(choicelog:emit(_,_,_)).
+sandbox:safe_primitive(choicelog:clog_emit(_,_,_)).
+sandbox:safe_primitive(choicelog:events(_)).
+sandbox:safe_primitive(choicelog:dump).
+sandbox:safe_primitive(choicelog:maybe_dump).
+sandbox:safe_primitive(choicelog:with_logging(_)).
+
 % -----------------------------------------------------------------------------
 %  Rules
 % -----------------------------------------------------------------------------

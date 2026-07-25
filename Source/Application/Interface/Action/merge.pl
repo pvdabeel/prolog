@@ -69,6 +69,7 @@ action:process_action(Action,ArgsSets,Options) :-
               message:print(' Proof/planning failed. Check that the target is valid and all dependencies exist.'), nl,
               message:color(normal),
               flush_output,
+              choicelog:maybe_dump,
               halt(1)
             ),
             printer:print(Proposal,ModelAVL,ProofAVL,Plan,Triggers,SCCs),
@@ -79,7 +80,8 @@ action:process_action(Action,ArgsSets,Options) :-
             ( ExplainOpt \== none, PretendMode == true
             -> run_explain(ExplainOpt, Proposal, ProofAVL, ModelAVL, Plan, Triggers)
             ;  true
-            )
+            ),
+            choicelog:maybe_dump
           )
       ; catch(
           call_with_time_limit(TimeLimitSec,
@@ -90,6 +92,7 @@ action:process_action(Action,ArgsSets,Options) :-
                 message:print(' Proof/planning failed. Check that the target is valid and all dependencies exist.'), nl,
                 message:color(normal),
                 flush_output,
+                choicelog:maybe_dump,
                 halt(1)
               ),
               printer:print(Proposal,ModelAVL,ProofAVL,Plan,Triggers,SCCs),
@@ -100,7 +103,8 @@ action:process_action(Action,ArgsSets,Options) :-
               ( ExplainOpt \== none, PretendMode == true
               -> run_explain(ExplainOpt, Proposal, ProofAVL, ModelAVL, Plan, Triggers)
               ;  true
-              )
+              ),
+              choicelog:maybe_dump
             )),
           time_limit_exceeded,
           ( message:bubble(red,'Error'),
@@ -108,6 +112,7 @@ action:process_action(Action,ArgsSets,Options) :-
             message:print(' Time limit exceeded while proving/planning. Try increasing --timeout or narrowing the target.'), nl,
             message:color(normal),
             flush_output,
+            choicelog:maybe_dump,
             halt(1)
           )
         )

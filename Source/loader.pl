@@ -127,7 +127,8 @@ loader:group(knowledge_modules,
     portage('Source/Knowledge/query.pl')]).
 
 loader:group(domain_modules,
-   [portage('Source/Domain/Gentoo/eapi.pl'),
+   [portage('Source/Application/Performance/choicelog.pl'),
+    portage('Source/Domain/Gentoo/eapi.pl'),
     portage('Source/Domain/Gentoo/version.pl'),
     portage('Source/Pipeline/Prover/explainer.pl'),
     portage('Source/Pipeline/Prover/explanation.pl'),

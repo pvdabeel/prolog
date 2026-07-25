@@ -179,5 +179,6 @@ interface:spec(S) :-
        % debugging purposes
 
        [opt(ci),        type(boolean),   default(false),                          longflags(['ci']),        help('CI mode: non-interactive, fail with nonzero exit code on assumptions')],
+       [opt(choicelog), type(boolean),   default(false),                          longflags(['choice-log']), help('Log structured resolver choice events to stderr after prove. Use the wrapper (sets -Dchoice_log=true) so emit/wrap sites are compiled in; without it they are compiled out')],
        [opt(profile),   type(boolean),   default(false),                          longflags(['profile']),   help('Enable instrumentation (sampler, debug hooks). Use wrapper or pass -Dinstrumentation=true to swipl.')]
       ].

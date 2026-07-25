@@ -182,6 +182,18 @@ config:binpkg_self_inject(true).
 config:binpkg_debug(false).
 
 
+%! config:choice_log(?Bool)
+%
+% When `true`, the resolver arms the structured choice-event log
+% (`choicelog`) at runtime. Hot-path emit/wrap sites are only present
+% when loaded with `-Dchoice_log=true` (set by `portage-ng-dev` for
+% `--choice-log`); otherwise they are compiled out. Default `false`.
+
+:- dynamic config:choice_log/1.
+
+config:choice_log(false).
+
+
 % -----------------------------------------------------------------------------
 %  Gentoo profile (for Portage parity)
 % -----------------------------------------------------------------------------

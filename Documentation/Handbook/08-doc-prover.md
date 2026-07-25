@@ -378,6 +378,27 @@ literal is resolved and are injected as proof obligations via
 `rules:literal_hook/4`.
 
 
+## Choice-event log
+
+For debugging which `||` arm or version candidate the resolver tried,
+use `--choice-log` via the `portage-ng-dev` wrapper.  The wrapper passes
+`-Dchoice_log=true` so emit/wrap sites are compiled in; without that
+define, `goal_expansion` compiles them to `true` / the wrapped Goal
+(zero overhead, same pattern as `--profile` / `instrumentation`).
+
+Runtime arming still requires `--choice-log` (or `choicelog:arm/0`).
+`choicelog` (`Source/Application/Performance/choicelog.pl`) records:
+
+- `any_of` — trying / succeeded / failed for choice-group arms
+- `version` — alternative multi-candidate binds (`index > 1` only)
+- `reject` / `learn` / `reprove` / `assumption` — sparse conflict path
+
+After prove, a human-readable dump is written to stderr.  From `--shell`
+(with `-Dchoice_log=true`), `choicelog:events/1` returns the term list
+and `choicelog:dump/0` reprints it.  See also
+[Policy: Choice](Policy/choice.md).
+
+
 ## Further reading
 
 - [Chapter 9: Assumptions and Constraint Learning](09-doc-prover-assumptions.md) —

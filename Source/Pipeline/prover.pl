@@ -1191,6 +1191,10 @@ prover:learn(Literal, Constraint, Added) :-
     nb_setval(prover_learned_constraints, AVL1),
     Added = true
   ),
+  ( Added == true ->
+      choicelog:clog_emit(learn, recorded, learn(Literal, Constraint, true))
+  ; true
+  ),
   !.
 
 

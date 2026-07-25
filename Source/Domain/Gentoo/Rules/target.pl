@@ -305,12 +305,14 @@ candidate:resolve(choice_group(Deps):config?{Context}, [D:config?{Context}]) :-
 candidate:resolve(choice_group(Deps):Action?{Context}, Conditions) :-
   ranking:prioritize_deps_keep_all(Deps, Context, SortedDeps),
   member(D0, SortedDeps),
-  candidate:group_choice_dep(D0, D),
-  rules:rule(D:Action?{Context}, Conditions0),
-  ( candidate:any_of_reject_assumed_choice(D, Conditions0) ->
-      fail
-  ; Conditions = Conditions0
-  ).
+  choicelog:wrap_any_of(Context, SortedDeps, D0,
+    ( candidate:group_choice_dep(D0, D),
+      rules:rule(D:Action?{Context}, Conditions0),
+      ( candidate:any_of_reject_assumed_choice(D, Conditions0) ->
+          fail
+      ; Conditions = Conditions0
+      )
+    )).
 
 
 % =============================================================================

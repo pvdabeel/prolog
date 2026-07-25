@@ -36,6 +36,9 @@ Notes:
   - --profile enables compile-time instrumentation (sampler counters,
     debug hooks, timeout traces). Without it, these are compiled out
     for zero overhead.
+  - --choice-log enables compile-time choice-event logging (-Dchoice_log)
+    and arms the runtime buffer. Without it, emit/wrap sites are
+    compiled out for zero overhead.
   - This wrapper passes all other args to portage-ng's Prolog main/0.
 EOF
       exit 0
@@ -103,6 +106,7 @@ done
 # linger.
 HARD_LIMIT=""
 INSTRUMENTATION=""
+CHOICE_LOG=""
 prev=""
 NEW_ARGS=""
 for a in "$@"; do
@@ -139,6 +143,10 @@ for a in "$@"; do
     --profile)
       INSTRUMENTATION=true
       ;;
+    --choice-log)
+      CHOICE_LOG=true
+      NEW_ARGS="$NEW_ARGS$(printf '\n%s' "$a")"
+      ;;
     *)
       NEW_ARGS="$NEW_ARGS$(printf '\n%s' "$a")"
       ;;
@@ -165,6 +173,9 @@ is_pos_int() {
 EXTRA_FLAGS=""
 if [ "$INSTRUMENTATION" = "true" ]; then
   EXTRA_FLAGS="-Dinstrumentation=true"
+fi
+if [ "$CHOICE_LOG" = "true" ]; then
+  EXTRA_FLAGS="$EXTRA_FLAGS -Dchoice_log=true"
 fi
 
 if is_pos_int "$HARD_LIMIT"; then
