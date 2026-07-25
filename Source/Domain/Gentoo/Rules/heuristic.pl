@@ -111,32 +111,29 @@ heuristic:merge_action(reinstall).
 %
 % Normalize an action literal by dropping `?{Context}` proof-context
 % annotations, yielding the bare core (e.g. `Repo://Entry:Action`).
-% Mirrors the shapes handled by `prover:canon_literal/3` -- context may
-% attach to the action (`Repo://Entry:Action?{Ctx}`) rather than only at
-% the top level (`Core?{Ctx}`). Without this, PDEPEND proof obligations
-% silently skip every context-carrying merge literal (portage-ng#100).
+% Thin wrapper over `prover:canon_literal/3` so the literal-shape table
+% lives in one place. Context may attach to the action
+% (`Repo://Entry:Action?{Ctx}`) rather than only at the top level
+% (`Core?{Ctx}`); without this, PDEPEND proof obligations silently skip
+% every context-carrying merge literal (portage-ng#100).
+%
+% Nested double-context forms can make `canon_literal/3` fail when
+% `sampler:ctx_union/3` rejects a USE conflict; the fallback still peels
+% Core so this predicate stays det for obligation filtering.
 
 heuristic:strip_ctx(Literal, Core) :-
-  heuristic:strip_ctx_(Literal, Core),
+  prover:canon_literal(Literal, Core, _),
+  !.
+heuristic:strip_ctx(Literal, Core) :-
+  heuristic:strip_ctx_nested_core_(Literal, Core),
   !.
 
-heuristic:strip_ctx_(R://(L:A), R://L:A) :- !.
-heuristic:strip_ctx_(R://(L:A?{_}), R://L:A) :- !.
-heuristic:strip_ctx_(R://(L:A)?{_}, R://L:A) :- !.
-heuristic:strip_ctx_(R://(L:A?{_})?{_}, R://L:A) :- !.
-heuristic:strip_ctx_(R://(L), R://L) :- !.
-heuristic:strip_ctx_(R://(L?{_}), R://L) :- !.
-heuristic:strip_ctx_(R://(L)?{_}, R://L) :- !.
-heuristic:strip_ctx_(R://(L?{_})?{_}, R://L) :- !.
-heuristic:strip_ctx_(R://L:A, R://L:A) :- !.
-heuristic:strip_ctx_(R://L:A?{_}, R://L:A) :- !.
-heuristic:strip_ctx_(R://L, R://L) :- !.
-heuristic:strip_ctx_(R://L?{_}, R://L) :- !.
-heuristic:strip_ctx_(L:A, L:A) :- !.
-heuristic:strip_ctx_(L:A?{_}, L:A) :- !.
-heuristic:strip_ctx_(L, L) :- !.
-heuristic:strip_ctx_(L?{_}, L) :- !.
-heuristic:strip_ctx_(Literal, Literal).
+% Only the nested double-`?{Context}` shapes where canon_literal may fail
+% after matching (ctx_union conflict). All other shapes are covered by
+% canon_literal/3 above.
+heuristic:strip_ctx_nested_core_(R://(L:A?{_})?{_}, R://L:A) :- !.
+heuristic:strip_ctx_nested_core_(R://(L?{_})?{_}, R://L) :- !.
+heuristic:strip_ctx_nested_core_(Literal, Literal).
 
 
 %! heuristic:obligation_candidate(+Literal)

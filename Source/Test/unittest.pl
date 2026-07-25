@@ -2148,6 +2148,33 @@ test(strip_ctx_strips_action_attached_context) :-
   Core == (fakerepo://'cat/pkg-1.0':install),
   heuristic:obligation_candidate(Lit).
 
+test(strip_ctx_matches_canon_literal_core) :-
+  Lit = fakerepo://('cat/pkg-1.0':install?{[self(x)]}),
+  heuristic:strip_ctx(Lit, S),
+  prover:canon_literal(Lit, C, _),
+  S == C,
+  S == (fakerepo://'cat/pkg-1.0':install).
+
+test(strip_ctx_nested_union_ok_matches_canon) :-
+  Inner = [build_with_use:use_state([icu],[])],
+  Outer = [self(parent)],
+  Lit = fakerepo://(('cat/pkg-1.0':install?{Inner})?{Outer}),
+  heuristic:strip_ctx(Lit, S),
+  prover:canon_literal(Lit, C, Ctx),
+  S == C,
+  S == (fakerepo://'cat/pkg-1.0':install),
+  memberchk(self(parent), Ctx),
+  memberchk(build_with_use:use_state([icu],[]), Ctx).
+
+test(strip_ctx_nested_union_conflict_still_peels_core) :-
+  Inner = [build_with_use:use_state([x],[])],
+  Outer = [build_with_use:use_state([],[x])],
+  Lit = fakerepo://(('cat/pkg-1.0':install?{Inner})?{Outer}),
+  heuristic:strip_ctx(Lit, Core),
+  Core == (fakerepo://'cat/pkg-1.0':install),
+  \+ prover:canon_literal(Lit, _, _),
+  heuristic:obligation_candidate(Lit).
+
 test(query_keyword_candidate_excludes_binpkg_repo,
      [setup(( retractall(cache:ordered_entry(binpkg, _, _, _, _)),
               retractall(cache:ordered_entry(portage, 'cat/pkg-1.0', _, _, _)),
