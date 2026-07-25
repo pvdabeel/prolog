@@ -1,8 +1,6 @@
 Feature exploration
 ===================
 
-- glsa
-
 - standalone loading performance
 
 - sets: security 
@@ -78,20 +76,3 @@ Phase B readability (helper extraction, same semantics):
 Validate:
 
 - test_stats_pkgs + tinderbox-ng compare on vm-linux.local after any Tier A/B change
-
-
-Emerge || / selection preferences (2026-07, post-#112) — DONE
-=============================================================
-
-Implemented as multi-key scores on ranking:prioritize_deps_keep_all
-(UseSat, UseUnmasked, SnapAll, SlotScore, NoDowngrade, InstScore, plus
-existing LicOk/Rank/Overlap/VerScore/UEScore). Full preference model,
-emerge mapping, and rationale for *not* implementing overlapping-|| DNF,
-virtual expand, circular demotion, or cp_map live in:
-
-  Documentation/Handbook/11-doc-rules.md  — "Any-of (||) arm selection"
-
-Validate after further ranking tweaks:
-
-- Overlay suite (esp. || / USE / slot cases) + tinderbox-ng compare on
-  vm-linux.local; watch USE-dep || and llvm/gcc/python slot || packages
