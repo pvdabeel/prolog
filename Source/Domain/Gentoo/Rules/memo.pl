@@ -45,8 +45,12 @@ heuristic:cleanup_state/0 during reprove retries.
 :- use_module(library(assoc), [empty_assoc/1]).
 
 % =============================================================================
-%  Thread-local caching facts
+%  MEMO declarations
 % =============================================================================
+
+% -----------------------------------------------------------------------------
+%  Thread-local caching facts
+% -----------------------------------------------------------------------------
 
 :- thread_local memo:effective_use_fact/3.      % effective_use_fact(Repo, Entry, EnabledUseSet)
 :- thread_local memo:cn_domain_reject_/2.       % cn_domain_reject_(Key, RejectedSet)

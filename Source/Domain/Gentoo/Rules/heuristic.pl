@@ -88,8 +88,12 @@ and obligation filtering.
 :- use_module(library(assoc), [empty_assoc/1]).
 
 % =============================================================================
-%  Obligation candidate filtering (domain hook for prover)
+%  HEURISTIC declarations
 % =============================================================================
+
+% -----------------------------------------------------------------------------
+%  Obligation candidate filtering (domain hook for prover)
+% -----------------------------------------------------------------------------
 
 %! heuristic:merge_action(+Action) is semidet.
 %
@@ -147,9 +151,9 @@ heuristic:obligation_candidate(Literal) :-
   !.
 
 
-% =============================================================================
+% -----------------------------------------------------------------------------
 %  Reprove hooks
-% =============================================================================
+% -----------------------------------------------------------------------------
 
 %! heuristic:handle_reprove(+Info, -Added)
 %
@@ -247,9 +251,9 @@ cleanup_state :-
   !.
 
 
-% =============================================================================
+% -----------------------------------------------------------------------------
 %  Partial restart hooks (non-chronological backtracking, domain side)
-% =============================================================================
+% -----------------------------------------------------------------------------
 
 %! heuristic:begin_pass(+Kind)
 %
@@ -393,9 +397,9 @@ heuristic:restart_drop_constraint(scope(_Entries, CNs), selected_cn(C, N)) :-
   !.
 
 
-% =============================================================================
+% -----------------------------------------------------------------------------
 %  Constraint unification hook (domain hook called by prover)
-% =============================================================================
+% -----------------------------------------------------------------------------
 
 %! heuristic:constraint_unify_hook(+Key, +Value, +Constraints, -NewConstraints)
 %
@@ -421,9 +425,9 @@ heuristic:constraint_unify_hook(cn_domain(C,N,Slot), DomainDelta0, Constraints, 
   ).
 
 
-% =============================================================================
+% -----------------------------------------------------------------------------
 %  Constraint guard (domain hook called by prover)
-% =============================================================================
+% -----------------------------------------------------------------------------
 
 %! heuristic:constraint_guard(+ConstraintLit, +Constraints)
 %
@@ -487,32 +491,32 @@ heuristic:selected_on_slot_(Slot, selected(_Repo, _Entry, _Act, _Ver, SlotMeta))
   cnselect:selected_cn_slot_key_(SlotMeta, Slot).
 
 
-% =============================================================================
-%  Context equivalence and union-eligibility (domain hooks called by prover)
-% =============================================================================
+% -----------------------------------------------------------------------------
+%  Proof-context equivalence and union-eligibility (domain hooks)
+% -----------------------------------------------------------------------------
 %
 % The prover engine calls these hooks to decide:
 %
-%  * `heuristic:ctx_equivalent/2` — when may two literal contexts be
+%  * `heuristic:ctx_equivalent/2` — when may two `?{Context}` lists be
 %    treated as the same? Used by `prover:proven/3` and by the
-%    post-union short-circuit in the context-changed branch of
+%    post-union short-circuit in the proof-context-changed branch of
 %    `prove_recursive/9` and `prove_model/6`.
 %
 %  * `heuristic:should_union_ctx/1` — for which literals should the
-%    prover *merge* (rather than overwrite) per-call-site contexts
+%    prover *merge* (rather than overwrite) per-call-site proof contexts
 %    when the same literal is re-requested under a different Ctx?
-%    Used by the context-changed branch.
+%    Used by the proof-context-changed branch.
 %
-% Both are pure predicates on Gentoo-specific literal/context shape.
-% The prover stays domain-agnostic and falls back to safe defaults
-% when these hooks are absent.
+% Both are pure predicates on Gentoo-specific literal / proof-context
+% shape. The prover stays domain-agnostic and falls back to safe
+% defaults when these hooks are absent.
 
 %! heuristic:ctx_equivalent(+Ctx1, +Ctx2) is semidet.
 %
-% Two literal contexts are equivalent iff they have the same
+% Two proof-context lists are equivalent iff they have the same
 % semantic key, where the semantic key is the pair of
 % required_use (RU) and build_with_use (BWU) values carried in
-% the context list. Other context items (provenance such as
+% the `?{Context}` list. Other proof-context items (provenance such as
 % `self/1`, suggestion tags, domain reasons, etc.) are
 % intentionally ignored: they describe how the literal was
 % reached, not what is being proven.
@@ -558,9 +562,9 @@ heuristic:should_union_ctx(_Repo://_Entry:_Action) :- !.
 heuristic:should_union_ctx(assumed(_Repo://_Entry:_Action)) :- !.
 
 
-% =============================================================================
+% -----------------------------------------------------------------------------
 %  Benign cycle classification (domain hook called by prover)
-% =============================================================================
+% -----------------------------------------------------------------------------
 
 %! heuristic:cycle_benign(+Lit, +CyclePath)
 %
@@ -580,9 +584,9 @@ heuristic:cycle_benign(_Lit, CyclePath) :-
     !.
 
 
-% =============================================================================
+% -----------------------------------------------------------------------------
 %  Proof obligations: PDEPEND expansion (domain hook called by prover)
-% =============================================================================
+% -----------------------------------------------------------------------------
 
 %! heuristic:proof_obligation_key(+Literal, +Model, -HookKey) is semidet.
 %
@@ -674,9 +678,9 @@ heuristic:proof_obligation(Literal, Model, HookKey, ExtraLits) :-
   ).
 
 
-% =============================================================================
+% -----------------------------------------------------------------------------
 %  Debugging helpers
-% =============================================================================
+% -----------------------------------------------------------------------------
 
 %! heuristic:profile_run_entry(+RepoEntry, +Context, -Report)
 %

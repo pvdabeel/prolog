@@ -45,14 +45,18 @@ The rule/2 clauses in rules.pl call into this module when they need to:
 :- module(dependency, []).
 
 % =============================================================================
-%  Dependency context management
+%  DEPENDENCY declarations
 % =============================================================================
+
+% -----------------------------------------------------------------------------
+%  Dependency proof-context management
+% -----------------------------------------------------------------------------
 
 %! dependency:add_self_to_dep_contexts(+Self, +Deps0, -Deps)
 %
 % Annotates every dependency literal in Deps0 with `self(Self)` so that
 % downstream rules can identify the parent ebuild. Keeps at most one
-% `self/1` term per context to prevent growth along chains.
+% `self/1` term per proof context to prevent growth along chains.
 
 dependency:add_self_to_dep_contexts(_Self, [], []) :- !.
 dependency:add_self_to_dep_contexts(Self, [D0|Rest0], [D|Rest]) :-
@@ -65,7 +69,7 @@ dependency:add_self_to_dep_contexts(Self, [D0|Rest0], [D|Rest]) :-
 
 %! dependency:ctx_set_self(+Ctx0, +Self, -Ctx)
 %
-% Replaces or inserts a `self(Self)` term in context Ctx0.
+% Replaces or inserts a `self(Self)` term in proof-context list Ctx0.
 % If Ctx0 already contains a self/1 term it is replaced (not stacked).
 
 dependency:ctx_set_self(Ctx0, Self, Ctx) :-
@@ -77,9 +81,9 @@ dependency:ctx_set_self(Ctx0, Self, Ctx) :-
   !.
 
 
-% =============================================================================
+% -----------------------------------------------------------------------------
 %  USE requirement collection for dependency edges
-% =============================================================================
+% -----------------------------------------------------------------------------
 
 %! dependency:collect_use_requirements(+UseDeps, -Requirements)
 %
@@ -132,9 +136,9 @@ dependency:process_use(ParentContext, use(Directive, Default), Acc, AccOut) :-
 dependency:process_use(_ParentContext, _Other, Acc, Acc) :- !.
 
 
-% =============================================================================
-%  Slot context propagation
-% =============================================================================
+% -----------------------------------------------------------------------------
+%  Slot proof-context propagation
+% -----------------------------------------------------------------------------
 
 %! dependency:process_slot(+SlotReq, +SlotMeta, +C, +N, +RepoEntry, +Ctx0, -Ctx)
 %
@@ -150,9 +154,9 @@ dependency:process_slot(_, Slot, C, N, _Repository://Candidate, Context0, Contex
   feature_unification:unify([slot(C, N, Slot):{Candidate}], Context0, Context).
 
 
-% =============================================================================
-%  Build-with-use context propagation
-% =============================================================================
+% -----------------------------------------------------------------------------
+%  Build-with-use proof-context propagation
+% -----------------------------------------------------------------------------
 
 %! dependency:process_build_with_use(+Directives, +Ctx0, -Ctx, -Conditions, +Candidate)
 %
@@ -188,9 +192,9 @@ dependency:process_build_with_use(Directives, Context0, Context, Conditions, Can
 dependency:build_with_use_constraints(_, [], _) :- !.
 
 
-% =============================================================================
+% -----------------------------------------------------------------------------
 %  PDEPEND goal collection from a completed plan
-% =============================================================================
+% -----------------------------------------------------------------------------
 
 %! dependency:pdepend_goals_from_plan(+Plan, -Goals)
 %

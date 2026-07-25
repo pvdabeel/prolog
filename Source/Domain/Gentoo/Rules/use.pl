@@ -53,6 +53,10 @@ implements this comparison.
 
 :- module(use, []).
 
+% =============================================================================
+%  USE declarations
+% =============================================================================
+
 % -----------------------------------------------------------------------------
 %  Optional unify.pl extension hook (generic)
 % -----------------------------------------------------------------------------
@@ -61,7 +65,8 @@ implements this comparison.
 % enable/disable sets.  Fails when a flag appears in both sets (conflict).
 % This hook is called by feature_unification:val/3 (CASE 0) and is critical
 % for the prescience mechanism: sampler:ctx_union must be able to merge
-% build_with_use contexts when a literal is re-proven with a changed context.
+% build_with_use proof-context values when a literal is re-proven with a
+% changed ?{Context} list.
 
 feature_unification:val_hook(use_state(En1, Dis1), use_state(En2, Dis2), use_state(En, Dis)) :-
     !,
@@ -75,16 +80,17 @@ feature_unification:val_hook(use_state(En, Dis), [], use_state(En, Dis)) :- !.
 feature_unification:val_hook([], use_state(En, Dis), use_state(En, Dis)) :- !.
 
 
-% =============================================================================
-%  Effective USE in context
-% =============================================================================
+% -----------------------------------------------------------------------------
+%  Effective USE in proof context
+% -----------------------------------------------------------------------------
 
 %! use:effective_use_in_context(+Context, +Use, -State)
 %
 % Determine the effective state of USE flag Use for the ebuild identified
-% by the `self/1` term in Context. State is unified with `positive` or
-% `negative`. Delegates to effective_use_for_entry/3, which implements
-% the precedence chain and memoizes in memo:eff_use_cache_/4.
+% by the `self/1` term in the ?{Context} proof-context list. State is
+% unified with `positive` or `negative`. Delegates to
+% effective_use_for_entry/3, which implements the precedence chain and
+% memoizes in memo:eff_use_cache_/4.
 
 use:effective_use_in_context(Context, Use, State) :-
   memberchk(self(RepoEntry), Context),
@@ -131,9 +137,9 @@ use:effective_use_for_entry(RepoEntry0, Use, State) :-
   !.
 
 
-% =============================================================================
+% -----------------------------------------------------------------------------
 %  Per-entry IUSE default map
-% =============================================================================
+% -----------------------------------------------------------------------------
 
 %! use:entry_iuse_default(+RepoEntry, +Use, -Default)
 %
@@ -186,9 +192,9 @@ use:iuse_default_pairs_to_assoc_([U-Def|Rest], M0, M) :-
   use:iuse_default_pairs_to_assoc_(Rest, M1, M).
 
 
-% =============================================================================
+% -----------------------------------------------------------------------------
 %  Per-entry IUSE memoization
-% =============================================================================
+% -----------------------------------------------------------------------------
 
 %! use:entry_iuse_info(+RepoEntry, -Info)
 %
@@ -218,9 +224,9 @@ use:entry_iuse_info(Repo://Entry, Info) :-
   ).
 
 
-% =============================================================================
+% -----------------------------------------------------------------------------
 %  Build-with-use state management
-% =============================================================================
+% -----------------------------------------------------------------------------
 
 %! use:empty_use_state(-State)
 %
@@ -425,9 +431,9 @@ use:required_use_group_excess_flags(Deps, Flag) :-
     member(Flag, Extras).
 
 
-% =============================================================================
-%  Context helpers for per-package USE (build_with_use)
-% =============================================================================
+% -----------------------------------------------------------------------------
+%  Proof-context helpers for per-package USE (build_with_use)
+% -----------------------------------------------------------------------------
 
 %! use:assumed(+Context, +Use)
 %
@@ -468,9 +474,9 @@ use:assumed_minus(Ctx, Use) :-
   !.
 
 
-% =============================================================================
+% -----------------------------------------------------------------------------
 %  Self-entry USE state (from ?{Context} list)
-% =============================================================================
+% -----------------------------------------------------------------------------
 
 %! use:self_context_use_state(+Context, +Use, -State)
 %
@@ -528,9 +534,9 @@ use:self_context_use_state_compute_(Repo, Id, Use, State) :-
   ).
 
 
-% =============================================================================
+% -----------------------------------------------------------------------------
 %  USE-dependency requirement resolution
-% =============================================================================
+% -----------------------------------------------------------------------------
 
 %! use:use_dep_requirement(+Context, +Directive, +Default, -Requirement)
 %
@@ -596,9 +602,9 @@ use:use_dep_requirement(_Ctx, optdisable(_Use), _Default, none) :- !.
 use:use_dep_requirement(_Ctx, _Directive, _Default, none).
 
 
-% =============================================================================
+% -----------------------------------------------------------------------------
 %  Candidate USE-dependency enforcement
-% =============================================================================
+% -----------------------------------------------------------------------------
 
 %! use:candidate_satisfies_use_deps(+ParentCtx, +Candidate, +UseDeps)
 %
@@ -664,9 +670,9 @@ use:use_dep_default_satisfies_absent_iuse(negative, disable) :- !.
 use:use_dep_default_satisfies_absent_iuse(_Default, _Mode) :- fail.
 
 
-% =============================================================================
+% -----------------------------------------------------------------------------
 %  Candidate effective USE evaluation
-% =============================================================================
+% -----------------------------------------------------------------------------
 
 %! use:candidate_effective_use_enabled_in_iuse(+RepoEntry, +Use)
 %
@@ -777,9 +783,9 @@ use:is_abi_x86_flag(Use) :-
   !.
 
 
-% =============================================================================
+% -----------------------------------------------------------------------------
 %  Installed package USE satisfaction checks
-% =============================================================================
+% -----------------------------------------------------------------------------
 
 %! use:installed_pkg_satisfies_use_reqs(+ParentCtx, +Installed, +UseDeps)
 %
@@ -809,9 +815,9 @@ use:installed_pkg_satisfies_use_requirement(VdbRepo://InstalledId, requirement(d
   !.
 
 
-% =============================================================================
+% -----------------------------------------------------------------------------
 %  Build-with-use constraint satisfaction
-% =============================================================================
+% -----------------------------------------------------------------------------
 
 %! use:context_build_with_use_list(+Context, -List)
 %
@@ -929,9 +935,9 @@ use:installed_entry_satisfies_plan_use(VdbRepo://InstalledEntry, SrcRepo://SrcEn
   ).
 
 
-% =============================================================================
+% -----------------------------------------------------------------------------
 %  --newuse / --changed-use support
-% =============================================================================
+% -----------------------------------------------------------------------------
 
 %! use:newuse_mismatch(+InstalledEntry)
 %
@@ -1050,9 +1056,9 @@ use:symmetric_diff_nonempty(A, B) :-
   ).
 
 
-% =============================================================================
+% -----------------------------------------------------------------------------
 %  REQUIRED_USE helpers
-% =============================================================================
+% -----------------------------------------------------------------------------
 
 %! use:required_use_term_satisfied(+Context, +Term)
 %
@@ -1096,9 +1102,9 @@ use:required_use_term_satisfied(Ctx, at_most_one_of_group(Deps)) :-
   !.
 
 
-% =============================================================================
+% -----------------------------------------------------------------------------
 %  Build-with-use / REQUIRED_USE compatibility
-% =============================================================================
+% -----------------------------------------------------------------------------
 
 %! use:build_with_use_resolve_required_use(+StateIn, +RepoEntry, -StateOut)
 %
@@ -1163,9 +1169,9 @@ use:bwu_conflict_disable(use_conditional_group(negative, Use, _, SubDeps), Enabl
     use:bwu_conflict_disable(SubTerm, Enable, RepoEntry, Other).
 
 
-% =============================================================================
+% -----------------------------------------------------------------------------
 %  Post-BWU REQUIRED_USE stabilization
-% =============================================================================
+% -----------------------------------------------------------------------------
 %
 % After build_with_use_resolve_required_use handles mutual-exclusion
 % conflicts, some REQUIRED_USE constraints may still be violated --
@@ -1478,9 +1484,9 @@ use:apply_requse_fix(disable(Flag), use_state(En0, Dis0), use_state(En1, Dis1)) 
     ( select(Flag, En0, En1) -> true ; En1 = En0 ).
 
 
-% =============================================================================
+% -----------------------------------------------------------------------------
 %  Post-BWU REQUIRED_USE validation
-% =============================================================================
+% -----------------------------------------------------------------------------
 
 %! use:verify_required_use_with_bwu(+RepoEntry, +BWU)
 %
@@ -1611,9 +1617,9 @@ use:describe_required_use_violation(Repo://Entry, use_state(Enable, Disable), De
     Desc = required_use_violation(Repo://Entry, Enable, Disable, Violated).
 
 
-% =============================================================================
+% -----------------------------------------------------------------------------
 %  Cross-dependency BWU aggregation (per category/name)
-% =============================================================================
+% -----------------------------------------------------------------------------
 
 %! use:merge_memo_candidate_bwu(+C, +N, +BWU0, -BWU) is det.
 %
@@ -2024,9 +2030,9 @@ use:verify_candidate_satisfies_bwu_state(Repo://Entry, use_state(En, Dis)) :-
            \+ use:candidate_effective_use_enabled_in_iuse(Repo://Entry, F)).
 
 
-% =============================================================================
+% -----------------------------------------------------------------------------
 %  Cross-dependency BWU REQUIRED_USE conflict detection
-% =============================================================================
+% -----------------------------------------------------------------------------
 
 %! use:check_bwu_cross_dep(+C, +N, +RepoEntry, +BWU)
 %

@@ -504,13 +504,17 @@ handling a distinct concern:
 
 | **Module** | **File** | **Purpose** |
 | :--- | :--- | :--- |
-| `memo` | `memo.pl` | Thread-local caches for selected candidates and violations |
-| `use` | `use.pl` | USE flag evaluation and REQUIRED_USE checking |
-| `candidate` | `candidate.pl` | Candidate selection, eligibility, and reprove triggers |
-| `heuristic` | `heuristic.pl` | Reprove state, retry budgets, and cycle benignity checks |
-| `dependency` | `dependency.pl` | Dependency model construction and context threading |
-| `target` | `target.pl` | Target resolution (translating a query to a candidate) |
-| `featureterm` | `featureterm.pl` | Context stripping for memoisation keys |
+| `acceptance` | `acceptance.pl` | Keyword, mask, and license acceptance; keyword-aware candidate enumeration |
+| `candidate` | `candidate.pl` | Grouped-dep resolution pipeline, blocker matching, eligibility protocol |
+| `cnselect` | `cnselect.pl` | CN-consistency: selected_cn reuse, CN-domain reject map, learned-domain narrowing |
+| `dependency` | `dependency.pl` | Self-entry injection, USE-requirement collection, slot/BWU proof-context propagation |
+| `featureterm` | `featureterm.pl` | Proof-context list helpers (`after/1`, strip `build_with_use`, etc.) |
+| `heuristic` | `heuristic.pl` | Prover hooks: constraint guard, cycle classification, PDEPEND obligations, reprove state |
+| `memo` | `memo.pl` | Thread-local caching declarations, `clear_caches/0` |
+| `ranking` | `ranking.pl` | Dependency ordering (`dep_priority/2`), choice-group ranking, BWU memo seeding |
+| `slotmeta` | `slotmeta.pl` | Slot canonicalization, restriction merging, constraint queries |
+| `target` | `target.pl` | Target resolution, update/downgrade transactions, depclean, `--exclude` helpers |
+| `use` | `use.pl` | USE evaluation, conditionals, `build_with_use`, newuse, REQUIRED_USE, BWU conflicts |
 
 
 ## Policy cards (declarative view)

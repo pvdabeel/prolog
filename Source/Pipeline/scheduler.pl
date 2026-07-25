@@ -40,6 +40,10 @@ and a condensed schedule for the remainder only.
 
 :- module(scheduler, []).
 
+% =============================================================================
+%  SCHEDULER declarations
+% =============================================================================
+
 user:goal_expansion(perf_reset, true) :-
   \+ current_prolog_flag(instrumentation, true).
 
@@ -308,6 +312,11 @@ scheduler:rule_order_after_anchor(Rule, Anchor) :-
   prover:rule_body(Rule, Body),
   member(constraint(order_after(Anchor):{_}), Body),
   !.
+
+%! scheduler:rechunk_by_lengths(+Flat, +Lens, -Plan)
+%
+% Rebuild a wave Plan from a flat rule list using the original per-wave
+% lengths in Lens (after order_after reordering has shuffled Flat).
 
 scheduler:rechunk_by_lengths(Flat, Lens, Plan) :-
   scheduler:rechunk_by_lengths_(Flat, Lens, Plan).
@@ -1429,10 +1438,13 @@ scheduler:build_components_([Members|Rest], Forward, I, M0, M, Comps0, Comps) :-
 scheduler:compmap_put(Id, Node, In, Out) :-
   put_assoc(Node, In, Id, Out).
 
-% Component kind:
+%! scheduler:component_kind(+Members, +Forward, -Kind)
+%
+% Classify an SCC by schedulability:
 % - merge_set: cyclic SCC of mergeable literals (:run or merge actions)
 % - bad: cyclic SCC containing any other literal kind
 % - single: singleton SCC with no self-loop
+
 scheduler:component_kind(Members, Forward, Kind) :-
   ( Members = [Only] ->
       ( scheduler:self_loop(Only, Forward) ->
@@ -1605,9 +1617,9 @@ scheduler:scc_get_rules(Members, HeadRuleMap, Rules) :-
           Rules).
 
 
-% =============================================================================
+% -----------------------------------------------------------------------------
 %  Priority-aware SCC linearization (Portage-like progressive relaxation)
-% =============================================================================
+% -----------------------------------------------------------------------------
 %
 % Within a merge-set SCC, iteratively select "ready" nodes whose SCC-internal
 % dependencies are all satisfied, using progressive relaxation:
@@ -1659,6 +1671,8 @@ scheduler:is_non_run_internal(MemberSet, Dep) :-
   get_assoc(Dep, MemberSet, _),
   \+ scheduler:is_run_literal(Dep).
 
+%! scheduler:linearize_iter(+Remaining, +IntFwd, +IntFwdNoRun, +HRM, +Done, +Acc, -Result)
+%
 % Iterative linearization: extract ready nodes in waves.
 %
 % Phase 1: Schedule all nodes whose ALL SCC-internal deps are satisfied.

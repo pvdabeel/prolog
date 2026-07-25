@@ -163,6 +163,25 @@ rule(Literal, Body) :-
 %  Ruleset: TARGET
 % =============================================================================
 
+%! rules:rule(+Literal, -Conditions)
+%
+% Domain `rule/2` families (this file). Each clause maps a proof literal to
+% ordered proof conditions. The prover calls `rules:rule(+Literal, -Conditions)`
+% and never interprets Gentoo meaning itself. Families below are grouped by
+% head pattern; helpers live in `Rules/` submodules.
+%
+% | Head family | Purpose |
+% |-------------|--------|
+% | `target(Q,Arg):Action` | Resolve a CLI/query target to a concrete ebuild action |
+% | `world(Atom):Action` | Schedule @world register/unregister relative to merges |
+% | `Repo://Ebuild:Action` | Ebuild actions (fetchonly/download/install/run/…) |
+% | `package_dependency(...):config` | Config-phase package dep (active/inactive only) |
+% | `grouped_package_dependency(...)` | Resolve blockers and grouped CN constraints |
+% | `use_conditional_group(...)` | Expand USE-conditional dependency groups |
+% | `*_of_group(...):validate\|Action` | REQUIRED_USE validate / choice-group resolve |
+% | `assumed(X)` / `naf` / `conflict` | Domain assumptions and prover primitives |
+
+
 % -----------------------------------------------------------------------------
 %  Rule: Target candidate (defer selection to prover)
 % -----------------------------------------------------------------------------

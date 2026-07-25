@@ -753,7 +753,7 @@ prover:prove_recursive(Full, Proof, NewProof, Model, NewModel, Constraints, NewC
       )
 
 
-  ;   % Case: Lit already proven with given context
+  ;   % Case: Lit already proven with given proof context
 
       prover:proven(Lit, Model, Ctx) ->
       !,
@@ -763,20 +763,20 @@ prover:prove_recursive(Full, Proof, NewProof, Model, NewModel, Constraints, NewC
       Constraints = NewConstraints
 
 
-  ;   % Case: Lit already proven, but the requested context differs.
+  ;   % Case: Lit already proven, but the requested proof context differs.
       %
       % The prover offers two ways of resolving such a re-request:
       %
       %   (a) `should_union_ctx/1` succeeds for Lit
       %       => union the stored Ctx with the incoming Ctx and
-      %          re-derive the rule body under the unioned Ctx.
+      %          re-derive the rule body under the unioned proof context.
       %          Subsequent obligations are computed from the diff
       %          (NewBody \ OldBody).
       %
       %   (b) `should_union_ctx/1` fails (default for any literal)
       %       => fall through to the `regular proof` branch below,
       %          which overwrites the stored Ctx with the incoming
-      %          Ctx and re-walks the body.
+      %          proof context and re-walks the body.
       %
       % (a) is needed when the rule body depends on Ctx in a way that
       % requires merging across multiple call sites (e.g. accumulating
@@ -971,13 +971,13 @@ prover:prove_model(Full, Model0, Model, Constraints0, Constraints, InProg0) :-
       Model = Model0,
       constraint:unify_constraints(Lit, Constraints0, Constraints)
 
-  ;   % Case: Lit already proven with given context
+  ;   % Case: Lit already proven with given proof context
       prover:proven(Lit, Model0, Ctx) ->
       !,
       Model = Model0,
       Constraints = Constraints0
 
-  ;   % Case: Lit already proven, but the requested context differs.
+  ;   % Case: Lit already proven, but the requested proof context differs.
       % Same domain-agnostic dispatch as prove_recursive/9: ask the
       % domain whether to union and re-derive (a) or to fall through
       % to the regular_proof branch (b). See the comment block in
@@ -1573,8 +1573,8 @@ prover:conflictrule(rule(Lit,_), Proof) :-
 %! prover:canon_literal(?Full, ?Core, ?Ctx)
 %
 %   Full  – full format
-%   Core  – part *before* the context annotation.
-%   Ctx   – the context ({} for the “no‑context” case).
+%   Core  – part *before* the `?{Context}` proof-context annotation.
+%   Ctx   – the proof-context list ({} for the “no proof-context” case).
 %
 % Convert between full format and key-value pair used
 % for the AVL model tree

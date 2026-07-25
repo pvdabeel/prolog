@@ -13,14 +13,14 @@ Hub module that dispatches plan rendering to Printer/ submodules.
 
 Architecture:
 
-  Source/Printer/
+  Source/Pipeline/Printer/
     Plan/
       annotation.pl   module annotation  — single-pass proof annotation collector
       assumption.pl   module assumption  — assumption classification
       warning.pl      module warning     — warnings, suggestions, bugreports
       cycle.pl        module cycle       — cycle explanation + DFS/BFS
       timing.pl       module timing      — emerge-compatible timing output
-    plan.pl           module plan        — build plan rendering + entry points
+      plan.pl         module plan        — build plan rendering + entry points
     index.pl          module index       — HTML index page rendering
     info.pl           module info        — ebuild metadata display
     stats.pl          module stats       — test statistics tables
@@ -30,8 +30,8 @@ This hub retains:
 - print/6,7          — thin wrappers delegating to plan:print/6,7
 - test/1,2, test_latest/1,2 — whole-repo test entry points
 
-File-writing predicates live in Source/writer.pl.
-The prove+plan+schedule pipeline lives in Source/pipeline.pl.
+File-writing predicates live in Source/Application/Output/writer.pl.
+The prove+plan+schedule pipeline lives in Source/Pipeline/pipeline.pl.
 */
 
 :- module(printer, []).

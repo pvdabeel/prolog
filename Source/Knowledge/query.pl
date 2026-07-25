@@ -18,18 +18,19 @@ An implementation of a query language for the knowledge base
 % (memo:dep_model_cache_/5, gated by config:dep_model_cache/1).
 %
 % The output of model construction depends on mutable proof state beyond
-% the explicit context argument.  Instead of clearing the cache whenever
-% that state might change (the approach of two earlier, abandoned attempts),
-% every mutable input is ENCODED IN THE CACHE KEY, so entries stay valid
-% for the whole proof (across fallback tiers, reprove passes and partial
-% restarts).  The hazards and their key encodings:
+% the explicit proof-context (`?{Context}`) argument.  Instead of clearing
+% the cache whenever that state might change (the approach of two earlier,
+% abandoned attempts), every mutable input is ENCODED IN THE CACHE KEY, so
+% entries stay valid for the whole proof (across fallback tiers, reprove
+% passes and partial restarts).  The hazards and their key encodings:
 %
-%   1. Context (build_with_use:use_state(Pos,Neg)) — the same (Ebuild,Phase)
-%      is reached through different dependency paths that impose different USE
-%      requirements (e.g. qtbase reached with [concurrent,dbus,...] vs [gui]).
-%      -> the full (ground) context term is part of the key.  This also means
-%      no re-contextualisation is needed on a hit: the cached output embeds
-%      exactly the keyed context.
+%   1. Proof-context (build_with_use:use_state(Pos,Neg)) — the same
+%      (Ebuild,Phase) is reached through different dependency paths that
+%      impose different USE requirements (e.g. qtbase reached with
+%      [concurrent,dbus,...] vs [gui]).
+%      -> the full (ground) proof-context term is part of the key.  This
+%      also means no re-contextualisation is needed on a hit: the cached
+%      output embeds exactly the keyed proof context.
 %
 %   2. prover:assuming(keyword_acceptance) / assuming(unmask) / assuming
 %      (conflicts) / assuming(blockers) — nb_setval flags that change between

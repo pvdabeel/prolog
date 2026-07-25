@@ -11,11 +11,11 @@
 /** <module> UNIFY
 Non-destructive feature unification.
 
-feature_unification:unify/3 merges two feature terms (contexts) or adds
-information into an existing feature term. In the portage-ng codebase the
-syntax uses `...?{Ctx}` where Ctx is one of `{}`, `{[]}`, `{L}`. The curly
-braces are part of the `?{}` annotation syntax; inside the engine we
-typically operate on the inner list L.
+feature_unification:unify/3 merges two feature terms (proof-context lists)
+or adds information into an existing feature term. In the portage-ng
+codebase the syntax uses `...?{Ctx}` where Ctx is one of `{}`, `{[]}`,
+`{L}`. The curly braces are part of the `?{}` annotation syntax; inside
+the engine we typically operate on the inner list L.
 
 This module stays domain-agnostic: it does not mention ebuilds, USE flags,
 or any domain-specific functors.
@@ -23,15 +23,19 @@ or any domain-specific functors.
 
 :- module(feature_unification, []).
 
+% =============================================================================
+%  FEATURE_UNIFICATION declarations
+% =============================================================================
+
 % Optional domain extension point for value unification.
 %
 % Keep this hook generic: concrete domains may provide clauses for specific
 % value shapes while the core unifier remains domain-agnostic.
 :- multifile feature_unification:val_hook/3.
 
-% =============================================================================
+% -----------------------------------------------------------------------------
 %  Public API
-% =============================================================================
+% -----------------------------------------------------------------------------
 
 %! feature_unification:unify(+FeatureTerm1, +FeatureTerm2, -Unified)
 %
@@ -50,9 +54,14 @@ unify(F1, F2, F3) :-
   append(U1, S1, Tmp),
   append(Tmp, S2, F3).
 
-% =============================================================================
+% -----------------------------------------------------------------------------
 %  Normalization (minimal; domain-agnostic)
-% =============================================================================
+% -----------------------------------------------------------------------------
+
+%! feature_unification:normalize_ft(+FeatureTerm0, -FeatureTerm)
+%
+% Normalize an empty/`{}` feature term to `[]`; leave lists and other
+% terms unchanged so later unification can fail meaningfully.
 
 % Historically some callers used `{}` as an "empty feature term". We treat that as [].
 normalize_ft({}, []) :- !.
@@ -94,9 +103,15 @@ list_canon_and_check(L0, L) :-
 % `Feature:Value`, where Value is a list or `{List}`. That is what `vunify/4`
 % handles as a real feature/value merge.
 
-% =============================================================================
+% -----------------------------------------------------------------------------
 %  Horizontal unification
-% =============================================================================
+% -----------------------------------------------------------------------------
+
+%! feature_unification:hunify(+FeatureTerm1, +FeatureTerm2, -Skipped, -Unified)
+%
+% Walk FeatureTerm1 against FeatureTerm2. Unified collects features that
+% matched and merged; Skipped collects features from FeatureTerm1 with no
+% counterpart in FeatureTerm2.
 
 hunify(List, F2, S, U) :-
   hunify_acc(List, F2, [], SRev, [], URev),
@@ -121,9 +136,15 @@ add_singleton(L, _Acc, _Out) :-
   !,
   fail.
 
-% =============================================================================
+% -----------------------------------------------------------------------------
 %  Value unification
-% =============================================================================
+% -----------------------------------------------------------------------------
+
+%! feature_unification:val(+Value1, +Value2, -Merged)
+%
+% Merge two feature values. Tries `val_hook/3` first (domain override),
+% then set intersection (`{L}`), list union, subset checks, and ordinary
+% term identity. Fails on contradiction (e.g. empty intersection).
 
 % CASE 0: domain-provided override hook.
 % Hook should fail when it does not handle the input pair.
@@ -203,9 +224,15 @@ val({V1}, V2, V3) :-
 
 empty([]) :- !.
 
-% =============================================================================
+% -----------------------------------------------------------------------------
 %  Vertical unification
-% =============================================================================
+% -----------------------------------------------------------------------------
+
+%! feature_unification:vunify(+FeatureOrItem, +Against, -Skipped, -Unified)
+%
+% Match one feature:value pair (or plain provenance item) against a
+% feature-term list. Unified is the merged pair when a match was found;
+% Skipped carries the input when Against had no matching feature.
 
 % CASE 1a: feature:value requires unification
 vunify(F:V1, [F:V2|R], [], U) :-
@@ -256,9 +283,9 @@ vunify(F, [], [F], []) :- !.
 vunify(F, [], [], [F]) :- !.
 
 
-% =============================================================================
+% -----------------------------------------------------------------------------
 %  Simple unifiability check
-% =============================================================================
+% -----------------------------------------------------------------------------
 
 %! feature_unification:unify(+A, +B)
 %

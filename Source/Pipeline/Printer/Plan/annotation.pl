@@ -56,7 +56,7 @@ annotation:unwrap_ctx(Ctx0, Ctx) :-
 %                      suggestion(unmask, _). Entries also tagged
 %                      suggestion(accept_license, _) are excluded here;
 %                      they appear under Licenses instead (the two tags
-%                      are mutually exclusive per context in rules).
+%                      are mutually exclusive per proof context in rules).
 % - Licenses:          accept_license(R, E, C, N) for entries tagged
 %                      suggestion(accept_license, _)
 % - Keywords:          accept_keyword(R, E, C, N, K) for entries tagged
@@ -64,7 +64,7 @@ annotation:unwrap_ctx(Ctx0, Ctx) :-
 % - UseChanges:        use_change(R, E, C, N, Changes) for entries tagged
 %                      suggestion(use_change, _, Changes)
 % - BwuChanges:        use_change(R://E, Enables, Disables) — legacy
-%                      build_with_use scan over context-bearing proof keys
+%                      build_with_use scan over proof-context-bearing keys
 % - BlockerNotes:      assoc mapping key(C, N, Phase) -> note(Strength,
 %                      Origin) for blocker domain assumptions
 % - CycleBreaks:       cycle_break(Content, Value) for prover cycle-break

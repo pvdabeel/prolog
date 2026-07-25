@@ -22,8 +22,12 @@ helpers, and provider-reuse candidate reordering.
 :- module(ranking, []).
 
 % =============================================================================
-%  Dependency ordering heuristic
+%  RANKING declarations
 % =============================================================================
+
+% -----------------------------------------------------------------------------
+%  Dependency ordering heuristic
+% -----------------------------------------------------------------------------
 
 %! ranking:order_deps_for_proof(+Action, +Deps, -Ordered)
 %
@@ -338,9 +342,9 @@ ranking:dep_extract_cn_packagedeps(grouped_package_dependency(_T, C, N, PackageD
 ranking:dep_extract_cn_packagedeps(grouped_package_dependency(_T, C, N, PackageDeps):_Action, C, N, PackageDeps) :- !.
 
 
-% =============================================================================
+% -----------------------------------------------------------------------------
 %  Dependency ranking / prioritization
-% =============================================================================
+% -----------------------------------------------------------------------------
 
 %! ranking:prioritize_deps(+Deps, -SortedDeps)
 %
@@ -966,9 +970,9 @@ ranking:is_preferred_dep(_Context, package_dependency(_Phase,_Strength,C,N,O,V,_
   !.
 
 
-% =============================================================================
+% -----------------------------------------------------------------------------
 %  USE_EXPAND profile-match scoring for any_of_group ranking
-% =============================================================================
+% -----------------------------------------------------------------------------
 
 %! ranking:dep_use_expand_profile_score(+Dep, -Score) is det.
 %
@@ -1060,9 +1064,9 @@ ranking:flag_is_use_expand(Flag) :-
   !.
 
 
-% =============================================================================
+% -----------------------------------------------------------------------------
 %  any_of_group preference helpers (installed satisfaction)
-% =============================================================================
+% -----------------------------------------------------------------------------
 
 %! ranking:group_member_preferred(+Context, +PackageDep)
 %
@@ -1119,9 +1123,9 @@ ranking:installed_version_mismatch_penalty(package_dependency(_Phase,_Strength,C
 ranking:installed_version_mismatch_penalty(_Dep, 0).
 
 
-% =============================================================================
+% -----------------------------------------------------------------------------
 %  Provider-reuse candidate reordering (Portage-like)
-% =============================================================================
+% -----------------------------------------------------------------------------
 
 %! ranking:candidates_prefer_proven_providers(+C, +N, +SlotReq, +Candidates, -Reordered)
 %
