@@ -252,10 +252,18 @@ daemon:dispatch(_, _In, Out) :-
 % Prepares clean state for a new request: clears memoized CLI args
 % and per-request preference flags, injects the new arguments,
 % applies client environment overrides, and re-initializes preferences.
+%
+% Client `--mode ipc` is rewritten to `--mode standalone` before argv
+% parsing: ipc is only a client transport, while preference/profile
+% caches and other mode-keyed config are defined for standalone/daemon.
+% Leaving mode=ipc would skip Knowledge/profile.qlf (license groups)
+% and Knowledge/preference.qlf, so ACCEPT_LICENSE="@FREE" expands to
+% nothing and every package spuriously looks license-masked.
 
-daemon:isolate_state(Args, Cols, Rows, Env) :-
+daemon:isolate_state(Args0, Cols, Rows, Env) :-
   retractall(interface:argv_(_,_)),
   retractall(preference:local_flag(_)),
+  rewrite_ipc_mode_args(Args0, Args),
   set_prolog_flag(argv, Args),
   interface:argv(_, _),
   retractall(daemon:client_tty_size(_,_)),
@@ -271,6 +279,20 @@ daemon:isolate_state(Args, Cols, Rows, Env) :-
   ;  true
   ),
   apply_client_env(Env).
+
+
+%! daemon:rewrite_ipc_mode_args(+ArgsIn, -ArgsOut) is det.
+%
+% Maps client transport mode `ipc` to execution mode `standalone` in
+% the raw argv list forwarded over the daemon socket.
+
+daemon:rewrite_ipc_mode_args(ArgsIn, ArgsOut) :-
+  ( append(Before, ['--mode', 'ipc'|Rest], ArgsIn)
+  -> append(Before, ['--mode', 'standalone'|Rest], ArgsOut)
+  ; append(Before, ['--mode=ipc'|Rest], ArgsIn)
+  -> append(Before, ['--mode=standalone'|Rest], ArgsOut)
+  ; ArgsOut = ArgsIn
+  ).
 
 
 %! daemon:apply_client_env(+Env:list) is det.

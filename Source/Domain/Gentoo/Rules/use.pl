@@ -102,8 +102,15 @@ use:effective_use_in_context(Context, Use, State) :-
 % of extracting it from a context. Used by use_conditional_group rules
 % for the ebuild that owns the conditional. This is the single
 % implementation of the USE precedence chain (variant override ->
-% profile force/mask -> userconfig per-CN -> userconfig match ->
-% profile soft -> global USE -> IUSE default).
+% package use.mask/force -> global use.force/use.mask -> userconfig
+% per-CN -> userconfig match -> profile soft -> global USE -> IUSE
+% default).
+%
+% Global use.mask/use.force beat soft package.use (profile or user): a
+% profile `package.use` line cannot enable a use.mask'd flag (Portage;
+% e.g. abi_x86_32 on non-multilib amd64). Without this, optenable
+% `[abi_x86_32(-)?]` on clang-runtime spuriously forced abi_x86_32 onto
+% compiler-rt and reported use_dep_unsat.
 
 use:effective_use_for_entry(RepoEntry0, Use, State) :-
   RepoEntry0 = Repo://Id,
@@ -114,27 +121,46 @@ use:effective_use_for_entry(RepoEntry0, Use, State) :-
   use:entry_iuse_default(Repo://Id, Use, Default),
   cache:ordered_entry(Repo, Id, C, N, _),
       ( variant:use_overridden(Use, Eff) ->
-      true
-  ; preference:profile_use_hard(Repo://Id, Use, Eff, _Reason0) ->
-      true
-  ; preference:userconfig_use(C, N, Use, positive) ->
-      Eff = positive
-  ; preference:userconfig_use(C, N, Use, negative) ->
-      Eff = negative
-  ; preference:userconfig_use_match(Repo://Id, Use, Eff0) ->
-      Eff = Eff0
-  ; preference:profile_use_soft_match(Repo://Id, Use, Eff0) ->
-      Eff = Eff0
-  ; preference:global_use(Use) ->
-      Eff = positive
-  ; preference:global_use(minus(Use)) ->
-      Eff = negative
-  ; Eff = Default
-  ),
+          true
+      ; use:profile_hard_use_state(Repo://Id, Use, Eff) ->
+          true
+      ; preference:profile_forced_use_flag(Use) ->
+          Eff = positive
+      ; preference:profile_masked_use_flag(Use) ->
+          Eff = negative
+      ; preference:userconfig_use(C, N, Use, positive) ->
+          Eff = positive
+      ; preference:userconfig_use(C, N, Use, negative) ->
+          Eff = negative
+      ; preference:userconfig_use_match(Repo://Id, Use, Eff0) ->
+          Eff = Eff0
+      ; preference:profile_use_soft_match(Repo://Id, Use, Eff0) ->
+          Eff = Eff0
+      ; preference:global_use(Use) ->
+          Eff = positive
+      ; preference:global_use(minus(Use)) ->
+          Eff = negative
+      ; Eff = Default
+      ),
       assertz(memo:eff_use_cache_(Repo, Id, Use, Eff)),
       State = Eff
   ),
   !.
+
+
+%! use:profile_hard_use_state(+RepoEntry, +Use, -State) is semidet.
+%
+% Package-level profile use.mask/force for an entry. A global use.mask
+% beats package.use.force (flag stays masked), matching
+% eapi:categorize_use_for_entry/4.
+
+use:profile_hard_use_state(RepoEntry, Use, State) :-
+  preference:profile_use_hard(RepoEntry, Use, State0, Reason0),
+  \+ ( State0 == positive,
+       Reason0 == profile_package_use_force,
+       preference:profile_masked_use_flag(Use)
+     ),
+  State = State0.
 
 
 % -----------------------------------------------------------------------------
@@ -710,9 +736,13 @@ use:entry_effective_use_set(Repo://Entry, EnabledSet) :-
 
 use:candidate_effective_use_enabled_raw(Repo://Entry, Use) :-
   cache:ordered_entry(Repo, Entry, C, N, _),
-  ( preference:profile_use_hard(Repo://Entry, Use, positive, _Reason0) ->
+  ( use:profile_hard_use_state(Repo://Entry, Use, positive) ->
       true
-  ; preference:profile_use_hard(Repo://Entry, Use, negative, _Reason0) ->
+  ; use:profile_hard_use_state(Repo://Entry, Use, negative) ->
+      fail
+  ; preference:profile_forced_use_flag(Use) ->
+      true
+  ; preference:profile_masked_use_flag(Use) ->
       fail
   ; preference:userconfig_use(C, N, Use, positive) ->
       true

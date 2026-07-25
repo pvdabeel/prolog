@@ -134,6 +134,7 @@ ipc:collect_env(Env) :-
 
 ipc:forwarded_env_var('USE').
 ipc:forwarded_env_var('ACCEPT_KEYWORDS').
+ipc:forwarded_env_var('ACCEPT_LICENSE').
 ipc:forwarded_env_var('PYTHON_TARGETS').
 ipc:forwarded_env_var('PYTHON_SINGLE_TARGET').
 ipc:forwarded_env_var('RUBY_TARGETS').

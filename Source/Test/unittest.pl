@@ -1767,6 +1767,61 @@ test(use_dep_atom_sat_after_disable_sibling,
 :- end_tests(rules_use_dep_unsat).
 
 
+% Global use.mask beats soft profile package.use (clang-runtime abi_x86_32
+% on non-multilib amd64). Soft enable must not make optenable `[flag?]`
+% force a masked flag onto dependencies.
+:- begin_tests(rules_use_mask_beats_soft).
+
+ums_entry(qtest://'llvm-runtimes/clang-runtime-0').
+ums_ver(version([0],'',4,0,[],0,'0')).
+
+ums_setup :-
+  ums_entry(R://Id),
+  ums_ver(V),
+  retractall(cache:ordered_entry(qtest, Id, _, _, _)),
+  retractall(memo:eff_use_cache_(qtest, Id, _, _)),
+  retractall(memo:iuse_default_cache_(qtest, Id, _)),
+  retractall(memo:self_use_cache_(qtest, Id, _, _)),
+  retractall(preference:local_profile_masked_use_flag(abi_x86_32)),
+  retractall(preference:local_profile_use_soft(simple('llvm-runtimes',
+                                                     'clang-runtime', _),
+                                              abi_x86_32, _)),
+  assertz(cache:ordered_entry(R, Id, 'llvm-runtimes', 'clang-runtime', V)),
+  assertz(preference:local_profile_masked_use_flag(abi_x86_32)),
+  assertz(preference:local_profile_use_soft(
+            simple('llvm-runtimes', 'clang-runtime', []),
+            abi_x86_32, positive)),
+  % Declare the flag in IUSE with default-off so soft/mask apply.
+  empty_assoc(Empty),
+  put_assoc(abi_x86_32, Empty, negative, Map),
+  assertz(memo:iuse_default_cache_(R, Id, Map)).
+
+ums_cleanup :-
+  ums_entry(_://Id),
+  retractall(cache:ordered_entry(qtest, Id, _, _, _)),
+  retractall(memo:eff_use_cache_(qtest, Id, _, _)),
+  retractall(memo:iuse_default_cache_(qtest, Id, _)),
+  retractall(memo:self_use_cache_(qtest, Id, _, _)),
+  retractall(preference:local_profile_masked_use_flag(abi_x86_32)),
+  retractall(preference:local_profile_use_soft(simple('llvm-runtimes',
+                                                     'clang-runtime', _),
+                                              abi_x86_32, _)).
+
+test(effective_use_masked_despite_soft_package_use,
+     [setup(ums_setup), cleanup(ums_cleanup),
+      true(Pol == negative)]) :-
+  ums_entry(E),
+  use:effective_use_for_entry(E, abi_x86_32, Pol).
+
+test(optenable_skips_globally_masked_flag,
+     [setup(ums_setup), cleanup(ums_cleanup),
+      true(Req == none)]) :-
+  ums_entry(E),
+  use:use_dep_requirement([self(E)], optenable(abi_x86_32), negative, Req).
+
+:- end_tests(rules_use_mask_beats_soft).
+
+
 % ||-branch ranking prefers the arm that admits the newest tree version
 % (portage-ng#112 — cabal's text 1.2 vs 2.x OR).
 :- begin_tests(ranking_any_of_version_branch).

@@ -1711,6 +1711,8 @@ query:iuse_effective_state_(States, State, Reason) :-
 
 query:iuse_state_priority_(positive, profile_package_use_force, 1000) :- !.
 query:iuse_state_priority_(negative, profile_package_use_mask, 1000) :- !.
+query:iuse_state_priority_(positive, profile_use_force, 1000) :- !.
+query:iuse_state_priority_(negative, profile_use_mask, 1000) :- !.
 query:iuse_state_priority_(_, package_use, 900) :- !.
 query:iuse_state_priority_(_, preference, 800) :- !.
 query:iuse_state_priority_(positive, ebuild, 700) :- !.

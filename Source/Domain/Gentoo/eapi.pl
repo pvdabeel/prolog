@@ -2162,7 +2162,9 @@ eapi:categorize_use(Use,negative,default) :-
 
 %! eapi:categorize_use_for_entry(+RawIuse, +Repo://Id, ?State, ?Reason)
 %
-% Like eapi:categorize_use/3, but honors per-package USE overrides (package.use).
+% Like eapi:categorize_use/3, but honors per-package USE overrides
+% (package.use) and global profile use.mask/use.force. Soft package.use
+% cannot enable a globally masked flag (Portage).
 
 eapi:categorize_use_for_entry(RawIuse, Repo://Id, State, Reason) :-
   % Derive the plain flag name.
@@ -2179,6 +2181,13 @@ eapi:categorize_use_for_entry(RawIuse, Repo://Id, State, Reason) :-
        ) ->
       State = State0,
       Reason = Reason0
+  ; % Global use.force / use.mask beat soft package.use.
+    preference:profile_forced_use_flag(Use) ->
+      State = positive,
+      Reason = profile_use_force
+  ; preference:profile_masked_use_flag(Use) ->
+      State = negative,
+      Reason = profile_use_mask
   ; % User /etc/portage/package.use (soft; overridden by profile mask/force)
     preference:userconfig_use(C, N, Use, State0) ->
       State = State0,
