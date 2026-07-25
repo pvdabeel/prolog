@@ -426,6 +426,7 @@ ebuild_exec:start_phase_async(EbuildPath, Phase, LogPath, UseString, ExtraEnv, P
   ),
   config:ebuild_command(EbuildCmd),
   atom_string(Phase, PhaseStr),
+  % Fixed -c script; paths/phase via $1..$4 (sanitize argv contract).
   process_create(
     path(sh),
     ['-c', '"$1" --skip-manifest "$2" "$3" >>"$4" 2>&1',
@@ -704,6 +705,7 @@ ebuild_exec:run_phase_logged(EbuildPath, Phase, LogPath, UseString, ExitCode) :-
 ebuild_exec:run_phase_logged_unlocked(EbuildPath, Phase, LogPath, UseString, ExitCode) :-
   config:ebuild_command(EbuildCmd),
   atom_string(Phase, PhaseStr),
+  % Fixed -c script; paths/phase via $1..$4 (sanitize argv contract).
   process_create(
     path(sh),
     ['-c', '"$1" --skip-manifest "$2" "$3" >>"$4" 2>&1',

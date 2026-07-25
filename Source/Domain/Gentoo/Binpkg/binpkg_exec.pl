@@ -1225,6 +1225,7 @@ binpkg_exec:run_qmerge_unlocked(EbuildPath, GpkgPath, BuildDir, UseString, Extra
 
 binpkg_exec:run_qmerge_unlocked(EbuildPath, GpkgPath, BuildDir, UseString, ExtraEnv, LogPath, ExitCode) :-
   config:ebuild_command(EbuildCmd),
+  % Fixed -c script; paths via $1..$3 (sanitize argv contract).
   process_create(
     path(sh),
     ['-c', '"$1" --skip-manifest "$2" qmerge >"$3" 2>&1; rc=$?; cat "$3"; exit $rc',

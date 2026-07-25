@@ -50,15 +50,7 @@ Tier B performance (if reprove-heavy packages dominate):
 Security (2026-07 full-codebase audit)
 ======================================
 
-Medium:
-
-- [done] kernelconfig:apply_options — process_create argv (no sh -c); CONFIG suffix gated
-- [done] download curl — https-only by default (ftp dropped); config:curl_allow_http for LAN
-- [done] sandbox: remove prover:learn/3; post_result requires in-flight job
-- [done] kb.qlf / resume.pl / feedback.pl — SHA-256 sidecars (config:file_integrity)
-- [done] empty digest password rejected in client/server (require Private/passwords.pl)
-
 Low:
 
-- sanitize docs say shell metacharacters OK for argv; several sh -c sites violate that contract
-- Certificates/*.pem public certs tracked (keys gitignored) — speeds attacks if CA key leaks
+- [done] sanitize argv contract documented; download:async_multi_url_curl uses fixed
+  bash -c + positional args (no URL/flag interpolation into the script)

@@ -11,6 +11,24 @@
 /** <module> SANITIZE
 Input validation and sanitization helpers for defense-in-depth against
 command injection, path traversal, and other input-based attacks.
+
+## Shell / process_create contract
+
+`safe_path_component/1`, `safe_filename/1`, `safe_portage_category/1`,
+and `safe_portage_name/1` intentionally allow shell metacharacters
+(e.g. `;`, `$()`, spaces). They only reject path traversal. Callers
+MUST therefore:
+
+  1. Pass values as `process_create/3` **argv elements**, or
+  2. If a shell is required, use a **fixed** `-c` script string and
+     pass data only as positional parameters (`$1`, `$2`, …), never
+     via `format/3` / `atomic_list_concat/2` into the script text.
+
+Violating (2) — interpolating sanitize-approved atoms into `sh -c` /
+`bash -c` — is command injection. Prefer argv-only `process_create`
+(see `ebuild_exec:reactivate_toolchain/2`, `kernelconfig:apply_options/1`).
+Compliant shell wrappers live in `ebuild_exec:start_phase_async/6` and
+`download:async_multi_url_curl/3`.
 */
 
 :- module(sanitize, []).

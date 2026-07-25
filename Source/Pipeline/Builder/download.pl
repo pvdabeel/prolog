@@ -611,35 +611,16 @@ download:start_curl_async(URL, DestPath, Pid) :-
 
 %! download:async_multi_url_curl(+URLs, +DestPath, -Pid) is det.
 %
-% Spawn a small bash process that loops over URLs, invoking curl with
-% the standard retry/resume flags for each, and exits at the first
-% successful download.
+% Spawn bash with a *fixed* `-c` script; DestPath, proto flag, and URLs
+% are passed as argv (`$1`, `$2`, `$@` after shift) — never interpolated
+% into the script string (sanitize argv contract).
 
 download:async_multi_url_curl(URLs, DestPath, Pid) :-
-  download:curl_args(BaseArgs),
-  atomic_list_concat(BaseArgs, ' ', BaseArgsAtom),
-  download:shell_quote_list(URLs, QuotedUrls),
-  atomic_list_concat(QuotedUrls, ' ', UrlsAtom),
-  format(atom(Cmd),
-         'for u in ~w; do curl ~w -o "$0" "$u" && exit 0; rm -f "$0"; done; exit 22',
-         [UrlsAtom, BaseArgsAtom]),
+  download:curl_proto_flag(Proto),
+  Script = 'dest="$1"; proto="$2"; shift 2; for u in "$@"; do curl -L -s -f --proto "$proto" --connect-timeout 15 --retry 3 --retry-delay 2 --retry-connrefused -C - --max-time 600 -o "$dest" "$u" && exit 0; rm -f "$dest"; done; exit 22',
   process_create(path(bash),
-                 ['-c', Cmd, DestPath],
+                 ['-c', Script, 'curlwalk', DestPath, Proto|URLs],
                  [stdout(null), stderr(null), process(Pid)]).
-
-
-%! download:shell_quote_list(+Atoms, -Quoted) is det.
-%
-% Quote each atom in single quotes for safe inclusion in a bash command
-% line. Embedded single quotes are escaped as '\''.
-
-download:shell_quote_list([], []).
-download:shell_quote_list([A|As], [Q|Qs]) :-
-  atom_string(A, S),
-  split_string(S, "'", "", Parts),
-  atomic_list_concat(Parts, '\'\\\'\'', Inner),
-  atomic_list_concat(['\'', Inner, '\''], Q),
-  download:shell_quote_list(As, Qs).
 
 
 %! download:check_process_done(+Pid, -ExitCode) is semidet.
