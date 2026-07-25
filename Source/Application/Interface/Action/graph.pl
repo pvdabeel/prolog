@@ -13,7 +13,8 @@
 
 %! action:process_graph(+Args) is det.
 %
-% Dispatches --graph with optional positional arguments:
+% Dispatches --graph with optional positional arguments. The repository
+% graphed is always config:graph_repository/1 (via kb:graph / kb:graph_emerge):
 %   --graph                 uses config:graph_modified_only/1
 %   --graph modified        overrides to modified-only for this run
 %   --graph full            overrides to graph everything for this run

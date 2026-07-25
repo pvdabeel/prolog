@@ -264,11 +264,8 @@ plan:printable_element(_,assumed(rule(_Repository://_Entry:run?_,_))) :- !.
 plan:printable_element(_,assumed(rule(_Repository://_Entry:fetchonly?_,_))) :- !.
 plan:printable_element(_,assumed(rule(package_dependency(_,_,_,_,_,_,_,_):install?_,_))) :- !.
 plan:printable_element(_,assumed(rule(package_dependency(_,_,_,_,_,_,_,_):run?_,_))) :- !.
-plan:printable_element(_,assumed(rule(grouped_package_dependency(_,_,_,_):install?_,_))) :- !. % todo: phase out
-plan:printable_element(_,assumed(rule(grouped_package_dependency(_,_,_,_):run?_,_))) :- !. % todo: phase out
-plan:printable_element(_,assumed(rule(grouped_package_dependency(_,_,_):install?_,_))) :- !.
-plan:printable_element(_,assumed(rule(grouped_package_dependency(_,_,_):run?_,_))) :- !.
-% Suppress any remaining cycle-break types from plan display.
+% Suppress any remaining cycle-break types from plan display
+% (including grouped_package_dependency — always benign via heuristic:cycle_benign/2).
 plan:printable_element(_,assumed(rule(_,_))) :- !, fail.
 
 
@@ -592,18 +589,6 @@ plan:print_element(_,assumed(rule(Repository://Entry:Action?{_Context},_Body))) 
 plan:print_element(_,assumed(rule(package_dependency(Phase,_,C,N,_,_,_,_):_Action?{_Context},_Body))) :-
   plan:assumed_phase_word(Phase, Word),
   !,
-  format(atom(Text), 'assumed ~w', [Word]),
-  plan:print_assumed_dep_verify(red, red, red, C, N, Text).
-
-plan:print_element(_,assumed(rule(grouped_package_dependency(_X,C,N,_Deps):Action?{_Context},_Body))) :- % todo: phase out
-  !,
-  plan:assumed_phase_word(Action, Word),
-  format(atom(Text), 'assumed ~w', [Word]),
-  plan:print_assumed_dep_verify(red, red, red, C, N, Text).
-
-plan:print_element(_,assumed(rule(grouped_package_dependency(C,N,_Deps):Action?{_Context},_Body))) :-
-  !,
-  plan:assumed_phase_word(Action, Word),
   format(atom(Text), 'assumed ~w', [Word]),
   plan:print_assumed_dep_verify(red, red, red, C, N, Text).
 

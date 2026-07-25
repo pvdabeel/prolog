@@ -269,7 +269,8 @@ clear ::-
 %
 % Public predicate
 %
-% Create svg dependency graphs for all entries
+% Create svg dependency graphs for entries in the repository named by
+% config:graph_repository/1 (default: portage). Invoked by --graph.
 
 graph ::-
   proxy,!,
@@ -279,17 +280,17 @@ graph ::-
 
 graph ::-
   \+ proxy,!,
-  with_mutex(graph, % todo: this should iterate over all registered repositories
-    (portage:graph)).
+  config:graph_repository(Repository),
+  with_mutex(graph, Repository:graph).
 
 
 %! knowledgebase:graph_emerge
 %
 % Public predicate
 %
-% Generate .emerge files (via emerge-vp) for all entries in the
-% registered repositories. Mirrors knowledgebase:graph/0 but writes
-% only the .emerge artefacts.
+% Generate .emerge files (via emerge-vp) for entries in the repository
+% named by config:graph_repository/1. Mirrors knowledgebase:graph/0 but
+% writes only the .emerge artefacts. Invoked by --graph emerge.
 
 graph_emerge ::-
   proxy,!,
@@ -299,8 +300,8 @@ graph_emerge ::-
 
 graph_emerge ::-
   \+ proxy,!,
-  with_mutex(graph, % todo: this should iterate over all registered repositories
-    (portage:graph_emerge)).
+  config:graph_repository(Repository),
+  with_mutex(graph, Repository:graph_emerge).
 
 
 %! knowledgebase:compile

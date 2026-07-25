@@ -643,6 +643,15 @@ config:graph_modified_only(Bool) :-
 config:graph_modified_only_default(true).
 
 
+%! config:graph_repository(?Repository)
+%
+% Name of the repository graphed by default when `--graph` / `kb:graph`
+% (and `--graph emerge` / `kb:graph_emerge`) is invoked. Must match a
+% registered repository instance name (typically `portage`).
+
+config:graph_repository(portage).
+
+
 % -----------------------------------------------------------------------------
 %  Emerge file generation (--graph emerge)
 % -----------------------------------------------------------------------------
