@@ -44,14 +44,49 @@ Tier A performance (only if measured):
 Tier B performance (if reprove-heavy packages dominate):
 
 - Incremental prune_model / prune_proof / prune_triggers (avoid full AVL rebuild)
-- Safer prover:learn store update (nb_setval whole-AVL deep-copy concern)
+- Safer prover:learn store update (nb_setval whole-AVL deep-copy concern
 
-Phase B readability (helper extraction, same semantics):
 
-- Extract prove_recursive / prove_model case helpers
-- [done] Unify heuristic:strip_ctx onto prover:canon_literal
-- Parameterize query.pl dep-model phase expansions
+Security (2026-07 full-codebase audit)
+======================================
 
-Validate:
+Critical / High:
 
-- test_stats_pkgs + tinderbox-ng compare on vm-linux.local after any Tier A/B change
+- [done] Rotate/remove committed HTTP digest password in Certificates/passwordfile
+  — gitignored; `DIGEST_PASSWORD=... make passwordfile` via
+  Certificates/Scripts/digestpassword.sh; mirror plaintext in Private/passwords.pl
+
+- [done] ebuild_exec:reactivate_toolchain/2 — process_create argv + Prolog chost parse
+  (no sh -c); Major gated by sanitize:safe_path_component
+
+- [done] ebuild_exec:register_ghc_pkg/1 — process_create argv (no sh -c)
+
+- [done] Remove explainer:call_llm/3 from sandbox safelist
+  — LLM is host-local (standalone/client); server RPC returns plans only;
+  client runs --explain/--diagnose with its own api_key.pl (see 16-doc-llm.md)
+
+- [done] server:start_server bind scope
+  — config:server_bind(localhost) default; require passwordfile; widen only on VPN
+  (see 17-doc-distributed.md). mTLS+digest still required.
+
+- [done] download:verify_hashes fails on empty Manifest checksum list
+
+- [done] worker: Bonjour must match config:server_host pin; git:checkout requires
+  full hex SHA already present locally (no fetch-from-server)
+
+
+Medium:
+
+- kernelconfig:build_apply_script — quote KDir/ConfigPath in sh -c (path metacharacters → RCE)
+- download curl allows http/ftp; integrity depends on hashes (weakened by empty-checksum success)
+- sandbox allows prover:learn/3 and worker post_result — poison shared-server prove state
+- knowledgebase loads unsigned kb.qlf — write access to Knowledge/ is code exec
+- resume.pl / feedback.pl read_term/3 with no integrity check — local writers poison plans
+- config: missing Private/passwords.pl falls back to empty cert/digest passwords
+  while public passwordfile remains
+
+Low:
+
+- sanitize docs say shell metacharacters OK for argv; several sh -c sites violate that contract
+- default mirror_url is cleartext HTTP
+- Certificates/*.pem public certs tracked (keys gitignored) — speeds attacks if CA key leaks

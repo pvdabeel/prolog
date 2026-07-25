@@ -632,8 +632,12 @@ download:verify_size(Path, ExpectedSize) :-
 %
 % Verify the downloaded file against Manifest checksums. Delegates to
 % mirror:verify_hashes/4. Succeeds if all supported hashes match.
+% Fails on an empty checksum list: size-only acceptance would let an
+% MITM on http/ftp swap a same-sized payload.
 
-download:verify_hashes(_Path, []) :- !.
+download:verify_hashes(_Path, []) :-
+  !,
+  fail.
 
 download:verify_hashes(Path, Pairs) :-
   mirror:verify_hashes(Path, Pairs, OK, _UnsupportedCount),

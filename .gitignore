@@ -3,6 +3,7 @@ Source/Config/Private/passwords.pl
 Certificates/*-key.pem
 Certificates/cakey.pem
 Certificates/cacert.srl
+Certificates/passwordfile
 Knowledge/kb.qlf
 Knowledge/kb.raw
 Knowledge/profile.qlf

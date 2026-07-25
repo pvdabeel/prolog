@@ -334,6 +334,13 @@ repair_proposal([
 - Skip loading LLM modules entirely: `config:load_llm_modules(false)`.
   Builder and CLI then no-op diagnose paths (stubs + soft
   `explainer:call_llm/3`); no existence errors.
+- **`explainer:call_llm/3` is not Pengines-safelisted.** Authenticated
+  clients must not burn server-side LLM API keys or exfiltrate prompts
+  through the shared server. LLM features are **host-local**: run
+  `--explain` / `--diagnose` / `--chat` on standalone or client
+  processes (which hold their own `Source/Config/Private/api_key.pl`).
+  In client-server mode the server resolves plans over RPC; natural-
+  language explanation stays on the client after the plan returns.
 
 ### CLI
 

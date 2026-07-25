@@ -471,17 +471,30 @@ config:bonjour_worker_service('_portage-ng-worker._tcp.').
 
 %! config:server_host(?Url)
 %
-% Declares the server url, including protocol (https) and port the client needs
-% to connect on. This can be overridden using the --host option in the interface.
+% Declares the server hostname the client/worker connects to. This can be
+% overridden using the --host option in the interface. Workers that use
+% Bonjour discovery only accept a discovered host that matches this pin
+% (hostile LAN advertisements are ignored).
 
 config:server_host('mac-pro.local').
 
 
+%! config:server_bind(?Address)
+%
+% Interface the HTTPS Pengine server binds to. Default `localhost` keeps
+% mutating POSTs (/sync, /clear, /load, …) off the public network; mTLS
+% + digest still apply, but binding all interfaces would expose those
+% endpoints to any peer that holds a CA-signed client cert and the digest
+% password. Override with `*` / `0.0.0.0` only on a trusted VPN/LAN.
+
+config:server_bind(localhost).
+
+
 %! config:server_port(?Number)
 %
-% Declares the port on which the server needs to be launched.
-% Always launches on localhost, using https/ssl. This can be overridden
-% using the --port option in the interface.
+% Declares the port on which the server needs to be launched (HTTPS/SSL).
+% Combined with config:server_bind/1 (default localhost). Override with
+% the --port option in the interface.
 
 config:server_port(4000).
 

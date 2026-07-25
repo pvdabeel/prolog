@@ -806,23 +806,14 @@ ebuild_exec:maybe_register_ghc_pkg(_Action, _Repo, _Entry, _Outcome).
 %
 % Runs `ghc-pkg recache` under the portage_pkg_merge mutex. Fully guarded
 % so a host without ghc-pkg never turns a successful merge into a failure.
+% Uses process_create/3 argv (no `sh -c`), so RepoEntry/LogPath never
+% reach a shell.
 
 ebuild_exec:register_ghc_pkg(RepoEntry) :-
-  ( ebuild_exec:reactivation_log_path(LogPath)
-  -> format(atom(Redir), ' >>~w 2>&1', [LogPath]),
-     format(atom(Marker), 'echo "[ghc-pkg-recache] ~w" >>~w; ', [RepoEntry, LogPath])
-  ;  Redir = ' >/dev/null 2>&1',
-     Marker = ''
-  ),
-  format(atom(Cmd),
-         'if command -v ghc-pkg >/dev/null 2>&1; then ghc-pkg recache~w; fi; true',
-         [Redir]),
-  atomic_list_concat([Marker, Cmd], Script),
   catch(
     ebuild_exec:with_portage_pkg_merge_lock(merge,
-      ( process_create(path(sh), ['-c', Script],
-                       [stdout(null), stderr(null), process(Pid)]),
-        process_wait(Pid, _Status)
+      ( ebuild_exec:append_reactivation_log('[ghc-pkg-recache] ~w', [RepoEntry]),
+        ignore(ebuild_exec:run_logged_cmd(path('ghc-pkg'), [recache]))
       )),
     _Error,
     true).
@@ -874,37 +865,124 @@ ebuild_exec:gcc_profile_major(Repo, Entry, Major) :-
 % `/etc/profile.env` and the `ld.so.cache`.
 %
 % Serialized under the `portage_pkg_merge` mutex (never overlaps a merge)
-% and fully tolerant of a host where these commands do not exist: the
-% `command -v` guards make it a silent no-op (e.g. macOS standalone). A
-% trace line (plus the gcc-config/env-update output) is appended to
-% config:build_log_dir/'toolchain-reactivation.log' so a run can be
-% confirmed to have fired; the build display itself is left undisturbed.
+% and fully tolerant of a host where these commands do not exist (silent
+% no-op, e.g. macOS standalone). All external commands use process_create/3
+% argv — SLOT/Major/RepoEntry/LogPath are never interpolated into `sh -c`.
+% A trace line (plus gcc-config/env-update output) is appended to
+% config:build_log_dir/'toolchain-reactivation.log' when configured.
 
 ebuild_exec:reactivate_toolchain(Kind, RepoEntry) :-
-  ( ebuild_exec:reactivation_log_path(LogPath)
-  -> format(atom(Redir), ' >>~w 2>&1', [LogPath]),
-     format(atom(Marker), 'echo "[reactivate] ~w ~w" >>~w; ', [Kind, RepoEntry, LogPath])
-  ;  Redir = ' >/dev/null 2>&1',
-     Marker = ''
-  ),
-  ( Kind = gcc(Major)
-  -> format(atom(GccCmd),
-            'if command -v gcc-config >/dev/null 2>&1; then cur=$(gcc-config -c 2>/dev/null); chost=$(echo "$cur" | sed "s/-[0-9.]*$//"); if [ -n "$chost" ] && gcc-config "$chost-~w"~w; then :; elif [ -n "$cur" ]; then gcc-config "$cur"~w; fi; fi; ',
-            [Major, Redir, Redir])
-  ;  GccCmd = ''
-  ),
-  format(atom(EnvCmd),
-         'if command -v env-update >/dev/null 2>&1; then env-update~w; fi; true',
-         [Redir]),
-  atomic_list_concat([Marker, GccCmd, EnvCmd], Script),
   catch(
     ebuild_exec:with_portage_pkg_merge_lock(merge,
-      ( process_create(path(sh), ['-c', Script],
-                       [stdout(null), stderr(null), process(Pid)]),
-        process_wait(Pid, _Status)
+      ( ebuild_exec:append_reactivation_log('[reactivate] ~w ~w', [Kind, RepoEntry]),
+        ( Kind = gcc(Major)
+        -> catch(ignore(ebuild_exec:select_gcc_profile(Major)), _, true)
+        ;  true
+        ),
+        catch(ignore(ebuild_exec:run_logged_cmd(path('env-update'), [])), _, true)
       )),
     _Error,
     true).
+
+
+%! ebuild_exec:select_gcc_profile(+Major) is semidet.
+%
+% Select `${CHOST}-${Major}` via gcc-config argv. Major must be a safe
+% path component (digits/dots from SLOT); otherwise the select is skipped.
+% Falls back to re-selecting the current profile when the new profile is
+% missing. Fails softly when gcc-config is absent.
+
+ebuild_exec:select_gcc_profile(Major) :-
+  \+ sanitize:safe_path_component(Major),
+  !,
+  ebuild_exec:append_reactivation_log('[reactivate] refusing unsafe gcc Major ~w', [Major]),
+  fail.
+ebuild_exec:select_gcc_profile(Major) :-
+  ebuild_exec:capture_cmd(path('gcc-config'), ['-c'], Cur),
+  ebuild_exec:gcc_chost_from_profile(Cur, Chost),
+  ( Chost \== '',
+    format(atom(Profile), '~w-~w', [Chost, Major]),
+    ebuild_exec:run_logged_cmd(path('gcc-config'), [Profile])
+  -> true
+  ;  Cur \== '',
+     ebuild_exec:run_logged_cmd(path('gcc-config'), [Cur])
+  ).
+
+
+%! ebuild_exec:gcc_chost_from_profile(+Profile, -Chost) is det.
+%
+% Strip the trailing `-<Major>` version from a gcc-config profile name
+% (`x86_64-pc-linux-gnu-15` → `x86_64-pc-linux-gnu`). Unifies Chost with
+% '' when Profile has no trailing version suffix.
+
+ebuild_exec:gcc_chost_from_profile(Profile, Chost) :-
+  atom_string(Profile, S),
+  ( re_matchsub('^(.*)-[0-9.]+$', S, M, [])
+  -> atom_string(Chost, M.1)
+  ;  Chost = ''
+  ).
+
+
+%! ebuild_exec:run_logged_cmd(+Exe, +Args) is semidet.
+%
+% Run Exe with Args via process_create/3. Stdout/stderr append to the
+% reactivation log when configured; otherwise discarded. Fails when the
+% process exits non-zero or cannot be started.
+
+ebuild_exec:run_logged_cmd(Exe, Args) :-
+  ( ebuild_exec:reactivation_log_path(LogPath)
+  -> open(LogPath, append, Out),
+     call_cleanup(
+       ( process_create(Exe, Args,
+                        [stdout(Out), stderr(Out), process(Pid)]),
+         process_wait(Pid, Status)
+       ),
+       close(Out))
+  ;  process_create(Exe, Args,
+                    [stdout(null), stderr(null), process(Pid)]),
+     process_wait(Pid, Status)
+  ),
+  Status == exit(0).
+
+
+%! ebuild_exec:capture_cmd(+Exe, +Args, -Output) is semidet.
+%
+% Run Exe with Args, unify Output with the first line of stdout (atom).
+% Stderr discarded. Fails when the process exits non-zero or yields no
+% non-empty line.
+
+ebuild_exec:capture_cmd(Exe, Args, Output) :-
+  process_create(Exe, Args,
+                 [stdout(pipe(Out)), stderr(null), process(Pid)]),
+  call_cleanup(
+    ( read_string(Out, _, Raw),
+      split_string(Raw, "\n", "\n \t", Lines)
+    ),
+    ( close(Out), process_wait(Pid, Status) )
+  ),
+  Status == exit(0),
+  Lines = [Line|_],
+  Line \== "",
+  atom_string(Output, Line).
+
+
+%! ebuild_exec:append_reactivation_log(+Format, +Args) is det.
+%
+% Append a printf-style line to the reactivation log when configured.
+
+ebuild_exec:append_reactivation_log(Format, Args) :-
+  ( ebuild_exec:reactivation_log_path(LogPath)
+  -> catch(
+       ( open(LogPath, append, S),
+         call_cleanup(
+           ( format(S, Format, Args),
+             format(S, '~n', [])
+           ),
+           close(S))
+       ),
+       _, true)
+  ;  true
+  ).
 
 
 %! ebuild_exec:reactivation_log_path(-LogPath) is semidet.

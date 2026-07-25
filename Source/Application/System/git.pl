@@ -61,12 +61,37 @@ git:rev_parse(Dir, Args, Commit) :-
 
 %! git:checkout(+Dir, +Commit)
 %
-% Checkout a specific commit in a git repository.
+% Checkout a specific commit in a git repository. Commit must be a full
+% hex object name that already exists in Dir's object store (no fetch).
+% Refuses shell-metacharacter / short-ref / branch-name inputs so a
+% hostile advertiser cannot inject checkout arguments.
 
 git:checkout(Dir, Commit) :-
-  process_create(path(git), ['checkout', Commit],
+  ( sanitize:safe_git_commit(Commit)
+  -> true
+  ;  message:failure(['Refusing git checkout of non-hex commit id: ', Commit]),
+     !, fail
+  ),
+  ( git:commit_exists(Dir, Commit)
+  -> true
+  ;  message:failure(['Git object not present locally (no fetch): ', Commit,
+                      ' in ', Dir, '. Sync the tree from your trusted remote first.']),
+     !, fail
+  ),
+  process_create(path(git), ['checkout', '--detach', Commit],
                  [stdout(null), stderr(null), cwd(Dir), process(Pid)]),
   process_wait(Pid, Status),
   ( Status == exit(0) -> true
   ; message:failure(['git checkout failed for ', Commit, ' in ', Dir])
   ).
+
+
+%! git:commit_exists(+Dir, +Commit) is semidet.
+%
+% True when Commit names an object already present in Dir (git cat-file -e).
+
+git:commit_exists(Dir, Commit) :-
+  process_create(path(git), ['cat-file', '-e', Commit],
+                 [stdout(null), stderr(null), cwd(Dir), process(Pid)]),
+  process_wait(Pid, Status),
+  Status == exit(0).

@@ -58,6 +58,7 @@ sandbox:safe_primitive(config:powerline_bubbles).
 sandbox:safe_primitive(config:proving_target(_)).
 sandbox:safe_primitive(config:reprove_max_retries(_)).
 sandbox:safe_primitive(config:server_port(_)).
+sandbox:safe_primitive(config:server_bind(_)).
 sandbox:safe_primitive(config:shared_dep_use_forcing(_)).
 sandbox:safe_primitive(config:server_host(_)).
 sandbox:safe_primitive(config:systemconfig(_)).
@@ -115,8 +116,11 @@ sandbox:safe_primitive(explanation:assumption_reason_for_grouped_dep(_,_,_,_,_,_
 
 sandbox:safe_primitive(explainer:explain(_,_)).
 sandbox:safe_primitive(explainer:explain(_,_,_)).
-sandbox:safe_primitive(explainer:call_llm(_,_,_)).
+% explainer:call_llm/3 is intentionally NOT safelisted: Pengines clients
+% must not burn server-side LLM API keys or exfiltrate prompts. LLM calls
+% run host-locally (standalone / client / worker process), never via RPC.
 sandbox:safe_primitive(explainer:why_in_proof(_,_,_)).
+
 sandbox:safe_primitive(explainer:why_in_proof(_,_,_,_)).
 sandbox:safe_primitive(explainer:why_in_plan(_,_,_,_,_)).
 sandbox:safe_primitive(explainer:why_in_plan(_,_,_,_,_,_)).

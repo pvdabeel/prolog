@@ -89,6 +89,22 @@ sanitize:safe_snapshot_id(Id) :-
   \+ sub_string(S, _, _, _, "\x00\").
 
 
+%! sanitize:safe_git_commit(+Commit) is semidet.
+%
+% True when Commit is a full Git object name: 40 (SHA-1) or 64 (SHA-256)
+% lowercase/uppercase hexadecimal characters. Rejects short SHAs, branch
+% names, and anything with path/shell metacharacters.
+
+sanitize:safe_git_commit(Commit) :-
+  atom(Commit),
+  atom_string(Commit, S),
+  string_length(S, Len),
+  memberchk(Len, [40, 64]),
+  string_lower(S, Lower),
+  re_match('^[0-9a-f]+$', Lower),
+  !.
+
+
 % -----------------------------------------------------------------------------
 %  Ebuild phase validation
 % -----------------------------------------------------------------------------

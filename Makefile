@@ -91,6 +91,14 @@ HOST?=$(shell hostname)
 
 certs:    ## Generate local CA + per-host client/server TLS certs (for --mode client/server). Usage: make certs HOST=mac-pro.local
 	  sh $(CERTDIR)/Scripts/generate.sh $(HOST)
+	  @if [ ! -f $(CERTDIR)/passwordfile ]; then \
+	    echo "NOTE: $(CERTDIR)/passwordfile missing."; \
+	    echo "  Generate it with:  DIGEST_PASSWORD='...' make passwordfile"; \
+	    echo "  Then mirror the plaintext in Source/Config/Private/passwords.pl"; \
+	  fi
+
+passwordfile: ## Write Certificates/passwordfile for HTTP digest auth. Requires DIGEST_PASSWORD (see Certificates/README.md).
+	  sh $(CERTDIR)/Scripts/digestpassword.sh
 
 certs-check: ## Check TLS certificate expiry status for all hosts.
 	  @sh $(CERTDIR)/Scripts/generate.sh --check
@@ -98,4 +106,4 @@ certs-check: ## Check TLS certificate expiry status for all hosts.
 certs-renew: ## Renew expired/expiring TLS certificates for all hosts.
 	  sh $(CERTDIR)/Scripts/generate.sh --renew
 
-.PHONY: help check all build install test test-overlay test-profile-mask-golden test-profile-mask-golden-update clean certs certs-check certs-renew
+.PHONY: help check all build install test test-overlay test-profile-mask-golden test-profile-mask-golden-update clean certs passwordfile certs-check certs-renew

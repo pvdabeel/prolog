@@ -10,9 +10,10 @@
 
 /** <module> WORKER
 Compute node for distributed proving. A worker advertises its CPU count on
-the network, discovers a portage-ng server via Bonjour, syncs its local
-portage tree to the server's git snapshot, then polls for prove jobs and
-posts back results.
+the network, connects to a pinned portage-ng server (config:server_host/1
+or --host; Bonjour may resolve only that pin), syncs its local portage
+tree to the server's full git snapshot SHA when the object already exists
+locally, then polls for prove jobs and posts back results.
 
 Each worker spawns N threads (one per CPU) that independently poll the
 server's job queue.
@@ -51,14 +52,37 @@ worker:start(Host, Port) :-
 
 %! worker:start
 %
-% Discover a server via Bonjour, then start.
+% Discover servers via Bonjour, but only connect to a host that matches
+% config:server_host/1 (or --host). First-match on a hostile LAN is
+% rejected when the pin does not match — set server_host explicitly.
 
 worker:start :-
+  config:server_host(Pinned),
   bonjour:discover(Hosts),
-  ( Hosts = [[Host, Port]|_] ->
-      worker:start(Host, Port)
-  ; message:failure('No portage-ng server found on the network.')
+  ( member([Host, Port], Hosts),
+    worker:host_matches_pin(Host, Pinned)
+  -> worker:start(Host, Port)
+  ;  message:failure(['No trusted portage-ng server found on the network ',
+                      '(pin config:server_host=', Pinned, '). ',
+                      'Pass --host explicitly or fix the pin; do not trust ',
+                      'unpinned Bonjour advertisements.'])
   ).
+
+
+%! worker:host_matches_pin(+Host, +Pinned) is semidet.
+%
+% True when a Bonjour instance name matches the configured server pin
+% (exact atom match, or Host equals Pinned with/without a trailing
+% `.local` suffix).
+
+worker:host_matches_pin(Host, Pinned) :-
+  Host == Pinned,
+  !.
+worker:host_matches_pin(Host, Pinned) :-
+  atom_concat(Pinned, '.local', Host),
+  !.
+worker:host_matches_pin(Host, Pinned) :-
+  atom_concat(Host, '.local', Pinned).
 
 
 % =============================================================================
@@ -68,7 +92,9 @@ worker:start :-
 %! worker:sync_to_server(+Host, +Port)
 %
 % Query the server for its portage tree snapshot, then sync the local
-% portage tree to the same git commit.
+% portage tree to the same git commit. Checkout only proceeds when the
+% full hex object already exists locally (git:checkout/2); there is no
+% fetch from the server — sync the tree from your trusted remote first.
 
 worker:sync_to_server(Host, Port) :-
   message:inform(['Querying server snapshot from ', Host, ':', Port, '...']),
@@ -82,10 +108,12 @@ worker:sync_to_server(_, _) :-
 %! worker:sync_to_commit(+Commit)
 %
 % Checkout the given commit in the local portage tree and reload the KB.
+% Commit must be a full hex object name already present in the local
+% object store (see git:checkout/2).
 
 worker:sync_to_commit(Commit) :-
   portage:get_location(Location),
-  git:head(Location, LocalHead),
+  git:head_full(Location, LocalHead),
   ( LocalHead == Commit ->
       message:inform(['Local tree already at ', Commit, '.'])
   ; message:inform(['Syncing local tree to ', Commit, '...']),

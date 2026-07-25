@@ -1237,6 +1237,26 @@ test(reject_dotdot, [fail]) :-
 :- end_tests(sanitize_snapshot).
 
 
+:- begin_tests(sanitize_git_commit).
+
+test(valid_sha1) :-
+  sanitize:safe_git_commit('0123456789abcdef0123456789abcdef01234567').
+
+test(valid_sha256) :-
+  sanitize:safe_git_commit('0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef').
+
+test(reject_short, [fail]) :-
+  sanitize:safe_git_commit(abc1234).
+
+test(reject_branch, [fail]) :-
+  sanitize:safe_git_commit(master).
+
+test(reject_metachar, [fail]) :-
+  sanitize:safe_git_commit('0123456789abcdef0123456789abcdef0123456;').
+
+:- end_tests(sanitize_git_commit).
+
+
 :- begin_tests(sanitize_phase).
 
 test(known_phase) :-

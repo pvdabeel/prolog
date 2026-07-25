@@ -54,7 +54,11 @@ Three roles interact in the portage-ng architecture:
 
 %! server:start_server
 %
-% Start a http server on the given port and listens for commands
+% Start an HTTPS Pengine server on config:server_bind/1:config:server_port/1.
+% Default bind is localhost: mutating POSTs (/sync, /clear, /load, …) stay
+% off the public network. mTLS (peer_cert) + HTTP digest remain mandatory;
+% with a shared CA, digest is the main credential — keep passwordfile
+% private (make passwordfile) and only widen the bind on a trusted VPN.
 
 server:start_server  :-
   interface:process_server(_,Port),
@@ -66,12 +70,14 @@ server:start_server  :-
   config:digest_passwordfile(Pwdfile),
   config:digest_realm(Realm),
   server:require_tls_files(Hostname, CaCert, ServerCert, ServerKey),
+  server:require_digest_passwordfile(Pwdfile),
   config:server_workers(Workers),
   config:server_keep_alive_timeout(KeepAlive),
+  server:server_address(Port, Address),
   server:ensure_queues,
   nl,
   http:http_server(http_dispatch,
-                   [ port(Port) ,
+                   [ port(Address),
  		     authentication(digest(Pwdfile,Realm)),
                      workers(Workers) ,
 		     keep_alive_timeout(KeepAlive),
@@ -83,8 +89,41 @@ server:start_server  :-
                          ])
                    ]),
   message:datetime(T),
-  message:notice([T]),
+  message:notice([T, ' listening on ', Address]),
   nl.
+
+
+%! server:server_address(+Port, -Address) is det.
+%
+% Build the http_server/2 bind address from config:server_bind/1 and Port.
+% `localhost` → localhost:Port; `*` / `0.0.0.0` → Port (all interfaces).
+
+server:server_address(Port, Address) :-
+  ( current_predicate(config:server_bind/1),
+    config:server_bind(Bind)
+  -> true
+  ;  Bind = localhost
+  ),
+  ( memberchk(Bind, [*, '0.0.0.0', any])
+  -> Address = Port
+  ;  Address = Bind:Port
+  ).
+
+
+%! server:require_digest_passwordfile(+Pwdfile) is det.
+%
+% Fail clearly when Certificates/passwordfile is missing. Generate with
+% `DIGEST_PASSWORD='...' make passwordfile`.
+
+server:require_digest_passwordfile(Pwdfile) :-
+  ( exists_file(Pwdfile)
+  -> true
+  ;  message:failure(['Missing HTTP digest password file: ', Pwdfile, '\n',
+                      'Generate it with:\n',
+                      '  DIGEST_PASSWORD=\'...\' make passwordfile\n',
+                      'Then mirror the plaintext in Source/Config/Private/passwords.pl\n',
+                      '(see Certificates/README.md).\n'])
+  ).
 
 
 %! server:stop_server
@@ -714,4 +753,4 @@ server:assert_client_vdb(Repo, Stamp, Entries, Metadata) :-
 
 server:snapshot(portage, Commit) :-
   portage:get_location(Location),
-  git:head(Location, Commit).
+  git:head_full(Location, Commit).

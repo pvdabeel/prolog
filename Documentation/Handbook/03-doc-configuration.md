@@ -103,7 +103,8 @@ retry chain and the domain exception fixups work.
 
 | **Setting** | **Default** | **Purpose** |
 |:---|:---|:---|
-| `config:server_host/1` | `'mac-pro.local'` | Server hostname for client-server mode. |
+| `config:server_host/1` | `'mac-pro.local'` | Server hostname pin for client/worker mode (Bonjour must match). |
+| `config:server_bind/1` | `localhost` | Interface the Pengine server binds (`localhost` or `*`). |
 | `config:server_port/1` | `4000` | HTTPS port for the Pengine server. |
 | `config:bonjour_service/1` | `'_portage-ng._tcp.'` | mDNS service name for automatic server/worker discovery. |
 

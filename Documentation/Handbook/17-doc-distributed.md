@@ -287,7 +287,7 @@ git (public certificates) and which are excluded (private keys):
 | `<host>.server-key.pem` | No | Server private key |
 | `<host>.client-cert.pem` | Yes | Client certificate for `<host>` |
 | `<host>.client-key.pem` | No | Client private key |
-| `passwordfile` | Yes | HTTP digest authentication passwords |
+| `passwordfile` | No | HTTP digest authentication passwords (`make passwordfile`) |
 
 Private keys and the CA serial file are excluded via `.gitignore`.
 The public certificates are committed so that nodes can verify each
@@ -327,6 +327,14 @@ configures the same CA and presents the local client certificate.
 An additional layer of security is provided by **HTTP digest
 authentication** (`passwordfile`), so even a node with a valid
 certificate must also know the correct username and password.
+Generate the file locally (it is not committed):
+
+```bash
+DIGEST_PASSWORD='choose-a-strong-secret' make passwordfile
+```
+
+Mirror the same plaintext in `Source/Config/Private/passwords.pl` as
+`config:digest_password/2` on every client and worker.
 
 ### How certificates are resolved at runtime
 
@@ -418,29 +426,41 @@ Each node keeps its own host-specific certificate and key.
 portage-ng --mode server
 ```
 
-The server loads the knowledge base and begins listening for
-connections.
+The server loads the knowledge base and listens on
+`config:server_bind/1`:`config:server_port/1` (default
+**localhost:4000**). Mutating POSTs (`/sync`, `/clear`, `/load`, …)
+therefore stay off the public network. Widen the bind
+(`config:server_bind(*)`) only on a trusted VPN/LAN — with a shared
+cluster CA, mTLS alone is not a strong gate; digest + bind scope are.
 
 **Step 4 — Start the worker.**
 
 ```text
-portage-ng --mode worker
+portage-ng --mode worker --host server.local
 ```
 
-The worker loads its own copy of the knowledge base and begins
-looking for the server.
+Prefer an explicit `--host` (or a matching `config:server_host/1`
+pin). Bonjour discovery is allowed only as a convenience lookup that
+still must match that pin — the worker never connects to the first
+untrusted advertisement on a hostile LAN.
 
-**Step 5 — Discovery.**
+Before tree sync, fetch the portage git objects from your **trusted
+remote** (not from the Pengine server). The server advertises a full
+commit SHA; the worker checks it out only when that object already
+exists locally (`git cat-file -e`). There is no fetch-from-server path.
 
-If mDNS/Bonjour is available on the network, the worker finds the
-server automatically via the `_portage-ng._tcp` service
-advertisement.  No IP addresses need to be configured.
+**Step 5 — Discovery (optional).**
+
+If mDNS/Bonjour is available, the worker may resolve
+`_portage-ng._tcp` advertisements, but only a host that matches
+`config:server_host/1` is accepted.
 
 **Step 6 — Mutual TLS handshake.**
 
 When the worker connects, both sides present certificates signed by
 the shared CA.  portage-ng verifies the Common Name and role, so only
-nodes with valid credentials can join the cluster.
+nodes with valid credentials can join the cluster. Digest auth is
+still required on top of mTLS.
 
 **Step 7 — Proving.**
 
@@ -456,10 +476,11 @@ To run a distributed cluster, every node needs two things:
 - Its own host-specific certificate and key pair.
 
 The server is started with `--mode server`, and each worker with
-`--mode worker`.  Discovery happens automatically via mDNS/Bonjour,
-and TLS ensures that only nodes sharing the same CA can participate.
-You can add more workers at any time — they will discover the server
-and start picking up jobs immediately.
+`--mode worker --host <pinned-server>`. Pin `config:server_host/1`
+on workers; Bonjour is only a lookup aid against that pin. TLS
+ensures peers share the same CA, and digest auth supplies the shared
+secret. You can add more workers at any time — they connect to the
+pinned server and start picking up jobs immediately.
 
 
 ## Further reading
