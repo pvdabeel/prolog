@@ -19,6 +19,11 @@ actually means in a Gentoo context.
 
 Helper predicates used by these rules live in the Rules/ submodules.
 
+For a declarative (newbie-oriented) view of Gentoo policy — PMS meaning,
+literals, invariants, and overlay specimens — see
+Documentation/Handbook/Policy/ (cards, examples.md, map.md). This file
+remains the executable rule/2 surface; Policy/ must not drift from it.
+
 == Submodules ==
 
 | Module        | Responsibility                                          |

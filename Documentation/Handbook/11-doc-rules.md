@@ -513,6 +513,20 @@ handling a distinct concern:
 | `featureterm` | `featureterm.pl` | Context stripping for memoisation keys |
 
 
+## Policy cards (declarative view)
+
+Chapter 11 walks **how** resolution proceeds. For a newbie-oriented
+view of **what** Gentoo policy requires — PMS meaning, literals,
+owning modules, and short invariants — start here:
+
+- [Policy cards hub](Policy/README.md)
+- [Policy by example](Policy/examples.md) — curated overlay curriculum
+- [One-page map](Policy/map.md) — `rule/2` head → schema → test → card
+
+Prefer those cards when onboarding or reviewing a rules change; keep
+this chapter for the end-to-end narrative and `||` ranking detail.
+
+
 ## Further reading
 
 - [Chapter 8: The Prover](08-doc-prover.md) — how the prover calls
@@ -521,3 +535,4 @@ handling a distinct concern:
   fallback chain, reprove mechanism, and progressive relaxation
 - [Chapter 10: Version Domains](10-doc-version-domains.md) — how
   version constraints feed into candidate selection
+- [Policy cards](Policy/README.md) — declarative Gentoo policy surface

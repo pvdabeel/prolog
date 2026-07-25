@@ -64,6 +64,7 @@ Tier B performance (if reprove-heavy packages dominate):
 
 Phase A readability (docs/style only):
 
+- Policy cards + example index (DONE): Documentation/Handbook/Policy/
 - Normalize chapter→section headers in Rules/*.pl (one ===== per file)
 - Fix printer.pl module-doc paths; qualify "context" in hot comments
 - Sync Handbook 11 submodule table with rules.pl; PlDoc gaps (rule/2, scheduler, unify)

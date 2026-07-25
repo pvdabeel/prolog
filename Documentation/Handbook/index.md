@@ -19,6 +19,9 @@ software configuration, applied to Gentoo Linux.
 9. [Assumptions and Constraint Learning](09-doc-prover-assumptions.md)
 10. [Version Domains](10-doc-version-domains.md)
 11. [Rules and Domain Logic](11-doc-rules.md)
+    - [Policy cards](Policy/README.md) — what Gentoo policy requires
+    - [Policy by example](Policy/examples.md) — overlay curriculum
+    - [One-page map](Policy/map.md) — `rule/2` → schema → test → card
 12. [Planning and Scheduling](12-doc-planning.md)
 13. [Output and Visualization](13-doc-output.md)
 

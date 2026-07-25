@@ -6,6 +6,12 @@ Each test has a dependency graph, description, and captured output from both
 
 The overlay repository itself is at [`Repository/Overlay/`](../../Repository/Overlay/).
 
+**Learning Gentoo domain policy?** Start with the curated curriculum in
+[Handbook Policy → examples](../Handbook/Policy/examples.md) (and the
+[policy cards](../Handbook/Policy/README.md)), then use this full matrix
+for coverage. The [one-page map](../Handbook/Policy/map.md) links
+`rule/2` heads to specimen tests.
+
 ## Test Matrix
 
 | # | Category | Purpose |

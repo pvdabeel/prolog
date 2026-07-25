@@ -34,3 +34,7 @@ auto-sync = no
 ```
 
 Test documentation (descriptions, graphs, logs) lives in [`Documentation/Tests/`](../../Documentation/Tests/README.md).
+
+For learning resolver **policy** (not only regression), use the curated
+curriculum in [`Documentation/Handbook/Policy/examples.md`](../../Documentation/Handbook/Policy/examples.md)
+and the [policy cards](../../Documentation/Handbook/Policy/README.md).

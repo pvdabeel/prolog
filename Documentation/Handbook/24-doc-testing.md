@@ -23,6 +23,10 @@ The overlay test suite (`make test-overlay`) runs 80 curated scenarios
 against a test overlay in `Repository/Overlay/`.  Each scenario has a
 specific dependency story and expected behavior.
 
+For onboarding, treat a subset as **policy specimens** (not only CI):
+see [Policy by example](Policy/examples.md) and the
+[policy cards](Policy/README.md).
+
 ### Running
 
 ```bash
