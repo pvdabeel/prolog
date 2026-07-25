@@ -184,7 +184,9 @@ sandbox:safe_primitive(prover:conflictrule(_,_)).
 sandbox:safe_primitive(prover:assuming(_)).
 sandbox:safe_primitive(prover:assuming(_,_)).
 sandbox:safe_primitive(prover:learned(_,_)).
-sandbox:safe_primitive(prover:learn(_,_,_)).
+% prover:learn/3 is intentionally NOT safelisted: Pengines clients must
+% not poison the server's learned-constraint store. Learning still runs
+% inside server-side prove (safe_primitive prove body is not re-sandboxed).
 sandbox:safe_primitive(prover:test(_)).
 sandbox:safe_primitive(prover:test(_,_)).
 sandbox:safe_primitive(prover:test_latest(_)).

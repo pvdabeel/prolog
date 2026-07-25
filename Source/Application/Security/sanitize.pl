@@ -106,6 +106,114 @@ sanitize:safe_git_commit(Commit) :-
 
 
 % -----------------------------------------------------------------------------
+%  File integrity (SHA-256 sidecars)
+% -----------------------------------------------------------------------------
+
+%! sanitize:sha256_sidecar(+Path, -SidePath) is det.
+%
+% Path of the SHA-256 sidecar written next to Path (`Path.sha256`).
+
+sanitize:sha256_sidecar(Path, SidePath) :-
+  atom_concat(Path, '.sha256', SidePath).
+
+
+%! sanitize:file_sha256(+Path, -Hash) is semidet.
+%
+% Unify Hash with the lowercase hex SHA-256 of Path's contents.
+
+sanitize:file_sha256(Path, Hash) :-
+  process_create(path(openssl), ['dgst', '-sha256', Path],
+                 [stdout(pipe(Out)), stderr(null), process(Pid)]),
+  call_cleanup(
+    read_string(Out, _, Raw),
+    ( close(Out), process_wait(Pid, Status) )
+  ),
+  Status == exit(0),
+  split_string(Raw, "=", " \t\n\r", Parts),
+  last(Parts, HashStr),
+  HashStr \== "",
+  string_lower(HashStr, Lower),
+  atom_string(Hash, Lower),
+  atom_length(Hash, 64).
+
+
+%! sanitize:write_sha256_sidecar(+Path) is det.
+%
+% Write Path.sha256 containing the SHA-256 of Path. Best-effort: failures
+% are swallowed so a digest write never aborts the caller.
+
+sanitize:write_sha256_sidecar(Path) :-
+  catch(
+    ( sanitize:file_sha256(Path, Hash),
+      sanitize:sha256_sidecar(Path, Side),
+      setup_call_cleanup(
+        open(Side, write, S),
+        format(S, '~w~n', [Hash]),
+        close(S))
+    ),
+    _, true).
+
+
+%! sanitize:verify_sha256_sidecar(+Path) is semidet.
+%
+% Succeeds when Path.sha256 exists and matches the current SHA-256 of Path.
+
+sanitize:verify_sha256_sidecar(Path) :-
+  sanitize:sha256_sidecar(Path, Side),
+  exists_file(Side),
+  sanitize:file_sha256(Path, Got),
+  setup_call_cleanup(
+    open(Side, read, S),
+    read_string(S, _, Raw),
+    close(S)),
+  split_string(Raw, "\n", " \t\n\r", [ExpectedStr|_]),
+  atom_string(Expected, ExpectedStr),
+  Got == Expected.
+
+
+%! sanitize:ensure_file_integrity(+Path) is semidet.
+%
+% Enforce config:file_integrity/1 against Path:
+%   * require — sidecar must verify (fail otherwise)
+%   * prefer  — verify when sidecar exists; warn and succeed when missing
+%   * off     — always succeed
+% Default is prefer.
+
+sanitize:ensure_file_integrity(Path) :-
+  ( current_predicate(config:file_integrity/1),
+    config:file_integrity(Mode0)
+  -> Mode = Mode0
+  ;  Mode = prefer
+  ),
+  sanitize:ensure_file_integrity(Path, Mode).
+
+sanitize:ensure_file_integrity(_Path, off) :- !.
+sanitize:ensure_file_integrity(Path, require) :-
+  !,
+  ( sanitize:verify_sha256_sidecar(Path)
+  -> true
+  ;  message:failure(['Integrity check failed for ', Path,
+                      ' (missing or mismatched .sha256 sidecar). ',
+                      'Regenerate the file with a current portage-ng save/write path.']),
+     !, fail
+  ).
+sanitize:ensure_file_integrity(Path, prefer) :-
+  sanitize:sha256_sidecar(Path, Side),
+  ( exists_file(Side)
+  -> ( sanitize:verify_sha256_sidecar(Path)
+     -> true
+     ;  message:failure(['Integrity check failed for ', Path,
+                         ' (.sha256 mismatch). Refusing to load.']),
+        !, fail
+     )
+  ;  message:warning(['No integrity sidecar for ', Path,
+                      '; loading without verification. ',
+                      'Re-save to create ', Side, '.']),
+     true
+  ).
+
+
+% -----------------------------------------------------------------------------
 %  Ebuild phase validation
 % -----------------------------------------------------------------------------
 

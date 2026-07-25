@@ -202,9 +202,11 @@ download:write_disk_cache_(Layout) :-
 % and is also a touch faster (no tmp file lifecycle, no extra read).
 
 download:fetch_layout_conf(URL, Contents) :-
+  download:url_allowed(URL),
+  download:curl_proto_flag(Proto),
   process_create(
     path(curl),
-    ['-L', '-s', '-f', '--proto', '=https,http,ftp',
+    ['-L', '-s', '-f', '--proto', Proto,
      '--max-time', '30', '--max-filesize', '1048576', URL],
     [stdout(pipe(Out)), stderr(null), process(Pid)]),
   set_stream(Out, encoding(utf8)),
@@ -512,14 +514,43 @@ download:mirror_download_url(MirrorUrl, Layout, Filename, URL) :-
 % --connect-timeout bounds the initial connect (so a dead mirror does not
 % eat the full --max-time before we move on to the next URL).
 
-download:curl_args(['-L', '-s', '-f',
-                    '--proto', '=https,http,ftp',
-                    '--connect-timeout', '15',
-                    '--retry', '3',
-                    '--retry-delay', '2',
-                    '--retry-connrefused',
-                    '-C', '-',
-                    '--max-time', '600']).
+download:curl_args(Args) :-
+  download:curl_proto_flag(Proto),
+  Args = ['-L', '-s', '-f',
+          '--proto', Proto,
+          '--connect-timeout', '15',
+          '--retry', '3',
+          '--retry-delay', '2',
+          '--retry-connrefused',
+          '-C', '-',
+          '--max-time', '600'].
+
+
+%! download:curl_proto_flag(-Flag) is det.
+%
+% curl --proto allowlist. Default https-only; http added when
+% config:curl_allow_http(true). ftp is never allowed.
+
+download:curl_proto_flag(Flag) :-
+  ( current_predicate(config:curl_allow_http/1),
+    config:curl_allow_http(true)
+  -> Flag = '=https,http'
+  ;  Flag = '=https'
+  ).
+
+
+%! download:url_allowed(+URL) is semidet.
+%
+% True when URL's scheme is permitted by config:curl_allow_http/1.
+
+download:url_allowed(URL) :-
+  atom(URL),
+  ( atom_concat('https://', _, URL)
+  -> true
+  ;  atom_concat('http://', _, URL),
+     current_predicate(config:curl_allow_http/1),
+     config:curl_allow_http(true)
+  ).
 
 
 %! download:curl_download(+URLOrList, +DestPath, -ExitCode) is det.
@@ -536,15 +567,20 @@ download:curl_download(URL, DestPath, ExitCode) :-
 
 download:curl_walk([], _, _, 22).
 download:curl_walk([URL|Rest], BaseArgs, DestPath, ExitCode) :-
-  append(BaseArgs, ['-o', DestPath, URL], Args),
-  process_create(path(curl), Args,
-                 [stdout(null), stderr(null), process(Pid)]),
-  process_wait(Pid, exit(EC)),
-  ( EC =:= 0
-  -> ExitCode = 0
-  ;  ( Rest == [] -> ExitCode = EC
-     ;  catch(delete_file(DestPath), _, true),
-        download:curl_walk(Rest, BaseArgs, DestPath, ExitCode)
+  ( download:url_allowed(URL)
+  -> append(BaseArgs, ['-o', DestPath, URL], Args),
+     process_create(path(curl), Args,
+                    [stdout(null), stderr(null), process(Pid)]),
+     process_wait(Pid, exit(EC)),
+     ( EC =:= 0
+     -> ExitCode = 0
+     ;  ( Rest == [] -> ExitCode = EC
+        ;  catch(delete_file(DestPath), _, true),
+           download:curl_walk(Rest, BaseArgs, DestPath, ExitCode)
+        )
+     )
+  ;  ( Rest == [] -> ExitCode = 22
+     ;  download:curl_walk(Rest, BaseArgs, DestPath, ExitCode)
      )
   ).
 
@@ -559,8 +595,12 @@ download:curl_walk([URL|Rest], BaseArgs, DestPath, ExitCode) :-
 % every attempt.
 
 download:start_curl_async(URL, DestPath, Pid) :-
-  ( is_list(URL) -> URLs = URL ; URLs = [URL] ),
-  ( URLs = [Single]
+  ( is_list(URL) -> URLs0 = URL ; URLs0 = [URL] ),
+  include(download:url_allowed, URLs0, URLs),
+  ( URLs == []
+  -> process_create(path(false), [],
+                    [stdout(null), stderr(null), process(Pid)])
+  ;  URLs = [Single]
   -> download:curl_args(BaseArgs),
      append(BaseArgs, ['-o', DestPath, Single], Args),
      process_create(path(curl), Args,

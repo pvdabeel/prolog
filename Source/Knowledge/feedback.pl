@@ -110,34 +110,47 @@ feedback:load :-
 
 feedback:consult_terms(Path) :-
   ( exists_file(Path)
-  -> catch(
-       setup_call_cleanup(
-         open(Path, read, S),
-         feedback:read_assert_terms(S),
-         close(S)),
-       _, true)
+  -> ( sanitize:ensure_file_integrity(Path)
+     -> catch(
+          setup_call_cleanup(
+            open(Path, read, S),
+            feedback:read_assert_terms(S),
+            close(S)),
+          _, true)
+     ;  message:warning(['Skipping feedback file after integrity failure: ', Path])
+     )
   ;  true
   ).
 
 
 %! feedback:read_assert_terms(+Stream) is det.
 %
-% Reads terms until end_of_file, asserting each discovered_dep/4 or
-% unresolved_diagnostic/2 fact (other terms are ignored defensively).
+% Reads terms until end_of_file, asserting only ground feedback facts of
+% known functors (other terms are ignored defensively).
 
 feedback:read_assert_terms(S) :-
-  read_term(S, T, []),
+  read_term(S, T, [syntax_errors(error)]),
   ( T == end_of_file
   -> true
-  ;  ( T = discovered_dep(_, _, _, _)         -> assertz(feedback:T)
-     ; T = discovered_usedep(_, _, _, _)      -> assertz(feedback:T)
-     ; T = excluded_version(_, _, _, _)       -> assertz(feedback:T)
-     ; T = unresolved_diagnostic(_, _)        -> assertz(feedback:T)
-     ; T = required_kernel_config(_, _, _)     -> assertz(feedback:T)
-     ; true
-     ),
+  ;  ( feedback:safe_feedback_term(T) -> assertz(feedback:T) ; true ),
      feedback:read_assert_terms(S)
   ).
+
+
+%! feedback:safe_feedback_term(+Term) is semidet.
+%
+% True when Term is a ground fact of an allowed feedback functor.
+
+feedback:safe_feedback_term(discovered_dep(A, B, C, D)) :-
+  ground(A), ground(B), ground(C), ground(D).
+feedback:safe_feedback_term(discovered_usedep(A, B, C, D)) :-
+  ground(A), ground(B), ground(C), ground(D).
+feedback:safe_feedback_term(excluded_version(A, B, C, D)) :-
+  ground(A), ground(B), ground(C), ground(D).
+feedback:safe_feedback_term(unresolved_diagnostic(A, B)) :-
+  ground(A), ground(B).
+feedback:safe_feedback_term(required_kernel_config(A, B, C)) :-
+  ground(A), ground(B), ground(C).
 
 
 % -----------------------------------------------------------------------------
@@ -259,11 +272,13 @@ feedback:record_kernel_config(Target, Options, Evidence) :-
 
 feedback:append_term(Path, Term) :-
   catch(
-    setup_call_cleanup(
-      open(Path, append, S),
-      ( write_term(S, Term, [quoted(true)]),
-        format(S, '.~n', []) ),
-      close(S)),
+    ( setup_call_cleanup(
+        open(Path, append, S),
+        ( write_term(S, Term, [quoted(true)]),
+          format(S, '.~n', []) ),
+        close(S)),
+      sanitize:write_sha256_sidecar(Path)
+    ),
     _, true).
 
 

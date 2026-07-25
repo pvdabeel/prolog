@@ -417,10 +417,11 @@ config:verbosity(debug).
 %  Passwords
 % -----------------------------------------------------------------------------
 
-% The private passwords file is optional. On a fresh checkout (where
-% Source/Config/Private/template_passwords.pl has not been copied to
-% passwords.pl yet) we fall back to the same empty defaults the template
-% ships with, instead of aborting the entire config load.
+% The private passwords file is optional for standalone builds. Client
+% and server modes call interface:require_digest_password/0 and refuse
+% an empty digest password (do not pair empty defaults with a real
+% Certificates/passwordfile). Copy template_passwords.pl → passwords.pl,
+% set a secret, then `make passwordfile`.
 
 :- if(exists_source(portage('Source/Config/Private/passwords'))).
 :- include(portage('Source/Config/Private/passwords')).
@@ -428,7 +429,7 @@ config:verbosity(debug).
 
 %! config:certificate_password(?Key,?Pass)
 %
-% Default (empty) passwords for the SSL client/server certificates.
+% Default (empty) passwords for unencrypted SSL client/server keys.
 % Override by creating Source/Config/Private/passwords.pl from the template.
 
 config:certificate_password(server,'').
@@ -437,7 +438,8 @@ config:certificate_password(client,'').
 
 %! config:digest_password(?User,?Pass)
 %
-% Default (empty) password for digest user authentication.
+% Placeholder only when Private/passwords.pl is absent. Empty Pass is
+% rejected by interface:require_digest_password/0 before any digest auth.
 
 config:digest_password('portage-ng','').
 
@@ -882,17 +884,39 @@ config:mirror_root('/Volumes/Storage/Distfiles/distfiles').
 
 %! config:mirror_url(?URL) is multi.
 %
-% HTTP base URL(s) of distfiles mirrors. The mirror has the same GLEP 75
-% directory layout as mirror_root/1, served over HTTP. Multiple facts may
-% be present; the downloader will try them in declaration order, then fall
-% back to the SRC_URI chain (mirror://+thirdpartymirror+direct upstream).
-%
-% Order: list the fastest / most-complete mirror first. mac-pro.local is a
-% private LAN mirror that retains older distfiles which Gentoo's main
-% mirror has pruned.
+% HTTPS base URL(s) of distfiles mirrors. The mirror has the same GLEP 75
+% directory layout as mirror_root/1. Multiple facts may be present; the
+% downloader tries them in declaration order, then falls back to the
+% SRC_URI chain. Prefer https. Cleartext http mirrors require
+% config:curl_allow_http(true) (see host configs).
 
-config:mirror_url('http://mac-pro.local/distfiles').
+:- multifile config:mirror_url/1.
+
 config:mirror_url('https://distfiles.gentoo.org/distfiles').
+
+
+%! config:curl_allow_http(?Bool)
+%
+% When false (default), curl is restricted to `--proto =https` and
+% cleartext http/ftp URLs are skipped. Set true on a host that uses a
+% trusted LAN mirror (e.g. http://mac-pro.local/distfiles). Integrity
+% still depends on Manifest hashes (empty checksum lists are rejected).
+
+:- dynamic config:curl_allow_http/1.
+:- multifile config:curl_allow_http/1.
+
+config:curl_allow_http(false).
+
+
+%! config:file_integrity(?Mode)
+%
+% Integrity policy for Knowledge sidecars (kb.qlf, resume.pl, feedback.pl):
+%   * prefer  — verify .sha256 when present; warn and load when absent
+%   * require — refuse to load without a matching .sha256 sidecar
+%   * off     — skip verification
+% Sidecars are written on every save/append by the corresponding writers.
+
+config:file_integrity(prefer).
 
 
 %! config:mirror_verify_hashes_default(?Policy)

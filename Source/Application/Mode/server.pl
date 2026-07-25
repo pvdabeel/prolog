@@ -71,6 +71,7 @@ server:start_server  :-
   config:digest_realm(Realm),
   server:require_tls_files(Hostname, CaCert, ServerCert, ServerKey),
   server:require_digest_passwordfile(Pwdfile),
+  interface:require_digest_password,
   config:server_workers(Workers),
   config:server_keep_alive_timeout(KeepAlive),
   server:server_address(Port, Address),
@@ -363,13 +364,17 @@ server:resume_workers :-
 
 %! server:post_result(+Job, +Result)
 %
-% Post a completed proof/plan result back to the server. Clears the
-% in-flight record for Job.
+% Post a completed proof/plan result back to the server. Succeeds only
+% when Job is currently in flight (was dequeued via get_job); clears that
+% record. Rejects forged results for jobs the caller never took.
 
 server:post_result(Job, Result) :-
   server:ensure_queues,
-  retractall(server:inflight_job(Job, _, _)),
-  thread_send_message(server_results, result(Job, Result)).
+  ( retract(server:inflight_job(Job, _Worker, _))
+  -> thread_send_message(server_results, result(Job, Result))
+  ;  message:warning(['Ignoring post_result for non-inflight job: ', Job]),
+     fail
+  ).
 
 %! server:get_result(-Job, -Result)
 %

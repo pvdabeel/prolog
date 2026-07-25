@@ -188,6 +188,7 @@ save ::-
   \+ proxy,!,
   config:working_dir(Dir),
   directory_file_path(Dir,'Knowledge/kb.raw',Raw),
+  directory_file_path(Dir,'Knowledge/kb.qlf',Qlf),
   lock:with_system_lock(kb_save(Dir),
     with_mutex(save,
       (setup_call_cleanup(
@@ -205,7 +206,8 @@ save ::-
                           write_canonical(Stream,H),
                           format(Stream,'.\n',[])))))),
          close(Stream)),
-       qcompile(Raw)))),!.
+       qcompile(Raw),
+       sanitize:write_sha256_sidecar(Qlf)))),!.
 
 
 %! knowledgebase:load
@@ -225,6 +227,7 @@ load ::-
   config:working_dir(Dir),
   directory_file_path(Dir,'Knowledge/kb.qlf',Qlf),
   exists_file(Qlf),!,
+  sanitize:ensure_file_integrity(Qlf),
   ensure_loaded(Qlf),
   % Warm the JIT indexes off the critical path: index building is
   % mutex-protected per predicate, so an early query at worst blocks on

@@ -272,6 +272,26 @@ interface:require_tls_files(Role, Hostname, CaCert, Cert, Key) :-
   ).
 
 
+%! interface:require_digest_password is det.
+%
+% Fail when config:digest_password/2 is missing or empty. Empty defaults
+% (no Private/passwords.pl) must not be paired with a real
+% Certificates/passwordfile — copy the template, set a secret, then
+% `make passwordfile`.
+
+interface:require_digest_password :-
+  ( current_predicate(config:digest_password/2),
+    config:digest_password(_User, Pass),
+    atom(Pass), Pass \== ''
+  -> true
+  ;  message:failure(['Empty or missing config:digest_password/2.\n',
+                      'Copy Source/Config/Private/template_passwords.pl to\n',
+                      '  Source/Config/Private/passwords.pl\n',
+                      'set a non-empty digest password, then run:\n',
+                      '  make passwordfile\n'])
+  ).
+
+
 %! interface:init_tty
 %
 % Initialize TTY-related features (editline, history). Safe to call when

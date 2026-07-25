@@ -320,18 +320,20 @@ kernelconfig:apply_planned(PreActions) :-
 % Enables/disables each config(Name, State) in the kernel source .config
 % via scripts/config, then runs `make olddefconfig` (to resolve option
 % dependencies) and `make modules_prepare` (so out-of-tree modules can
-% still build against the tree). All best-effort.
+% still build against the tree). All best-effort. Uses process_create/3
+% argv only — KDir/ConfigPath/option names are never interpolated into
+% `sh -c`.
 
 kernelconfig:apply_options(Options) :-
   kernelconfig:kernel_source_dir(KDir),
   atom_concat(KDir, '/.config', ConfigPath),
   ( exists_file(ConfigPath)
-  -> kernelconfig:build_apply_script(KDir, ConfigPath, Options, Script),
-     kernelconfig:log_apply(KDir, Options),
+  -> kernelconfig:log_apply(KDir, Options),
      catch(
-       ( process_create(path(sh), ['-c', Script],
-                        [stdout(null), stderr(null), process(Pid)]),
-         process_wait(Pid, _Status) ),
+       ( kernelconfig:run_scripts_config(KDir, ConfigPath, Options),
+         kernelconfig:run_make(KDir, olddefconfig),
+         kernelconfig:run_make(KDir, modules_prepare)
+       ),
        _Error,
        true)
   ;  message:color(red),
@@ -340,26 +342,56 @@ kernelconfig:apply_options(Options) :-
   ).
 
 
-%! kernelconfig:build_apply_script(+KDir, +ConfigPath, +Options, -Script) is det.
+%! kernelconfig:run_scripts_config(+KDir, +ConfigPath, +Options) is det.
 %
-% Composes a single sh script that runs scripts/config per option followed
-% by `make olddefconfig` and `make modules_prepare`. The kernel's
-% scripts/config takes the option name WITHOUT the CONFIG_ prefix.
+% Run scripts/config --enable/--disable for each option via argv.
+% Skips options whose bare suffix is not a safe CONFIG token.
 
-kernelconfig:build_apply_script(KDir, ConfigPath, Options, Script) :-
-  findall(Cmd,
-          ( member(config(Name, State), Options),
-            kernelconfig:strip_prefix(Name, Suffix),
-            ( State == y -> Op = '--enable' ; Op = '--disable' ),
-            format(atom(Cmd),
-                   'if [ -x ~w/scripts/config ]; then ~w/scripts/config --file ~w ~w ~w; fi; ',
-                   [KDir, KDir, ConfigPath, Op, Suffix]) ),
-          CfgCmds),
-  atomic_list_concat(CfgCmds, CfgScript),
-  format(atom(MakeScript),
-         'make -C ~w olddefconfig >/dev/null 2>&1 || true; make -C ~w modules_prepare >/dev/null 2>&1 || true; true',
-         [KDir, KDir]),
-  atomic_list_concat([CfgScript, MakeScript], Script).
+kernelconfig:run_scripts_config(KDir, ConfigPath, Options) :-
+  atomic_list_concat([KDir, '/scripts/config'], Script),
+  ( exists_file(Script)
+  -> forall(
+       member(config(Name, State), Options),
+       ( kernelconfig:strip_prefix(Name, Suffix),
+         ( kernelconfig:safe_config_suffix(Suffix),
+           ( State == y -> Op = '--enable' ; Op = '--disable' )
+         -> catch(
+              ( process_create(Script,
+                               ['--file', ConfigPath, Op, Suffix],
+                               [stdout(null), stderr(null), process(Pid)]),
+                process_wait(Pid, _)
+              ),
+              _, true)
+         ;  true
+         )
+       ))
+  ;  true
+  ).
+
+
+%! kernelconfig:run_make(+KDir, +Target) is det.
+%
+% Best-effort `make -C KDir Target` via argv (stdout/stderr discarded).
+
+kernelconfig:run_make(KDir, Target) :-
+  catch(
+    ( process_create(path(make), ['-C', KDir, Target],
+                     [stdout(null), stderr(null), process(Pid)]),
+      process_wait(Pid, _)
+    ),
+    _, true).
+
+
+%! kernelconfig:safe_config_suffix(+Suffix) is semidet.
+%
+% True when Suffix is a bare Kconfig token safe as an argv element
+% (uppercase letters, digits, underscore only).
+
+kernelconfig:safe_config_suffix(Suffix) :-
+  atom(Suffix),
+  atom_string(Suffix, S),
+  string_length(S, Len), Len > 0, Len =< 128,
+  re_match('^[A-Z0-9_]+$', S).
 
 
 %! kernelconfig:strip_prefix(+Name, -Suffix) is det.

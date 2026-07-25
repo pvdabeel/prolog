@@ -50,6 +50,12 @@ config:emerge_vp_path('/Volumes/Storage/gentoo-prefix/bin/emerge-vp').
 :- distfiles:init('/Volumes/Storage/Distfiles/distfiles','', '', 'local','distfiles').
 :- kb:register(distfiles).
 
+% Trusted LAN distfiles mirror (cleartext). Tried before the public
+% https mirror when curl_allow_http is enabled.
+config:mirror_url('http://mac-pro.local/distfiles').
+:- retractall(config:curl_allow_http(_)).
+config:curl_allow_http(true).
+
 
 % -----------------------------------------------------------------------------
 %  Overlay repository - local sync

@@ -71,14 +71,16 @@ resume:state_file(Path) :-
 resume:save_state(Goals, Plan) :-
   resume:state_file(Path),
   catch(
-    setup_call_cleanup(
-      open(Path, write, S),
-      ( write_term(S, resume_goals(Goals), [quoted(true)]),
-        format(S, '.~n', []),
-        write_term(S, resume_plan(Plan), [quoted(true)]),
-        format(S, '.~n', [])
-      ),
-      close(S)),
+    ( setup_call_cleanup(
+        open(Path, write, S),
+        ( write_term(S, resume_goals(Goals), [quoted(true)]),
+          format(S, '.~n', []),
+          write_term(S, resume_plan(Plan), [quoted(true)]),
+          format(S, '.~n', [])
+        ),
+        close(S)),
+      sanitize:write_sha256_sidecar(Path)
+    ),
     _, true).
 
 
@@ -93,15 +95,17 @@ resume:flush_done_to_disk :-
   -> findall(E-A, resume:done(E, A), Entries),
      ( Entries \= []
      -> catch(
-          setup_call_cleanup(
-            open(Path, append, S),
-            forall(
-              member(E-A, Entries),
-              ( write_term(S, resume_done(E, A), [quoted(true)]),
-                format(S, '.~n', [])
-              )
-            ),
-            close(S)),
+          ( setup_call_cleanup(
+              open(Path, append, S),
+              forall(
+                member(E-A, Entries),
+                ( write_term(S, resume_done(E, A), [quoted(true)]),
+                  format(S, '.~n', [])
+                )
+              ),
+              close(S)),
+            sanitize:write_sha256_sidecar(Path)
+          ),
           _, true),
         resume:clear_done_marks
      ;  true
@@ -119,6 +123,7 @@ resume:flush_done_to_disk :-
 resume:load_state(Goals, Plan, DoneList) :-
   resume:state_file(Path),
   exists_file(Path),
+  sanitize:ensure_file_integrity(Path),
   catch(
     setup_call_cleanup(
       open(Path, read, S),
@@ -132,15 +137,32 @@ resume:load_state(Goals, Plan, DoneList) :-
 
 %! resume:read_all_terms(+Stream, -Terms) is det.
 %
-% Reads all Prolog terms from a stream until end_of_file.
+% Reads all Prolog terms from a stream until end_of_file. Only
+% resume_goals/1, resume_plan/1, and resume_done/2 terms are kept;
+% everything else is dropped so a poisoned file cannot inject goals.
 
 resume:read_all_terms(S, Terms) :-
-  read_term(S, T, []),
+  read_term(S, T, [syntax_errors(error)]),
   ( T == end_of_file
   -> Terms = []
-  ;  Terms = [T|Rest],
+  ;  ( resume:safe_state_term(T)
+     -> Terms = [T|Rest]
+     ;  Terms = Rest
+     ),
      resume:read_all_terms(S, Rest)
   ).
+
+
+%! resume:safe_state_term(+Term) is semidet.
+%
+% True when Term is a ground resume-state fact of an allowed shape.
+
+resume:safe_state_term(resume_goals(Goals)) :-
+  ground(Goals), is_list(Goals).
+resume:safe_state_term(resume_plan(Plan)) :-
+  ground(Plan), is_list(Plan).
+resume:safe_state_term(resume_done(E, A)) :-
+  ground(E), ground(A).
 
 
 %! resume:clear_state is det.

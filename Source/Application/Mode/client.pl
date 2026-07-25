@@ -118,6 +118,7 @@ client:rpc_execute(Hostname,Port,Cmd) :-
   config:certificate(LocalHostname,'client-key.pem',ClientKey),
   config:certificate_password(client,Pass),
   config:digest_password(User,Digestpwd),
+  interface:require_digest_password,
   config:server_chunk(ChunkSize),
   client:require_tls_files(LocalHostname, CaCert, ClientCert, ClientKey),
   client:maybe_auto_import_vdb(Hostname, Port),
@@ -186,6 +187,7 @@ client:execute_remotely(Hostname,Port,Page) :-
     config:certificate(LocalHostname,'client-key.pem',ClientKey),
     config:certificate_password(client,Pass),
     config:digest_password(User,Digestpwd),
+    interface:require_digest_password,
     client:require_tls_files(LocalHostname, CaCert, ClientCert, ClientKey),
     http:http_open(URL, In,
               [ host(Hostname),
@@ -513,6 +515,7 @@ client:post_remotely(Hostname, Port, Page, Payload, Output) :-
   config:certificate(LocalHostname, 'client-key.pem', ClientKey),
   config:certificate_password(client, Pass),
   config:digest_password(User, Digestpwd),
+  interface:require_digest_password,
   client:require_tls_files(LocalHostname, CaCert, ClientCert, ClientKey),
   setup_call_cleanup(
     http:http_open(URL, In,

@@ -5,6 +5,7 @@ Certificates/cakey.pem
 Certificates/cacert.srl
 Certificates/passwordfile
 Knowledge/kb.qlf
+Knowledge/kb.qlf.sha256
 Knowledge/kb.raw
 Knowledge/profile.qlf
 Knowledge/profile.raw
@@ -16,10 +17,14 @@ Knowledge/preference.stamp
 Knowledge/embeddings.pl
 Knowledge/phase_stats.pl
 Knowledge/resume.pl
+Knowledge/resume.pl.sha256
 Knowledge/feedback.pl
+Knowledge/feedback.pl.sha256
 Knowledge/feedback.unresolved.pl
+Knowledge/feedback.unresolved.pl.sha256
 Knowledge/drafts/
 Knowledge/vdbimport.pl
+
 Source/Knowledge/Sets/**/*.local
 Source/Knowledge/Sets/glsa_injected/**
 Source/Tests/
