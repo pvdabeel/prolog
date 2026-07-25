@@ -91,6 +91,7 @@ interface:request_handler(similar,         _,    Args, _,       action:process_s
 interface:request_handler(estimate,        _,    Args, _,       action:process_estimate(Args)).
 interface:request_handler(llm,             _,    _,    Options, (action:extract_llm_opt(Options, LlmOpt),
                                                                  action:process_llm_chat(LlmOpt))).
+interface:request_handler(diagnose,        _,    Args, Options, action:process_diagnose(Args, Options)).
 interface:request_handler(shellrun,        _,    Args, Options, action:process_action(run, Args, Options)).
 interface:request_handler(shell,           _,    _,    _,       true).
 interface:request_handler(merge,           _,    Args, Options, action:process_action(run, Args, Options)).

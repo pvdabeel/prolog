@@ -263,6 +263,7 @@ loader:group(llm_modules,
     portage('Source/Application/Llm/gemini.pl'),
     portage('Source/Application/Llm/ollama.pl'),
     portage('Source/Application/Llm/explain.pl'),
+    portage('Source/Application/Llm/metacircular.pl'),
     portage('Source/Application/Llm/semantic.pl')]).
 
 
@@ -425,11 +426,15 @@ load_server_modules :-
 
 %! load_llm_modules is det.
 %
-% Loads the Generative AI / LLM integration modules.
+% Loads the Generative AI / LLM integration modules when
+% config:load_llm_modules(true). When false (or the config predicate
+% is absent), skips loading so builder/CLI continue without LLM
+% backends; call sites must tolerate that (stubs + soft call_llm).
 
 load_llm_modules :-
-
-   loader:load_groups([llm_libraries,
-                       llm_modules]),
-
-   message:log('Loaded Generative AI modules...').
+  ( catch(config:load_llm_modules(true), _, fail)
+  -> loader:load_groups([llm_libraries,
+                         llm_modules]),
+     message:log('Loaded Generative AI modules...')
+  ;  message:log('Skipping Generative AI modules (config:load_llm_modules(false)).')
+  ).

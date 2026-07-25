@@ -528,3 +528,167 @@ explain:format_one_assumption(assumption(Key, Type, Reason), Text) :-
   ; TypeStr = 'other'
   ),
   format(atom(Text), '  [~w] ~w (reason: ~w)~n', [TypeStr, Key, Reason]).
+
+
+% -----------------------------------------------------------------------------
+%  Metacircular context helpers (shared with metacircular.pl)
+% -----------------------------------------------------------------------------
+
+%! explain:format_assumptions_with_polarity(+ProofAVL, +ModelAVL, -Text) is det.
+%
+% Like format_assumptions/3 but tags each domain assumption as positive
+% (actionable config change) or negative (blocking).
+
+explain:format_assumptions_with_polarity(ProofAVL, ModelAVL, Text) :-
+  findall(assumption(Key, Type, Reason, Polarity),
+    ( assoc_to_keys(ProofAVL, ProofKeys),
+      member(Key, ProofKeys),
+      explainer:assumption_content_from_proof_key(Key, Wrapped),
+      explainer:assumption_normalize(Wrapped, Normalized),
+      ( Normalized = domain(Content) -> Type = domain
+      ; Normalized = cycle_break(Content) -> Type = cycle_break
+      ; Content = Normalized, Type = other
+      ),
+      ( explainer:why_assumption(ModelAVL, ProofAVL, Key, _AssType, why_assumption(_, _, _, reason(R)))
+      -> Reason = R
+      ;  Reason = none
+      ),
+      explain:assumption_polarity(Type, Content, Reason, Polarity)
+    ),
+    Assumptions),
+  ( Assumptions == []
+  -> Text = 'Assumptions (polarity): none (clean resolution)'
+  ;  maplist(explain:format_one_polarity_assumption, Assumptions, ATexts),
+     atomic_list_concat(['Assumptions (polarity):\n' | ATexts], Text)
+  ).
+
+
+%! explain:assumption_polarity(+Type, +Content, +Reason, -Polarity) is det.
+
+explain:assumption_polarity(cycle_break, _, _, cycle) :- !.
+explain:assumption_polarity(_, Content, Reason, Polarity) :-
+  ( catch(assumption:assumption_type(Content, AType), _, fail)
+  -> true
+  ;  ( Reason == none -> AType = other ; assumption:assumption_reason_type(Reason, AType) -> true ; AType = other )
+  ),
+  explain:polarity_of_type(AType, Polarity).
+
+
+%! explain:polarity_of_type(+AssumptionType, -Polarity) is det.
+
+explain:polarity_of_type(masked, positive) :- !.
+explain:polarity_of_type(masked_dependency, positive) :- !.
+explain:polarity_of_type(keyword_filtered, positive) :- !.
+explain:polarity_of_type(keyword_filtered_dependency, positive) :- !.
+explain:polarity_of_type(blocker_assumption, positive) :- !.
+explain:polarity_of_type(license, positive) :- !.
+explain:polarity_of_type(non_existent_dependency, negative) :- !.
+explain:polarity_of_type(missing_dependency, negative) :- !.
+explain:polarity_of_type(required_use_violation, negative) :- !.
+explain:polarity_of_type(slot_conflict, negative) :- !.
+explain:polarity_of_type(version_no_candidate, negative) :- !.
+explain:polarity_of_type(version_no_candidate_dependency, negative) :- !.
+explain:polarity_of_type(version_conflict, negative) :- !.
+explain:polarity_of_type(version_conflict_dependency, negative) :- !.
+explain:polarity_of_type(unsatisfied_constraints, negative) :- !.
+explain:polarity_of_type(issue_with_model, negative) :- !.
+explain:polarity_of_type(_, other).
+
+
+%! explain:format_one_polarity_assumption(+Assumption, -Text) is det.
+
+explain:format_one_polarity_assumption(assumption(Key, Type, Reason, Polarity), Text) :-
+  format(atom(Text), '  [~w/~w] ~w (reason: ~w)~n', [Type, Polarity, Key, Reason]).
+
+
+%! explain:format_fallback(+FallbackUsed, -Text) is det.
+
+explain:format_fallback(FallbackUsed, Text) :-
+  ( var(FallbackUsed) ; FallbackUsed == unknown
+  -> Text = 'Fallback tier: (unknown)'
+  ;  format(atom(Text), 'Fallback tier: ~w', [FallbackUsed])
+  ).
+
+
+%! explain:format_feedback_backlog(-Text) is det.
+
+explain:format_feedback_backlog(Text) :-
+  findall(Line,
+    ( feedback:unresolved_diagnostic(Symbol, Evidence),
+      format(atom(Line), '  unresolved ~w :: ~w~n', [Symbol, Evidence])
+    ),
+    Unresolved),
+  findall(Line,
+    ( feedback:discovered_dep(T, P, K, _),
+      format(atom(Line), '  discovered_dep ~w -> ~w (~w)~n', [T, P, K])
+    ),
+    Deps),
+  findall(Line,
+    ( feedback:discovered_usedep(T, P, U, _),
+      format(atom(Line), '  discovered_usedep ~w -> ~w ~w~n', [T, P, U])
+    ),
+    UseDeps),
+  append([Unresolved, Deps, UseDeps], All),
+  ( All == []
+  -> Text = 'Feedback store: (empty)'
+  ;  atomic_list_concat(['Feedback store:\n' | All], Text)
+  ).
+
+
+%! explain:format_learned_domains_for_target(+Target, -Text) is det.
+%
+% Compact prover:learned / cn_domain summary for the failing package CN.
+
+explain:format_learned_domains_for_target(Repo://Entry, Text) :-
+  !,
+  ( cache:ordered_entry(Repo, Entry, C, N, _)
+  -> ( cache:entry_metadata(Repo, Entry, slot, slot(Slot0))
+     -> Slot = Slot0
+     ;  Slot = '0'
+     ),
+     Lit = cn_domain(C, N, Slot),
+     ( catch(prover:learned(Lit, Constraint), _, fail)
+     -> format(atom(Text), 'Learned cn_domain for ~w/~w:~w = ~w', [C, N, Slot, Constraint])
+     ;  format(atom(Text), 'Learned cn_domain for ~w/~w:~w: (none)', [C, N, Slot])
+     )
+  ;  Text = 'Learned cn_domain: (target not in cache)'
+  ).
+explain:format_learned_domains_for_target(_, 'Learned cn_domain: (n/a)').
+
+
+%! explain:format_failure_focus(+Target, +Phase, +LogPath, +Reason, -Text) is det.
+
+explain:format_failure_focus(Target, Phase, LogPath, Reason, Text) :-
+  format(atom(Text),
+         'Failure focus:\n  target: ~w\n  phase: ~w\n  reason: ~w\n  log: ~w',
+         [Target, Phase, Reason, LogPath]).
+
+
+%! explain:format_log_tail(+LogPath, -Text) is det.
+%
+% Bounded tail of the build log for LLM context.
+
+explain:format_log_tail(LogPath, Text) :-
+  ( catch(config:llm_metacircular_log_tail(Max), _, fail), integer(Max)
+  -> true
+  ;  Max = 12000
+  ),
+  ( exists_file(LogPath)
+  -> catch(
+       ( size_file(LogPath, Size),
+         ( Size =< Max
+         -> Offset = 0
+         ;  Offset is Size - Max
+         ),
+         setup_call_cleanup(
+           open(LogPath, read, S),
+           ( ( Offset > 0 -> seek(S, Offset, bof, _) ; true ),
+             read_string(S, _, Tail)
+           ),
+           close(S)),
+         atomic_list_concat(['Build log tail:\n', Tail], Text)
+       ),
+       _,
+       Text = 'Build log tail: (unreadable)')
+  ;  Text = 'Build log tail: (file missing)'
+  ).

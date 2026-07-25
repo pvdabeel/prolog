@@ -17,6 +17,7 @@ Knowledge/phase_stats.pl
 Knowledge/resume.pl
 Knowledge/feedback.pl
 Knowledge/feedback.unresolved.pl
+Knowledge/drafts/
 Knowledge/vdbimport.pl
 Source/Knowledge/Sets/**/*.local
 Source/Knowledge/Sets/glsa_injected/**

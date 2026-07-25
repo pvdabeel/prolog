@@ -1780,6 +1780,73 @@ config:llm_capability(code,Capability) :-
                :- main. The temporary module is destroyed after execution.",
   normalize_space(string(Capability),Description).
 
+% Metacircular diagnose prompts only (excluded from ordinary chat via llm:prompt/1).
+config:llm_capability(metacircular,Capability) :-
+  Description="You are the metacircular repair advisor for portage-ng. You know how
+               plans and proofs are produced: reader/parser builds cache facts; the
+               prover builds ProofAVL/ModelAVL/Constraints/TriggersAVL; the planner
+               yields waves plus a remainder; the scheduler SCCs :run remainder; the
+               printer renders the plan. Domain assumptions use proof key
+               rule(assumed(X)); prover cycle-breaks use assumed(rule(X)). Positive
+               (actionable) domain assumptions: masked, keyword_filtered, license,
+               blocker_assumption. Negative (blocking): non_existent_dependency,
+               missing_dependency, required_use_violation, slot_conflict,
+               version_no_candidate, version_conflict, unsatisfied_constraints,
+               issue_with_model. Build-time learning uses feedback:* (discovered_dep,
+               discovered_usedep, excluded_version, required_kernel_config) which
+               re-derives the plan — NOT prover:learn (version/USE domains only).
+               Deterministic fixups register via fixup:mechanism/1 and
+               fixup:phase_retry_hook/10 under Source/Domain/Gentoo/Exceptions/.
+               When diagnosing a failed build, respond with ONE Prolog term only,
+               optionally fenced as ```prolog ... ```:
+               repair_proposal([action(...), ...]) with at most 3 actions.
+               Allowed actions:
+               action(record_discovery, Repo://Entry, 'cat/pkg', bdepend, Evidence)
+               action(record_usedep, Repo://Entry, 'cat/pkg', [use(enable(Flag),none)], Evidence)
+               action(record_excluded_version, Cat, Name, Ver, Evidence)
+               action(record_kernel_config, Repo://Entry, ['CONFIG_FOO'], Evidence)
+               action(draft_fixup, MechanismName, Synopsis, SketchBody)
+               Never invent out-of-tree packages. Prefer record_discovery when a
+               missing command/header/lib maps to an in-tree Category/Name.
+               Evidence should be a structured term citing phase/log lines.
+               Do not propose edits to rules.pl, prover, or planner.",
+  normalize_space(string(Capability),Description).
+
+
+%! config:load_llm_modules(?Bool)
+%
+% When false, `load_llm_modules/0` is a no-op (no provider backends,
+% explain, metacircular, or semantic search). Builder/CLI paths that
+% need LLM support detect the absence and skip with a warning.
+% Override from a host config with
+% `:- asserta(config:load_llm_modules(false)).` before init completes,
+% or set the dynamic fact early in startup.
+
+:- dynamic config:load_llm_modules/1.
+
+config:load_llm_modules(true).
+
+
+%! config:llm_metacircular(?Bool)
+%
+% Kill-switch for LLM metacircular diagnose-after-build (propose + confirm).
+
+config:llm_metacircular(true).
+
+
+%! config:llm_metacircular_log_tail(?Bytes)
+%
+% Maximum bytes of build-log tail included in a metacircular diagnose prompt.
+
+config:llm_metacircular_log_tail(12000).
+
+
+%! config:llm_metacircular_max_actions(?N)
+%
+% Cap on actions accepted from a single repair_proposal/1.
+
+config:llm_metacircular_max_actions(3).
+
 
 %! config:llm_support(-Prompt)
 %

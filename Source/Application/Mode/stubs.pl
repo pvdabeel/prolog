@@ -102,6 +102,35 @@ semantic:build_index :-
 
 
 % -----------------------------------------------------------------------------
+%  Stubs for metacircular LLM repair (when LLM modules are not loaded).
+% -----------------------------------------------------------------------------
+
+:- dynamic metacircular:diagnose_after_build/7.
+:- dynamic metacircular:diagnose_cli/2.
+
+:- if(\+ current_module(metacircular)).
+
+:- multifile metacircular:diagnose_after_build/7.
+:- multifile metacircular:diagnose_cli/2.
+
+%! metacircular:diagnose_after_build(+Goals, +Proof, +Model, +Plan, +Triggers, +Fallback, -Applied) is det.
+%
+% Stub: no LLM modules — report zero applied actions so the builder
+% replan gate (`Applied > 0`) stays closed.
+
+metacircular:diagnose_after_build(_, _, _, _, _, _, 0).
+
+%! metacircular:diagnose_cli(+Args, +Options) is det.
+%
+% Stub: warn that metacircular diagnose needs LLM modules.
+
+metacircular:diagnose_cli(_, _) :-
+    print_message(error, "Metacircular LLM module not loaded; cannot --diagnose").
+
+:- endif.
+
+
+% -----------------------------------------------------------------------------
 %  Daemon bridge dynamics.
 % -----------------------------------------------------------------------------
 

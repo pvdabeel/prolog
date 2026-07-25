@@ -180,6 +180,8 @@ action is performed per invocation.
 |------|-------------|
 | **--explain** [*QUESTION*] | Ask questions about the build plan using a configured LLM service. Must be combined with `--pretend`. Without a question, enters interactive mode. |
 | **--llm** [*SERVICE*] | Start an interactive chat session with a large language model. Services: `claude`, `grok`, `chatgpt`, `gemini`, `ollama`. |
+| **--diagnose** | Metacircular LLM diagnose of a failed package build: propose `feedback:*` learning (discovered deps, USE deps, excluded versions, kernel config) or a draft fixup sketch; each action requires interactive confirmation before apply. Requires LLM modules and a TTY (skipped under `--ci`). |
+| **--log** *PATH* | Build log path for `--diagnose`. When omitted, the default log under the configured build-log directory for the package is used. |
 | **--train-model** | Build the semantic search embedding index from the current knowledge base. Requires a locally running Ollama instance with the `nomic-embed-text` model. GPU-accelerated on Apple Silicon via Metal. |
 | **--similar** | Find semantically similar packages to the given target(s). Uses the pre-built embedding index; does not require Ollama at query time. |
 | **--estimate** | Show estimated build time for the given packages, using VDB installed sizes and historical emerge.log data when available. |
@@ -472,6 +474,12 @@ portage-ng --llm
 
 # Chat with a specific LLM service
 portage-ng --llm grok
+
+# Metacircular diagnose of a failed build (confirm before applying feedback)
+portage-ng --diagnose cat/pkg
+
+# Diagnose with an explicit build log
+portage-ng --diagnose --log /var/tmp/portage-ng/logs/cat--pkg-1.2.3.log cat/pkg
 
 # Check upstream versions for specific packages
 portage-ng --upstream sys-apps/portage dev-lang/python

@@ -116,6 +116,8 @@ interface:spec(S) :-
 
        [opt(explain),   type(atom),      default(none),                           longflags(['explain']),   help('Explain the build plan via LLM (optionally pass a question)')],
        [opt(llm),       type(atom),      default(none),                           longflags(['llm']),       help('Start interactive chat with an LLM (optionally specify service name)')],
+       [opt(diagnose),  type(boolean),   default(false),                          longflags(['diagnose']),  help('Metacircular LLM diagnose of a failed build (propose feedback; confirm to apply)')],
+       [opt(diagnoselog), type(atom),    default(none),                           longflags(['log']),       help('Build log path for --diagnose (default: log dir for the package)')],
        [opt(trainmodel), type(boolean),   default(false),                          longflags(['train-model']), help('Build the semantic search embedding index (requires Ollama)')],
        [opt(similar),   type(boolean),   default(false),                          longflags(['similar']),   help('Find semantically similar packages (uses pre-built embedding index)')],
        [opt(estimate),  type(boolean),   default(false),                          longflags(['estimate']),  help('Show estimated build time for given packages or a plan')],

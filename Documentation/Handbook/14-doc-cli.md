@@ -5,7 +5,8 @@ flags will feel immediately familiar: `--pretend`, `--verbose`, `--emptytree`,
 and the usual resolution switches mirror what you already use with emerge-style
 workflows.  On top of that, a proof-based resolver can expose tools that a
 traditional dependency solver does not: `--explain` and `--llm` for plan
-dialogue, `--variants` for USE-sensitive alternatives, and `--search` that can
+dialogue, `--diagnose` / `--log` for metacircular build-failure repair,
+`--variants` for USE-sensitive alternatives, and `--search` that can
 treat a phrase as a natural-language query when structured parsing does not
 apply.
 
@@ -133,6 +134,7 @@ everyday workflows.
 | `--bugs <target>` | Search Gentoo Bugzilla for known issues |
 | `--upstream <target>` | Check upstream versions via Repology |
 | `--explain` / `--llm` | Get AI-assisted plan explanation |
+| `--diagnose` / `--log` | Metacircular LLM diagnose of a failed build |
 | `--variants` | Show plan variants with different USE configurations |
 | `--shell` | Drop into an interactive Prolog shell |
 
@@ -228,6 +230,11 @@ Short recipes that match how people actually use the tool:
 - **Why is this package in my plan?**  
   `portage-ng --pretend --explain cat/pkg` — ask the explainer/LLM path to
   narrate the plan (see [Chapter 16: Semantic Search and LLM Integration](16-doc-llm.md)).
+
+- **Diagnose a failed build with metacircular LLM repair**  
+  `portage-ng --diagnose cat/pkg` (optional `--log path`) — propose
+  `feedback:*` learning from the build log; confirm before apply
+  (same chapter).
 
 - **What would change if I enabled this USE flag?**  
   `portage-ng --pretend --variants cat/pkg` — surface alternative proofs when

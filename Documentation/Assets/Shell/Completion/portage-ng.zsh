@@ -104,6 +104,8 @@ _portage-ng() {
     # LLM interaction
     '--explain[Explain build plan via LLM]:question:'
     '--llm[Start interactive chat with LLM]:service:(claude grok chatgpt gemini ollama)'
+    '--diagnose[Metacircular LLM diagnose of a failed build]'
+    '--log[Build log path for --diagnose]:path:_files'
     '--train-model[Build semantic search embedding index]'
     '--similar[Find semantically similar packages]'
     '--estimate[Show estimated build time for packages]'

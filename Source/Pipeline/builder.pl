@@ -39,6 +39,7 @@ supporting concerns are split into sibling modules:
 :- dynamic builder:slot_outcome/2.
 :- dynamic builder:exec_phase_state/3.
 :- dynamic builder:last_build_status/3.
+:- dynamic builder:last_failed/3.
 
 % -----------------------------------------------------------------------------
 %  Entry points
@@ -63,10 +64,13 @@ builder:build(Goals) :-
 % One prove/print/confirm/run pass. Confirmation is asked only on the
 % first attempt; a replan re-runs non-interactively. On a failed pass
 % that grew the discovery store (builder:should_replan/4), re-enters with
-% Attempt+1, bounded by config:missing_provider_max_replan/1.
+% Attempt+1, bounded by config:missing_provider_max_replan/1. When the
+% pass failed without new deterministic discoveries, optionally invokes
+% metacircular LLM diagnose (human-confirmed feedback) and replans if
+% the learned store grew.
 
 builder:build_loop(Goals, Attempt) :-
-  pipeline:prove_plan_with_fallback(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, SCCs, _FallbackUsed),
+  pipeline:prove_plan_with_fallback(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, SCCs, FallbackUsed),
   printer:print(Goals, ModelAVL, ProofAVL, Plan, TriggersAVL, SCCs),
   nl,
   ( Attempt =:= 0
@@ -96,8 +100,40 @@ builder:build_loop(Goals, Attempt) :-
   -> Next is Attempt + 1,
      builder:announce_replan(Next),
      builder:build_loop(Goals, Next)
+  ;  builder:maybe_metacircular_replan(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL,
+                                       FallbackUsed, Attempt, Failed, Before)
+  -> Next is Attempt + 1,
+     builder:announce_replan(Next),
+     builder:build_loop(Goals, Next)
   ;  true
   ).
+
+
+%! builder:maybe_metacircular_replan(+Goals, +ProofAVL, +ModelAVL, +Plan, +TriggersAVL, +FallbackUsed, +Attempt, +Failed, +Before) is semidet.
+%
+% Succeeds when a failed pass had no deterministic discovery growth, the
+% metacircular module is available and interactive, the user confirmed
+% at least one feedback action, and the replan budget is not exhausted.
+
+builder:maybe_metacircular_replan(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL,
+                                  FallbackUsed, Attempt, Failed, Before) :-
+  Failed > 0,
+  catch(config:load_llm_modules(true), _, fail),
+  catch(config:llm_metacircular(true), _, fail),
+  config:llm_default(Service),
+  current_predicate(Service:Service/2),
+  predicate_property(metacircular:diagnose_after_build(_,_,_,_,_,_,_), defined),
+  ( catch(config:missing_provider_max_replan(Max), _, fail), integer(Max)
+  -> true
+  ;  Max = 3
+  ),
+  Attempt < Max,
+  catch(metacircular:diagnose_after_build(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL,
+                                          FallbackUsed, Applied),
+        _, Applied = 0),
+  Applied > 0,
+  feedback:learned_count(After),
+  After > Before.
 
 
 %! builder:should_replan(+Attempt, +Failed, +Before, +After) is semidet.
@@ -193,6 +229,7 @@ builder:run_plan(Plan, StartStep, Opts, Completed, Failed, Stubs) :-
   ( memberchk(pre_actions(PreActions), Opts) -> true ; PreActions = [] ),
   length(PreActions, PreCount),
   ( PreCount > 0 -> PreSteps = 1 ; PreSteps = 0 ),
+  retractall(builder:last_failed(_, _, _)),
   resume:clear_done_marks,
   builder:prepare_binpkg_index,
   builder:count_actions(Plan, 0, PlanActions),
@@ -862,7 +899,8 @@ builder:stub_all_phases(Action, PhaseList, TotalLines, ExecLine, LogsLine, LogPa
 builder:handle_result(_TotalLines, LineOff, display_handled(Outcome)) :-
   !,
   assertz(builder:slot_outcome(LineOff, Outcome)),
-  builder:maybe_record_resume_done(LineOff, Outcome).
+  builder:maybe_record_resume_done(LineOff, Outcome),
+  builder:maybe_record_failed(LineOff, Outcome).
 
 builder:handle_result(TotalLines, LineOff, Outcome) :-
   assertz(builder:slot_outcome(LineOff, Outcome)),
@@ -870,7 +908,8 @@ builder:handle_result(TotalLines, LineOff, Outcome) :-
   builder:outcome_to_status(Outcome, Status),
   with_mutex(build_display,
     build:update_slot(LineOff, TotalLines, Status, PlanStep, NumSteps, ActionIdx, Action, Entry)),
-  builder:maybe_record_resume_done(LineOff, Outcome).
+  builder:maybe_record_resume_done(LineOff, Outcome),
+  builder:maybe_record_failed(LineOff, Outcome).
 
 
 %! builder:maybe_record_resume_done(+LineOff, +Outcome) is det.
@@ -883,6 +922,24 @@ builder:maybe_record_resume_done(LineOff, Outcome) :-
     display:slot_info(LineOff, _, _, _, Action, Entry),
     Entry = _://_
   -> resume:mark_done(Entry, Action)
+  ;  true
+  ).
+
+
+%! builder:maybe_record_failed(+LineOff, +Outcome) is det.
+%
+% Persists failed Repo://Entry outcomes (with log path) across
+% clear_step_state/0 so metacircular diagnose can inspect them after
+% run_plan/6 returns.
+
+builder:maybe_record_failed(LineOff, Outcome) :-
+  ( builder:outcome_to_status(Outcome, failed(Reason)),
+    display:slot_info(LineOff, _, _, _, _Action, Repo://Entry)
+  -> ( current_predicate(ebuild_exec:build_log_path/2)
+     -> ebuild_exec:build_log_path(Entry, LogPath)
+     ;  LogPath = ''
+     ),
+     assertz(builder:last_failed(Repo://Entry, Reason, LogPath))
   ;  true
   ).
 

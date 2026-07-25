@@ -518,7 +518,9 @@ llm:get_input(Msg) :-
 
 llm:prompt(Prompt) :-
   catch(findall(Capability,
-                config:llm_capability(_, Capability),
+                ( config:llm_capability(Name, Capability),
+                  Name \== metacircular
+                ),
                 Cs),
         _, Cs = []),
   Cs \== [],

@@ -113,7 +113,9 @@ load_client_modules        — HTTP/socket client, subset of printer/pipeline
 
 load_worker_modules        — Same pipeline as standalone + client + cluster
 
-load_llm_modules           — LLM provider backends, explain, semantic search
+load_llm_modules           — LLM provider backends, explain, metacircular,
+                             semantic search (skipped when
+                             config:load_llm_modules(false))
 ```
 
 

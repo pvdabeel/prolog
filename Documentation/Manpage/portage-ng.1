@@ -630,6 +630,36 @@ to leave.
 .PP
 Requires LLM modules to be loaded and a valid API key for the
 chosen service.
+.SS Metacircular diagnose (requires LLM)
+.TP
+.B \-\-diagnose
+Metacircular LLM diagnose of a failed package build.
+Reads the package build log (see
+.BR \-\-log ),
+assembles plan/proof context, and asks the configured LLM for a
+.B repair_proposal/1
+term.  Proposed actions may record durable
+.B feedback:*
+learning (discovered dependency, USE dependency, excluded version,
+kernel config) or write a draft fixup sketch under
+.IR Knowledge/drafts/ .
+Each action is confirmed interactively before apply; confirmed
+feedback grows the learned store so a subsequent
+.B \-\-build
+re\-derives the plan.
+Requires LLM modules, an interactive TTY, and
+.BR config:llm_metacircular(true) .
+Skipped under
+.BR \-\-ci
+and when
+.B config:load_llm_modules(false)
+is set.
+.TP
+.B \-\-log " " \fIPATH\fR
+Build log path for
+.BR \-\-diagnose .
+When omitted, the default log under the configured build\-log
+directory for the package atom is used.
 .SS Semantic search index
 .TP
 .B \-\-train\-model
@@ -1332,6 +1362,22 @@ Chat with a specific LLM service:
 .RS
 .nf
 portage\-ng \-\-llm grok
+.fi
+.RE
+.PP
+Metacircular diagnose of a failed build:
+.PP
+.RS
+.nf
+portage\-ng \-\-diagnose cat/pkg
+.fi
+.RE
+.PP
+Diagnose with an explicit build log:
+.PP
+.RS
+.nf
+portage\-ng \-\-diagnose \-\-log /var/tmp/portage\-ng/logs/cat\-\-pkg\-1.2.3.log cat/pkg
 .fi
 .RE
 .PP

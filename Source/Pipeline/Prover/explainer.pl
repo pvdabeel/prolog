@@ -22,7 +22,7 @@ family; `explanation.pl` implements these with Gentoo/Portage logic.
 The `explain/2,3` predicates send structured Why terms to an LLM (configured
 via `config:llm_default/1`) for human-readable interpretation.
 
-See `Documentation/Handbook/doc-explainer.md` for architecture, usage examples, and a
+See `Documentation/Handbook/16-doc-llm.md` for architecture, usage examples, and a
 step-by-step guide.
 */
 
@@ -445,8 +445,16 @@ explainer:format_why_prompt(Why, Prompt) :-
 %! explainer:call_llm(+Service, +Prompt, -Response) is det.
 %
 % Dispatch a prompt to the named LLM service. The service module must
-% provide a Service/2 predicate (e.g. claude/2, grok/2).
+% provide a Service/2 predicate (e.g. claude/2, grok/2). When LLM
+% modules are not loaded (or the backend is missing), warns and unifies
+% Response with '' instead of throwing an existence error.
 
 explainer:call_llm(Service, Prompt, Response) :-
-  Goal =.. [Service, Prompt, Response],
-  call(Service:Goal).
+  ( atom(Service),
+    current_predicate(Service:Service/2)
+  -> Goal =.. [Service, Prompt, Response],
+     call(Service:Goal)
+  ;  message:warning(['LLM service not available: ', Service,
+                      ' (LLM modules not loaded or backend missing).']),
+     Response = ''
+  ).

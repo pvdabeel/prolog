@@ -45,6 +45,7 @@ action:process_action(Action,ArgsSets,Options) :-
       ; ignore(( config:llm_support(Prompt),
                  atomic_list_concat([Prompt|Args], Message),
                  config:llm_default(Service),
+                 current_predicate(Service:Service/2),
                  explainer:call_llm(Service, Message, _) )),
         ignore(message:failure('No valid targets found.'))
       ),

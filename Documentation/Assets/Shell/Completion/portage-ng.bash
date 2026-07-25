@@ -90,6 +90,8 @@ _portage_ng() {
     --snapshots
     --explain
     --llm
+    --diagnose
+    --log
     --train-model
     --similar
     --estimate
@@ -149,6 +151,10 @@ _portage_ng() {
       ;;
     --llm)
       COMPREPLY=( $(compgen -W "claude grok chatgpt gemini ollama" -- "${cur}") )
+      return 0
+      ;;
+    --log)
+      COMPREPLY=( $(compgen -f -- "${cur}") )
       return 0
       ;;
     --cmd)

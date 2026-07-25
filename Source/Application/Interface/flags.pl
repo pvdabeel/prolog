@@ -67,6 +67,7 @@ interface:process_flags :-
   (lists:memberchk(verbose(true),           Options) -> asserta(config:verbose(true)) ; true),
   (lists:memberchk(profile(true),           Options) -> set_prolog_flag(instrumentation, true) ; true),
   (lists:memberchk(logs(true),              Options) -> asserta(config:show_build_logs(true)) ; true),
+  (lists:memberchk(ci(true),                Options) -> asserta(config:cli_ci(true)) ; true),
   (lists:memberchk(style(Style),            Options) -> interface:assert_valid_style(Style) ; true),
   ((lists:memberchk(jobs(J),                Options), J > 0) -> asserta(config:cli_jobs(J)) ; true),
   ((lists:memberchk(loadavg(L),             Options), L > 0.0) -> asserta(config:cli_load_average(L)) ; true),

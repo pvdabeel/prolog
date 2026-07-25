@@ -1,8 +1,11 @@
 # Semantic Search and LLM Integration
 
-portage-ng integrates with large language models for two purposes:
-**semantic search** over the knowledge base using vector embeddings, and
-**plan explanation** using natural-language generation.
+portage-ng integrates with large language models for three purposes:
+**semantic search** over the knowledge base using vector embeddings,
+**plan explanation** using natural-language generation, and
+**metacircular self-repair** that proposes build-time learning from
+failed build logs (human-confirmed `feedback:*` records, optional
+fixup drafts).
 
 
 ## Semantic search
@@ -256,6 +259,68 @@ When the `--llm` flag is combined with a failing target, portage-ng
 sends a specialized diagnostic prompt (`config:llm_support/1`) to the
 LLM, providing the failure details and asking for help identifying the
 correct package atom or diagnosing the issue.
+
+
+## Metacircular self-repair
+
+When a build phase fails and deterministic fixups
+(`fixup:phase_retry_hook/10`) do not mint new `feedback:*` knowledge,
+portage-ng can ask the configured LLM to diagnose the failure and
+propose structured repair actions.  The module is
+`Source/Application/Llm/metacircular.pl`.
+
+### Loop
+
+1. Builder records failed `Repo://Entry` + log path (`builder:last_failed/3`).
+2. If `should_replan` would not fire (no new deterministic discoveries),
+   and `config:llm_metacircular(true)` with an interactive TTY (not `--ci`),
+   metacircular assembles context: plan summary, polarity-tagged assumptions,
+   fallback tier, feedback backlog, learned `cn_domain`, and a bounded log tail.
+3. The LLM receives `config:llm_capability(metacircular, …)` (excluded from
+   ordinary `--llm` chat prompts) and must reply with a single term:
+
+```prolog
+repair_proposal([
+  action(record_discovery, Repo://Entry, 'cat/pkg', bdepend, Evidence),
+  action(record_usedep, Repo://Entry, 'cat/pkg', [use(enable(foo),none)], Evidence),
+  action(record_excluded_version, Cat, Name, Ver, Evidence),
+  action(record_kernel_config, Repo://Entry, ['CONFIG_FOO'], Evidence),
+  action(draft_fixup, MechanismName, Synopsis, SketchBody)
+]).
+```
+
+4. Actions are validated (in-tree providers only; at most
+   `config:llm_metacircular_max_actions/1`, default 3).  Each accepted
+   action is confirmed interactively; confirmed feedback writes go through
+   `feedback:record_*` so the existing replan loop re-derives the plan.
+5. `draft_fixup` writes a sketch under `Knowledge/drafts/` (gitignored);
+   it is never auto-loaded.  A human must review and commit under
+   `Source/Domain/Gentoo/Exceptions/`.
+
+### Safety model
+
+- Mutations happen **host-side after confirm**, never via `<call:swi_prolog>`.
+- Sandbox may **read** `feedback:*`, `missing_provider:package_in_tree/1`,
+  and parse helpers; it cannot call `feedback:record_*`.
+- New package edges belong in `feedback:*`, not `prover:learn/3`
+  (version/USE domains only).
+- Kill-switch: `config:llm_metacircular(false)`.
+- Skip loading LLM modules entirely: `config:load_llm_modules(false)`.
+  Builder and CLI then no-op diagnose paths (stubs + soft
+  `explainer:call_llm/3`); no existence errors.
+
+### CLI
+
+```bash
+# Offline diagnose of a failed package (uses default log path)
+portage-ng --diagnose cat/pkg
+
+# Explicit log
+portage-ng --diagnose --log /var/tmp/portage-ng/logs/cat--pkg-1.2.3.log cat/pkg
+```
+
+During an interactive `--build`, diagnose runs automatically after a
+failed pass with no new deterministic discoveries (same confirm gate).
 
 
 ## Explainer architecture

@@ -18,7 +18,9 @@
 % (single-shot mode).
 
 action:run_explain(ExplainOpt, Proposal, ProofAVL, ModelAVL, Plan, TriggersAVL) :-
-  ( predicate_property(explain:explain_plan(_,_,_,_,_,_), defined)
+  ( config:llm_default(Service),
+    current_predicate(Service:Service/2),
+    predicate_property(explain:explain_plan(_,_,_,_,_,_), defined)
   -> ( ExplainOpt == true
      -> explain:explain_plan_interactive(Proposal, ProofAVL, ModelAVL, Plan, TriggersAVL)
      ;  explain:explain_plan(ExplainOpt, Proposal, ProofAVL, ModelAVL, Plan, TriggersAVL)
@@ -48,12 +50,12 @@ action:extract_llm_opt(Options, LlmOpt) :-
 % LlmOpt is either 'true' (use default service) or a service name atom.
 
 action:process_llm_chat(LlmOpt) :-
-  ( predicate_property(explainer:call_llm(_,_,_), defined)
-  -> ( LlmOpt == true
-     -> config:llm_default(Service)
-     ;  Service = LlmOpt
-     ),
-     ( config:llm_model(Service, Model)
+  ( LlmOpt == true
+  -> config:llm_default(Service)
+  ;  Service = LlmOpt
+  ),
+  ( current_predicate(Service:Service/2)
+  -> ( config:llm_model(Service, Model)
      -> nl,
         message:color(cyan),
         format('Chat session with ~w (~w). Type "quit" or "exit" to leave.~n', [Service, Model]),
@@ -95,4 +97,24 @@ action:llm_chat_loop(Service) :-
       nl, nl,
       llm_chat_loop(Service)
     )
+  ).
+
+
+% -----------------------------------------------------------------------------
+%  Action: DIAGNOSE (metacircular LLM repair)
+% -----------------------------------------------------------------------------
+
+%! action:process_diagnose(+Args, +Options) is det.
+%
+% Offline metacircular diagnose for a failed package build. Requires LLM
+% modules and an interactive TTY. Optional --log overrides the default
+% build-log path for the package atom.
+
+action:process_diagnose(Args, Options) :-
+  ( catch(config:load_llm_modules(true), _, fail),
+    config:llm_default(Service),
+    current_predicate(Service:Service/2),
+    predicate_property(metacircular:diagnose_cli(_, _), defined)
+  -> metacircular:diagnose_cli(Args, Options)
+  ;  message:warning('--diagnose requires LLM support. LLM modules are not loaded.')
   ).

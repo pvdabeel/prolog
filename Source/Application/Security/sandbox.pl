@@ -43,6 +43,10 @@ sandbox:safe_primitive(config:bugreport_drafts_enabled(_)).
 sandbox:safe_primitive(config:bugreport_drafts_max_assumptions(_)).
 sandbox:safe_primitive(config:llm_default(_)).
 sandbox:safe_primitive(config:llm_support(_)).
+sandbox:safe_primitive(config:load_llm_modules(_)).
+sandbox:safe_primitive(config:llm_metacircular(_)).
+sandbox:safe_primitive(config:llm_metacircular_log_tail(_)).
+sandbox:safe_primitive(config:llm_metacircular_max_actions(_)).
 sandbox:safe_primitive(config:hostname(_)).
 sandbox:safe_primitive(config:installation_dir(_)).
 sandbox:safe_primitive(config:name(_)).
@@ -119,6 +123,27 @@ sandbox:safe_primitive(explainer:why_in_plan(_,_,_,_,_,_)).
 sandbox:safe_primitive(explainer:why_assumption(_,_,_,_)).
 sandbox:safe_primitive(explainer:why_assumption(_,_,_,_,_)).
 sandbox:safe_primitive(explainer:term_ctx(_,_)).
+
+% -----------------------------------------------------------------------------
+%  Feedback / missing-provider introspection (read-only; no record_*)
+% -----------------------------------------------------------------------------
+
+sandbox:safe_primitive(feedback:discovered_dep(_,_,_,_)).
+sandbox:safe_primitive(feedback:discovered_usedep(_,_,_,_)).
+sandbox:safe_primitive(feedback:excluded_version(_,_,_,_)).
+sandbox:safe_primitive(feedback:unresolved_diagnostic(_,_)).
+sandbox:safe_primitive(feedback:required_kernel_config(_,_,_)).
+sandbox:safe_primitive(feedback:learned_count(_)).
+sandbox:safe_primitive(feedback:discovery_count(_)).
+sandbox:safe_primitive(feedback:version_excluded(_,_,_)).
+sandbox:safe_primitive(feedback:discovered_bdepend_dep(_,_,_)).
+
+sandbox:safe_primitive(missing_provider:package_in_tree(_)).
+sandbox:safe_primitive(missing_provider:provider_of(_,_,_,_)).
+
+sandbox:safe_primitive(metacircular:provider_in_tree(_)).
+sandbox:safe_primitive(metacircular:parse_proposal(_,_)).
+sandbox:safe_primitive(metacircular:valid_action(_)).
 
 % -----------------------------------------------------------------------------
 %  Prover
