@@ -141,9 +141,9 @@ portage-ng registers four computed set names in
 | `@affected` | `AffectedSet` | Vulnerable installs, including applied GLSAs |
 | `@new-glsa` | `NewGlsaSet` | Unapplied GLSAs (atoms still only appear when an upgrade exists) |
 
-Related non-GLSA computed sets in the same registry (`Preference/sets.pl`):
-`@preserved-rebuild` (PreservedLibraryConsumerSet) and `@changed-deps`
-(ChangedDepsSet).
+Related non-GLSA computed sets live in the same registry
+(`Preference/sets.pl`); see [Chapter 14: CLI — Package sets](14-doc-cli.md#package-sets)
+for the full table (`@preserved-rebuild`, `@changed-deps`, `@installed`, …).
 
 Expansion is **VDB-driven**: walk installed packages, look up matching
 advisory rows, emit upgrade atoms, then reduce per `cat/name:slot` to

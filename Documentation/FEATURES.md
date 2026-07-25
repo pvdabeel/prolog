@@ -130,13 +130,21 @@ automatically, and packaging exceptions are repaired in-transaction by a
 pluggable fixup registry (`Source/Domain/Gentoo/Exceptions/`).  Every recovery
 is logged and reported in the build summary -- never silent.
 
-**Native @preserved-rebuild and haskell-updater.**
+**Native ABI rebuild and haskell-updater.**
 Sub-slot (`:=`) ABI changes trigger same-version rebuilds of installed reverse
-dependencies as part of the plan.  GHC ABI-hash and OCaml/findlib breakage --
-invisible to sub-slots -- are detected from their compiler failure signatures
-and repaired mid-build by rebuilding the broken packages before retrying the
-failed phase, where traditional emerge fails and defers to a manual
-haskell-updater run (or, for OCaml, to the user).
+dependencies as part of the plan (`config:subslot_rebuild/1`).  The
+`@preserved-rebuild` computed set separately targets consumers of libraries
+kept only by FEATURES=preserve-libs (Portage `PreservedLibraryConsumerSet`).
+GHC ABI-hash and OCaml/findlib breakage -- invisible to sub-slots -- are
+detected from their compiler failure signatures and repaired mid-build by
+rebuilding the broken packages before retrying the failed phase, where
+traditional emerge fails and defers to a manual haskell-updater run (or, for
+OCaml, to the user).
+
+**Computed package sets.**
+VDB/tree-derived sets mirror Portage `sets.conf` classes — including
+`@security` (GLSA), `@preserved-rebuild`, `@changed-deps`, `@installed`,
+`@live-rebuild`, `@changed-subslot`, and related names — via `sets:expand/2`.
 
 **Collision deconfliction.**
 Merge-time file collisions caused by missing blocker atoms are recognised and

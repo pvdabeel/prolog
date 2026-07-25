@@ -87,7 +87,7 @@ action is performed per invocation.
 | **--sync** | Synchronise the portage tree, regenerate the md5-cache, load the knowledge base, and (in standalone mode) save it to disk. Optional positional arguments restrict the sync to specific repository names. |
 | **--regen** [*REPOSITORY*...] | Regenerate the ebuild metadata cache (md5-cache) on disk without performing a network sync (no git pull). Equivalent to running **egencache**. |
 | **--metadata** | Alias for `--regen`. |
-| **--list-sets** | List all available package sets (@world, @system, user-defined, and computed sets including @security). |
+| **--list-sets** | List all available package sets (@world, @system, user-defined, and computed sets such as @security, @preserved-rebuild, @changed-deps). |
 | **--check-news** | Check for and display GLEP 42 news items from the portage repository's `metadata/news/` directory. |
 | **--graph** | Generate dependency graph output. Accepts sub-commands: `modified`, `full`, `build modified`, `build full`. |
 | **--clear** | Clear the in-memory knowledge base. |
@@ -128,7 +128,7 @@ action is performed per invocation.
 | **-e**, **--emptytree** | Pretend no other packages are installed when resolving dependencies. |
 | **-N**, **--newuse** | Include packages whose USE flags or declared IUSE set have changed since installation. |
 | **-U**, **--changed-use** | Include packages whose effective USE flags have changed since installation. More conservative than `--newuse`. |
-| **--changed-deps** | Rebuild packages whose runtime dependencies have changed since they were installed. |
+| **--changed-deps** | During deep resolution, rebuild installed packages whose VDB RDEPEND/PDEPEND no longer match the same-version tree ebuild (same comparison as `@changed-deps`). |
 | **--changed-slot** | Rebuild packages whose SLOT value has changed since installation. |
 | **--selective** | Do not reinstall packages that are already installed and satisfy all dependency constraints. Implied by `--update` and `--newuse`. |
 | **-n**, **--noreplace** | Skip packages that are already installed. Equivalent to `--selective`. |
@@ -265,7 +265,50 @@ Targets identify which packages to operate on. Several formats are supported:
 | *name* | `vim` | Unqualified package name. Resolves to the best visible version. |
 | *category/name* | `app-editors/vim` | Category-qualified name. |
 | *category/name-version* | `app-editors/vim-9.1.0` | Exact version. |
-| *@set* | `@world` | A package set. Built-in sets include `@world`, `@system`, and computed sets such as `@security` (GLSA NewAffectedSet), `@preserved-rebuild`, and `@changed-deps`. |
+| *@set* | `@world` | A package set (`@name`). See **PACKAGE SETS** below. |
+
+## PACKAGE SETS
+
+Package sets expand to concrete target atoms before proving. File-backed
+sets (`@world`, `@system`, and files under the sets directory) come from
+preference configuration. **Computed sets** are derived on demand from the
+VDB and/or portage tree via `sets:expand/2`
+(`Source/Domain/Gentoo/Preference/sets.pl`). Use `--list-sets` to see every
+name registered on the current host.
+
+An empty computed set is not an error: with `--ci --pretend @set`, portage-ng
+prints an informational message and exits 0.
+
+### File-backed / preference sets
+
+| Set | Description |
+|-----|-------------|
+| **@world** | User-selected packages recorded in the world file. |
+| **@system** | Profile system set. |
+| **@***name*** | User-defined set file (see `config:set_dir/1`). |
+
+### Computed sets (VDB / tree)
+
+| Set | Portage class | Atoms | Description |
+|-----|---------------|-------|-------------|
+| **@installed** | EverythingSet | `cat/name:slot` | All installed packages. |
+| **@live-rebuild** | VariableSet (PROPERTIES=live) | `cat/name:slot` | Installed packages with the `live` PROPERTY. |
+| **@changed-subslot** | SubslotChangedSet | `cat/name:slot` | Installed packages whose highest visible ebuild has a different subslot. |
+| **@downgrade** | DowngradeSet | `cat/name:slot` | Installed packages whose highest visible ebuild version is lower. |
+| **@unavailable** | UnavailableSet | `cat/name:slot` | Installed packages with no visible ebuild in the same slot. |
+| **@rebuilt-binaries** | RebuiltBinaries | `=cat/name-version` | Binpkgs whose BUILD_TIME differs from the installed copy of the same version. |
+| **@unavailable-binaries** | UnavailableBinaries | `cat/name:slot` | Installed packages with no matching binpkg of the same version. |
+| **@security** | NewAffectedSet (default) | `=cat/name-version` | Vulnerable installs for unapplied GLSAs. See Handbook ch. 19. |
+| **@new-affected** | NewAffectedSet | `=cat/name-version` | Same as `@security` under an explicit name. |
+| **@affected** | AffectedSet | `=cat/name-version` | Vulnerable installs, including already-applied GLSAs. |
+| **@new-glsa** | NewGlsaSet | `=cat/name-version` | Remediation atoms from unapplied GLSAs. |
+| **@preserved-rebuild** | PreservedLibraryConsumerSet | `cat/name:slot` | Installed packages that consume a library kept only by FEATURES=preserve-libs (reads `preserved_libs_registry`; empty when none). |
+| **@changed-deps** | ChangedDepsSet | `=cat/name-version` | Installed packages whose VDB RDEPEND/PDEPEND diverge from the same-version tree ebuild after use-reduce and `:=` stripping (libc injects stripped, as in emerge `--changed-deps`). |
+
+Related flags (not sets): `--changed-deps` applies the same outdated-deps
+test while resolving other targets; `config:subslot_rebuild/1` plans
+same-version reverse-dep rebuilds when a `:=` provider's subslot changes
+(transaction-driven; complementary to `@preserved-rebuild`).
 
 ## SEARCH SYNTAX
 
@@ -504,6 +547,21 @@ portage-ng --search-bugs "openssl segfault"
 
 # Upgrade the world set
 portage-ng --mode standalone --upgrade
+
+# List available sets (file-backed and computed)
+portage-ng --mode standalone --list-sets
+
+# Pretend a GLSA security upgrade set
+portage-ng --mode standalone --ci --pretend @security
+
+# Rebuild consumers of preserve-libs leftovers
+portage-ng --mode standalone --ci --pretend @preserved-rebuild
+
+# Rebuild packages whose installed RDEPEND/PDEPEND drifted from the tree
+portage-ng --mode standalone --ci --pretend @changed-deps
+
+# Same comparison while updating other targets
+portage-ng --mode standalone --pretend --deep --changed-deps @world
 ```
 
 ## FILES
@@ -514,9 +572,12 @@ portage-ng --mode standalone --upgrade
 | `Source/Application/Wrapper/portage-ng-dev` | Development launcher script with timeout and instrumentation support. |
 | `Knowledge/kb.qlf` | QLC-compiled knowledge base cache (generated by `--sync`). |
 | `Knowledge/profile.qlf` | Cached profile data (generated by `--sync`). |
+| `Knowledge/glsa.qlf` | Cached GLSA advisory facts (generated by `--sync`). |
 | `Knowledge/preference.qlf` | Materialized preference state (generated on first startup; invalidated by `--sync`). |
 | `Knowledge/preference.stamp` | Fingerprint of preference-cache inputs (file mtimes and env vars). |
 | `Knowledge/embeddings.pl` | Semantic search vector index (generated by `--train-model`). |
+| `Source/Knowledge/Sets/` | Named set files and host-local world / glsa_injected paths. |
+| `$EROOT/var/lib/portage/preserved_libs_registry` | Portage preserve-libs registry (JSON); input to `@preserved-rebuild`. Override with `config:preserved_libs_registry_override/1`. |
 | `Source/Config/` | Machine-specific and Gentoo configuration files. |
 | `Source/Config/Gentoo/` | Template files mirroring the `/etc/portage` layout. |
 

@@ -3,11 +3,6 @@ Feature exploration
 
 - standalone loading performance
 
-- sets: security — DONE (@security/@affected/@new-affected/@new-glsa)
-- sets: @preserved-rebuild — DONE (PreservedLibraryConsumerSet)
-- sets: @changed-deps — DONE (ChangedDepsSet; also wires --changed-deps)
-
-
 - Smart QLF split
 
 - Better color handling (fg and bg defined twice in message.pl: once for normal messages and once for bubbles)
@@ -21,7 +16,9 @@ Feature exploration
   - different transaction strategies (zfs snapshot, unionfs, overlayfs, fuse, snaps, other)
 
 - Create portage-ng ebuild
-   
+
+- Create portage-ng website
+
 - Reimplement prefix the proper way
 
 

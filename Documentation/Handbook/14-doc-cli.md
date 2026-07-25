@@ -175,6 +175,58 @@ Targets can be specified in several formats:
 | `pkg` | `portage` | Ambiguous name (searched across categories) |
 
 
+## Package sets
+
+`@name` targets expand to concrete atoms via `eapi:substitute_sets/2`
+before proving. File-backed sets (`@world`, `@system`, user sets under
+`config:set_dir/1`) come from preference configuration. **Computed sets**
+are registered in `Source/Domain/Gentoo/Preference/sets.pl` and resolved
+on demand by `sets:expand/2`.
+
+```bash
+portage-ng --mode standalone --list-sets
+portage-ng --mode standalone --ci --pretend @security
+portage-ng --mode standalone --ci --pretend @preserved-rebuild
+portage-ng --mode standalone --ci --pretend @changed-deps
+```
+
+An empty computed set prints an informational line and exits 0 under
+`--ci` (nothing to do), not a hard failure.
+
+| **Set** | **Atoms** | **Meaning** |
+| :--- | :--- | :--- |
+| `@world` / `@system` | as configured | Preference / profile sets |
+| `@installed` | `cat/name:slot` | Everything installed |
+| `@live-rebuild` | `cat/name:slot` | Installed `PROPERTIES=live` packages |
+| `@changed-subslot` | `cat/name:slot` | Subslot differs from highest visible ebuild |
+| `@downgrade` | `cat/name:slot` | Highest visible ebuild is older than installed |
+| `@unavailable` | `cat/name:slot` | No visible ebuild in the same slot |
+| `@rebuilt-binaries` | `=cpv` | Binpkg BUILD_TIME ≠ installed BUILD_TIME |
+| `@unavailable-binaries` | `cat/name:slot` | No binpkg for the installed version |
+| `@security` | `=cpv` | GLSA NewAffectedSet (default security set) |
+| `@affected` / `@new-affected` / `@new-glsa` | `=cpv` | Other Portage security-set filters |
+| `@preserved-rebuild` | `cat/name:slot` | Consumers of FEATURES=preserve-libs leftovers |
+| `@changed-deps` | `=cpv` | VDB RDEPEND/PDEPEND drifted from same-version ebuild |
+
+**`@preserved-rebuild`** reads Portage’s `preserved_libs_registry` JSON
+(default: derive from `config:pkg_directory/1` as
+`…/lib/portage/preserved_libs_registry`; override with
+`config:preserved_libs_registry_override/1`) and matches consumers via
+VDB `NEEDED.ELF.2`. It is complementary to the automatic
+`config:subslot_rebuild/1` pass, which rebuilds `:=` reverse deps when a
+provider’s subslot changes inside a plan.
+
+**`@changed-deps`** compares installed RDEPEND/PDEPEND (from the on-disk
+VDB) to the same-version tree ebuild after use-reduce and `:=` stripping,
+with libc injects removed (emerge `--changed-deps` semantics). The
+`--changed-deps` flag applies the same test while resolving other
+targets.
+
+GLSA details for `@security` and siblings:
+[Chapter 19](19-doc-glsa.md). Full option text:
+[`portage-ng(1)`](../Manpage/portage-ng.1.md).
+
+
 ## CI mode
 
 Use `--ci` for non-interactive automation.  Exit codes indicate plan
@@ -334,4 +386,6 @@ shell would expand `*` (e.g. `--search 'name:=*vim*'`).
 - [Chapter 13: Output and Visualization](13-doc-output.md) — what the output
   looks like
 - [Chapter 19: Gentoo Linux Security Advisories (GLSA)](19-doc-glsa.md) —
-  `@security` and related computed sets
+  `@security` and related GLSA computed sets
+- [Chapter 3: Configuration](03-doc-configuration.md) —
+  `config:preserved_libs_registry/1` and related paths

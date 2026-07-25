@@ -20,8 +20,9 @@ selection. Sets expand before resolution.
 - Explicit versions try candidates in standard order (user pin wins).
 - `:fetchonly` does not register `@world`; `:uninstall` may unregister
   unless `--oneshot`.
-- Set atoms (`@world`, `@security`, …) expand to ordinary package atoms
-  before target rules run.
+- Set atoms (`@world`, `@security`, `@preserved-rebuild`, `@changed-deps`,
+  …) expand to ordinary package atoms before target rules run
+  (`sets:expand/2` for computed sets).
 
 **Examples:** [test01](examples.md#test01), [test71](examples.md#test71),
 [test78](examples.md#test78).  

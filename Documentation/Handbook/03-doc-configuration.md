@@ -50,6 +50,11 @@ See [Preference cache](#preference-cache) for the materialized preference cache.
 | `config:portage_confdir/1` | Path to the `/etc/portage` directory (or a development copy).  Determines where `make.conf`, `package.use`, `package.mask`, etc. are read from.  Comment out to use built-in fallback defaults. |
 | `config:pkg_directory/1` | Path to the VDB directory (`/var/db/pkg` on a standard Gentoo system).  Defined per host in `Source/Config/<host>.pl`. |
 | `config:world_file/1` | Path to the world set file (auto-resolved from hostname). |
+| `config:set_dir/1` | Directory of named set files (one atom list per file). |
+| `config:glsa_dir/1` | Optional override for `$PORTDIR/metadata/glsa` (GLSA XML). |
+| `config:glsa_injected_file/1` | Applied-GLSA id file (Portage `glsa_injected` equivalent). |
+| `config:preserved_libs_registry/1` | Path to Portage’s `preserved_libs_registry` JSON used by `@preserved-rebuild`. Default maps `…/db/pkg` → `…/lib/portage/preserved_libs_registry`. |
+| `config:preserved_libs_registry_override/1` | Host-specific override for the preserve-libs registry path (multifile / dynamic). |
 | `config:graph_directory/1` | Output directory for generated dependency graphs and `.merge` files.  Defined per host in `Source/Config/<host>.pl`. |
 | `config:build_root/1` | Root directory for build work (equivalent to Portage's `PORTAGE_TMPDIR`). |
 | `config:build_log_dir/1` | Directory for per-package build logs. |
@@ -80,7 +85,7 @@ The machine config file is where repositories are created and registered — cov
 | `config:deconflict_collisions/1` | `override` | Merge-time file collision handling when a blocker atom is missing from metadata: `off` (fail as usual), `report` (fail, but surface the collision as a deconfliction assumption), or `override` (re-merge with collision protection disabled so the merge succeeds). |
 | `config:ghc_abi_repair/1` | `true` | Repair GHC ABI-hash breakage in-transaction: rebuild the packages listed by haskell-cabal's broken-package check, then re-run the failed phase (native `haskell-updater`). |
 | `config:ocaml_abi_repair/1` | `true` | Repair OCaml/findlib ABI breakage in-transaction: map stale compiled-unit errors to their installed owners via the VDB, rebuild them, then re-run the failed phase. |
-| `config:subslot_rebuild/1` | `true` | Plan same-version rebuilds of installed reverse dependencies when a sub-slot (`:=`) dependency changes ABI (native `@preserved-rebuild`). |
+| `config:subslot_rebuild/1` | `true` | Plan same-version rebuilds of installed reverse dependencies when a sub-slot (`:=`) provider’s ABI changes inside a transaction. Complementary to the `@preserved-rebuild` *set* (FEATURES=preserve-libs consumers); this pass is automatic during prove/plan. |
 | `config:toolchain_reactivation/1` | `true` | Re-activate the toolchain right after a toolchain package merges, before dependent builds continue. |
 
 See [Chapter 15: Building and Execution](15-doc-building.md) for how the
