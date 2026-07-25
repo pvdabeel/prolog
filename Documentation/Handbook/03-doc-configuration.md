@@ -243,6 +243,8 @@ The result is two serialised cache files:
 
 - **`Knowledge/kb.qlf`** — all repository and cache facts (ebuilds, metadata, manifests).
 - **`Knowledge/profile.qlf`** — all profile-derived data (USE terms, masks, per-package USE, license groups).
+- **`Knowledge/glsa.qlf`** — Gentoo Linux Security Advisories parsed from
+  `metadata/glsa/` (see [Chapter 19](19-doc-glsa.md)).
 - **`Knowledge/preference.qlf`** — materialized preference state (built on first startup; see [Preference cache](#preference-cache)).
 
 See [Profile loading strategy](#profile-loading-strategy) for details on live vs. cached profile loading.
@@ -473,3 +475,5 @@ After you change world membership or sync new tree data, rely on the same **sync
   tree is loaded into Prolog facts
 - [Chapter 14: Command-Line Interface](14-doc-cli.md) — CLI options that interact
   with configuration
+- [Chapter 19: Gentoo Linux Security Advisories (GLSA)](19-doc-glsa.md) —
+  `Knowledge/glsa.qlf` built during `--sync`

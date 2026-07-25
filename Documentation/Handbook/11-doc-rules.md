@@ -370,7 +370,7 @@ checks).  Scores are computed once per arm per
 `prioritize_deps_keep_all/3` call, with a short-lived per-call cache for
 installed / reference-version lookups.  Ranking must not walk the
 ProofAVL; it only sees the proof-context list and memo snapshots
-(see also [Chapter 24](24-doc-performance.md)).
+(see also [Chapter 25](25-doc-performance.md)).
 
 ### What we deliberately do not implement
 

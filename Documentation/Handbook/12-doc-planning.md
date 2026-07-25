@@ -61,7 +61,7 @@ Roughly:
   context and planner machinery as the other classes.
 
 For the exact mapping from PMS ordering to internal edges and constraints, see
-[Chapter 22: Dependency Ordering](22-doc-dependency-ordering.md).  The
+[Chapter 23: Dependency Ordering](23-doc-dependency-ordering.md).  The
 implementation detail lives in the rules and `featureterm` helpers: `after/1`
 propagates as a real dependency relation, while `after_only/1` can be lowered
 to ordering constraints (for example `constraint(order_after(…))`) that the
@@ -233,5 +233,5 @@ for execution.
   rendered
 - [Chapter 15: Building and Execution](15-doc-building.md) — how the plan is
   executed
-- [Chapter 22: Dependency Ordering](22-doc-dependency-ordering.md) — PMS
+- [Chapter 23: Dependency Ordering](23-doc-dependency-ordering.md) — PMS
   ordering semantics

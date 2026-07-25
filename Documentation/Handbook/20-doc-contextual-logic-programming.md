@@ -264,7 +264,7 @@ context list `?{[...]}` that accumulates constraints as the proof
 deepens.  These context terms are merged via feature unification —
 the same algebraic operation that the context system uses for its
 data members.  This connection is explored in detail in
-[Chapter 20: Context Terms and Feature Unification](20-doc-context-terms.md).
+[Chapter 21: Context Terms and Feature Unification](21-doc-context-terms.md).
 
 
 ## Serialization
@@ -284,5 +284,5 @@ from the QLC file in under a second.
 
 - A. Zeller, *Unified Versioning through Feature Logic*, 1997
 - [`Source/Logic/context.pl`](../Source/Logic/context.pl) — full implementation
-- [`Documentation/Handbook/20-doc-context-terms.md`](20-doc-context-terms.md) — how context
+- [`Documentation/Handbook/21-doc-context-terms.md`](21-doc-context-terms.md) — how context
   terms flow through the prover

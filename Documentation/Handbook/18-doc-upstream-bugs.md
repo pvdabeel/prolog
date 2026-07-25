@@ -138,3 +138,5 @@ Both kinds of draft are gated by `config:bugreport_drafts_enabled/1`.
   how unsatisfiable dependencies are detected
 - [Chapter 15: Building and Execution](15-doc-building.md) — the
   missing-provider feedback loop that produces build-time bug drafts
+- [Chapter 19: Gentoo Linux Security Advisories (GLSA)](19-doc-glsa.md) —
+  security advisories and `@security` remediation sets

@@ -444,6 +444,27 @@ compile_query_compound(masked(false), Repo://Id,
     \+ preference:masked(Repo://Id) )) :- !.
 
 
+% 5b. GLSA bridges (advisories are not a package repository; join onto
+%     an existing Repo://Entry via glsa.pl facts)
+
+compile_query_compound(vulnerable(true), Repo://Id,
+  ( current_predicate(glsa:entry_covered/2),
+    glsa:ensure_loaded,
+    glsa:search([vulnerable(true)], GlsaId),
+    glsa:entry_covered(GlsaId, Repo://Id) )) :- !.
+
+compile_query_compound(vulnerable(false), Repo://Id,
+  ( cache:ordered_entry(Repo, Id, _, _, _),
+    \+ ( current_predicate(glsa:entry_covered/2),
+         glsa:ensure_loaded,
+         glsa:search([vulnerable(true)], GlsaId),
+         glsa:entry_covered(GlsaId, Repo://Id) ) )) :- !.
+
+compile_query_compound(glsa(GlsaId), Repo://Id,
+  ( current_predicate(glsa:entry_covered/2),
+    glsa:entry_covered(GlsaId, Repo://Id) )) :- !.
+
+
 % 6. rule helpers: dependency query for fetchonly, install & run rules
 
 compile_query_compound(dependency(D,run), Repo://Id,

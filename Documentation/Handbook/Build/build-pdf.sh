@@ -42,13 +42,14 @@ pandoc \
   16-doc-llm.md \
   17-doc-distributed.md \
   18-doc-upstream-bugs.md \
-  19-doc-contextual-logic-programming.md \
-  20-doc-context-terms.md \
-  21-doc-resolver-comparison.md \
-  22-doc-dependency-ordering.md \
-  23-doc-testing.md \
-  24-doc-performance.md \
-  25-doc-contributing.md \
-  26-doc-closing.md
+  19-doc-glsa.md \
+  20-doc-contextual-logic-programming.md \
+  21-doc-context-terms.md \
+  22-doc-resolver-comparison.md \
+  23-doc-dependency-ordering.md \
+  24-doc-testing.md \
+  25-doc-performance.md \
+  26-doc-contributing.md \
+  27-doc-closing.md
 
 echo "Built $OUTFILE ($(wc -c < "$OUTFILE" | tr -d ' ') bytes)"

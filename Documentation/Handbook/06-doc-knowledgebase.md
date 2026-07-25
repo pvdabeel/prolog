@@ -111,7 +111,7 @@ is that the prover naturally gravitates toward the newest compatible
 version, which matches Gentoo's standard policy, while still falling
 back to older versions when constraints demand it.
 
-See [Chapter 21: Resolver Comparison](21-doc-resolver-comparison.md)
+See [Chapter 22: Resolver Comparison](22-doc-resolver-comparison.md)
 for more on Vermeir's ordered logic and its role alongside Zeller's
 feature logic and CDCL-style conflict learning.
 
@@ -369,3 +369,5 @@ rationale.
 - [Chapter 3: Configuration](03-doc-configuration.md) — repository path setup
 - [Chapter 8: The Prover](08-doc-prover.md) — how the prover queries the
   knowledge base
+- [Chapter 19: Gentoo Linux Security Advisories (GLSA)](19-doc-glsa.md) —
+  sibling `Knowledge/glsa.qlf` store (not a package repository)

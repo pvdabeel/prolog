@@ -643,5 +643,5 @@ following checklist helps catch regressions quickly:
   used by constraint learning
 - [Chapter 11: Rules and Domain Logic](11-doc-rules.md) — entry rules, fallback
   chains, and REQUIRED_USE handling
-- [Chapter 21: Resolver Comparison](21-doc-resolver-comparison.md) — Zeller,
+- [Chapter 22: Resolver Comparison](22-doc-resolver-comparison.md) — Zeller,
   Vermeir, and CDCL foundations

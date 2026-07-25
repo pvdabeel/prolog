@@ -39,6 +39,15 @@ tree:
                      installed packages for which no binary package of the
                      exact same version is available, as `cat/name:slot`
                      atoms (mirrors portage.sets.dbapi.UnavailableBinaries)
+  - security         packages needing upgrade for an unapplied GLSA that
+                     currently affects the system (`=cat/name-version`
+                     atoms; mirrors portage.sets.security.NewAffectedSet,
+                     the Portage default for @security)
+  - affected         same, including already-applied GLSAs
+                     (mirrors AffectedSet)
+  - new-affected     alias of security (explicit NewAffectedSet name)
+  - new-glsa         remediation atoms from unapplied GLSAs
+                     (mirrors NewGlsaSet)
 
 The expansion entry point is `sets:expand/2`; `eapi:substitute_sets/2`
 recognises the names enumerated by `sets:is_computed_set/1` and replaces an
@@ -66,12 +75,17 @@ sets:is_computed_set(downgrade).
 sets:is_computed_set(unavailable).
 sets:is_computed_set('rebuilt-binaries').
 sets:is_computed_set('unavailable-binaries').
+sets:is_computed_set(security).
+sets:is_computed_set(affected).
+sets:is_computed_set('new-affected').
+sets:is_computed_set('new-glsa').
 
 
 %! sets:expand(+Name, -Targets) is det.
 %
-% Resolves a computed set name to a sorted list of `cat/name:slot` target
-% atoms.  Fails (or yields []) for unknown names.
+% Resolves a computed set name to a sorted list of target atoms
+% (`cat/name:slot` or `=cat/name-version` for security sets).
+% Yields [] for unknown names.
 
 sets:expand(installed, Targets) :-
   !,
@@ -100,6 +114,22 @@ sets:expand('rebuilt-binaries', Targets) :-
 sets:expand('unavailable-binaries', Targets) :-
   !,
   sets:unavailable_binaries_set(Targets).
+
+sets:expand(security, Targets) :-
+  !,
+  glsa:security_atoms(new_affected, Targets).
+
+sets:expand(affected, Targets) :-
+  !,
+  glsa:security_atoms(affected, Targets).
+
+sets:expand('new-affected', Targets) :-
+  !,
+  glsa:security_atoms(new_affected, Targets).
+
+sets:expand('new-glsa', Targets) :-
+  !,
+  glsa:security_atoms(new_glsa, Targets).
 
 sets:expand(_, []).
 

@@ -118,7 +118,7 @@ happens to do dependency resolution internally.
 An important design question for distributed proving is: how does
 each mode access the Portage tree?  The answer is portage-ng's
 object-oriented context system (see
-[Chapter 19](19-doc-contextual-logic-programming.md)).  Each
+[Chapter 20](20-doc-contextual-logic-programming.md)).  Each
 repository is an instance created through that system, and methods
 like `portage:read` populate the cache facts.
 

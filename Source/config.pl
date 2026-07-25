@@ -288,6 +288,30 @@ config:set_dir(Dir) :-
 
 
 % -----------------------------------------------------------------------------
+%  GLSA (Gentoo Linux Security Advisories)
+% -----------------------------------------------------------------------------
+
+%! config:glsa_dir(?Dir)
+%
+% Optional override for the on-disk GLSA directory. When unset, GLSA loading
+% uses `$PORTDIR/metadata/glsa` from the registered portage repository.
+% Declare a host-specific clause in Source/Config/<host>.local.pl if needed.
+
+% config:glsa_dir('/path/to/metadata/glsa').
+
+
+%! config:glsa_injected_file(-File)
+%
+% Path of the glsa_injected applied-ID file (Portage PRIVATE_PATH equivalent).
+% Defaults to a host-local Knowledge path.
+
+config:glsa_injected_file(File) :-
+  config:installation_dir(Dir),
+  config:hostname(Hostname),
+  os:compose_path([Dir, 'Source/Knowledge/Sets/glsa_injected', Hostname], File).
+
+
+% -----------------------------------------------------------------------------
 %  Snapshots
 % -----------------------------------------------------------------------------
 

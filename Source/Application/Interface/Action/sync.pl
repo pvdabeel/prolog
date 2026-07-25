@@ -13,7 +13,8 @@
 
 %! action:process_list_sets is det.
 %
-% Lists all available package sets (@world, @system, user-defined sets).
+% Lists all available package sets (@world, @system, user-defined sets,
+% and computed sets such as @installed / @security).
 
 action:process_list_sets :-
   message:topheader(['Available package sets']),
@@ -25,7 +26,14 @@ action:process_list_sets :-
   forall(preference:set(Name, _),
     ( message:color(green), format(' * '), message:color(normal),
       format('~w~n', [Name])
-    )).
+    )),
+  ( current_predicate(sets:is_computed_set/1) ->
+      forall(sets:is_computed_set(Name),
+        ( message:color(green), format(' * '), message:color(normal),
+          format('~w~n', [Name])
+        ))
+  ; true
+  ).
 
 
 % -----------------------------------------------------------------------------
@@ -46,6 +54,7 @@ action:process_sync(Mode, []) :-
   kb:sync,
   message:header(['Syncing profile']), nl,
   catch(profile:cache_save, _, true),
+  catch(glsa:cache_save, _, true),
   catch(preference:cache_invalidate, _, true),
   ( Mode == standalone -> kb:save ; true ).
 
@@ -54,6 +63,7 @@ action:process_sync(Mode, RepoNames) :-
          kb:sync(Name)),
   message:header(['Syncing profile']), nl,
   catch(profile:cache_save, _, true),
+  catch(glsa:cache_save, _, true),
   catch(preference:cache_invalidate, _, true),
   ( Mode == standalone -> kb:save ; true ).
 

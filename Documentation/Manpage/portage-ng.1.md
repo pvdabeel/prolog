@@ -87,7 +87,7 @@ action is performed per invocation.
 | **--sync** | Synchronise the portage tree, regenerate the md5-cache, load the knowledge base, and (in standalone mode) save it to disk. Optional positional arguments restrict the sync to specific repository names. |
 | **--regen** [*REPOSITORY*...] | Regenerate the ebuild metadata cache (md5-cache) on disk without performing a network sync (no git pull). Equivalent to running **egencache**. |
 | **--metadata** | Alias for `--regen`. |
-| **--list-sets** | List all available package sets (@world, user-defined sets). |
+| **--list-sets** | List all available package sets (@world, @system, user-defined, and computed sets including @security). |
 | **--check-news** | Check for and display GLEP 42 news items from the portage repository's `metadata/news/` directory. |
 | **--graph** | Generate dependency graph output. Accepts sub-commands: `modified`, `full`, `build modified`, `build full`. |
 | **--clear** | Clear the in-memory knowledge base. |
@@ -263,7 +263,7 @@ Targets identify which packages to operate on. Several formats are supported:
 | *name* | `vim` | Unqualified package name. Resolves to the best visible version. |
 | *category/name* | `app-editors/vim` | Category-qualified name. |
 | *category/name-version* | `app-editors/vim-9.1.0` | Exact version. |
-| *@set* | `@world` | A package set. Built-in sets include `@world` and `@system`. |
+| *@set* | `@world` | A package set. Built-in sets include `@world`, `@system`, and computed sets such as `@security` (GLSA NewAffectedSet). |
 
 ## SEARCH SYNTAX
 

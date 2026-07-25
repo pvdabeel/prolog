@@ -294,5 +294,5 @@ grammar handles all PMS 9 / EAPI 9 constructs:
   data is stored
 - [Chapter 11: Rules and Domain Logic](11-doc-rules.md) — how dependency terms
   are consumed during proof construction
-- [Chapter 22: Dependency Ordering](22-doc-dependency-ordering.md) — PMS
+- [Chapter 23: Dependency Ordering](23-doc-dependency-ordering.md) — PMS
   dependency type semantics

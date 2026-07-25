@@ -266,5 +266,5 @@ a different domain constraint:
   how domains interact with the reprove mechanism
 - [Chapter 11: Rules and Domain Logic](11-doc-rules.md) — how version domains
   feed into candidate selection
-- [Chapter 21: Resolver Comparison](21-doc-resolver-comparison.md) — Zeller's
+- [Chapter 22: Resolver Comparison](22-doc-resolver-comparison.md) — Zeller's
   feature logic and CDCL connections

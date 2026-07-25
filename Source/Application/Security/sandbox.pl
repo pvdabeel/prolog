@@ -280,6 +280,18 @@ sandbox:safe_primitive(userconfig:package_license_entry(_,_)).
 sandbox:safe_primitive(profile:cache_available).
 
 % -----------------------------------------------------------------------------
+%  GLSA knowledge store
+% -----------------------------------------------------------------------------
+
+sandbox:safe_primitive(glsa:cache_available).
+sandbox:safe_primitive(glsa:search(_,_)).
+sandbox:safe_primitive(glsa:advisory(_,_)).
+sandbox:safe_primitive(glsa:is_vulnerable(_)).
+sandbox:safe_primitive(glsa:security_atoms(_,_)).
+sandbox:safe_primitive(glsa:entry_covered(_,_)).
+sandbox:safe_primitive(glsa:ensure_loaded).
+
+% -----------------------------------------------------------------------------
 %  Server job queue (worker RPC protocol)
 % -----------------------------------------------------------------------------
 

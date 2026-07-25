@@ -904,7 +904,7 @@ different approach to the same problem:
 | **Guarantees** | None | None | None | Every plan is a proof |
 
 For a detailed comparison of the reasoning models, see
-[Chapter 21: Resolver Comparison](21-doc-resolver-comparison.md).
+[Chapter 22: Resolver Comparison](22-doc-resolver-comparison.md).
 
 
 ## A brief history
@@ -950,5 +950,5 @@ Gentoo tree.
   pipeline stages fit together
 - [Chapter 8: The Prover](08-doc-prover.md) — the inductive proof engine in
   detail
-- [Chapter 21: Resolver Comparison](21-doc-resolver-comparison.md) — deep dive
+- [Chapter 22: Resolver Comparison](22-doc-resolver-comparison.md) — deep dive
   into how portage-ng compares with Portage, Paludis, and pkgcore

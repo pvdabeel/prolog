@@ -183,7 +183,7 @@ Options: `repo(Atom)` (default `portage`), `limit(N)` (0 = all),
 
 - [Chapter 2: Installation and Quick Start](02-doc-installation.md) — `make test`
   commands
-- [Chapter 24: Performance and Profiling](24-doc-performance.md) —
+- [Chapter 25: Performance and Profiling](25-doc-performance.md) —
   `prover:test_stats` for bulk testing
-- [Chapter 25: Contributing](25-doc-contributing.md) — development workflow
+- [Chapter 26: Contributing](26-doc-contributing.md) — development workflow
   with regression testing

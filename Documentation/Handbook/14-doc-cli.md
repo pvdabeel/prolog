@@ -169,7 +169,7 @@ Targets can be specified in several formats:
 | `cat/pkg` | `sys-apps/portage` | Resolve latest version |
 | `=cat/pkg-ver` | `=sys-apps/portage-3.0.77` | Exact version |
 | `>=cat/pkg-ver` | `>=dev-lang/python-3.10` | Version constraint |
-| `@set` | `@world` | Package set |
+| `@set` | `@world`, `@security` | Package set (file-backed, profile, or computed) |
 | `pkg` | `portage` | Ambiguous name (searched across categories) |
 
 
@@ -326,3 +326,5 @@ shell would expand `*` (e.g. `--search 'name:=*vim*'`).
   examples
 - [Chapter 13: Output and Visualization](13-doc-output.md) — what the output
   looks like
+- [Chapter 19: Gentoo Linux Security Advisories (GLSA)](19-doc-glsa.md) —
+  `@security` and related computed sets

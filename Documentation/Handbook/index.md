@@ -29,20 +29,21 @@ software configuration, applied to Gentoo Linux.
 16. [Semantic Search and LLM Integration](16-doc-llm.md)
 17. [Distributed Proving](17-doc-distributed.md)
 18. [Upstream and Bug Tracking](18-doc-upstream-bugs.md)
+19. [Gentoo Linux Security Advisories (GLSA)](19-doc-glsa.md)
 
 ## Part IV — Foundations
 
-19. [Contextual Logic Programming](19-doc-contextual-logic-programming.md)
-20. [Context Terms and Feature Unification](20-doc-context-terms.md)
-21. [Resolver Comparison](21-doc-resolver-comparison.md)
-22. [Dependency Ordering](22-doc-dependency-ordering.md)
+20. [Contextual Logic Programming](20-doc-contextual-logic-programming.md)
+21. [Context Terms and Feature Unification](21-doc-context-terms.md)
+22. [Resolver Comparison](22-doc-resolver-comparison.md)
+23. [Dependency Ordering](23-doc-dependency-ordering.md)
 
 ## Part V — Development
 
-23. [Testing and Regression](23-doc-testing.md)
-24. [Performance and Profiling](24-doc-performance.md)
-25. [Contributing](25-doc-contributing.md)
+24. [Testing and Regression](24-doc-testing.md)
+25. [Performance and Profiling](25-doc-performance.md)
+26. [Contributing](26-doc-contributing.md)
 
 ## Closing
 
-26. [Closing Thoughts](26-doc-closing.md)
+27. [Closing Thoughts](27-doc-closing.md)

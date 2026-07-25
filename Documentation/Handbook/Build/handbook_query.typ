@@ -1003,7 +1003,7 @@ different approach to the same problem:
   )
 
 For a detailed comparison of the reasoning models, see
-#link("21-doc-resolver-comparison.md")[Chapter 21: Resolver Comparison].
+#link("22-doc-resolver-comparison.md")[Chapter 21: Resolver Comparison].
 
 == A brief history
 <a-brief-history>
@@ -1047,7 +1047,7 @@ Gentoo tree.
   how the six pipeline stages fit together
 - #link("08-doc-prover.md")[Chapter 8: The Prover] --- the inductive
   proof engine in detail
-- #link("21-doc-resolver-comparison.md")[Chapter 21: Resolver Comparison]
+- #link("22-doc-resolver-comparison.md")[Chapter 21: Resolver Comparison]
   --- deep dive into how portage-ng compares with Portage, Paludis, and
   pkgcore
 
@@ -1350,7 +1350,7 @@ make test            # PLUnit tests
 make test-overlay    # Overlay regression tests (80 scenarios)
 ```
 
-See #link("23-doc-testing.md")[Chapter 23: Testing and Regression] for
+See #link("24-doc-testing.md")[Chapter 23: Testing and Regression] for
 details.
 
 == Further reading
@@ -2777,7 +2777,7 @@ the installation of `sys-apps/portage` (`after`)."
 The context list is #strong[not] an unstructured bag of annotations. It
 is the proof-side counterpart of #strong[feature terms] in the sense
 used by Zeller-style feature logic (see
-#link("20-doc-context-terms.md")[Chapter 20: Context Terms]): a
+#link("21-doc-context-terms.md")[Chapter 20: Context Terms]): a
 structured collection of features that can be #strong[merged] when two
 dependency paths describe the same package under different conditions.
 When two paths reach the same literal with different USE requirements or
@@ -2940,7 +2940,7 @@ sort.
 
 Contexts are merged at join points via feature term unification, which
 uses Zeller-inspired feature unification. See
-#link("20-doc-context-terms.md")[Chapter 20: Context Terms] for full
+#link("21-doc-context-terms.md")[Chapter 20: Context Terms] for full
 details.
 
 == Canonical decomposition
@@ -3058,7 +3058,7 @@ Tracing `target('sys-apps/portage'):run?{[]}` through the pipeline:
   uses these literals
 - #link("11-doc-rules.md")[Chapter 11: Rules and Domain Logic] --- how
   rules produce literals
-- #link("20-doc-context-terms.md")[Chapter 20: Context Terms] --- deep
+- #link("21-doc-context-terms.md")[Chapter 20: Context Terms] --- deep
   dive into context semantics and feature unification
 
 = Knowledge Base and Cache
@@ -3204,7 +3204,7 @@ matches Gentoo's standard policy, while still falling back to older
 versions when constraints demand it.
 
 See
-#link("21-doc-resolver-comparison.md")[Chapter 21: Resolver Comparison]
+#link("22-doc-resolver-comparison.md")[Chapter 21: Resolver Comparison]
 for more on Vermeir's ordered logic and its role alongside Zeller's
 feature logic and CDCL-style conflict learning.
 
@@ -3757,7 +3757,7 @@ The EAPI grammar handles all PMS 9 / EAPI 9 constructs:
   --- how parsed data is stored
 - #link("11-doc-rules.md")[Chapter 11: Rules and Domain Logic] --- how
   dependency terms are consumed during proof construction
-- #link("22-doc-dependency-ordering.md")[Chapter 22: Dependency Ordering]
+- #link("23-doc-dependency-ordering.md")[Chapter 22: Dependency Ordering]
   --- PMS dependency type semantics
 
 = The Prover
@@ -4852,7 +4852,7 @@ carry more information per constraint.
   domain operations used by constraint learning
 - #link("11-doc-rules.md")[Chapter 11: Rules and Domain Logic] --- entry
   rules, fallback chains, and REQUIRED\_USE handling
-- #link("21-doc-resolver-comparison.md")[Chapter 21: Resolver Comparison]
+- #link("22-doc-resolver-comparison.md")[Chapter 21: Resolver Comparison]
   --- Zeller, Vermeir, and CDCL foundations
 
 = Version Domains
@@ -5106,7 +5106,7 @@ producing a different domain constraint:
   --- how domains interact with the reprove mechanism
 - #link("11-doc-rules.md")[Chapter 11: Rules and Domain Logic] --- how
   version domains feed into candidate selection
-- #link("21-doc-resolver-comparison.md")[Chapter 21: Resolver Comparison]
+- #link("22-doc-resolver-comparison.md")[Chapter 21: Resolver Comparison]
   --- Zeller's feature logic and CDCL connections
 
 = Rules and Domain Logic
@@ -5551,7 +5551,7 @@ Roughly:
 
 For the exact mapping from PMS ordering to internal edges and
 constraints, see
-#link("22-doc-dependency-ordering.md")[Chapter 22: Dependency Ordering].
+#link("23-doc-dependency-ordering.md")[Chapter 22: Dependency Ordering].
 The implementation detail lives in the rules and `featureterm` helpers:
 `after/1` propagates as a real dependency relation, while `after_only/1`
 can be lowered to ordering constraints (for example
@@ -5697,7 +5697,7 @@ builder for execution.
   how the plan is executed
 - #link("15-doc-building.md")[Chapter 15: Output and Visualization] ---
   how the plan is rendered
-- #link("22-doc-dependency-ordering.md")[Chapter 22: Dependency Ordering]
+- #link("23-doc-dependency-ordering.md")[Chapter 22: Dependency Ordering]
   --- PMS ordering semantics
 
 = Building and Execution
@@ -6276,7 +6276,7 @@ generates structured reports for analysis. Reports can include:
   how waves and parallelism are computed
 - #link("14-doc-cli.md")[Chapter 14: Command-Line Interface] ---
   `--graph`, `--verbose`, `--quiet` flags
-- #link("23-doc-testing.md")[Chapter 23: Testing and Regression] --- how
+- #link("24-doc-testing.md")[Chapter 23: Testing and Regression] --- how
   `.merge` files are used for regression testing
 
 = Semantic Search and LLM Integration
@@ -7088,7 +7088,7 @@ propagation across the dependency graph.
 - A. Zeller, #emph[Unified Versioning through Feature Logic], 1997
 - #link("../Source/Logic/context.pl")[`Source/Logic/context.pl`] -- full
   implementation
-- #link("20-doc-context-terms.md")[`Documentation/Handbook/20-doc-context-terms.md`]
+- #link("21-doc-context-terms.md")[`Documentation/Handbook/21-doc-context-terms.md`]
   -- how context terms flow through the prover
 
 = Context Terms in portage-ng
@@ -8153,9 +8153,9 @@ python3 Reports/Scripts/compare-prover-failset.py \
 <further-reading-19>
 - #link("02-doc-installation.md")[Chapter 2: Installation and Quick Start]
   --- `make test` commands
-- #link("24-doc-performance.md")[Chapter 24: Performance and Profiling]
+- #link("25-doc-performance.md")[Chapter 24: Performance and Profiling]
   --- `prover:test_stats` for bulk testing
-- #link("25-doc-contributing.md")[Chapter 25: Contributing] ---
+- #link("26-doc-contributing.md")[Chapter 25: Contributing] ---
   development workflow with regression testing
 
 = Performance and Profiling
@@ -8181,7 +8181,7 @@ This chapter walks those pillars in order, then covers
 #strong[instrumentation] (the sampler), #strong[bulk testing],
 #strong[known bottlenecks], and a #strong[performance testing
 checklist]. For broader testing methodology, see
-#link("23-doc-testing.md")[Chapter 23: Testing and Regression].
+#link("24-doc-testing.md")[Chapter 23: Testing and Regression].
 
 == Pillar 1: Compiled knowledge (qcompiled `.qlf` files)
 <pillar-1-compiled-knowledge-qcompiled-.qlf-files>
@@ -8392,7 +8392,7 @@ When testing changes that may affect performance:
 
 == Further reading
 <further-reading-20>
-- #link("23-doc-testing.md")[Chapter 23: Testing and Regression] --- the
+- #link("24-doc-testing.md")[Chapter 23: Testing and Regression] --- the
   full testing methodology
 - #link("08-doc-prover.md")[Chapter 8: The Prover] --- proof search
   algorithm and reprove mechanism
@@ -8631,9 +8631,9 @@ Do not create ad-hoc compare scripts outside these two locations.
 
 == Further reading
 <further-reading-21>
-- #link("23-doc-testing.md")[Chapter 23: Testing and Regression] ---
+- #link("24-doc-testing.md")[Chapter 23: Testing and Regression] ---
   testing methodology
-- #link("24-doc-performance.md")[Chapter 24: Performance and Profiling]
+- #link("25-doc-performance.md")[Chapter 24: Performance and Profiling]
   --- performance testing
 - #link("02-doc-installation.md")[Chapter 2: Installation and Quick Start]
   --- build and run instructions

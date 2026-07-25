@@ -39,14 +39,18 @@ action:process_action(Action,ArgsSets,Options) :-
           ),
           Proposal),!,
   message:log(['Proposal:  ',Proposal]),
-  (Proposal == []
-   -> ( ignore((config:llm_support(Prompt),
-                atomic_list_concat([Prompt|Args],Message),
-                config:llm_default(Service),
-                explainer:call_llm(Service, Message, _))),
-        ignore(message:failure('No valid targets found.')),
-        action:exit_on_invalid_targets(Options) )
-   ;  true),
+  ( Proposal == [] ->
+      ( action:empty_security_set(ArgsSets) ->
+          ignore(message:inform('No vulnerable packages requiring a GLSA upgrade (@security is empty).'))
+      ; ignore(( config:llm_support(Prompt),
+                 atomic_list_concat([Prompt|Args], Message),
+                 config:llm_default(Service),
+                 explainer:call_llm(Service, Message, _) )),
+        ignore(message:failure('No valid targets found.'))
+      ),
+      action:exit_on_invalid_targets(Options)
+  ; true
+  ),
   (Mode == 'client' ->
     (client:rpc_execute(Host,Port,
      (pipeline:prove_plan_with_fallback(Proposal, ProofAVL, ModelAVL, Plan, Triggers, SCCs, _FallbackUsed),
@@ -154,3 +158,24 @@ action:execute_world_step([Rule|Rest]) :-
   ; true
   ),
   execute_world_step(Rest).
+
+
+%! action:empty_security_set(+ArgsSets) is semidet.
+%
+% True when the original CLI targets were only GLSA security computed
+% sets (so an empty proposal means "system not vulnerable", not a bad
+% atom).
+
+action:empty_security_set(ArgsSets) :-
+  ArgsSets \== [],
+  forall(member(A, ArgsSets), action:is_security_set_arg(A)).
+
+
+%! action:is_security_set_arg(+Arg) is semidet.
+%
+% True for `@security`, `@affected`, `@new-affected`, `@new-glsa`
+% (with or without the `@` prefix).
+
+action:is_security_set_arg(Arg) :-
+  ( atom_concat('@', Name, Arg) -> true ; Name = Arg ),
+  memberchk(Name, [security, affected, 'new-affected', 'new-glsa']).

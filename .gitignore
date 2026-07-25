@@ -7,6 +7,8 @@ Knowledge/kb.qlf
 Knowledge/kb.raw
 Knowledge/profile.qlf
 Knowledge/profile.raw
+Knowledge/glsa.qlf
+Knowledge/glsa.raw
 Knowledge/preference.qlf
 Knowledge/preference.raw
 Knowledge/preference.stamp
@@ -17,6 +19,7 @@ Knowledge/feedback.pl
 Knowledge/feedback.unresolved.pl
 Knowledge/vdbimport.pl
 Source/Knowledge/Sets/**/*.local
+Source/Knowledge/Sets/glsa_injected/**
 Source/Tests/
 __pycache__/
 *.pyc
