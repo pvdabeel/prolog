@@ -171,18 +171,27 @@ scheduler:add_rule_to_head_set_(Rule, In, Out) :-
 
 scheduler:compute_refcount(TriggersAVL, HeadSet, Head, In, Out) :-
   scheduler:effective_trigger_keys(Head, TriggerKeys),
-  findall(DepHead,
-          ( member(TK, TriggerKeys),
-            get_assoc(TK, TriggersAVL, Dependents),
-            member(D0, Dependents),
-            prover:canon_literal(D0, DepHead, _),
-            get_assoc(DepHead, HeadSet, _),
-            DepHead \= Head
-          ),
-          DepHeads0),
-  sort(DepHeads0, UniqueDepHeads),
+  % Assoc-set uniqueness avoids findall + sort over the dependents bag.
+  empty_assoc(U0),
+  foldl(scheduler:refcount_add_key(TriggersAVL, HeadSet, Head),
+        TriggerKeys, U0, Unique),
+  assoc_to_keys(Unique, UniqueDepHeads),
   length(UniqueDepHeads, Count),
   put_assoc(Head, In, Count, Out).
+
+scheduler:refcount_add_key(TriggersAVL, HeadSet, Head, TK, In, Out) :-
+  ( get_assoc(TK, TriggersAVL, Dependents) ->
+      foldl(scheduler:refcount_add_dep(HeadSet, Head), Dependents, In, Out)
+  ; Out = In
+  ).
+
+scheduler:refcount_add_dep(HeadSet, Head, D0, In, Out) :-
+  prover:canon_literal(D0, DepHead, _),
+  DepHead \= Head,
+  get_assoc(DepHead, HeadSet, _),
+  !,
+  put_assoc(DepHead, In, true, Out).
+scheduler:refcount_add_dep(_HeadSet, _Head, _D0, In, In).
 
 % For merge actions (:install/:update/:downgrade/:reinstall), also count
 % triggers on the corresponding :run head, since other packages depend on
