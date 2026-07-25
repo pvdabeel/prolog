@@ -47,6 +47,7 @@ sandbox:safe_primitive(config:load_llm_modules(_)).
 sandbox:safe_primitive(config:llm_metacircular(_)).
 sandbox:safe_primitive(config:llm_metacircular_log_tail(_)).
 sandbox:safe_primitive(config:llm_metacircular_max_actions(_)).
+sandbox:safe_primitive(config:llm_server_calls(_)).
 sandbox:safe_primitive(config:hostname(_)).
 sandbox:safe_primitive(config:installation_dir(_)).
 sandbox:safe_primitive(config:name(_)).
@@ -116,9 +117,12 @@ sandbox:safe_primitive(explanation:assumption_reason_for_grouped_dep(_,_,_,_,_,_
 
 sandbox:safe_primitive(explainer:explain(_,_)).
 sandbox:safe_primitive(explainer:explain(_,_,_)).
-% explainer:call_llm/3 is intentionally NOT safelisted: Pengines clients
-% must not burn server-side LLM API keys or exfiltrate prompts. LLM calls
-% run host-locally (standalone / client / worker process), never via RPC.
+% explainer:call_llm/3 is opt-in via config:llm_server_calls(true).
+% Default false keeps server API keys / prompts off the Pengines path;
+% LLM then runs host-locally (standalone / client). Enable only on a
+% trusted cluster that intentionally shares the server's api_key.pl.
+sandbox:safe_primitive(explainer:call_llm(_,_,_)) :-
+  config:llm_server_calls(true).
 sandbox:safe_primitive(explainer:why_in_proof(_,_,_)).
 
 sandbox:safe_primitive(explainer:why_in_proof(_,_,_,_)).

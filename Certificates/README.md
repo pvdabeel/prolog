@@ -19,26 +19,20 @@ This runs `Certificates/Scripts/generate.sh`, which creates:
 ## HTTP digest password file
 
 `passwordfile` is **not** tracked in git (a previous well-known demo
-password was rotated out). Generate it locally:
+password was rotated out). The plaintext lives in
+`Source/Config/Private/passwords.pl` (copy from the template); the
+hashed server file is derived from that:
 
 ```bash
-DIGEST_PASSWORD='choose-a-strong-secret' make passwordfile
+cp Source/Config/Private/template_passwords.pl \
+   Source/Config/Private/passwords.pl
+# edit config:digest_password/2 to a strong secret
+make passwordfile
 ```
 
-Optional overrides: `DIGEST_USER`, `DIGEST_REALM`, `DIGEST_FILE`
-(see `Certificates/Scripts/digestpassword.sh`).
-
-Mirror the same plaintext on every client/worker in
-`Source/Config/Private/passwords.pl` (copy from
-`template_passwords.pl`):
-
-```prolog
-config:digest_password('portage-ng', 'choose-a-strong-secret').
-config:digest_realm('portage-ng').
-```
-
-The server reads the hashed `Certificates/passwordfile`; clients send
-the plaintext via `config:digest_password/2`. Both must match.
+Copy the same `passwords.pl` to every client/worker. The server reads
+the hashed `Certificates/passwordfile`; clients send the plaintext via
+`config:digest_password/2`.
 
 ## Checking and renewing certificates
 

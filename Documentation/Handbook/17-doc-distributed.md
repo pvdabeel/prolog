@@ -327,14 +327,17 @@ configures the same CA and presents the local client certificate.
 An additional layer of security is provided by **HTTP digest
 authentication** (`passwordfile`), so even a node with a valid
 certificate must also know the correct username and password.
-Generate the file locally (it is not committed):
+Set the plaintext once in `Source/Config/Private/passwords.pl`, then
+derive the hashed server file (it is not committed):
 
 ```bash
-DIGEST_PASSWORD='choose-a-strong-secret' make passwordfile
+cp Source/Config/Private/template_passwords.pl \
+   Source/Config/Private/passwords.pl
+# edit config:digest_password/2
+make passwordfile
 ```
 
-Mirror the same plaintext in `Source/Config/Private/passwords.pl` as
-`config:digest_password/2` on every client and worker.
+Ship the same `passwords.pl` to every client and worker.
 
 ### How certificates are resolved at runtime
 

@@ -117,6 +117,7 @@ LLM integration is entirely optional.  If you do not need `--explain`, `--chat`,
 | `config:llm_default/1` | `claude` | Default LLM service for `--explain` and `--chat`. |
 | `config:llm_model/2` | (per service) | Model version for each LLM provider (ChatGPT, Claude, Gemini, Ollama, etc.). |
 | `config:llm_use_tools/1` | `true` | Whether the LLM may execute Prolog code locally during a conversation. |
+| `config:llm_server_calls/1` | `false` | Allow Pengines clients to call `explainer:call_llm/3` on the server (uses server API keys). |
 
 Most settings have sensible defaults.  For a typical Gentoo system, the main items to configure are `config:gentoo_profile/1`, `config:portage_confdir/1`, and the repository definitions in the machine config file.
 

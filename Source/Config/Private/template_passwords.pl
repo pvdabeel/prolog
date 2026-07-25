@@ -2,10 +2,10 @@
 % Rename this file to passwords.pl and set your passwords for the following below.
 % =================================================================================
 %
-% HTTP digest: set the same plaintext here that you used for
-%   DIGEST_PASSWORD='...' make passwordfile
-% The server reads the hashed Certificates/passwordfile; clients/workers
-% send this plaintext via config:digest_password/2.
+% HTTP digest: set config:digest_password/2 below, then run
+%   make passwordfile
+% to derive Certificates/passwordfile for the server. Clients/workers
+% use this plaintext file directly via config:digest_password/2.
 
 
 %! config:certificate_password(?Key,?Pass)

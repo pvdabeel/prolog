@@ -93,11 +93,10 @@ certs:    ## Generate local CA + per-host client/server TLS certs (for --mode cl
 	  sh $(CERTDIR)/Scripts/generate.sh $(HOST)
 	  @if [ ! -f $(CERTDIR)/passwordfile ]; then \
 	    echo "NOTE: $(CERTDIR)/passwordfile missing."; \
-	    echo "  Generate it with:  DIGEST_PASSWORD='...' make passwordfile"; \
-	    echo "  Then mirror the plaintext in Source/Config/Private/passwords.pl"; \
+	    echo "  Set Source/Config/Private/passwords.pl then: make passwordfile"; \
 	  fi
 
-passwordfile: ## Write Certificates/passwordfile for HTTP digest auth. Requires DIGEST_PASSWORD (see Certificates/README.md).
+passwordfile: ## Derive Certificates/passwordfile from Source/Config/Private/passwords.pl
 	  sh $(CERTDIR)/Scripts/digestpassword.sh
 
 certs-check: ## Check TLS certificate expiry status for all hosts.

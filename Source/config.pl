@@ -1919,6 +1919,19 @@ config:load_llm_modules(true).
 config:llm_metacircular(true).
 
 
+%! config:llm_server_calls(?Bool)
+%
+% When true, Pengines clients may call `explainer:call_llm/3` on the
+% server (sandbox safelist). Default false: LLM stays host-local so
+% authenticated clients cannot burn server API keys or exfiltrate
+% prompts. Enable only on a trusted cluster where the server's
+% `Source/Config/Private/api_key.pl` is intentionally shared.
+
+:- dynamic config:llm_server_calls/1.
+
+config:llm_server_calls(false).
+
+
 %! config:llm_metacircular_log_tail(?Bytes)
 %
 % Maximum bytes of build-log tail included in a metacircular diagnose prompt.

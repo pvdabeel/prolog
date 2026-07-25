@@ -112,16 +112,15 @@ server:server_address(Port, Address) :-
 
 %! server:require_digest_passwordfile(+Pwdfile) is det.
 %
-% Fail clearly when Certificates/passwordfile is missing. Generate with
-% `DIGEST_PASSWORD='...' make passwordfile`.
+% Fail clearly when Certificates/passwordfile is missing. Set
+% Source/Config/Private/passwords.pl then run `make passwordfile`.
 
 server:require_digest_passwordfile(Pwdfile) :-
   ( exists_file(Pwdfile)
   -> true
   ;  message:failure(['Missing HTTP digest password file: ', Pwdfile, '\n',
-                      'Generate it with:\n',
-                      '  DIGEST_PASSWORD=\'...\' make passwordfile\n',
-                      'Then mirror the plaintext in Source/Config/Private/passwords.pl\n',
+                      'Set Source/Config/Private/passwords.pl then:\n',
+                      '  make passwordfile\n',
                       '(see Certificates/README.md).\n'])
   ).
 

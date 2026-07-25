@@ -53,17 +53,15 @@ Security (2026-07 full-codebase audit)
 Critical / High:
 
 - [done] Rotate/remove committed HTTP digest password in Certificates/passwordfile
-  — gitignored; `DIGEST_PASSWORD=... make passwordfile` via
-  Certificates/Scripts/digestpassword.sh; mirror plaintext in Private/passwords.pl
+  — gitignored; `make passwordfile` derives hash from Private/passwords.pl
 
 - [done] ebuild_exec:reactivate_toolchain/2 — process_create argv + Prolog chost parse
   (no sh -c); Major gated by sanitize:safe_path_component
 
 - [done] ebuild_exec:register_ghc_pkg/1 — process_create argv (no sh -c)
 
-- [done] Remove explainer:call_llm/3 from sandbox safelist
-  — LLM is host-local (standalone/client); server RPC returns plans only;
-  client runs --explain/--diagnose with its own api_key.pl (see 16-doc-llm.md)
+- [done] explainer:call_llm/3 Pengines safelist gated by config:llm_server_calls/1
+  (default false = host-local LLM; set true on trusted cluster to share server keys)
 
 - [done] server:start_server bind scope
   — config:server_bind(localhost) default; require passwordfile; widen only on VPN
