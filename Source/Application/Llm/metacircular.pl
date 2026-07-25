@@ -143,8 +143,12 @@ metacircular:assemble_context(Target, Phase, LogPath, Reason,
   explain:format_learned_domains_for_target(Target, LearnedText),
   explain:format_failure_focus(Target, Phase, LogPath, Reason, FailText),
   explain:format_log_tail(LogPath, LogText),
+  ( llmknowledge:topic(learning, LearningText) -> true ; LearningText = '' ),
+  ( llmknowledge:topic(code_map, CodeMapText) -> true ; CodeMapText = '' ),
   atomic_list_concat([
     MetaCap, '\n\n',
+    LearningText, '\n\n',
+    CodeMapText, '\n\n',
     FailText, '\n',
     FallbackText, '\n',
     AssumpText, '\n',
@@ -152,7 +156,9 @@ metacircular:assemble_context(Target, Phase, LogPath, Reason,
     LearnedText, '\n\n',
     PlanCtx, '\n\n',
     LogText, '\n\n',
-    'Respond with exactly one repair_proposal([...]) term (at most 3 actions).'
+    'Respond with exactly one repair_proposal([...]) term (at most 3 actions). ',
+    'If unsure about mechanisms, prefer feedback:record_discovery for missing ',
+    'in-tree providers; use draft_fixup only for recurring log signatures.'
   ], Prompt).
 
 

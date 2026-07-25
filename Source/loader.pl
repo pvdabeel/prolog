@@ -263,6 +263,7 @@ loader:group(llm_modules,
     portage('Source/Application/Llm/gemini.pl'),
     portage('Source/Application/Llm/ollama.pl'),
     portage('Source/Application/Llm/explain.pl'),
+    portage('Source/Application/Llm/knowledge.pl'),
     portage('Source/Application/Llm/metacircular.pl'),
     portage('Source/Application/Llm/semantic.pl')]).
 

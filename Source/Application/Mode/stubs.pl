@@ -102,6 +102,37 @@ semantic:build_index :-
 
 
 % -----------------------------------------------------------------------------
+%  Stubs for LLM knowledge pack (when LLM modules are not loaded).
+% -----------------------------------------------------------------------------
+
+:- dynamic llmknowledge:list_topics/0.
+:- dynamic llmknowledge:print_topic/1.
+:- dynamic llmknowledge:print_handbook/1.
+:- dynamic llmknowledge:print_source/3.
+
+:- if(\+ current_module(llmknowledge)).
+
+:- multifile llmknowledge:list_topics/0.
+:- multifile llmknowledge:print_topic/1.
+:- multifile llmknowledge:print_handbook/1.
+:- multifile llmknowledge:print_source/3.
+
+llmknowledge:list_topics :-
+    print_message(informational, "LLM knowledge module not loaded").
+
+llmknowledge:print_topic(_) :-
+    print_message(informational, "LLM knowledge module not loaded").
+
+llmknowledge:print_handbook(_) :-
+    print_message(informational, "LLM knowledge module not loaded").
+
+llmknowledge:print_source(_, _, _) :-
+    print_message(informational, "LLM knowledge module not loaded").
+
+:- endif.
+
+
+% -----------------------------------------------------------------------------
 %  Stubs for metacircular LLM repair (when LLM modules are not loaded).
 % -----------------------------------------------------------------------------
 

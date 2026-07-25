@@ -126,6 +126,32 @@ Each service maintains its own conversation history, so subsequent
 calls build on previous context.
 
 
+## Grounding: how the LLM learns portage-ng
+
+Ordinary chat injects short `config:llm_capability/2` primers (`context`,
+`architecture`, `chat`, `code`).  Those are not enough to invent APIs
+safely, so the LLM is steered to a **read-only knowledge pack**:
+
+| Predicate | Purpose |
+| :--- | :--- |
+| `llmknowledge:list_topics/0` | Catalogue curated digests |
+| `llmknowledge:print_topic/1` | `architecture`, `proof`, `assumptions`, `learning`, `code_map`, … |
+| `llmknowledge:print_handbook/1` | Bounded Handbook chapter (`prover`, `rules`, `building`, …) |
+| `llmknowledge:print_source/3` | Whitelisted `Source/…` or Handbook excerpt by line range |
+
+Call these from `<call:swi_prolog>` (sandboxed).  Paths outside the
+whitelist and `..` traversal are rejected.  Caps:
+`config:llm_knowledge_max_bytes/1`,
+`config:llm_knowledge_max_source_lines/1`.
+
+Metacircular `--diagnose` additionally injects the `learning` and
+`code_map` digests into its prompt.  A future step can embed Handbook
++ source for vector retrieval; the knowledge pack is the always-on
+path that does not require Ollama.
+
+Module: `Source/Application/Llm/knowledge.pl`.
+
+
 ## Code execution in the sandbox
 
 One of portage-ng's most distinctive LLM features is that an LLM can

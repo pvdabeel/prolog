@@ -146,6 +146,22 @@ sandbox:safe_primitive(metacircular:parse_proposal(_,_)).
 sandbox:safe_primitive(metacircular:valid_action(_)).
 
 % -----------------------------------------------------------------------------
+%  LLM knowledge pack (read-only Handbook / Source excerpts)
+% -----------------------------------------------------------------------------
+
+sandbox:safe_primitive(llmknowledge:topics(_)).
+sandbox:safe_primitive(llmknowledge:topic(_,_)).
+sandbox:safe_primitive(llmknowledge:print_topic(_)).
+sandbox:safe_primitive(llmknowledge:list_topics).
+sandbox:safe_primitive(llmknowledge:handbook(_,_)).
+sandbox:safe_primitive(llmknowledge:print_handbook(_)).
+sandbox:safe_primitive(llmknowledge:handbook_catalogue(_)).
+sandbox:safe_primitive(llmknowledge:source(_,_,_,_)).
+sandbox:safe_primitive(llmknowledge:print_source(_,_,_)).
+sandbox:safe_primitive(config:llm_knowledge_max_bytes(_)).
+sandbox:safe_primitive(config:llm_knowledge_max_source_lines(_)).
+
+% -----------------------------------------------------------------------------
 %  Prover
 % -----------------------------------------------------------------------------
 

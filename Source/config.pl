@@ -1761,6 +1761,22 @@ config:llm_capability(context,Capability) :-
                portage-ng issues. Focus on the dependency metadata and constraints instead.",
   normalize_space(string(Capability),Description).
 
+config:llm_capability(architecture,Capability) :-
+  Description="portage-ng mechanisms (ground yourself before answering code/design
+               questions): pipeline is reader/parser -> prover (Proof/Model/Constraints/
+               Triggers AVLs) -> planner (waves+remainder) -> scheduler (:run SCCs) ->
+               printer -> builder. Domain assumptions are proof key rule(assumed(X));
+               cycle-breaks are assumed(rule(X)). feedback:* learns build-time deps and
+               re-derives plans; prover:learn only narrows version/USE domains. Before
+               inventing APIs or file layouts, use sandboxed Prolog to call
+               llmknowledge:list_topics, llmknowledge:print_topic(Name),
+               llmknowledge:print_handbook(Chapter), or
+               llmknowledge:print_source('Source/...', StartLine, NumLines). Topics
+               include architecture, proof, assumptions, learning, code_map,
+               context_words, howto_inspect. Handbook aliases include architecture,
+               prover, assumptions, rules, planning, building, llm, policy.",
+  normalize_space(string(Capability),Description).
+
 config:llm_capability(chat,Capability) :-
   Description="When formulating a response, you may optionally enclose a message
                (e.g., a question) in <call:chatgpt>, <call:gemini>, <call:ollama>,
@@ -1777,7 +1793,13 @@ config:llm_capability(code,Capability) :-
                you include SWI-Prolog code between them. Write the code as if it
                were loaded from a separate source file, including triggering
                execution of your main function using a :- directive, such as
-               :- main. The temporary module is destroyed after execution.",
+               :- main. The temporary module is destroyed after execution.
+               To inspect portage-ng itself from sandbox, prefer:
+               :- llmknowledge:print_topic(code_map).
+               :- llmknowledge:print_handbook(architecture).
+               :- llmknowledge:print_source('Source/Pipeline/prover.pl', 1, 80).
+               Do not attempt filesystem writes, shell, or feedback:record_*/prover:learn
+               from sandbox.",
   normalize_space(string(Capability),Description).
 
 % Metacircular diagnose prompts only (excluded from ordinary chat via llm:prompt/1).
@@ -1846,6 +1868,20 @@ config:llm_metacircular_log_tail(12000).
 % Cap on actions accepted from a single repair_proposal/1.
 
 config:llm_metacircular_max_actions(3).
+
+
+%! config:llm_knowledge_max_bytes(?Bytes)
+%
+% Cap for llmknowledge:handbook/2 and whole-file reads.
+
+config:llm_knowledge_max_bytes(12000).
+
+
+%! config:llm_knowledge_max_source_lines(?N)
+%
+% Cap for llmknowledge:source/4 line excerpts.
+
+config:llm_knowledge_max_source_lines(120).
 
 
 %! config:llm_support(-Prompt)
