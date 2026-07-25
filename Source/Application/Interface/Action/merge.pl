@@ -40,16 +40,18 @@ action:process_action(Action,ArgsSets,Options) :-
           Proposal),!,
   message:log(['Proposal:  ',Proposal]),
   ( Proposal == [] ->
-      ( action:empty_security_set(ArgsSets) ->
-          ignore(message:inform('No vulnerable packages requiring a GLSA upgrade (@security is empty).'))
+      ( action:empty_computed_set_message(ArgsSets, EmptyMsg) ->
+          ignore(message:inform(EmptyMsg)),
+          % Empty computed sets are success (nothing to do), not a bad atom.
+          ( memberchk(ci(true), Options) -> halt(0) ; true )
       ; ignore(( config:llm_support(Prompt),
                  atomic_list_concat([Prompt|Args], Message),
                  config:llm_default(Service),
                  current_predicate(Service:Service/2),
                  explainer:call_llm(Service, Message, _) )),
-        ignore(message:failure('No valid targets found.'))
-      ),
-      action:exit_on_invalid_targets(Options)
+        ignore(message:failure('No valid targets found.')),
+        action:exit_on_invalid_targets(Options)
+      )
   ; true
   ),
   (Mode == 'client' ->
@@ -166,22 +168,60 @@ action:execute_world_step([Rule|Rest]) :-
   execute_world_step(Rest).
 
 
+%! action:empty_computed_set_message(+ArgsSets, -Message) is semidet.
+%
+% True when the original CLI targets were only computed sets that may
+% legitimately expand to nothing. Binds a user-facing inform message so
+% an empty proposal is reported as an empty set, not a bad atom.
+
+action:empty_computed_set_message(ArgsSets, Message) :-
+  ArgsSets \== [],
+  findall(Name, (member(A, ArgsSets), action:computed_set_arg(A, Name)), Names),
+  Names \== [],
+  length(ArgsSets, NArgs),
+  length(Names, NArgs),
+  action:empty_computed_set_text(Names, Message).
+
+
+%! action:computed_set_arg(+Arg, -Name) is semidet.
+%
+% True when Arg is a `@name` / `name` reference to a known computed set.
+
+action:computed_set_arg(Arg, Name) :-
+  ( atom_concat('@', Name, Arg) -> true ; Name = Arg ),
+  current_predicate(sets:is_computed_set/1),
+  sets:is_computed_set(Name).
+
+
+%! action:empty_computed_set_text(+Names, -Message) is det.
+%
+% Informational text for an empty computed-set expansion.
+
+action:empty_computed_set_text(Names, Message) :-
+  ( Names = [Name] ->
+      ( memberchk(Name, [security, affected, 'new-affected', 'new-glsa']) ->
+          format(atom(Message),
+                 'No vulnerable packages requiring a GLSA upgrade (@~w is empty).',
+                 [Name])
+      ; Name == 'preserved-rebuild' ->
+          Message = 'No packages consume preserved libraries (@preserved-rebuild is empty).'
+      ; Name == 'changed-deps' ->
+          Message = 'No installed packages have outdated runtime dependencies (@changed-deps is empty).'
+      ; format(atom(Message), 'Computed set @~w is empty.', [Name])
+      )
+  ; atomic_list_concat(Names, ', @', Joined),
+    format(atom(Message), 'Computed sets @~w are empty.', [Joined])
+  ).
+
+
 %! action:empty_security_set(+ArgsSets) is semidet.
 %
-% True when the original CLI targets were only GLSA security computed
-% sets (so an empty proposal means "system not vulnerable", not a bad
-% atom).
+% Backward-compatible alias: true when every CLI target is a GLSA
+% security computed set.
 
 action:empty_security_set(ArgsSets) :-
   ArgsSets \== [],
-  forall(member(A, ArgsSets), action:is_security_set_arg(A)).
-
-
-%! action:is_security_set_arg(+Arg) is semidet.
-%
-% True for `@security`, `@affected`, `@new-affected`, `@new-glsa`
-% (with or without the `@` prefix).
-
-action:is_security_set_arg(Arg) :-
-  ( atom_concat('@', Name, Arg) -> true ; Name = Arg ),
-  memberchk(Name, [security, affected, 'new-affected', 'new-glsa']).
+  forall(member(A, ArgsSets),
+         ( action:computed_set_arg(A, Name),
+           memberchk(Name, [security, affected, 'new-affected', 'new-glsa'])
+         )).

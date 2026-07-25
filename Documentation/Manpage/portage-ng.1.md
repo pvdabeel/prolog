@@ -265,7 +265,7 @@ Targets identify which packages to operate on. Several formats are supported:
 | *name* | `vim` | Unqualified package name. Resolves to the best visible version. |
 | *category/name* | `app-editors/vim` | Category-qualified name. |
 | *category/name-version* | `app-editors/vim-9.1.0` | Exact version. |
-| *@set* | `@world` | A package set. Built-in sets include `@world`, `@system`, and computed sets such as `@security` (GLSA NewAffectedSet). |
+| *@set* | `@world` | A package set. Built-in sets include `@world`, `@system`, and computed sets such as `@security` (GLSA NewAffectedSet), `@preserved-rebuild`, and `@changed-deps`. |
 
 ## SEARCH SYNTAX
 

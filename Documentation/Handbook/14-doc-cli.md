@@ -171,7 +171,7 @@ Targets can be specified in several formats:
 | `cat/pkg` | `sys-apps/portage` | Resolve latest version |
 | `=cat/pkg-ver` | `=sys-apps/portage-3.0.77` | Exact version |
 | `>=cat/pkg-ver` | `>=dev-lang/python-3.10` | Version constraint |
-| `@set` | `@world`, `@security` | Package set (file-backed, profile, or computed) |
+| `@set` | `@world`, `@security`, `@changed-deps` | Package set (file-backed, profile, or computed) |
 | `pkg` | `portage` | Ambiguous name (searched across categories) |
 
 

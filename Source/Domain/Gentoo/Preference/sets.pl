@@ -48,6 +48,15 @@ tree:
   - new-affected     alias of security (explicit NewAffectedSet name)
   - new-glsa         remediation atoms from unapplied GLSAs
                      (mirrors NewGlsaSet)
+  - preserved-rebuild
+                     installed packages that consume a library kept only by
+                     FEATURES=preserve-libs (`cat/name:slot` atoms; mirrors
+                     portage.sets.libs.PreservedLibraryConsumerSet)
+  - changed-deps     installed packages whose VDB RDEPEND/PDEPEND no longer
+                     match the same-version tree ebuild after use-reduce and
+                     slot-operator stripping (`=cat/name-version` atoms;
+                     mirrors portage.sets.dbapi.ChangedDepsSet, with libc
+                     inject stripping as in emerge's --changed-deps path)
 
 The expansion entry point is `sets:expand/2`; `eapi:substitute_sets/2`
 recognises the names enumerated by `sets:is_computed_set/1` and replaces an
@@ -55,6 +64,8 @@ recognises the names enumerated by `sets:is_computed_set/1` and replaces an
 */
 
 :- module(sets, []).
+
+:- use_module(library(http/json)).
 
 % =============================================================================
 %  SETS declarations
@@ -79,12 +90,14 @@ sets:is_computed_set(security).
 sets:is_computed_set(affected).
 sets:is_computed_set('new-affected').
 sets:is_computed_set('new-glsa').
+sets:is_computed_set('preserved-rebuild').
+sets:is_computed_set('changed-deps').
 
 
 %! sets:expand(+Name, -Targets) is det.
 %
 % Resolves a computed set name to a sorted list of target atoms
-% (`cat/name:slot` or `=cat/name-version` for security sets).
+% (`cat/name:slot` or `=cat/name-version` for security / changed-deps sets).
 % Yields [] for unknown names.
 
 sets:expand(installed, Targets) :-
@@ -130,6 +143,14 @@ sets:expand('new-affected', Targets) :-
 sets:expand('new-glsa', Targets) :-
   !,
   glsa:security_atoms(new_glsa, Targets).
+
+sets:expand('preserved-rebuild', Targets) :-
+  !,
+  sets:preserved_rebuild_set(Targets).
+
+sets:expand('changed-deps', Targets) :-
+  !,
+  sets:changed_deps_set(Targets).
 
 sets:expand(_, []).
 
@@ -368,6 +389,360 @@ sets:unavailable_binaries_set(Targets) :-
           ),
           Targets0),
   sort(Targets0, Targets).
+
+
+% -----------------------------------------------------------------------------
+%  preserved-rebuild set
+% -----------------------------------------------------------------------------
+
+%! sets:preserved_rebuild_set(-Targets) is det.
+%
+% Installed packages that consume a library retained only by
+% FEATURES=preserve-libs, as sorted `cat/name:slot` atoms.  Reads Portage's
+% `preserved_libs_registry` JSON (see `config:preserved_libs_registry/1`) and
+% matches consumers via VDB `NEEDED.ELF.2` soname fields.  Yields [] when the
+% registry is missing or empty (preserve-libs inactive / nothing preserved).
+
+sets:preserved_rebuild_set(Targets) :-
+  ( sets:preserved_lib_paths(Paths),
+    Paths \== []
+  -> findall(Soname, (member(Path, Paths), sets:path_sonames(Path, Sonames), member(Soname, Sonames)), Sonames0),
+     sort(Sonames0, Sonames),
+     findall(OwnerAtom, (member(Path, Paths), sets:path_owner_atom(Path, OwnerAtom)), OwnerAtoms0),
+     sort(OwnerAtoms0, OwnerAtoms),
+     findall(Atom,
+             ( knowledgebase:vdb_repository(VdbRepo),
+               query:search([category(C), name(N)], VdbRepo://Entry),
+               findall(Tok, query:search(needed_elf2(Tok), VdbRepo://Entry), Needed),
+               Needed \== [],
+               sets:needed_mentions_soname(Needed, Sonames),
+               sets:slot_atom(VdbRepo://Entry, C, N, Atom),
+               \+ memberchk(Atom, OwnerAtoms)
+             ),
+             Targets0),
+     sort(Targets0, Targets)
+  ; Targets = []
+  ).
+
+
+%! sets:preserved_lib_paths(-Paths) is det.
+%
+% Sorted absolute paths of libraries listed in the preserve-libs registry.
+
+sets:preserved_lib_paths(Paths) :-
+  ( sets:read_preserved_libs_registry(Dict) ->
+      findall(Path,
+              ( get_dict(_Key, Dict, Value),
+                sets:registry_entry_paths(Value, EntryPaths),
+                member(Path, EntryPaths)
+              ),
+              Paths0),
+      sort(Paths0, Paths)
+  ; Paths = []
+  ).
+
+
+%! sets:read_preserved_libs_registry(-Dict) is semidet.
+%
+% Loads the Portage preserved_libs_registry JSON object. Fails when the file
+% is missing, empty, or unreadable.
+
+sets:read_preserved_libs_registry(Dict) :-
+  current_predicate(config:preserved_libs_registry/1),
+  config:preserved_libs_registry(File),
+  exists_file(File),
+  catch(
+    setup_call_cleanup(
+      open(File, read, In, [encoding(utf8)]),
+      json_read_dict(In, Dict, [default_tag(json)]),
+      close(In)
+    ),
+    _,
+    fail
+  ),
+  is_dict(Dict).
+
+
+%! sets:registry_entry_paths(+Value, -Paths) is det.
+%
+% Extracts the path list from a registry value. Portage stores
+% `[Cpv, Counter, Paths]` (JSON array); tolerate a bare path list.
+
+sets:registry_entry_paths(Value, Paths) :-
+  is_list(Value),
+  Value = [_, _, Paths0],
+  is_list(Paths0),
+  !,
+  Paths = Paths0.
+sets:registry_entry_paths(Value, Paths) :-
+  is_list(Value),
+  !,
+  Paths = Value.
+sets:registry_entry_paths(_, []).
+
+
+%! sets:path_sonames(+Path, -Sonames) is det.
+%
+% Candidate sonames derived from a preserved library path: the basename and
+% successive `.N` truncations down to the `.so` stem (best-effort stand-in for
+% Portage LinkageMap ELF soname lookup).
+
+sets:path_sonames(Path, Sonames) :-
+  file_base_name(Path, Base),
+  sets:soname_truncations(Base, Sonames0),
+  sort(Sonames0, Sonames).
+
+
+%! sets:soname_truncations(+Name, -Names) is det.
+%
+% `[libfoo.so.1.2.3, libfoo.so.1.2, libfoo.so.1, libfoo.so]` style chain.
+% Strips a trailing `.` + digits component repeatedly (from the right).
+
+sets:soname_truncations(Name, [Name|Rest]) :-
+  ( atomic_list_concat(Parts, '.', Name),
+    Parts = [_, _|_],
+    append(StemParts, [Last], Parts),
+    StemParts \== [],
+    atom_codes(Last, Codes),
+    Codes \== [],
+    maplist(between(0'0, 0'9), Codes)
+  -> atomic_list_concat(StemParts, '.', Stem),
+     sets:soname_truncations(Stem, Rest)
+  ;  Rest = []
+  ).
+
+
+%! sets:needed_mentions_soname(+NeededTokens, +Sonames) is semidet.
+%
+% True when any NEEDED.ELF.2 token lists one of Sonames in its needed field.
+
+sets:needed_mentions_soname(NeededTokens, Sonames) :-
+  member(Tok, NeededTokens),
+  sets:needed_token_libs(Tok, Libs),
+  member(Lib, Libs),
+  memberchk(Lib, Sonames),
+  !.
+
+
+%! sets:needed_token_libs(+Token, -Libs) is det.
+%
+% Parses `arch;object;soname;rpath;needed;multilib` and returns the comma-
+% separated needed sonames (empty when the token is malformed).
+
+sets:needed_token_libs(Token, Libs) :-
+  atomic_list_concat(Fields, ';', Token),
+  ( nth1(5, Fields, NeededField),
+    NeededField \== ''
+  -> atomic_list_concat(Libs0, ',', NeededField),
+     exclude(=( ''), Libs0, Libs)
+  ;  Libs = []
+  ).
+
+
+%! sets:path_owner_atom(+Path, -Atom) is nondet.
+%
+% Yields `cat/name:slot` atoms for installed packages that own Path.
+
+sets:path_owner_atom(Path, Atom) :-
+  vdb:find_owner(Path, Owners),
+  member(Entry-_OwnedPath, Owners),
+  knowledgebase:vdb_repository(VdbRepo),
+  query:search([category(C), name(N)], VdbRepo://Entry),
+  sets:slot_atom(VdbRepo://Entry, C, N, Atom).
+
+
+% -----------------------------------------------------------------------------
+%  changed-deps set
+% -----------------------------------------------------------------------------
+
+%! sets:changed_deps_set(-Targets) is det.
+%
+% Installed packages whose on-disk VDB RDEPEND/PDEPEND differ from the
+% same-version tree ebuild after use-reduce (installed USE), slot-operator
+% stripping (`:=`), and libc-inject stripping, as sorted `=cat/name-version`
+% atoms.
+
+sets:changed_deps_set(Targets) :-
+  findall(Atom,
+          ( knowledgebase:vdb_repository(VdbRepo),
+            cache:ordered_entry(VdbRepo, Entry, C, N, Ver),
+            Ver \== version_none,
+            sets:tree_same_version(C, N, Ver, TreeRepo, TreeEntry),
+            sets:entry_deps_outdated(VdbRepo://Entry, TreeRepo://TreeEntry),
+            atom_concat('=', Entry, Atom)
+          ),
+          Targets0),
+  sort(Targets0, Targets).
+
+
+%! sets:entry_deps_outdated(+VdbEntry) is semidet.
+%
+% True when the installed entry has a same-version tree ebuild and the
+% runtime dependency sets diverge. Used by `@changed-deps` and `--changed-deps`.
+
+sets:entry_deps_outdated(VdbRepo://Entry) :-
+  query:search([category(C), name(N), version(Ver)], VdbRepo://Entry),
+  Ver \== version_none,
+  sets:tree_same_version(C, N, Ver, TreeRepo, TreeEntry),
+  sets:entry_deps_outdated(VdbRepo://Entry, TreeRepo://TreeEntry).
+
+
+%! sets:entry_deps_outdated(+VdbEntry, +TreeEntry) is semidet.
+%
+% Compares use-reduced RDEPEND+PDEPEND of an installed entry against the
+% matching tree ebuild.
+
+sets:entry_deps_outdated(VdbRepo://Entry, TreeRepo://TreeEntry) :-
+  findall(U, query:search(use(U), VdbRepo://Entry), Use),
+  sets:vdb_runtime_deps(Entry, VdbDeps0),
+  sets:use_reduce_deps(VdbDeps0, Use, VdbDeps1),
+  sets:canonicalize_deps(VdbDeps1, VdbDeps),
+  findall(D, cache:entry_metadata(TreeRepo, TreeEntry, rdepend, D), TreeRd),
+  findall(D, cache:entry_metadata(TreeRepo, TreeEntry, pdepend, D), TreePd),
+  append(TreeRd, TreePd, TreeDeps0),
+  sets:use_reduce_deps(TreeDeps0, Use, TreeDeps1),
+  sets:canonicalize_deps(TreeDeps1, TreeDeps),
+  VdbDeps \== TreeDeps.
+
+
+%! sets:tree_same_version(+C, +N, +Ver, -TreeRepo, -TreeEntry) is semidet.
+%
+% Finds a non-VDB tree/overlay entry with the exact installed version.
+
+sets:tree_same_version(C, N, Ver, TreeRepo, TreeEntry) :-
+  cache:ordered_entry(TreeRepo, TreeEntry, C, N, Ver),
+  \+ knowledgebase:is_vdb_repository(TreeRepo),
+  !.
+
+
+%! sets:vdb_runtime_deps(+Entry, -Deps) is det.
+%
+% Parses on-disk VDB RDEPEND and PDEPEND (not loaded into kb cache) via the
+% EAPI rdepend grammar.
+
+sets:vdb_runtime_deps(Entry, Deps) :-
+  ( vdb:read_metadata_file(Entry, 'RDEPEND', RdStr) -> true ; RdStr = '' ),
+  ( vdb:read_metadata_file(Entry, 'PDEPEND', PdStr) -> true ; PdStr = '' ),
+  sets:parse_rdepend_string(RdStr, Rd),
+  sets:parse_rdepend_string(PdStr, Pd),
+  append(Rd, Pd, Deps).
+
+
+%! sets:parse_rdepend_string(+StringOrAtom, -Deps) is det.
+%
+% Parses a DEPEND-family string into a list of EAPI dependency terms.
+% Empty / unparseable input yields [].
+
+sets:parse_rdepend_string('', []) :- !.
+sets:parse_rdepend_string(Str, Deps) :-
+  ( atom(Str) -> atom_codes(Str, Codes)
+  ; string(Str) -> string_codes(Str, Codes)
+  ; Codes = []
+  ),
+  ( Codes == [] -> Deps = []
+  ; catch(phrase(eapi:rdepend(_://_, Deps), Codes), _, Deps = [])
+  ).
+
+
+%! sets:use_reduce_deps(+Deps, +Use, -Reduced) is det.
+%
+% Evaluates use-conditional groups against the installed USE list and
+% flattens `all_of_group`. Other group constructors are retained (with
+% reduced children) so structure stays comparable to Portage use_reduce.
+
+sets:use_reduce_deps([], _, []) :- !.
+sets:use_reduce_deps([use_conditional_group(positive, U, _, Inner)|T], Use, Out) :-
+  !,
+  ( memberchk(U, Use)
+  -> sets:use_reduce_deps(Inner, Use, R),
+     sets:use_reduce_deps(T, Use, Rest),
+     append(R, Rest, Out)
+  ;  sets:use_reduce_deps(T, Use, Out)
+  ).
+sets:use_reduce_deps([use_conditional_group(negative, U, _, Inner)|T], Use, Out) :-
+  !,
+  ( memberchk(U, Use)
+  -> sets:use_reduce_deps(T, Use, Out)
+  ;  sets:use_reduce_deps(Inner, Use, R),
+     sets:use_reduce_deps(T, Use, Rest),
+     append(R, Rest, Out)
+  ).
+sets:use_reduce_deps([all_of_group(Inner)|T], Use, Out) :-
+  !,
+  sets:use_reduce_deps(Inner, Use, R),
+  sets:use_reduce_deps(T, Use, Rest),
+  append(R, Rest, Out).
+sets:use_reduce_deps([any_of_group(Inner)|T], Use, [any_of_group(R)|Rest]) :-
+  !,
+  sets:use_reduce_deps(Inner, Use, R),
+  sets:use_reduce_deps(T, Use, Rest).
+sets:use_reduce_deps([exactly_one_of_group(Inner)|T], Use, [exactly_one_of_group(R)|Rest]) :-
+  !,
+  sets:use_reduce_deps(Inner, Use, R),
+  sets:use_reduce_deps(T, Use, Rest).
+sets:use_reduce_deps([at_most_one_of_group(Inner)|T], Use, [at_most_one_of_group(R)|Rest]) :-
+  !,
+  sets:use_reduce_deps(Inner, Use, R),
+  sets:use_reduce_deps(T, Use, Rest).
+sets:use_reduce_deps([H|T], Use, Out) :-
+  ( sets:is_libc_dep(H)
+  -> sets:use_reduce_deps(T, Use, Out)
+  ;  sets:use_reduce_deps(T, Use, Rest),
+     Out = [H|Rest]
+  ).
+
+
+%! sets:is_libc_dep(+Dep) is semidet.
+%
+% True for package deps on known libc providers. Mirrors emerge's
+% `strip_libc_deps` so VDB libc injects do not flood `@changed-deps`.
+
+sets:is_libc_dep(package_dependency(_, _, C, N, _, _, _, _)) :-
+  sets:libc_package(C, N).
+
+
+%! sets:libc_package(?Category, ?Name) is nondet.
+%
+% Known libc provider C/N pairs stripped during changed-deps comparison.
+
+sets:libc_package('sys-libs', glibc).
+sets:libc_package('sys-libs', musl).
+sets:libc_package('sys-libs', uclibc).
+sets:libc_package('sys-libs', 'uclibc-ng').
+
+
+%! sets:canonicalize_deps(+Deps, -Canon) is det.
+%
+% Sorts a dependency list after stripping `:=` slot/subslot pins and ignoring
+% USE-dep / phase noise on package atoms (Portage `strip_slots` plus a stable
+% comparison key).
+
+sets:canonicalize_deps(Deps, Canon) :-
+  maplist(sets:canonicalize_dep, Deps, Canon0),
+  sort(Canon0, Canon).
+
+
+%! sets:canonicalize_dep(+Dep, -Canon) is det.
+%
+% Per-node canonical form for changed-deps comparison.
+
+sets:canonicalize_dep(package_dependency(_Ph, B, C, N, O, V, S, _U),
+                      dep(B, C, N, O, V, S2)) :-
+  !,
+  ( ( memberchk(equal, S) ; memberchk(any_same_slot, S) )
+  -> S2 = equal
+  ;  S2 = S
+  ).
+sets:canonicalize_dep(any_of_group(D), any_of_group(C)) :-
+  !,
+  sets:canonicalize_deps(D, C).
+sets:canonicalize_dep(exactly_one_of_group(D), exactly_one_of_group(C)) :-
+  !,
+  sets:canonicalize_deps(D, C).
+sets:canonicalize_dep(at_most_one_of_group(D), at_most_one_of_group(C)) :-
+  !,
+  sets:canonicalize_deps(D, C).
+sets:canonicalize_dep(D, D).
 
 
 % -----------------------------------------------------------------------------

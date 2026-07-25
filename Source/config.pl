@@ -323,6 +323,35 @@ config:glsa_injected_file(File) :-
   os:compose_path([Dir, 'Source/Knowledge/Sets/glsa_injected', Hostname], File).
 
 
+%! config:preserved_libs_registry_override(?File)
+%
+% Optional host-specific override for the preserve-libs registry path.
+% Declare in Source/Config/<host>.local.pl when the default derivation
+% (from `config:pkg_directory/1`) does not apply.
+
+:- multifile config:preserved_libs_registry_override/1.
+:- dynamic config:preserved_libs_registry_override/1.
+
+
+%! config:preserved_libs_registry(?File)
+%
+% Path of Portage's `preserved_libs_registry` JSON (FEATURES=preserve-libs).
+% Used by the `@preserved-rebuild` computed set. Prefers
+% `config:preserved_libs_registry_override/1` when declared; otherwise
+% derives from `config:pkg_directory/1` by mapping `.../db/pkg` →
+% `.../lib/portage/preserved_libs_registry` (standard Gentoo layout).
+
+config:preserved_libs_registry(File) :-
+  config:preserved_libs_registry_override(File),
+  !.
+
+config:preserved_libs_registry(File) :-
+  current_predicate(config:pkg_directory/1),
+  config:pkg_directory(PkgDir),
+  atom_concat(Prefix, '/db/pkg', PkgDir),
+  atom_concat(Prefix, '/lib/portage/preserved_libs_registry', File).
+
+
 % -----------------------------------------------------------------------------
 %  Snapshots
 % -----------------------------------------------------------------------------

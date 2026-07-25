@@ -659,6 +659,10 @@ candidate:grouped_dep_keep_installed(Action, C, N, PackageDeps1, Context) :-
       \+ use:changeduse_mismatch(VdbRepo://InstalledEntry)
   ; true
   ),
+  ( preference:flag(changeddeps) ->
+      \+ sets:entry_deps_outdated(VdbRepo://InstalledEntry)
+  ; true
+  ),
   \+ target:rebuild_if_newer_available(VdbRepo://InstalledEntry),
   \+ target:is_excluded_cn(C, N),
   !.
@@ -1068,6 +1072,13 @@ candidate:grouped_dep_update_reason(_C, _N, FoundRepo://Candidate,
   use:changeduse_mismatch(VdbRepo://InstalledEntry2, FoundRepo://Candidate),
   !,
   feature_unification:unify([replaces(VdbRepo://InstalledEntry2),rebuild_reason(changeduse)], NewerContext, UpdateCtx).
+candidate:grouped_dep_update_reason(_C, _N, _FoundRepo://_Candidate,
+                                    VdbRepo://InstalledEntry2, NewerContext,
+                                    update, UpdateCtx) :-
+  preference:flag(changeddeps),
+  sets:entry_deps_outdated(VdbRepo://InstalledEntry2),
+  !,
+  feature_unification:unify([replaces(VdbRepo://InstalledEntry2),rebuild_reason(changeddeps)], NewerContext, UpdateCtx).
 candidate:grouped_dep_update_reason(_C, _N, _FoundRepo://_Candidate,
                                     VdbRepo://InstalledEntry2, NewerContext,
                                     update, UpdateCtx) :-

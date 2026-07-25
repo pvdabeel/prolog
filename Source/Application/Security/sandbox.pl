@@ -342,6 +342,10 @@ sandbox:safe_primitive(glsa:is_vulnerable(_)).
 sandbox:safe_primitive(glsa:security_atoms(_,_)).
 sandbox:safe_primitive(glsa:entry_covered(_,_)).
 sandbox:safe_primitive(glsa:ensure_loaded).
+sandbox:safe_primitive(sets:expand(_,_)).
+sandbox:safe_primitive(sets:is_computed_set(_)).
+sandbox:safe_primitive(sets:entry_deps_outdated(_)).
+sandbox:safe_primitive(config:preserved_libs_registry(_)).
 
 % -----------------------------------------------------------------------------
 %  Server job queue (worker RPC protocol)
