@@ -1822,6 +1822,59 @@ test(optenable_skips_globally_masked_flag,
 :- end_tests(rules_use_mask_beats_soft).
 
 
+% Global use.mask beats global use.force when both apply (Gentoo
+% arch/base big-endian: "Forced and masked by default"). Force-before-
+% mask incorrectly enabled the flag and broke strict binpkg USE match
+% for ghc (#113).
+:- begin_tests(rules_use_mask_beats_force).
+
+umf_entry(qtest://'dev-lang/ghc-0').
+umf_ver(version([0],'',4,0,[],0,'0')).
+
+umf_setup :-
+  umf_entry(R://Id),
+  umf_ver(V),
+  retractall(cache:ordered_entry(qtest, Id, _, _, _)),
+  retractall(memo:eff_use_cache_(qtest, Id, _, _)),
+  retractall(memo:iuse_default_cache_(qtest, Id, _)),
+  retractall(preference:local_profile_masked_use_flag('big-endian')),
+  retractall(preference:local_profile_forced_use_flag('big-endian')),
+  assertz(cache:ordered_entry(R, Id, 'dev-lang', ghc, V)),
+  assertz(preference:local_profile_masked_use_flag('big-endian')),
+  assertz(preference:local_profile_forced_use_flag('big-endian')),
+  empty_assoc(Empty),
+  put_assoc('big-endian', Empty, negative, Map),
+  assertz(memo:iuse_default_cache_(R, Id, Map)).
+
+umf_cleanup :-
+  umf_entry(_://Id),
+  retractall(cache:ordered_entry(qtest, Id, _, _, _)),
+  retractall(memo:eff_use_cache_(qtest, Id, _, _)),
+  retractall(memo:iuse_default_cache_(qtest, Id, _)),
+  retractall(preference:local_profile_masked_use_flag('big-endian')),
+  retractall(preference:local_profile_forced_use_flag('big-endian')).
+
+test(effective_use_masked_despite_global_force,
+     [setup(umf_setup), cleanup(umf_cleanup),
+      true(Pol == negative)]) :-
+  umf_entry(E),
+  use:effective_use_for_entry(E, 'big-endian', Pol).
+
+test(candidate_raw_excludes_forced_and_masked,
+     [setup(umf_setup), cleanup(umf_cleanup)]) :-
+  umf_entry(E),
+  \+ use:candidate_effective_use_enabled_raw(E, 'big-endian').
+
+test(categorize_use_mask_beats_force,
+     [setup(umf_setup), cleanup(umf_cleanup),
+      true(State == negative),
+      true(Reason == profile_use_mask)]) :-
+  umf_entry(E),
+  eapi:categorize_use_for_entry('big-endian', E, State, Reason).
+
+:- end_tests(rules_use_mask_beats_force).
+
+
 % ||-branch ranking prefers the arm that admits the newest tree version
 % (portage-ng#112 — cabal's text 1.2 vs 2.x OR).
 :- begin_tests(ranking_any_of_version_branch).

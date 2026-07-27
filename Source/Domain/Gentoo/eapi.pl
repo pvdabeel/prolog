@@ -2181,13 +2181,14 @@ eapi:categorize_use_for_entry(RawIuse, Repo://Id, State, Reason) :-
        ) ->
       State = State0,
       Reason = Reason0
-  ; % Global use.force / use.mask beat soft package.use.
-    preference:profile_forced_use_flag(Use) ->
-      State = positive,
-      Reason = profile_use_force
-  ; preference:profile_masked_use_flag(Use) ->
+  ; % Global use.mask / use.force beat soft package.use. Mask wins when
+    % both apply (arch/base big-endian: forced and masked by default).
+    preference:profile_masked_use_flag(Use) ->
       State = negative,
       Reason = profile_use_mask
+  ; preference:profile_forced_use_flag(Use) ->
+      State = positive,
+      Reason = profile_use_force
   ; % User /etc/portage/package.use (soft; overridden by profile mask/force)
     preference:userconfig_use(C, N, Use, State0) ->
       State = State0,

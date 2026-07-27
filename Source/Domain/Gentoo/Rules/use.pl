@@ -102,7 +102,7 @@ use:effective_use_in_context(Context, Use, State) :-
 % of extracting it from a context. Used by use_conditional_group rules
 % for the ebuild that owns the conditional. This is the single
 % implementation of the USE precedence chain (variant override ->
-% package use.mask/force -> global use.force/use.mask -> userconfig
+% package use.mask/force -> global use.mask/use.force -> userconfig
 % per-CN -> userconfig match -> profile soft -> global USE -> IUSE
 % default).
 %
@@ -111,6 +111,11 @@ use:effective_use_in_context(Context, Use, State) :-
 % e.g. abi_x86_32 on non-multilib amd64). Without this, optenable
 % `[abi_x86_32(-)?]` on clang-runtime spuriously forced abi_x86_32 onto
 % compiler-rt and reported use_dep_unsat.
+%
+% When a flag is both globally forced and masked (Gentoo arch/base
+% `big-endian`), use.mask wins — matching profile:profile_finalize/2
+% and Portage. Checking force before mask would enable the flag and
+% break strict binpkg USE matching (#113).
 
 use:effective_use_for_entry(RepoEntry0, Use, State) :-
   RepoEntry0 = Repo://Id,
@@ -124,10 +129,10 @@ use:effective_use_for_entry(RepoEntry0, Use, State) :-
           true
       ; use:profile_hard_use_state(Repo://Id, Use, Eff) ->
           true
-      ; preference:profile_forced_use_flag(Use) ->
-          Eff = positive
       ; preference:profile_masked_use_flag(Use) ->
           Eff = negative
+      ; preference:profile_forced_use_flag(Use) ->
+          Eff = positive
       ; preference:userconfig_use(C, N, Use, positive) ->
           Eff = positive
       ; preference:userconfig_use(C, N, Use, negative) ->
@@ -740,10 +745,11 @@ use:candidate_effective_use_enabled_raw(Repo://Entry, Use) :-
       true
   ; use:profile_hard_use_state(Repo://Entry, Use, negative) ->
       fail
+  ; % Global use.mask beats use.force (arch/base big-endian pattern).
+    preference:profile_masked_use_flag(Use) ->
+      fail
   ; preference:profile_forced_use_flag(Use) ->
       true
-  ; preference:profile_masked_use_flag(Use) ->
-      fail
   ; preference:userconfig_use(C, N, Use, positive) ->
       true
   ; preference:userconfig_use(C, N, Use, negative) ->
