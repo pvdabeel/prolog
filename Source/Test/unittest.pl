@@ -3032,14 +3032,17 @@ test(record_visibility_override_noop_without_selection,
 % and a hand-built PkgHeadMap (grouped RDEPEND aliasing via run_phase-C-N).
 
 % Repair the wave map for a synthetic rule set: builds the effective repair
-% graph, condenses it (Kosaraju) and assigns longest-path waves.
+% graph, condenses it (Kosaraju), assigns longest-path waves and linearizes
+% multi-member SCCs.
 repair_waves(AllRules, Map0, PkgHeadMap, Pd, CfgMap, Map1) :-
   scheduler:build_repair_graph(AllRules, Map0, PkgHeadMap, Pd, CfgMap,
                                Heads, Forward, Reverse),
   scheduler:kosaraju_scc(Heads, Forward, Reverse, SCCs),
   scheduler:repair_comp_map(SCCs, CompMap, CompIds, MembersMap),
   scheduler:comp_edges(Forward, CompMap, CompEdges),
-  scheduler:assign_repair_waves(CompIds, CompEdges, MembersMap, Map0, Map1).
+  scheduler:remainder_head_rule_map(AllRules, HeadRuleMap),
+  scheduler:assign_repair_waves(CompIds, CompEdges, MembersMap, Forward,
+                                HeadRuleMap, Map0, Map1).
 
 test(install_promoted_past_run_rdepend) :-
   BifRun = grouped_package_dependency(no, 'dev-haskell', bifunctors, []):run,
@@ -3075,7 +3078,9 @@ test(configure_deps_alias_edge_from_run_body) :-
 % must not collapse an acyclic downstream chain into a single wave. The
 % earlier fixpoint-sweep repair diverged on the a<->b cycle, hit its
 % iteration cap, and then merged c (BDEPEND consumer) into the same wave
-% as its dependency.
+% as its dependency. Cycle members may now occupy consecutive linearized
+% sub-waves (portage-ng#114); the consumer chain must still start strictly
+% after the later of the two.
 test(cycle_does_not_collapse_downstream_chain) :-
   ARun = portage://'fake/a-1':run,
   BRun = portage://'fake/b-1':run,
@@ -3093,8 +3098,8 @@ test(cycle_does_not_collapse_downstream_chain) :-
   get_assoc(BRun, Map1, WB),
   get_assoc(CInstall, Map1, WC),
   get_assoc(DInstall, Map1, WD),
-  WA =:= WB,
-  WC > WB,
+  CycleEnd is max(WA, WB),
+  WC > CycleEnd,
   WD > WC.
 
 % Regression for portage-ng#83: a provider's soft/hard blocker against the
@@ -3217,6 +3222,51 @@ test(requse_violation_consumer_promoted_after_planned_provider) :-
   get_assoc(portage://'fake/qtbase-1':install, Map1, WProvider),
   get_assoc(portage://'fake/breeze-icons-1':install, Map1, WConsumer),
   WConsumer > WProvider.
+
+% Regression for portage-ng#114: python[tk] RDEPEND/DEPEND on tk, while tk
+% and fontconfig form a proof-level cycle back through python (fontconfig
+% needs python; tk needs fontconfig; python[tk] needs tk). Sharing one
+% repair wave for the whole SCC co-scheduled python:update with tk:install
+% under builder parallelism (_tkinter configure race). Multi-member repair
+% SCCs must linearize concrete members so the consumer lands strictly after
+% tk:install and tk:run.
+test(grouped_dep_pkg_key_install_phase) :-
+  Dep = grouped_package_dependency(no, 'dev-lang', tk, []):install,
+  scheduler:grouped_dep_pkg_key(Dep, Key),
+  Key == install_phase-'dev-lang'-tk.
+
+test(python_tk_cycle_linearizes_consumer_after_provider) :-
+  TkDepI = grouped_package_dependency(no, 'dev-lang', tk, []):install,
+  TkDepR = grouped_package_dependency(no, 'dev-lang', tk, []):run,
+  FcDepI = grouped_package_dependency(no, 'media-libs', fontconfig, []):install,
+  PyDepI = grouped_package_dependency(no, 'dev-lang', python, []):install,
+  PyUpdate = rule(portage://'fake/python-1':update, [TkDepI, TkDepR]),
+  TkInstall = rule(portage://'fake/tk-1':install, [FcDepI]),
+  TkRun = rule(portage://'fake/tk-1':run, [portage://'fake/tk-1':install]),
+  FcUpdate = rule(portage://'fake/fontconfig-1':update, [PyDepI]),
+  % Grouped meta-heads (proof artifacts) close the cycle the way live plans do.
+  GTkI = rule(TkDepI, [portage://'fake/tk-1':install]),
+  GTkR = rule(TkDepR, [portage://'fake/tk-1':run]),
+  GFcI = rule(FcDepI, [portage://'fake/fontconfig-1':update]),
+  GPyI = rule(PyDepI, [portage://'fake/python-1':update]),
+  AllRules = [PyUpdate, TkInstall, TkRun, FcUpdate, GTkI, GTkR, GFcI, GPyI],
+  list_to_assoc([ (portage://'fake/python-1':update)-1,
+                  (portage://'fake/tk-1':install)-1,
+                  (portage://'fake/tk-1':run)-1,
+                  (portage://'fake/fontconfig-1':update)-1,
+                  TkDepI-1, TkDepR-1, FcDepI-1, PyDepI-1 ], Map0),
+  list_to_assoc([ ('install_phase'-'dev-lang'-tk)-(portage://'fake/tk-1':install),
+                  ('run_phase'-'dev-lang'-tk)-(portage://'fake/tk-1':run),
+                  ('install_phase'-'media-libs'-fontconfig)-(portage://'fake/fontconfig-1':update),
+                  ('install_phase'-'dev-lang'-python)-(portage://'fake/python-1':update) ],
+                 PkgHeadMap),
+  empty_assoc(CfgMap),
+  repair_waves(AllRules, Map0, PkgHeadMap, pd(t, t), CfgMap, Map1),
+  get_assoc(portage://'fake/tk-1':install, Map1, WTkI),
+  get_assoc(portage://'fake/tk-1':run, Map1, WTkR),
+  get_assoc(portage://'fake/python-1':update, Map1, WPy),
+  WTkR > WTkI,
+  WPy > WTkR.
 
 :- end_tests(scheduler_install_configure_deps).
 

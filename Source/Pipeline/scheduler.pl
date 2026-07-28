@@ -353,13 +353,15 @@ scheduler:rechunk_by_lengths_(Rules, [N|Ns], [Step|Rest]) :-
 %   - never demotes a rule below its incoming wave, and
 %   - places every rule strictly after all of its cross-SCC dependencies.
 %
-% Members of a genuine dependency cycle (one SCC) share a wave -- a strict
-% order does not exist for them (Portage merge-set semantics). Crucially,
-% rules *downstream* of a cycle still get strictly later waves: an earlier
-% fixpoint-sweep implementation diverged on cycles, hit its iteration cap,
-% and then collapsed acyclic chains (e.g. a BDEPEND provider and its
-% consumer) into a single wave, losing hard build-time ordering
-% (portage-ng#26, cvs-fast-export vs dev-ruby/asciidoctor).
+% Multi-member SCCs are then *linearized* into consecutive sub-waves via
+% the same Portage-like progressive relaxation used for remainder merge
+% sets (`linearize_scc/4`). Sharing one wave for a whole cycle co-schedules
+% hard DEPEND providers with their consumers under builder parallelism
+% (portage-ng#114, python[tk] update beside tk/libX11 install). Rules
+% *downstream* of a cycle still get strictly later waves than the SCC's
+% last linearized sub-wave: an earlier fixpoint-sweep diverged on cycles,
+% hit its iteration cap, and collapsed acyclic chains (e.g. a BDEPEND
+% provider and its consumer) into a single wave (portage-ng#26).
 
 %! scheduler:repair_ordering_violations(+PlanIn, +HasOrderAfter, -PlanOut)
 %
@@ -389,8 +391,8 @@ scheduler:repair_ordering_violations(PlanIn, HasOrderAfter, PlanOut) :-
 %
 % The full SCC-condensation repair (see section comment above). Builds the
 % PDEPEND anchor/closure maps and the configure-dep map, extracts the
-% effective repair graph, condenses it (Kosaraju) and assigns longest-path
-% waves.
+% effective repair graph, condenses it (Kosaraju), assigns longest-path
+% base waves, and linearizes multi-member SCCs into consecutive sub-waves.
 
 scheduler:repair_ordering_violations_full(AllRules, Map0, PkgHeadMap, PlanOut) :-
   scheduler:build_pdepend_anchor_map(AllRules, AnchorMap),
@@ -405,7 +407,9 @@ scheduler:repair_ordering_violations_full(AllRules, Map0, PkgHeadMap, PlanOut) :
   scheduler:kosaraju_scc(Heads, Forward, Reverse, SCCs),
   scheduler:repair_comp_map(SCCs, CompMap, CompIds, MembersMap),
   scheduler:comp_edges(Forward, CompMap, CompEdges),
-  scheduler:assign_repair_waves(CompIds, CompEdges, MembersMap, Map0, Map1),
+  scheduler:remainder_head_rule_map(AllRules, HeadRuleMap),
+  scheduler:assign_repair_waves(CompIds, CompEdges, MembersMap, Forward,
+                                HeadRuleMap, Map0, Map1),
   scheduler:rebuild_plan_from_map(AllRules, Map1, PlanOut).
 
 
@@ -456,8 +460,8 @@ scheduler:rule_ordering_violation(Rule, Map, PkgHeadMap) :-
 % True when body dep `Dep` of the rule for `Head` (planned at `Wave`)
 % resolves to a different in-plan head whose wave is >= Wave. Checks the
 % same two resolution paths as `repair_dep_head/6`: the canonical dep head
-% in the wave map, and the assumed-dep / grouped-RDEPEND alias against the
-% concrete planned action in PkgHeadMap.
+% in the wave map, and the assumed-dep / grouped install-or-run alias
+% against the concrete planned action in PkgHeadMap.
 
 scheduler:dep_violates_wave(Dep, Head, Wave, Map, _PkgHeadMap) :-
   prover:canon_literal(Dep, DepHead, _),
@@ -523,7 +527,8 @@ scheduler:configure_closure_violation(Repo://Entry:run, RunBody, Map, PkgHeadMap
 %     package concretely. Without this aliasing the parent would be
 %     scheduled in wave 1 alongside the empty-body `rule(assumed(...), [])`
 %     verify rule and run before the concrete install (Qt6 cmake-find
-%     ordering bug).
+%     ordering bug). Grouped `:run` literals are similarly aliased for
+%     configure-closure resolution.
 %
 %  4. Configure closure: install-phase heads additionally depend on their
 %     sibling `:run` rule's `:run`-phase body deps (RDEPEND providers must
@@ -613,60 +618,127 @@ scheduler:repair_comp_map_([Members|Rest], I, M0, M, Mm0, Mm, Ids0, Ids) :-
   scheduler:repair_comp_map_(Rest, I1, M1, M, Mm1, Mm, [I|Ids0], Ids).
 
 
-%! scheduler:assign_repair_waves(+CompIds, +CompEdges, +MembersMap, +InitMap, -MapOut)
+%! scheduler:assign_repair_waves(+CompIds, +CompEdges, +MembersMap, +Forward,
+%!                               +HeadRuleMap, +InitMap, -MapOut)
 %
-% Longest-path wave assignment over the SCC condensation:
+% Longest-path wave assignment over the SCC condensation, with Portage-like
+% linearization of multi-member components:
 %
-%   wave(C) = max(max initial wave of C's members,
-%                 max over dep components C' of wave(C') + 1)
+%   base(C) = max(max initial wave of C's members,
+%                 max over dep components C' of end_wave(C') + 1)
 %
-% Computed by memoized DFS (the condensation is acyclic). All members of a
-% component share its wave; cross-component edges strictly increase waves.
+% Singleton (or single-concrete) components occupy `base(C)`. Multi-concrete
+% SCCs occupy `base(C) .. base(C)+N-1` via `linearize_scc/4` so hard DEPEND
+% edges inside a proof-level cycle still become sequential builder steps
+% (portage-ng#114). Downstream components start after `end_wave(C)`.
 
-scheduler:assign_repair_waves(CompIds, CompEdges, MembersMap, InitMap, MapOut) :-
+scheduler:assign_repair_waves(CompIds, CompEdges, MembersMap, Forward,
+                              HeadRuleMap, InitMap, MapOut) :-
   empty_assoc(A0),
   foldl(scheduler:add_comp_adj, CompEdges, A0, CompAdj),
-  empty_assoc(CW0),
-  foldl(scheduler:assign_comp_members(CompAdj, MembersMap, InitMap),
-        CompIds, s(CW0, InitMap), s(_, MapOut)).
+  empty_assoc(Memo0),
+  foldl(scheduler:assign_repair_comp(CompAdj, MembersMap, Forward, HeadRuleMap, InitMap),
+        CompIds, s(Memo0, InitMap), s(_, MapOut)).
 
 scheduler:add_comp_adj(edge(CU, CV), In, Out) :-
   ( get_assoc(CU, In, L0) -> true ; L0 = [] ),
   put_assoc(CU, In, [CV|L0], Out).
 
-scheduler:assign_comp_members(CompAdj, MembersMap, InitMap, CompId,
-                              s(CW0, HM0), s(CW, HM)) :-
-  scheduler:comp_wave(CompId, CompAdj, MembersMap, InitMap, CW0, CW, Wave),
+scheduler:assign_repair_comp(CompAdj, MembersMap, Forward, HeadRuleMap, InitMap,
+                             CompId, s(Memo0, HM0), s(Memo, HM)) :-
+  scheduler:comp_base_end(CompId, CompAdj, MembersMap, Forward, HeadRuleMap,
+                          InitMap, Memo0, Memo1, Base, _End),
   get_assoc(CompId, MembersMap, Members),
-  foldl(scheduler:put_head_wave(Wave), Members, HM0, HM).
+  scheduler:assign_comp_member_waves(Members, Forward, HeadRuleMap, Base, HM0, HM),
+  Memo = Memo1.
 
 scheduler:put_head_wave(Wave, Head, In, Out) :-
   put_assoc(Head, In, Wave, Out).
 
 
-%! scheduler:comp_wave(+CompId, +CompAdj, +MembersMap, +InitMap, +CWIn, -CWOut, -Wave)
+%! scheduler:comp_base_end(+CompId, +CompAdj, +MembersMap, +Forward, +HeadRuleMap,
+%!                         +InitMap, +MemoIn, -MemoOut, -Base, -End)
 %
-% Memoized longest-path wave of one component.
+% Memoized (Base, End) wave span of one condensation component.
 
-scheduler:comp_wave(CompId, CompAdj, MembersMap, InitMap, CW0, CW, Wave) :-
-  ( get_assoc(CompId, CW0, Cached)
-  -> Wave = Cached,
-     CW = CW0
+scheduler:comp_base_end(CompId, CompAdj, MembersMap, Forward, HeadRuleMap,
+                        InitMap, Memo0, Memo, Base, End) :-
+  ( get_assoc(CompId, Memo0, cached(Base, End))
+  -> Memo = Memo0
   ;  get_assoc(CompId, MembersMap, Members),
-     foldl(scheduler:max_init_wave(InitMap), Members, 1, Base),
+     foldl(scheduler:max_init_wave(InitMap), Members, 1, Base0),
      ( get_assoc(CompId, CompAdj, DepComps) -> true ; DepComps = [] ),
-     foldl(scheduler:comp_wave_dep(CompAdj, MembersMap, InitMap),
-           DepComps, s(CW0, 0), s(CW1, MaxDep)),
-     Wave is max(Base, MaxDep + 1),
-     put_assoc(CompId, CW1, Wave, CW)
+     foldl(scheduler:comp_base_end_dep(CompAdj, MembersMap, Forward, HeadRuleMap, InitMap),
+           DepComps, s(Memo0, 0), s(Memo1, MaxDepEnd)),
+     Base is max(Base0, MaxDepEnd + 1),
+     scheduler:repair_comp_span(Members, Forward, HeadRuleMap, Span),
+     End is Base + Span - 1,
+     put_assoc(CompId, Memo1, cached(Base, End), Memo)
   ).
 
-scheduler:comp_wave_dep(CompAdj, MembersMap, InitMap, DepId, s(CW0, Max0), s(CW, Max)) :-
-  scheduler:comp_wave(DepId, CompAdj, MembersMap, InitMap, CW0, CW, W),
-  ( W > Max0 -> Max = W ; Max = Max0 ).
+scheduler:comp_base_end_dep(CompAdj, MembersMap, Forward, HeadRuleMap, InitMap,
+                            DepId, s(Memo0, Max0), s(Memo, Max)) :-
+  scheduler:comp_base_end(DepId, CompAdj, MembersMap, Forward, HeadRuleMap,
+                          InitMap, Memo0, Memo, _Base, End),
+  ( End > Max0 -> Max = End ; Max = Max0 ).
 
 scheduler:max_init_wave(InitMap, Head, In, Out) :-
   ( get_assoc(Head, InitMap, W), W > In -> Out = W ; Out = In ).
+
+
+%! scheduler:repair_comp_span(+Members, +Forward, +HeadRuleMap, -Span)
+%
+% Number of consecutive waves a component occupies after linearization.
+
+scheduler:repair_comp_span(Members, Forward, HeadRuleMap, Span) :-
+  include(scheduler:is_concrete_plan_head, Members, Conc),
+  ( Conc = [_,_|_]
+  -> scheduler:linearize_scc(Conc, Forward, HeadRuleMap, Waves),
+     length(Waves, Span)
+  ;  Span = 1
+  ).
+
+
+%! scheduler:assign_comp_member_waves(+Members, +Forward, +HeadRuleMap, +Base,
+%!                                   +MapIn, -MapOut)
+%
+% Assigns wave numbers to component members starting at Base. Multi-concrete
+% SCCs are linearized; proof meta-heads (grouped deps, etc.) share Base.
+
+scheduler:assign_comp_member_waves(Members, Forward, HeadRuleMap, Base, HM0, HM) :-
+  include(scheduler:is_concrete_plan_head, Members, Conc),
+  exclude(scheduler:is_concrete_plan_head, Members, Meta),
+  ( Conc = [_,_|_]
+  -> scheduler:linearize_scc(Conc, Forward, HeadRuleMap, Waves),
+     scheduler:apply_linearized_waves(Waves, Base, HM0, HM1),
+     foldl(scheduler:put_head_wave(Base), Meta, HM1, HM)
+  ;  foldl(scheduler:put_head_wave(Base), Members, HM0, HM)
+  ).
+
+
+%! scheduler:apply_linearized_waves(+Waves, +Base, +MapIn, -MapOut)
+%
+% Writes consecutive wave numbers for each linearized batch of rules.
+
+scheduler:apply_linearized_waves([], _Wave, HM, HM).
+scheduler:apply_linearized_waves([Rules|Rest], Wave, HM0, HM) :-
+  foldl(scheduler:put_rule_wave(Wave), Rules, HM0, HM1),
+  Wave1 is Wave + 1,
+  scheduler:apply_linearized_waves(Rest, Wave1, HM1, HM).
+
+scheduler:put_rule_wave(Wave, Rule, In, Out) :-
+  ( prover:rule_head(Rule, Head)
+  -> put_assoc(Head, In, Wave, Out)
+  ;  Out = In
+  ).
+
+
+%! scheduler:is_concrete_plan_head(+Head) is semidet
+%
+% True for builder-executable `Repo://Entry:Action` heads. Grouped
+% dependency literals and other proof meta-heads fail.
+
+scheduler:is_concrete_plan_head(_Repo://_Entry:_Action).
 
 
 % -----------------------------------------------------------------------------
@@ -1097,14 +1169,29 @@ scheduler:assumed_inner_pkg(grouped_package_dependency(C, N, _Deps),     C, N) :
 scheduler:assumed_inner_pkg(package_dependency(_, _, C, N, _, _, _, _), C, N).
 
 
+%! scheduler:grouped_dep_pkg_key(+Dep, -Key)
+%
+% Maps a concrete grouped package-dependency literal to the
+% `(PhaseClass-C-N)` key in `PkgHeadMap`, so both DEPEND (`:install`) and
+% RDEPEND (`:run`) resolve to the planned concrete action when present
+% (portage-ng#114).
+
+scheduler:grouped_dep_pkg_key(grouped_package_dependency(_, C, N, _):Action, PhaseClass-C-N) :-
+  scheduler:phase_class(Action, PhaseClass),
+  !.
+scheduler:grouped_dep_pkg_key(grouped_package_dependency(_, C, N, _):Action?{_}, PhaseClass-C-N) :-
+  scheduler:phase_class(Action, PhaseClass),
+  !.
+
+
 %! scheduler:grouped_run_dep_pkg_key(+Dep, -Key)
 %
-% Maps a concrete grouped RDEPEND literal to the `(run_phase-C-N)` key in
-% `PkgWaveMap`, so configure-closure deps resolve to the provider's merged
-% `:run` wave even when the plan only records concrete ebuild heads.
+% Maps a concrete grouped RDEPEND literal to the `(run_phase-C-N)` key.
+% Retained for callers/tests that specifically mean `:run`; delegates to
+% `grouped_dep_pkg_key/2`.
 
-scheduler:grouped_run_dep_pkg_key(grouped_package_dependency(_, C, N, _):run, run_phase-C-N) :- !.
-scheduler:grouped_run_dep_pkg_key(grouped_package_dependency(_, C, N, _):run?{_}, run_phase-C-N) :- !.
+scheduler:grouped_run_dep_pkg_key(Dep, run_phase-C-N) :-
+  scheduler:grouped_dep_pkg_key(Dep, run_phase-C-N).
 
 
 %! scheduler:rebuild_plan_from_map(+AllRules, +Map, -Plan)
