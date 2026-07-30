@@ -56,6 +56,7 @@ action:process_sync(Mode, []) :-
   catch(profile:cache_save, _, true),
   catch(glsa:cache_save, _, true),
   catch(preference:cache_invalidate, _, true),
+  action:apply_package_moves,
   ( Mode == standalone -> kb:save ; true ).
 
 action:process_sync(Mode, RepoNames) :-
@@ -65,7 +66,21 @@ action:process_sync(Mode, RepoNames) :-
   catch(profile:cache_save, _, true),
   catch(glsa:cache_save, _, true),
   catch(preference:cache_invalidate, _, true),
+  action:apply_package_moves,
   ( Mode == standalone -> kb:save ; true ).
+
+
+%! action:apply_package_moves is det.
+%
+% Post-sync application of profiles/updates package moves to the world
+% file (see pkgmoves:apply_world_moves/0). Skipped silently when the
+% pkgmoves module is not loaded (client mode).
+
+action:apply_package_moves :-
+  ( current_predicate(pkgmoves:apply_world_moves/0)
+  -> catch(pkgmoves:apply_world_moves, _, true)
+  ;  true
+  ).
 
 
 % -----------------------------------------------------------------------------

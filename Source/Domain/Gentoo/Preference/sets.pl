@@ -235,7 +235,8 @@ sets:changed_subslot_set(Targets) :-
             query:search([category(C),name(N)], VdbRepo://Entry),
             slotmeta:entry_slot_default(VdbRepo, Entry, Slot),
             sets:entry_subslot(VdbRepo://Entry, InstalledSub),
-            sets:highest_visible_in_slot(C, N, Slot, BestEntry, _),
+            once(( sets:tree_cn(C, N, TC, TN),
+                   sets:highest_visible_in_slot(TC, TN, Slot, BestEntry, _) )),
             sets:entry_subslot(BestEntry, TreeSub),
             InstalledSub \== TreeSub,
             sets:cn_slot_atom(C, N, Slot, Atom)
@@ -259,7 +260,8 @@ sets:downgrade_set(Targets) :-
             query:search([category(C),name(N),version(InstalledVer)], VdbRepo://Entry),
             InstalledVer \== version_none,
             slotmeta:entry_slot_default(VdbRepo, Entry, Slot),
-            sets:highest_visible_in_slot(C, N, Slot, _, BestVer),
+            once(( sets:tree_cn(C, N, TC, TN),
+                   sets:highest_visible_in_slot(TC, TN, Slot, _, BestVer) )),
             eapi:version_compare(<, BestVer, InstalledVer),
             sets:cn_slot_atom(C, N, Slot, Atom)
           ),
@@ -281,7 +283,8 @@ sets:unavailable_set(Targets) :-
           ( knowledgebase:vdb_repository(VdbRepo),
             query:search([category(C),name(N)], VdbRepo://Entry),
             slotmeta:entry_slot_default(VdbRepo, Entry, Slot),
-            \+ sets:highest_visible_in_slot(C, N, Slot, _, _),
+            \+ ( sets:tree_cn(C, N, TC, TN),
+                 sets:highest_visible_in_slot(TC, TN, Slot, _, _) ),
             sets:cn_slot_atom(C, N, Slot, Atom)
           ),
           Targets0),
@@ -607,10 +610,12 @@ sets:entry_deps_outdated(VdbRepo://Entry, TreeRepo://TreeEntry) :-
 
 %! sets:tree_same_version(+C, +N, +Ver, -TreeRepo, -TreeEntry) is semidet.
 %
-% Finds a non-VDB tree/overlay entry with the exact installed version.
+% Finds a non-VDB tree/overlay entry with the exact installed version,
+% following package moves when the installed name is gone from the tree.
 
 sets:tree_same_version(C, N, Ver, TreeRepo, TreeEntry) :-
-  cache:ordered_entry(TreeRepo, TreeEntry, C, N, Ver),
+  sets:tree_cn(C, N, TC, TN),
+  cache:ordered_entry(TreeRepo, TreeEntry, TC, TN, Ver),
   \+ knowledgebase:is_vdb_repository(TreeRepo),
   !.
 
@@ -748,6 +753,20 @@ sets:canonicalize_dep(D, D).
 % -----------------------------------------------------------------------------
 %  Shared helpers
 % -----------------------------------------------------------------------------
+
+%! sets:tree_cn(+C0, +N0, -C, -N) is nondet.
+%
+% Yields the category/name to use for tree lookups of an installed
+% package: first the installed name itself, then (when the pkgmoves
+% module is available) the current name after profiles/updates package
+% moves. Callers wrap this in once/1 with the tree lookup so a moved
+% package resolves against its new name.
+
+sets:tree_cn(C, N, C, N).
+sets:tree_cn(C0, N0, C, N) :-
+  current_predicate(pkgmoves:moved/4),
+  catch(pkgmoves:moved(C0, N0, C, N), _, fail).
+
 
 %! sets:slot_atom(+Repo://+Entry, +Category, +Name, -Atom) is det.
 %

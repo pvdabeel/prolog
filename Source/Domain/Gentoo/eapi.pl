@@ -2252,11 +2252,40 @@ eapi:version2numberlist(NumberAtom, NumberList) :-
 
 %! eapi:substitute_sets(Query,Result)
 %
-% Replace world and set references in query with their content.
+% Replace world and set references in query with their content, then
+% apply package moves (profiles/updates renames) to the resulting
+% target atoms so old names in the world file, named sets or CLI
+% arguments resolve against the current tree.
 
-eapi:substitute_sets([],[]) :- !.
+eapi:substitute_sets(Query,Result) :-
+  eapi:substitute_sets_(Query,Result0),
+  maplist(eapi:apply_pkgmove_target,Result0,Result).
 
-eapi:substitute_sets([world|Tail],Result) :-
+
+%! eapi:apply_pkgmove_target(+Atom0, -Atom)
+%
+% Translates a target (atom or string) referencing a moved package to
+% its current name (see pkgmoves:translate_atom/2), informing the user.
+% Leaves every other target untouched. pkgmoves is not loaded in client
+% mode, hence the current_predicate guard.
+
+eapi:apply_pkgmove_target(Atom0,Atom) :-
+  ( current_predicate(pkgmoves:translate_atom/2),
+    catch(pkgmoves:translate_atom(Atom0,Atom1),_,fail)
+  -> message:inform(['Package move: ',Atom0,' -> ',Atom1]),
+     Atom = Atom1
+  ;  Atom = Atom0
+  ).
+
+
+%! eapi:substitute_sets_(Query,Result)
+%
+% Worker behind eapi:substitute_sets/2 (set expansion only, no package
+% move translation).
+
+eapi:substitute_sets_([],[]) :- !.
+
+eapi:substitute_sets_([world|Tail],Result) :-
   !,
   ( pengine_self(M) ->
       findall(E, M:local_world_entry(E), WorldTargets)
@@ -2269,24 +2298,24 @@ eapi:substitute_sets([world|Tail],Result) :-
   append(WorldTargets, SystemTargets, Combined0),
   sort(Combined0, Combined),
   append(Combined,NewResult,Result),
-  eapi:substitute_sets(Tail,NewResult).
+  eapi:substitute_sets_(Tail,NewResult).
 
-eapi:substitute_sets([system|Tail],Result) :-
+eapi:substitute_sets_([system|Tail],Result) :-
   !,
   findall(Cat/Name, preference:system_pkg(Cat, Name), SystemPairs),
   maplist([C/N, T]>>(atomic_list_concat([C, '/', N], T)), SystemPairs, Targets0),
   sort(Targets0, Targets),
   append(Targets,NewResult,Result),
-  eapi:substitute_sets(Tail,NewResult).
+  eapi:substitute_sets_(Tail,NewResult).
 
-eapi:substitute_sets([Atom|Tail],Result) :-
+eapi:substitute_sets_([Atom|Tail],Result) :-
   atom(Atom),
   atom_concat('@',Set,Atom),
   memberchk(Set,[world,system]),
   !,
-  eapi:substitute_sets([Set|Tail],Result).
+  eapi:substitute_sets_([Set|Tail],Result).
 
-eapi:substitute_sets([Atom|Tail],Result) :-
+eapi:substitute_sets_([Atom|Tail],Result) :-
   atom(Atom),
   atom_concat('@',Name,Atom),
   current_predicate(sets:is_computed_set/1),
@@ -2294,16 +2323,16 @@ eapi:substitute_sets([Atom|Tail],Result) :-
   !,
   sets:expand(Name,Targets),
   append(Targets,NewResult,Result),
-  eapi:substitute_sets(Tail,NewResult).
+  eapi:substitute_sets_(Tail,NewResult).
 
-eapi:substitute_sets([Set|Tail],Result) :-
+eapi:substitute_sets_([Set|Tail],Result) :-
   preference:set(Set,Targets),!,
   append(Targets,NewResult,Result),
-  eapi:substitute_sets(Tail,NewResult).
+  eapi:substitute_sets_(Tail,NewResult).
 
-eapi:substitute_sets([Query|Tail],[Query|Rest]) :-
+eapi:substitute_sets_([Query|Tail],[Query|Rest]) :-
   !,
-  eapi:substitute_sets(Tail,Rest).
+  eapi:substitute_sets_(Tail,Rest).
 
 
 % -----------------------------------------------------------------------------
