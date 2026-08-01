@@ -133,6 +133,8 @@ digraph portage_ng_architecture {
                label="resolving.pl + Resolving/\npass-1 domain rules:\ncandidates, USE, deps,\nblockers, assumptions"];
     ordering  [fillcolor="#eeddff", shape=box,
                label="ordering.pl\npass-2 planning laws\n+ step/requires/prefers/world"];
+    unmerging [fillcolor="#eeddff", shape=box,
+               label="unmerging.pl\nsame laws, removal bindings\n(depclean uninstall order)"];
   }
 
   // ── Output ─────────────────────────────────────────────────────────
@@ -167,7 +169,7 @@ digraph portage_ng_architecture {
     builder  [fillcolor="#f5e6d0", shape=box,
               label="builder.pl + Builder/\nebuild phases, downloads,\njobserver, binpkg"];
     depclean [fillcolor="#f5e6d0", shape=box,
-              label="depclean.pl (+ kahn.pl)\nproof-based removal\n(re-proves via resolver)"];
+              label="depclean.pl\nproof-based removal\n(prover: resolving closure\n+ unmerging order)"];
 
     { rank=same; builder; depclean; }
   }
@@ -206,6 +208,7 @@ digraph portage_ng_architecture {
   orderer  -> prover [label="prove_once(ordering, ...)"];
   prover   -> resolving [label="Rules:rule/2", style=dashed];
   prover   -> ordering  [style=dashed];
+  prover   -> unmerging [style=dashed];
 
   // results → output / execution
   orderer -> printer [label="plan + proof"];

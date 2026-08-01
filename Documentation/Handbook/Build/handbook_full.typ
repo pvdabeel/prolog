@@ -1,44 +1,3 @@
-#let horizontalrule = line(start: (25%,0%), end: (75%,0%))
-
-#show terms.item: it => block(breakable: false)[
-  #text(weight: "bold")[#it.term]
-  #block(inset: (left: 1.5em, top: -0.4em))[#it.description]
-]
-
-#set table(
-  inset: 6pt,
-  stroke: none
-)
-
-#show figure.where(
-  kind: table
-): set figure.caption(position: top)
-
-#show figure.where(
-  kind: image
-): set figure.caption(position: bottom)
-
-#import "Build/template.typst": conf
-
-#show: doc => conf(
-  title: [portage-ng],
-  subtitle: [A declarative reasoning engine for large scale software
-configuration management],
-  authors: (
-    ( name: [Pieter Van den Abeele],
-      affiliation: [],
-      email: [pvdabeel\@mac.com] ),
-    ),
-  date: [August 2026],
-  abstract-title: [Abstract],
-  paper: "a4",
-  sectionnumbering: "1.1.1",
-  pagenumbering: "1",
-  cols: 1,
-  doc,
-)
-
-
 = Introduction
 <introduction>
 == The growing complexity of software
@@ -6504,6 +6463,30 @@ The plan is annotated per entry with:
 - #strong[Action] --- download, install, run, etc.
 - #strong[Literal] --- the full `Repo://Entry:Action?{Context}` term
 
+== The same laws order uninstalls
+<the-same-laws-order-uninstalls>
+Depclean's uninstall order is the same three laws proved over a
+different set of bindings (`Source/Domain/Gentoo/Rules/unmerging.pl`). A
+step is the `:unmerge` of a removable package; what a step
+#emph[requires] is the release of every claim on it --- each removable
+consumer must be unmerged first; and the #emph[world] provides nothing,
+because an installed consumer's claim is a present fact in the VDB ---
+there is no "already provided" escape like merge ordering has.
+
+Cyclic claim chains fall through the same `currently_proving` guard and
+surface as #strong[retained-claim assumptions]: the report names exactly
+which package still depends on which at its unmerge point, instead of a
+bare "cycle detected" flag. The wave projection is reused unchanged, and
+the flattened waves are the uninstall order (consumers first,
+dependencies last). Kahn's topological sort --- the last procedural
+survivor of the pre-proof planner --- was retired with this pass.
+
+One binding detail is load-bearing: the claim index reads the VDB
+dependency models through the query layer, whose inlined model
+construction dispatches through the #emph[active] rule module. The index
+is therefore prepared eagerly, before the unmerge prove scopes the rule
+module to `unmerging` (see `unmerging:with_unmerge_pass/2`).
+
 == Further reading
 <further-reading-11>
 - #link("08-doc-prover.md")[Chapter 8: The Prover] --- how the Proof AVL
@@ -6516,8 +6499,6 @@ The plan is annotated per entry with:
   how the plan is executed
 - #link("23-doc-dependency-ordering.md")[Chapter 23: Dependency Ordering]
   --- PMS ordering semantics
-- `Documentation/Designs/ordering-engine.md` --- the full design
-  document, including the Q&A record of the design decisions
 
 = Output and Visualization
 <output-and-visualization>

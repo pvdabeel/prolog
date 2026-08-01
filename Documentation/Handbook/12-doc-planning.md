@@ -253,6 +253,31 @@ The plan is annotated per entry with:
 - **Literal** — the full `Repo://Entry:Action?{Context}` term
 
 
+## The same laws order uninstalls
+
+Depclean's uninstall order is the same three laws proved over a different
+set of bindings (`Source/Domain/Gentoo/Rules/unmerging.pl`).  A step is
+the `:unmerge` of a removable package; what a step *requires* is the
+release of every claim on it — each removable consumer must be unmerged
+first; and the *world* provides nothing, because an installed consumer's
+claim is a present fact in the VDB — there is no "already provided"
+escape like merge ordering has.
+
+Cyclic claim chains fall through the same `currently_proving` guard and
+surface as **retained-claim assumptions**: the report names exactly which
+package still depends on which at its unmerge point, instead of a bare
+"cycle detected" flag.  The wave projection is reused unchanged, and the
+flattened waves are the uninstall order (consumers first, dependencies
+last).  Kahn's topological sort — the last procedural survivor of the
+pre-proof planner — was retired with this pass.
+
+One binding detail is load-bearing: the claim index reads the VDB
+dependency models through the query layer, whose inlined model
+construction dispatches through the *active* rule module.  The index is
+therefore prepared eagerly, before the unmerge prove scopes the rule
+module to `unmerging` (see `unmerging:with_unmerge_pass/2`).
+
+
 ## Further reading
 
 - [Chapter 8: The Prover](08-doc-prover.md) — how the Proof AVL is constructed
@@ -264,5 +289,3 @@ The plan is annotated per entry with:
   executed
 - [Chapter 23: Dependency Ordering](23-doc-dependency-ordering.md) — PMS
   ordering semantics
-- `Documentation/Designs/ordering-engine.md` — the full design document,
-  including the Q&A record of the design decisions
