@@ -16,7 +16,7 @@ laws + Gentoo bindings) to construct a provably correct ordering of the
 pass-1 solution, then projects the availability proofs onto the
 wave-list Plan.  The counterpart stage is the resolver
 (Source/Pipeline/resolver.pl), which hands the same prover the
-`resolving` rule set.  See Documentation/Designs/ordering-engine.md for
+`resolving` rule set.  See Documentation/Handbook/12-doc-planning.md for
 the design.
 
 Pass-2 literal language (all ground, built over pass-1 proof keys):
@@ -43,12 +43,12 @@ allowed to force a world bridge or an unreachable assumption somewhere
 down a cyclic chain. The wave projection honors preferences after the
 hard structure is fixed — each is accepted exactly when it closes no
 cycle against the hard edges and the previously accepted preferences
-(design doc sections 4.1 and 10).
+(Handbook chapter 12, "Preferences: honored exactly when safe").
 
 The wave-list Plan is a projection over the pass-2 proofs: an evaluator,
-not a decider (design doc section 6). Its output contract is the one the
-printer and builder have always consumed: a list of waves of full-format
-pass-1 rule terms.
+not a decider (Handbook chapter 12, "Wave projection and plan output").
+Its output contract is the one the printer and builder have always
+consumed: a list of waves of full-format pass-1 rule terms.
 */
 
 :- module(orderer, []).

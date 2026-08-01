@@ -33,7 +33,6 @@ Source/
     resolver.pl                        Resolve stage (pass 1): proves with the resolving rules
     orderer.pl                         Order stage (pass 2): proves with the ordering rules,
                                        projects availability proofs to the wave plan
-    Planner/kahn.pl                    Kahn topological sort (used by depclean)
     printer.pl + Printer/              Plan rendering: assumptions, warnings, suggestions
     builder.pl + Builder/              Build execution, downloads, jobserver, snapshots
     pipeline.pl                        Orchestration: resolve → order with fallback
@@ -47,6 +46,7 @@ Source/
     eapi.pl                            DCG grammar for PMS 9 / EAPI 9
     Rules/resolving.pl + Rules/Resolving/  Resolve rule set: candidates, USE, dependencies, heuristics
     Rules/ordering.pl                  Order rule set: planning laws + step/requires/prefers/world
+    Rules/unmerging.pl                 Unmerge rule set: same laws, removal bindings (depclean order)
     version.pl                         Version domain model (Zeller-style feature logic)
     profile.pl, preference.pl          Profile reading, USE/KEYWORDS/mask resolution
     vdb.pl                             Installed-package repository (VDB)

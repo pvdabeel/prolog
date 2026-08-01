@@ -242,6 +242,7 @@ sandbox:safe_primitive(choicelog:with_logging(_)).
 
 sandbox:safe_primitive(resolving:rule(_,_)).
 sandbox:safe_primitive(ordering:rule(_,_)).
+sandbox:safe_primitive(unmerging:rule(_,_)).
 
 % -----------------------------------------------------------------------------
 %  Orderer

@@ -11,8 +11,10 @@
 /** <module> UNITTEST
 PLUnit-based unit tests for core modules.
 
-Covers pure-logic predicates in eapi, version_domain, constraint, kahn,
-and sanitize that can be tested without a loaded knowledge base.
+Covers pure-logic predicates in eapi, version_domain, constraint, and
+sanitize that can be tested without a loaded knowledge base, plus the
+synthetic law tests for the prover core, the ordering engine, and the
+unmerging engine.
 
 Run via the project wrapper:
 
@@ -1105,53 +1107,6 @@ test(non_slot_passthrough, [true(I == depend(foo))]) :-
   eapi:normalize_entry_metadata(depend, depend(foo), I).
 
 :- end_tests(eapi_normalize_metadata).
-
-
-% =============================================================================
-%  Kahn topological sort tests
-% =============================================================================
-
-:- begin_tests(kahn_toposort).
-
-test(empty_graph, [true(Order-Cyclic == []-false)]) :-
-  empty_assoc(E),
-  kahn:toposort([], E, Order, Cyclic).
-
-test(single_node, [true(Order-Cyclic == [a]-false)]) :-
-  list_to_assoc([a-[]], E),
-  kahn:toposort([a], E, Order, Cyclic).
-
-test(linear_chain, [true(Order-Cyclic == [a,b,c]-false)]) :-
-  list_to_assoc([a-[b], b-[c], c-[]], E),
-  kahn:toposort([a,b,c], E, Order, Cyclic).
-
-test(diamond_dag, [true(Cyclic == false)]) :-
-  list_to_assoc([a-[b,c], b-[d], c-[d], d-[]], E),
-  kahn:toposort([a,b,c,d], E, Order, Cyclic),
-  Order = [a|_],
-  last(Order, d).
-
-test(two_component, [true(Cyclic == false)]) :-
-  list_to_assoc([a-[b], b-[], x-[y], y-[]], E),
-  kahn:toposort([a,b,x,y], E, Order, Cyclic),
-  length(Order, 4).
-
-test(simple_cycle, [true(Cyclic == true)]) :-
-  list_to_assoc([a-[b], b-[a]], E),
-  kahn:toposort([a,b], E, Order, Cyclic),
-  length(Order, 2).
-
-test(partial_cycle, [true(Cyclic == true)]) :-
-  list_to_assoc([a-[b], b-[c], c-[b], d-[]], E),
-  kahn:toposort([a,b,c,d], E, Order, Cyclic),
-  memberchk(d, Order).
-
-test(self_loop, [true(Cyclic == true)]) :-
-  list_to_assoc([a-[a]], E),
-  kahn:toposort([a], E, Order, Cyclic),
-  length(Order, 1).
-
-:- end_tests(kahn_toposort).
 
 
 % =============================================================================
@@ -3802,6 +3757,69 @@ test(configure_closure_delays_install_after_run_providers, [nondet]) :-
   WG < WSgI, WSgI < WSgR.
 
 :- end_tests(ordering_engine_synthetic).
+
+
+% -----------------------------------------------------------------------------
+%  Unmerging engine: rule-based uninstall ordering over synthetic claims
+% -----------------------------------------------------------------------------
+%
+% The depclean uninstall order (Source/Domain/Gentoo/depclean.pl +
+% Source/Domain/Gentoo/Rules/unmerging.pl) runs the same planning laws as
+% the ordering engine with the bindings flipped: a step is the unmerge of
+% a removable package, and a step's requirement is the release of every
+% claim on it (each removable consumer unmerges first). These tests drive
+% depclean:uninstall_order/3 over synthetic claim graphs:
+% unmerging:consumes_override/2 stands in for the VDB dependency models,
+% unmerging:world_override/1 for a world release. Cyclic claim chains
+% surface as retained/2 claims, never as silent cuts.
+
+unmerging_claims(Pairs) :-
+  retractall(unmerging:consumes_override(_, _)),
+  forall(member(C-R, Pairs),
+         assertz(unmerging:consumes_override(C, R))).
+
+:- begin_tests(unmerging_engine_synthetic,
+               [cleanup(( retractall(unmerging:consumes_override(_, _)),
+                          retractall(unmerging:world_override(_)) ))]).
+
+% A consumer unmerges before its dependency; nothing is retained.
+test(unmerge_consumer_before_dependency, [true(Order-Retained == [a,b]-[])]) :-
+  unmerging_claims([a-b]),
+  depclean:uninstall_order([a, b], Order, Retained).
+
+% A chain unmerges leaf-consumer-first.
+test(unmerge_chain_order, [true(Order-Retained == [a,b,c]-[])]) :-
+  unmerging_claims([a-b, b-c]),
+  depclean:uninstall_order([c, a, b], Order, Retained).
+
+% Independent consumers of a shared dependency share a wave (wave-major
+% flatten: both precede the dependency).
+test(unmerge_shared_dependency_last, [true(Order-Retained == [a,b,c]-[])]) :-
+  unmerging_claims([a-c, b-c]),
+  depclean:uninstall_order([a, b, c], Order, Retained).
+
+% Packages without claims on each other are unordered (single wave).
+test(unmerge_independent_nodes, [true(Order-Retained == [a,b,c]-[])]) :-
+  unmerging_claims([]),
+  depclean:uninstall_order([b, c, a], Order, Retained).
+
+% Membership invariant: cyclic claims still unmerge every member exactly
+% once, and the claim that could not be honored is reported as retained —
+% b unmerges while claimant a is still installed.
+test(unmerge_cycle_retained_claim,
+     [true(Order-Retained == [b,a]-[retained(a, b)])]) :-
+  unmerging_claims([a-b, b-a]),
+  depclean:uninstall_order([a, b], Order, Retained).
+
+% The same cycle with a world release for a's unmerge: the world clause
+% bridges the loop with a citation instead of a retained claim.
+test(unmerge_cycle_bridged_by_world, [true(Order-Retained == [b,a]-[])]) :-
+  unmerging_claims([a-b, b-a]),
+  assertz(unmerging:world_override(a:unmerge)),
+  depclean:uninstall_order([a, b], Order, Retained),
+  retractall(unmerging:world_override(_)).
+
+:- end_tests(unmerging_engine_synthetic).
 
 
 % -----------------------------------------------------------------------------

@@ -10,9 +10,12 @@
 
 /** <module> DEPCLEAN
 Proof-based depclean: approximates Gentoo's graph-based depclean using the
-prover's proof/model instead of scanning ELF binaries. Computes the runtime
-closure from @world roots over installed packages and identifies removable
-packages that are not required by the closure.
+prover's proof/model instead of scanning ELF binaries. Two proving passes:
+the runtime closure from @world roots over installed packages (resolving
+rule set, depclean mode) identifies removable packages not required by the
+closure; the uninstall order is then proved over the unmerging rule set
+(Source/Domain/Gentoo/Rules/unmerging.pl) — consumers unmerge before their
+dependencies, cyclic claims surface as retained-claim assumptions.
 */
 
 :- module(depclean, []).
@@ -164,38 +167,62 @@ depclean:model_item_repo_entry(_Other, _RepoEntry) :- fail.
 
 
 % -----------------------------------------------------------------------------
-%  Uninstall ordering (reverse-dependency topological sort)
+%  Uninstall ordering (proof-based unmerge pass)
 % -----------------------------------------------------------------------------
 
 
-%! depclean:uninstall_order(+Removable, -Order, -Cyclic)
+%! depclean:uninstall_order(+Removable, -Order, -Retained)
 %
-% Compute the uninstall order via Kahn's topological sort on the
-% dependency graph restricted to the removable set. Cyclic is `true`
-% if a cycle was detected (remaining nodes appended to the order).
+% Order the removable set by proving `scheduled(Node:unmerge)` for every
+% node with the generic prover over the unmerging rule set
+% (Source/Domain/Gentoo/Rules/unmerging.pl): a package can be unmerged
+% once every claim on it is released, i.e. every removable consumer is
+% unmerged first. The availability proofs are projected onto waves by
+% the orderer's evaluator and flattened wave-major into Order.
+%
+% Retained is the sorted list of retained-claim assumptions
+% `retained(Claimant, Dependency)` — dependency cycles where the
+% claimant could not be ordered before the package it depends on, so
+% the dependency unmerges while the claimant is still installed. Empty
+% when the claim graph is acyclic.
 
-depclean:uninstall_order(Removable, Order, Cyclic) :-
+depclean:uninstall_order([], [], []) :- !.
+depclean:uninstall_order(Removable, Order, Retained) :-
   sort(Removable, Nodes),
-  list_to_ord_set(Nodes, NodeSet),
-  depclean:build_edges(NodeSet, Nodes, EdgesAssoc),
-  kahn:toposort(Nodes, EdgesAssoc, Order, Cyclic).
+  findall(N:unmerge, member(N, Nodes), Steps),
+  findall(scheduled(S), member(S, Steps), Goals),
+  unmerging:with_unmerge_pass(Nodes,
+    once(prover:prove_once(unmerging, Goals, t, OrdProof, t, _Model, t, _Cons, t, _Triggers))),
+  orderer:provider_edges(OrdProof, Edges),
+  orderer:assign_waves(Steps, Edges, WaveAVL),
+  depclean:waves_to_order(WaveAVL, Order),
+  depclean:retained_claims(OrdProof, Retained).
 
 
-%! depclean:build_edges(+NodeSet, +Nodes, -EdgesAssoc)
+%! depclean:waves_to_order(+WaveAVL, -Order)
 %
-% Build adjacency list A -> [B...] where A depends on B, restricted to
-% the removable node set.
+% Flatten the wave assignment (Node:unmerge -> Wave) into the uninstall
+% order: wave-major, standard order of terms within a wave (keysort is
+% stable over the key-ordered assoc list).
 
-depclean:build_edges(_NodeSet, [], Assoc) :-
-  empty_assoc(Assoc).
-depclean:build_edges(NodeSet, [Node|Es], Out) :-
-  depclean:build_edges(NodeSet, Es, In),
-  ( depclean:direct_deps_installed(Node, DirectDeps),
-    include({NodeSet}/[X]>>ord_memberchk(X, NodeSet), DirectDeps, DirectDepsInSet),
-    list_to_ord_set(DirectDepsInSet, DepsSet),
-    put_assoc(Node, In, DepsSet, Out)
-  ; put_assoc(Node, In, [], Out)
-  ).
+depclean:waves_to_order(WaveAVL, Order) :-
+  assoc_to_list(WaveAVL, Pairs),
+  findall(W-N, member((N:unmerge)-W, Pairs), WavePairs),
+  keysort(WavePairs, SortedPairs),
+  findall(N, member(_-N, SortedPairs), Order).
+
+
+%! depclean:retained_claims(+OrdProof, -Retained)
+%
+% Extract the retained-claim assumptions from the unmerge-pass proof:
+% `assumed(unreachable(R:unmerge, C:unmerge))` records that claimant C
+% could not be unmerged before its dependency R.
+
+depclean:retained_claims(OrdProof, Retained) :-
+  findall(retained(C, R),
+          gen_assoc(rule(assumed(unreachable(R:unmerge, C:unmerge))), OrdProof, _),
+          Retained0),
+  sort(Retained0, Retained).
 
 
 % -----------------------------------------------------------------------------

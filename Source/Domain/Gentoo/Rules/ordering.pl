@@ -31,7 +31,8 @@ the pass-1 proof and the VDB (installed packages):
 
 No graph algorithms live here: requires/prefers are a reading of the
 pass-1 proof bodies (dependency provenance), world is a reading of the
-VDB. See Documentation/Designs/ordering-engine.md sections 4-5.
+VDB. See Documentation/Handbook/12-doc-planning.md (the planning laws
+and the Gentoo bindings).
 */
 
 :- module(ordering, []).
@@ -168,7 +169,7 @@ requires(H, D) :-
 %     RDEPEND wants its providers early but cannot force them (Portage
 %     relaxes exactly these edges inside cycles);
 %   - `constraint(order_after(Anchor))` pseudo-constraints (the PDEPEND
-%     ordering channel, design doc section 8) — post-merge by nature,
+%     ordering channel, Handbook chapter 12) — post-merge by nature,
 %     best-effort by Portage semantics;
 %   - PDEPEND completion (portage-ng#18/#19): a step depending on a
 %     provider P prefers P's PDEPEND targets placed earlier too — P is

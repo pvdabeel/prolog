@@ -10,10 +10,10 @@
 /** <module> REMOVAL
 Depclean removal plan rendering.
 
-Renders the depclean output: proposed removals, topologically sorted
-uninstall order, and VDB ELF linkage risk report. The underlying
-computation lives in Source/Domain/Gentoo/depclean.pl; this module is
-display-only.
+Renders the depclean output: proposed removals, proved uninstall order
+(unmerging rule set, consumers before dependencies), and VDB ELF linkage
+risk report. The underlying computation lives in
+Source/Domain/Gentoo/depclean.pl; this module is display-only.
 */
 
 :- module(removal, []).
@@ -43,9 +43,9 @@ removal:print_removals(RequiredInstalled) :-
   nl,
   ( Removable == [] ->
       writeln('  (none)')
-  ; forall(member(R://E, Removable),
-           ( query:search([category(C),name(N),version(V)], R://E),
-             format('  ~w/~w-~w~n', [C, N, V])
+  ; forall(member(RE, Removable),
+           ( removal:pkg_label(RE, L),
+             format('  ~w~n', [L])
            ))
   ),
   removal:print_uninstall_order(Removable),
@@ -59,21 +59,59 @@ removal:print_removals(RequiredInstalled) :-
 
 %! removal:print_uninstall_order(+Removable)
 %
-% Compute and print a topologically sorted uninstall order for the
-% removable packages. Warns when cycles are detected.
+% Compute and print the proved uninstall order for the removable
+% packages (consumers before their dependencies). Retained claims —
+% cyclic dependencies where a claimant could not be ordered before the
+% package it depends on — are reported individually.
 
 removal:print_uninstall_order([]) :- !.
 removal:print_uninstall_order(Removable) :-
-  depclean:uninstall_order(Removable, Order, Cyclic),
+  depclean:uninstall_order(Removable, Order, Retained),
   nl,
   message:header('Depclean (uninstall order)'),
   nl,
-  ( Cyclic == true ->
-      message:warning('cycle detected in uninstall graph; order is best-effort')
-  ; true
+  ( Retained == [] ->
+      true
+  ; message:warning('dependency cycle in removable set; order is best-effort:'),
+    forall(member(retained(C, R), Retained),
+           removal:print_retained_claim(C, R))
   ),
   removal:print_pkg_list_numbered(1, Order),
   nl.
+
+
+%! removal:print_retained_claim(+Claimant, +Dependency)
+%
+% Print one retained claim: the claimant still depends on the package
+% at the moment the package is unmerged.
+
+removal:print_retained_claim(C, R) :-
+  removal:pkg_label(C, CL),
+  removal:pkg_label(R, RL),
+  format('    ~w still depends on ~w at its unmerge point~n', [CL, RL]).
+
+
+%! removal:pkg_label(+RepoEntry, -Label)
+%
+% Human-readable category/name-version label for a VDB Repo://Entry,
+% falling back to the raw term.
+
+removal:pkg_label(R://E, Label) :-
+  query:search([category(C),name(N),version(V)], R://E),
+  !,
+  removal:version_text(V, VT),
+  format(atom(Label), '~w/~w-~w', [C, N, VT]).
+removal:pkg_label(Term, Label) :-
+  format(atom(Label), '~w', [Term]).
+
+
+%! removal:version_text(+Version, -Text)
+%
+% Printable text of a version/7 compound (its Full field); passthrough
+% for anything else.
+
+removal:version_text(version(_,_,_,_,_,_,Full), Full) :- !.
+removal:version_text(V, V).
 
 
 %! removal:print_pkg_list_numbered(+Index, +Packages)
@@ -81,11 +119,9 @@ removal:print_uninstall_order(Removable) :-
 % Print a numbered list of VDB Repo://Entry terms with category/name-version.
 
 removal:print_pkg_list_numbered(_, []) :- !.
-removal:print_pkg_list_numbered(I, [R://E|Es]) :-
-  ( query:search([category(C),name(N),version(V)], R://E) ->
-      format('  ~d. ~w/~w-~w~n', [I, C, N, V])
-  ; format('  ~d. ~w~n', [I, R://E])
-  ),
+removal:print_pkg_list_numbered(I, [RE|Es]) :-
+  removal:pkg_label(RE, L),
+  format('  ~d. ~w~n', [I, L]),
   I2 is I + 1,
   removal:print_pkg_list_numbered(I2, Es).
 
@@ -127,14 +163,10 @@ removal:print_linkage_risks(Installed, Removable) :-
 % Print a single broken-linkage warning: the consumer package, the ELF
 % token it needs, and the removable packages that were its only providers.
 
-removal:print_broken_needed(R://E, Tok, RemovedProviders) :-
-  ( query:search([category(C),name(N),version(V)], R://E) ->
-      format('  ~w/~w-~w needs ~w~n', [C, N, V, Tok])
-  ; format('  ~w needs ~w~n', [R://E, Tok])
-  ),
-  forall(member(RP://P, RemovedProviders),
-         ( ( query:search([category(CP),name(NP),version(VP)], RP://P) ->
-               format('    - would lose provider: ~w/~w-~w~n', [CP, NP, VP])
-           ; format('    - would lose provider: ~w~n', [RP://P])
-           )
+removal:print_broken_needed(Consumer, Tok, RemovedProviders) :-
+  removal:pkg_label(Consumer, CL),
+  format('  ~w needs ~w~n', [CL, Tok]),
+  forall(member(RP, RemovedProviders),
+         ( removal:pkg_label(RP, PL),
+           format('    - would lose provider: ~w~n', [PL])
          )).
