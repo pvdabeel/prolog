@@ -4,10 +4,6 @@
 ## You need to have a recent version of SWI-Prolog installed. Preferably 
 ## a development version (version 10.0.0 or higher). This Makefile will help
 ## you create a 'portage-ng' binary that can be installed in /usr/local
-## The resulting binary can be passed several arguments (like --sync). 
-## when --shell is passed, you are dumped into a shell allowing 
-## you to query portage-ng and all its repositories directly. 
-## the Makefile.
 ##
 ## See manpage for more information on how to use portage-ng.
 ## ----------------------------------------------------------------------
