@@ -40,8 +40,8 @@ resolution produces sub-literals that drive the rest of the proof.
 The resolution then branches depending on the action:
 
 - **`:run`** resolves runtime dependencies (RDEPEND).  PDEPEND is
-  handled in the same pass through the prover's literal hook (see
-  [Hooks](#hooks)).
+  handled in the same pass through the prover's proof-obligation hook
+  (see [Hooks](#hooks)).
 - **`:install`** resolves build-time dependencies (DEPEND and BDEPEND)
   and attaches ordering constraints (`after/1`) that express which
   packages must be installed before others.
@@ -72,7 +72,7 @@ ultimately, records an assumption.
 The single entry point between the prover and the domain logic is:
 
 ```prolog
-rules:rule(+Head, -Body)
+resolving:rule(+Head, -Body)
 ```
 
 The prover passes a literal as `Head`, and the rules layer returns a
@@ -115,14 +115,15 @@ fallback chain for when no candidate works.
 ### Eligibility filtering
 
 Before a candidate version is considered, `candidate:eligible/1`
-checks three things:
+checks two things:
 
 - **Masking** — is the ebuild masked by the profile or user
   configuration?
 - **Keyword acceptance** — does the ebuild have an accepted keyword
   for the current architecture?
-- **Installed status** — is the package already installed (checked
-  against the VDB)?
+
+(Installed status is a separate check, `candidate:installed/1`, used
+by the entry rules' already-installed short-circuit.)
 
 If a candidate fails these checks and no relaxation tier is active
 (see [Chapter 9, Progressive Relaxation](09-doc-prover-assumptions.md#progressive-relaxation)),
@@ -130,14 +131,14 @@ the entry rule fails and Prolog backtracks to try the next candidate.
 
 ### Version-ordered selection
 
-`candidate:resolve/2` resolves a query to a specific
+`target:resolve_candidate/2` resolves a query to a specific
 `Repository://Ebuild` pair.  Candidates are tried newest-first via
 `cache:ordered_entry/5`, so the prover naturally prefers the latest
 eligible version.
 
 ### Dependency ordering within a group
 
-Before proving the dependencies of a package, `candidate:dep_priority/2`
+Before proving the dependencies of a package, `ranking:dep_priority/2`
 sorts them so that tightly constrained siblings are proved first.  This
 reduces greedy conflicts where an unconstrained sibling selects a version
 that later clashes with a tighter constraint:
@@ -149,10 +150,11 @@ that later clashes with a tighter constraint:
 | 8 | Wildcard constraint | `=dev-python/gast-0.6*` |
 | 999 | Unconstrained | `dev-libs/openssl` |
 
-Lower keys are proved first.  Within each tier, slot specificity
-further refines the order.  The effect is that tilde and wildcard
-dependencies lock their `selected_cn` before unconstrained siblings
-pick a potentially conflicting version.
+Lower keys are proved first.  Slot specificity is folded into the base
+key via `min` — a fully slot-qualified dependency (slot + subslot) gets
+key 0 and outranks every tier above.  The effect is that slotted, tilde
+and wildcard dependencies lock their `selected_cn` before unconstrained
+siblings pick a potentially conflicting version.
 
 ### Self-dependencies and cross-slot handling
 
@@ -217,9 +219,9 @@ example, cycles that pass through `:run` (RDEPEND paths) are often
 treated as ordering-style cycles rather than hard failures — mirroring
 how traditional resolvers tolerate certain cyclic patterns.
 
-After the proof is complete, cyclic portions of the `:run` side of the
-graph are grouped into **strongly connected components (SCCs)** by the
-scheduler, so that the merge ordering respects the cycle structure.
+After the proof is complete, the ordering pass (Chapter 12) resolves
+cyclic portions of the graph by citing the installed world (VDB) where
+possible, so that the merge ordering respects the cycle structure.
 For more on proof search and assumptions, see
 [Chapter 8](08-doc-prover.md) and
 [Chapter 9](09-doc-prover-assumptions.md).
@@ -239,9 +241,12 @@ USE-conditional dependencies like `ssl? ( dev-libs/openssl )` are
 evaluated against this set: if the flag is active, the dependency is
 included; otherwise it is skipped.
 
-The key predicates are `use:effective_use/3` (computes the full
-effective USE set for an ebuild) and `use:evaluate_conditional/3`
-(evaluates a single flag condition).
+The key predicate is `use:effective_use_for_entry/3` (with the context
+wrapper `use:effective_use_in_context/3`), which computes the full
+effective USE set for an ebuild.  Whether a USE-conditional group is
+active is decided by the `candidate:eligible(use_conditional(...))`
+clauses together with the `use_conditional_group` rules in
+`resolving.pl`.
 
 ### `build_with_use`
 
@@ -383,7 +388,7 @@ ProofAVL; it only sees the proof-context list and memo snapshots
 ### What we deliberately do not implement
 
 These Portage mechanisms are **design omissions**, not open bugs.  The
-inductive prover and planner already provide the effects they target.
+inductive prover and ordering pass already provide the effects they target.
 
 **Overlapping-`||` DNF (`_overlap_dnf`) and `minimize_slots` /
 `new_slot_count`.**
@@ -409,8 +414,8 @@ would duplicate that work and fight proven-provider reuse.
 **Circular-dep demotion inside `||`.**
 Portage demotes arms that close a known cycle with the parent (or
 `--onlydeps` parent CP) into `other`.  portage-ng handles cycles in the
-prover, planner, and scheduler (cycle-break assumptions, wave remainder,
-SCC merge-sets) — see [Chapter 8](08-doc-prover.md),
+prover and the ordering pass (cycle-break assumptions, world citations,
+`unreachable` assumptions) — see [Chapter 8](08-doc-prover.md),
 [Chapter 9](09-doc-prover-assumptions.md), and
 [Chapter 12](12-doc-planning.md).  Demoting at ranking time would
 second-guess cycle-break polarity and needs a parent circular map that
@@ -472,7 +477,7 @@ at runtime but are not required at build time.  Unlike DEPEND and
 RDEPEND, they do not block the build — they are installed afterwards.
 
 In portage-ng, PDEPEND is handled in a single pass inside the prover
-via the `rules:literal_hook/4` hook.  Whenever a literal is
+via the `heuristic:proof_obligation/4` hook.  Whenever a literal is
 successfully proved, the hook checks whether the corresponding ebuild
 has PDEPEND entries.  If it does, those entries are injected as
 additional proof obligations on the spot.  This avoids a separate
@@ -507,7 +512,7 @@ For the full story on assumptions and constraint learning, see
 ## Rules submodules
 
 The rules layer is not a single monolithic file.  It is split across
-several focused submodules under `Source/Domain/Gentoo/Rules/`, each
+several focused submodules under `Source/Domain/Gentoo/Rules/Resolving/`, each
 handling a distinct concern:
 
 | **Module** | **File** | **Purpose** |

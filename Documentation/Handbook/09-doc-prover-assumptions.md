@@ -174,7 +174,8 @@ This stores `rule(assumed(X))` in the Proof tree.
 
 **Where they appear:**
 - Proof: `rule(assumed(X))` → `dep(0, [])?Ctx`
-- Model: the enclosing literal's entry (normal)
+- Model: `assumed(X)` → `Ctx` (the `assumed(X)` body literal is proved
+  as a regular literal; exit-code detection scans for these keys)
 - Plan: rendered as "verify" steps + "Domain assumptions" warning block
 
 ### Prover Cycle-Break Assumptions (`assumed(rule(X))`)
@@ -192,18 +193,19 @@ put_assoc(assumed(Lit), Model, Ctx, NewModel)
 **Where they appear:**
 - Proof: `assumed(rule(Lit))` → `dep(-1, Body)?Ctx`
 - Model: `assumed(Lit)` → `Ctx`
-- Plan: SCC / merge-set scheduling; cycle explanation via `cycle:*`
+- Plan: ordered normally by the ordering pass; cycle explanation via
+  the printer's cycle section (`Printer/Plan/cycle.pl`)
 
 ### Summary Table
 
 | **Property** | **Domain Assumption** | **Prover Cycle-Break** |
 | :------------------------ | :---------------------------- | :---------------------------- |
 | Proof key              | `rule(assumed(X))`         | `assumed(rule(X))`         |
-| Model key              | (normal literal)           | `assumed(Lit)`             |
+| Model key              | `assumed(X)`               | `assumed(Lit)`             |
 | dep count              | 0                          | -1                         |
 | Introduced by          | rules layer                | prover layer               |
 | Represents             | unsatisfiable dependency   | cyclic dependency          |
-| Printed as             | "Domain assumptions"       | cycle break (SCC)          |
+| Printed as             | "Domain assumptions"       | cycle break                |
 | Exit code contribution | 2                          | 1                          |
 
 ## Reprove Mechanism
@@ -256,7 +258,7 @@ steps:
 
 The `prover:learn/3` and `prover:learned/2` predicates maintain a
 key-value store that **persists across reprove retries** within the same
-top-level `prove/9` invocation.  This is distinct from the reject set
+top-level `prove/10` invocation.  This is distinct from the reject set
 (which accumulates and is cleared on exhaustion).
 
 The domain uses learned constraints for:
@@ -362,8 +364,10 @@ gate checks run in order:
 2. **Keyword gate** — if no accepted keyword exists and
    `keyword_acceptance` is not active, the rule fails.
 3. **Already-installed short-circuit** — if the package is already
-   installed (and `--emptytree` was not requested), the rule succeeds
-   with an empty condition list.  Nothing further needs to be proved.
+   installed (and `--emptytree` was not requested) with USE flags that
+   match the request, the rule succeeds with an empty condition list.
+   When the installed USE differs, the entry is re-emitted as a
+   transactional `:update` action instead (portage-ng#85).
 
 **USE model verification.**
 When none of the gates apply, the rule queries the ebuild's metadata
@@ -391,7 +395,7 @@ different candidate version would resolve.
 ## Constraint guards and reprove integration
 
 Every time the prover unifies a new constraint term into the proof, it
-calls `rules:constraint_guard(Key, Constraints)` to verify that the
+calls `heuristic:constraint_guard(Key, Constraints)` to verify that the
 constraint is consistent with what has already been proved.  The guard
 has three possible outcomes:
 
@@ -405,7 +409,7 @@ has three possible outcomes:
   learned constraint, and restarts the proof from scratch with the new
   knowledge (see section 9.7).
 
-Three specialised guards in `candidate.pl` cover the most common
+Three specialised guards in `cnselect.pl` cover the most common
 conflict types:
 
 - **`selected_cn_unique_or_reprove`** checks that the selected
@@ -439,7 +443,9 @@ obstacle, the pipeline applies **progressive relaxation**: it re-runs
 the entire proof under successively weaker constraints until a complete
 plan emerges.
 
-The mechanism lives in `pipeline:prove_plan_with_fallback/6`.  Each
+The mechanism lives in the pipeline's shared fallback driver
+(`pipeline:fallback_tiers/1` + `pipeline:with_fallback/2`), used by both
+`prove_plan_with_fallback/5` and `prove_with_fallback/4`.  Each
 tier wraps the prover call inside `prover:assuming/2`, which sets a
 dynamic flag that the domain rules consult at decision points.
 
@@ -459,10 +465,10 @@ and returns a `FallbackUsed` tag (`false`, `keyword_acceptance`,
 The same 5-tier fallback chain is shared by two canonical entry
 points in the pipeline module:
 
-- `prove_plan_with_fallback/5` — full pipeline (prove + plan + schedule),
+- `prove_plan_with_fallback/5` — full pipeline (prove + order),
   used by production paths (`--pretend`, `--graph`, `--build`).
-- `prove_with_fallback/4` — prover only (no plan/schedule), used by
-  layered tests (`prover:test`, `planner:test`, `scheduler:test`)
+- `prove_with_fallback/4` — resolve pass only (no ordering pass), used
+  by layered tests (`resolver:test`, `orderer:test`)
   and `--bugs`.  Each test layer adds its own stages on top.
 
 ### How `assuming/2` works
@@ -470,13 +476,13 @@ points in the pipeline module:
 `prover:assuming(Flag, Goal)` stores a dynamic flag
 (`prover_assuming_<Flag>`) for the duration of `Goal`, using
 `setup_call_cleanup` to guarantee cleanup even on exceptions.  Domain
-predicates test this flag with the zero-argument
+predicates test this flag with the unary
 `prover:assuming(Flag)`:
 
 - **`candidate:eligible/1`** — when `keyword_acceptance` is active,
   candidates with any keyword are accepted; when `unmask` is active,
   masked candidates pass.
-- **`candidate:accepted_keyword_candidate/7`** — two fallback clauses
+- **`acceptance:accepted_keyword_candidate/7`** — two fallback clauses
   widen the candidate pool: one for unstable keywords, one for masked
   packages.
 - **`candidate:assume_blockers/0`** — returns `true` when blocker
@@ -496,7 +502,7 @@ would eliminate the need for the relaxation:
 | `suggestion(use_change, R://E, Changes)` | Adjust USE flags | `package.use` |
 
 These tags flow through the proof into the plan output.  In builder
-mode, `builder:dispatch_suggestions/1` can apply the suggestions
+mode, `builder:dispatch_suggestions/3` can apply the suggestions
 automatically (writing to `/etc/portage/package.*` files); in pretend
 mode, they appear as actionable hints in the plan output.
 
@@ -616,7 +622,7 @@ following checklist helps catch regressions quickly:
   seconds.  A significant increase compared to previous runs suggests
   excessive reprove retries or a learning bug.
 - **Test suite** — the overlay and portage test suites
-  (`prover:test_stats/1`) should maintain their previous pass rate.
+  (`resolver:test_stats/1`) should maintain their previous pass rate.
   Any drop indicates that a change has broken handling of a known
   edge case.
 
@@ -625,11 +631,12 @@ following checklist helps catch regressions quickly:
 | **File** | **Role** |
 | :------ | :------ |
 | `Source/Pipeline/prover.pl` | Core proof engine, reprove retry loop, cycle detection, learned store |
-| `Source/Domain/Gentoo/rules.pl` | Domain rules: entry rules, grouped deps, `rule(assumed(_),[])` |
-| `Source/Domain/Gentoo/Rules/candidate.pl` | Candidate selection, reprove triggers, parent narrowing |
-| `Source/Domain/Gentoo/Rules/heuristic.pl` | Reprove state management, reject accumulation |
-| `Source/Domain/Gentoo/Rules/memo.pl` | Thread-local caches including `requse_violation_/3` |
-| `Source/Domain/Gentoo/Rules/use.pl` | `verify_required_use_with_bwu`, `describe_required_use_violation` |
+| `Source/Domain/Gentoo/Rules/resolving.pl` | Domain rules: entry rules, grouped deps, `rule(assumed(_),[])` |
+| `Source/Domain/Gentoo/Rules/Resolving/candidate.pl` | Candidate selection and eligibility |
+| `Source/Domain/Gentoo/Rules/Resolving/cnselect.pl` | Constraint guards, reprove triggers, parent narrowing, learned domains |
+| `Source/Domain/Gentoo/Rules/Resolving/heuristic.pl` | Reprove state management, reject accumulation |
+| `Source/Domain/Gentoo/Rules/Resolving/memo.pl` | Thread-local caches including `requse_violation_/3` |
+| `Source/Domain/Gentoo/Rules/Resolving/use.pl` | `verify_required_use_with_bwu`, `describe_required_use_violation` |
 | `Source/Pipeline/Prover/explanation.pl` | `assumption_reason_for_grouped_dep` diagnosis |
 | `Source/Pipeline/Prover/explainer.pl` | `term_ctx/2`, "why" queries |
 | `Source/Pipeline/Printer/Plan/assumption.pl` | Assumption type classification |

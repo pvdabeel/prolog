@@ -77,7 +77,7 @@ user:goal_expansion(maybe_timeout_trace(_), true) :-
 user:goal_expansion(phase_walltime(_), true) :-
   \+ current_prolog_flag(instrumentation, true).
 
-user:goal_expansion(phase_record(_, _, _, _), true) :-
+user:goal_expansion(phase_record(_, _, _), true) :-
   \+ current_prolog_flag(instrumentation, true).
 
 user:goal_expansion(phase_perf_reset, true) :-
@@ -240,7 +240,7 @@ sampler:hook_counter_report :-
 %  Phase performance counters
 % -----------------------------------------------------------------------------
 %
-% Timing accumulators for prove / plan / schedule phases and PDEPEND processing.
+% Timing accumulators for prove / order phases and PDEPEND processing.
 
 %! sampler:phase_walltime(-T) is det.
 %
@@ -250,38 +250,35 @@ sampler:phase_walltime(T) :-
   statistics(walltime, [T, _]).
 
 
-%! sampler:phase_record(+T0, +T1, +T2, +T3) is det.
+%! sampler:phase_record(+T0, +T1, +T2) is det.
 %
-% Record phase timings from four wall-clock snapshots.
+% Record phase timings from three wall-clock snapshots.
 
-sampler:phase_record(T0, T1, T2, T3) :-
+sampler:phase_record(T0, T1, T2) :-
   ProveMs is T1 - T0,
-  PlanMs is T2 - T1,
-  SchedMs is T3 - T2,
-  sampler:phase_perf_add(ProveMs, PlanMs, SchedMs).
+  OrderMs is T2 - T1,
+  sampler:phase_perf_add(ProveMs, OrderMs).
 
 
 %! sampler:phase_perf_reset is det.
 %
-% Reset prove/plan/schedule timing accumulators.
+% Reset prove/order timing accumulators.
 
 sampler:phase_perf_reset :-
   flag(pp_perf_entries, _, 0),
   flag(pp_perf_prove_ms, _, 0),
-  flag(pp_perf_plan_ms, _, 0),
-  flag(pp_perf_sched_ms, _, 0),
+  flag(pp_perf_order_ms, _, 0),
   !.
 
 
-%! sampler:phase_perf_add(+ProveMs, +PlanMs, +SchedMs) is det.
+%! sampler:phase_perf_add(+ProveMs, +OrderMs) is det.
 %
 % Accumulate phase timing for one entry.
 
-sampler:phase_perf_add(ProveMs, PlanMs, SchedMs) :-
+sampler:phase_perf_add(ProveMs, OrderMs) :-
   flag(pp_perf_entries, E0, E0+1),
   flag(pp_perf_prove_ms, P0, P0+ProveMs),
-  flag(pp_perf_plan_ms, Pl0, Pl0+PlanMs),
-  flag(pp_perf_sched_ms, S0, S0+SchedMs),
+  flag(pp_perf_order_ms, O0, O0+OrderMs),
   !.
 
 
@@ -294,15 +291,12 @@ sampler:phase_perf_report :-
   ( E =:= 0 ->
       true
   ; flag(pp_perf_prove_ms, P, P),
-    flag(pp_perf_plan_ms, Pl, Pl),
-    flag(pp_perf_sched_ms, S, S),
+    flag(pp_perf_order_ms, O, O),
     AvgP is P / E,
-    AvgPl is Pl / E,
-    AvgS is S / E,
+    AvgO is O / E,
     message:scroll_notice(['phase perf: entries=',E,
                            ' prove_ms_sum=',P,' avg=',AvgP,
-                           ' plan_ms_sum=',Pl,' avg=',AvgPl,
-                           ' sched_ms_sum=',S,' avg=',AvgS])
+                           ' order_ms_sum=',O,' avg=',AvgO])
   ),
   nl,
   !.
@@ -499,8 +493,7 @@ sampler:reset(Label, ExpectedTotal) :-
     ( retractall(sampler:fact(_)),
       assertz(sampler:fact(kv(label, Label))),
       ( Label == 'Proving'   -> Stage = prover
-      ; Label == 'Planning'  -> Stage = planner
-      ; Label == 'Scheduling'-> Stage = scheduler
+      ; Label == 'Ordering'  -> Stage = orderer
       ; Label == 'Printing'  -> Stage = printer
       ; Label == 'Pipeline'  -> Stage = printer
       ; Stage = printer
@@ -602,7 +595,7 @@ sampler:value(Key, Value) :-
 %! sampler:stage_at_least(+MinStage) is semidet.
 %
 % Succeeds when the current stage is at least MinStage.
-% Stage order: prover < planner < scheduler < printer.
+% Stage order: prover < orderer < printer.
 
 sampler:stage_at_least(MinStage) :-
   ( sampler:fact(kv(stage, Stage)) -> true ; Stage = printer ),
@@ -611,9 +604,8 @@ sampler:stage_at_least(MinStage) :-
   Rank >= MinRank.
 
 sampler:stage_rank(prover, 1).
-sampler:stage_rank(planner, 2).
-sampler:stage_rank(scheduler, 3).
-sampler:stage_rank(printer, 4).
+sampler:stage_rank(orderer, 2).
+sampler:stage_rank(printer, 3).
 
 
 %! sampler:percent(+Part, +Total, -Percent) is det.
@@ -1220,7 +1212,7 @@ sampler:diagnose_timeout(Target, LimitSec, diagnosis(DeltaInferences, RuleCalls,
   ( catch(
       prover:with_debug_hook(sampler:timeout_trace_hook,
         call_with_time_limit(LimitSec,
-          prover:prove(Target, t, _Proof, t, _Model, t, _Cons, t, _Triggers)
+          resolver:resolve(Target, t, _Proof, t, _Model, t, _Cons, t, _Triggers)
         )
       ),
       time_limit_exceeded,

@@ -16,7 +16,7 @@ provenance information (self-references), manage slot propagation across
 dependency edges in the ?{Context} list, and handle build-with-use state
 threading.
 
-The rule/2 clauses in rules.pl call into this module when they need to:
+The rule/2 clauses in resolving.pl call into this module when they need to:
 
   1. Tag dependency literals with `self(Repo://Entry)` so downstream rules
      can distinguish self-dependencies from external ones.
@@ -205,7 +205,7 @@ dependency:build_with_use_constraints(_, [], _) :- !.
 dependency:pdepend_goals_from_plan(Plan, Goals) :-
   plan_merged_cn_sets(Plan, MergedCNSet, MergedCNSlotSet),
   findall(Gs,
-          ( planner:plan_merge_anchor(Plan, Repo://Entry, AnchorCore, ActionCtx),
+          ( dependency:plan_merge_anchor(Plan, Repo://Entry, AnchorCore, ActionCtx),
             use:context_build_with_use_state(ActionCtx, B),
             ModelKey = [build_with_use:B],
             ( cache:entry_metadata(Repo, Entry, pdepend, _) ->
@@ -221,6 +221,22 @@ dependency:pdepend_goals_from_plan(Plan, Goals) :-
   sort(Flat0, Goals).
 
 
+%! dependency:plan_merge_anchor(+Plan, -Repo://Entry, -AnchorCore, -Ctx)
+%
+% Non-deterministically enumerate every merge action in the plan.
+% A merge anchor is any rule whose action is install, update,
+% downgrade, or reinstall.
+
+dependency:plan_merge_anchor(Plan, Repo://Entry, AnchorCore, Ctx) :-
+  member(Step, Plan),
+  member(Rule, Step),
+  prover:rule_parts(Rule, HeadWithCtx, _Body, _Kind),
+  prover:canon_literal(HeadWithCtx, AnchorCore, Ctx),
+  AnchorCore = (Repo://Entry:Action),
+  ( Action == install ; Action == update ; Action == downgrade ; Action == reinstall ),
+  true.
+
+
 %! dependency:plan_merged_cn_sets(+Plan, -CNSet, -CNSlotSet)
 %
 % Build fast assoc-based lookup sets for category/name pairs (and
@@ -228,20 +244,33 @@ dependency:pdepend_goals_from_plan(Plan, Goals) :-
 
 dependency:plan_merged_cn_sets(Plan, CNSet, CNSlotSet) :-
   findall(key(C,N),
-          ( planner:plan_merge_anchor(Plan, Repo://Entry, _AnchorCore, _Ctx),
+          ( dependency:plan_merge_anchor(Plan, Repo://Entry, _AnchorCore, _Ctx),
             query:search([category(C),name(N)], Repo://Entry)
           ),
           CNKeys0),
   sort(CNKeys0, CNKeys),
-  scheduler:assoc_set_from_list(CNKeys, CNSet),
+  dependency:assoc_set_from_list(CNKeys, CNSet),
   findall(key(C,N,Slot),
-          ( planner:plan_merge_anchor(Plan, Repo://Entry, _AnchorCore2, _Ctx2),
+          ( dependency:plan_merge_anchor(Plan, Repo://Entry, _AnchorCore2, _Ctx2),
             query:search([category(C),name(N)], Repo://Entry),
             slotmeta:entry_slot_default(Repo, Entry, Slot)
           ),
           CNSlotKeys0),
   sort(CNSlotKeys0, CNSlotKeys),
-  scheduler:assoc_set_from_list(CNSlotKeys, CNSlotSet).
+  dependency:assoc_set_from_list(CNSlotKeys, CNSlotSet).
+
+
+%! dependency:assoc_set_from_list(+List, -Set)
+%
+% Build an assoc-based set (Key -> true) from a list of keys.
+
+dependency:assoc_set_from_list(List, Set) :-
+  empty_assoc(S0),
+  foldl(dependency:assoc_set_put, List, S0, Set),
+  !.
+
+dependency:assoc_set_put(K, A0, A) :-
+  ( get_assoc(K, A0, _) -> A = A0 ; put_assoc(K, A0, true, A) ).
 
 
 %! dependency:filter_redundant_pdepend_goals(+CNSet, +CNSlotSet, +Goals0, -Goals)

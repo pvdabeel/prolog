@@ -10,7 +10,7 @@ same engine could — in principle — prove goals in any domain that encodes it
 constraints as Horn-style expansions behind a single hook.
 
 The prover’s only contract with the outside world is this: **given a literal,
-`rules:rule/2` (or the configured `rule/2` delegate) returns a body — a list of
+`resolving:rule/2` (or the configured `rule/2` delegate) returns a body — a list of
 sub-literals that must hold for the head to hold.**  Everything that makes
 Gentoo “Gentoo” — USE flags, slots, version domains, PDEPEND side effects — lives
 in the rule layer and in proof-term annotations (`?{Context}`), not in the
@@ -60,12 +60,12 @@ proof queue:
 
 2. **Check the cycle stack.** If the literal is currently being proved (on the
    stack), handle the cycle:
-   - If `heuristic:cycle_benign/1` succeeds, treat it as already proven
-     (benign cycle — no assumption recorded).
+   - If `heuristic:cycle_benign/2` (literal + cycle path) succeeds, treat
+     it as already proven (benign cycle — no assumption recorded).
    - Otherwise, record a cycle-break assumption (`assumed(rule(Lit))` in Proof,
      `assumed(Lit)` in Model).
 
-3. **Expand via `rule/2`.** Call `rules:rule(Lit, Body)` to get the rule body —
+3. **Expand via `rule/2`.** Call `resolving:rule(Lit, Body)` to get the rule body —
    the list of sub-literals that must be proven to justify `Lit`.
 
 4. **Record in Proof.** Store `rule(Lit) → dep(N, Body)?Ctx` in the Proof AVL,
@@ -98,13 +98,10 @@ rule(Lit) → dep(DepCount, Body)?Ctx
 | `Ctx` | Context under which the literal was proven |
 
 The dependency count is stored alongside the body because it is used
-by downstream stages without having to recompute it.  The planner
-uses it to determine the **fan-out** of each node when building topological
-waves: a literal with many dependencies is heavier to schedule than one
-with few.  The printer uses it to produce indentation and step counts
-in the plan output.  Storing the count once, at proof time, avoids
-repeated `length/2` calls over the same body list during planning and
-printing.
+by downstream consumers without having to recompute it: the explainer
+reads it when reconstructing justifications, and the special value
+`-1` marks cycle-break assumptions.  Storing the count once, at proof
+time, avoids repeated `length/2` calls over the same body list.
 
 Special keys:
 - `assumed(rule(Lit))` with `dep(-1, Body)?Ctx` — prover cycle-break
@@ -144,8 +141,8 @@ purposes:
    feature term unification rather than re-proving the literal (when the incoming context is
    not already equivalent to the stored one — see below).
 
-2. **Plan generation.** The planner reads the model to determine which literals
-   are in the proof and what contexts they carry.
+2. **Plan generation.** The ordering pass and the printer read the model to
+   determine which literals are in the proof and what contexts they carry.
 
 A lightweight variant, `prove_model`, skips Proof and Triggers bookkeeping for
 internal query-side model construction where only the model is needed.
@@ -304,8 +301,8 @@ heads.
 
 ### Downstream use
 
-Later phases — planners, schedulers, diagnostics — use Triggers to
-answer **“if this literal moves, what else moves?”** in logarithmic
+Later phases — the orderer (merge-order bias), diagnostics — use Triggers
+to answer **“if this literal moves, what else moves?”** in logarithmic
 time per lookup.  Without these reverse edges, nothing in the pipeline
 could enumerate which install heads depended on a given dependency
 literal, and the graph carried out of proving would be incomplete for
@@ -320,22 +317,24 @@ The pipeline module provides two canonical entry points, both with
 the same 5-tier committed-choice progressive relaxation (strict,
 keyword_acceptance, blockers, unmask, keyword_unmask):
 
-- `pipeline:prove_plan_with_fallback/5` — full pipeline (prove + plan
-  + schedule).  Used by production paths (`--pretend`, `--graph`,
+- `pipeline:prove_plan_with_fallback/5` — full pipeline (prove +
+  order).  Used by production paths (`--pretend`, `--graph`,
   `--build`) and `pipeline:test_stats`.
-- `pipeline:prove_with_fallback/4` — prover only.  Used by layered
-  tests (`prover:test`, `planner:test`, `scheduler:test`) and
+- `pipeline:prove_with_fallback/4` — resolve pass only.  Used by layered
+  tests (`resolver:test`, `orderer:test`) and
   `--bugs`.  Each test layer adds its own stages on top.
 
-Underneath, `prove_plan_basic/5` chains three stages:
+Underneath, `prove_plan_basic/6` chains two stages (the trailing SCCs
+argument is always `[]` — the rule-based orderer leaves no remainder):
 
 ```prolog
-pipeline:prove_plan_basic(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL)
+pipeline:prove_plan_basic(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, SCCs)
 ```
 
-1. `prover:prove/9` — constructs Proof, Model, Constraints, and Triggers
-2. `planner:plan/5` — wave planning for the acyclic portion
-3. `scheduler:schedule/6` — SCC/merge-set scheduling for the remainder
+1. `resolver:resolve/9` — hands the `resolving` rule set to
+   `prover:prove/10`; constructs Proof, Model, Constraints, and Triggers
+2. `orderer:order/5` — hands the `ordering` rule set to the same prover
+   for a second proving pass; projects the wave-list plan (Chapter 12)
 
 The prover is wrapped in `with_reprove_state` which saves and restores the
 learned constraint store across reprove retries.  Inside that,
@@ -351,8 +350,10 @@ for the reprove mechanism in detail.
 ![Multiple stable models](Diagrams/08-stable-models.svg)
 
 The prover can produce different solutions (stable models) of the USE flag
-configuration space.  Using Prolog's built-in backtracking, different valid
-configurations of the same target can be explored and compared.
+configuration space.  Variants are explored by re-proving the target under
+thread-local branch-preference overrides (`variant:use_override`,
+`variant:branch_prefer`) that steer the committed choices — the choice-group
+cut is never removed within a single proof.
 
 For example, a `REQUIRED_USE="|| ( linux macos )"` constraint yields two stable
 models:
@@ -375,7 +376,7 @@ without the prover understanding domain-specific semantics.
 
 PDEPEND dependencies are handled this way: they are discovered only after a
 literal is resolved and are injected as proof obligations via
-`rules:literal_hook/4`.
+`heuristic:proof_obligation/4`.
 
 
 ## Choice-event log

@@ -9,7 +9,7 @@ See cache.pl for the datastructure. The actual data is contained in Knowledge/kb
 - `Source/Knowledge/knowledgebase.pl`: different repositories register themselves with the knowledge base. 
 - `Source/Knowledge/cache.pl`: the prolog cache data structure 
 - `Source/Domain/Gentoo/eapi.pl`: a Prolog DCG grammar to read md5-cache syntax
-- `Source/Domain/Gentoo/rules.pl`: domain specific (Gentoo) specific rules handling dependencies, interpreting use flags, PDEPEND hooks, etc.
+- `Source/Domain/Gentoo/Rules/resolving.pl`: domain specific (Gentoo) specific rules handling dependencies, interpreting use flags, PDEPEND hooks, etc.
 - `Source/Domain/Gentoo/vdb.pl`: a repository containing information about installed ebuilds
 - `Source/Domain/Gentoo/pkgmoves.pl`: profiles/updates package move / slotmove handling (read-time translation of targets, world/set entries and computed-set tree lookups; world file rewritten post-sync via `pkgmoves:apply_world_moves`; VDB rewriting intentionally left to traditional Portage)
 - `Source/Domain/Gentoo/Exceptions/fixup.pl`: generic registry/dispatcher for build-time domain exception fixups (multifile hooks `fixup:mechanism/1`, `fixup:phase_retry_hook/10`, `fixup:mechanism_note/3`; record via `fixup:record/3`; shared same-version repair rebuild helper `fixup:repair_rebuild/4`); `collision.pl` (#90 collision deconfliction), `ghcabi.pl` (#93 GHC ABI repair, native haskell-updater; #108 boot-lib recache; #112 prove-time `CABAL_CORE_LIB_GHC_PV` filter) and `ocamlabi.pl` (#99 OCaml/findlib ABI repair) register here
@@ -24,20 +24,42 @@ See cache.pl for the datastructure. The actual data is contained in Knowledge/kb
 
 
 ## Architecture (mental model)
-Pipeline (standalone):
+Pipeline (standalone): reader/parser → resolver → orderer → printer → builder.
+
+The prover is a generic inference facility, not a stage: it takes the rule
+module to prove against as its first argument (`prover:prove(Rules, ...)`,
+`prover:prove_once(Rules, ...)`) and knows nothing about resolving or
+ordering. The two proving stages are thin wrappers that pair the prover
+with a rule set:
 
 - reader/parser build cache facts using eapi grammar
-- prover makes proofs (ProofAVL, ModelAVL, Constraints, TriggersAVL) using rules 
-- planner does fast wave planning for acyclic portion of graph represented by rules in proof and returns a remainder
-- scheduler post-processes remainder: SCC (Kosaraju) and merge-sets for :run SCCs
+- resolver (pass 1, "what"): `resolver:resolve/9` =
+  `prover:prove(resolving, ...)` — proofs (ProofAVL, ModelAVL,
+  Constraints, TriggersAVL) over the Gentoo domain rules
+- orderer (pass 2, "when"): `orderer:order/5` =
+  `prover:prove_once(ordering, ...)` + wave projection:
+  every pass-1 step must prove `scheduled/1`; availability proofs assign
+  waves; cycles fall through a `currently_proving` guard into a VDB "world"
+  citation or a negative `unreachable/2` domain assumption; soft preferences
+  (RDEPEND groups, `order_after` anchors, PDEPEND completion, assumed-dep
+  aliases) are honored by the projection exactly when they close no cycle
 - printer renders plan + assumptions & warnings
 
+Callers outside any pass (query-side model construction) fall back to
+`config:default_rules/1` (= `resolving`).
+
+The classic wave planner (Kahn) + SCC scheduler (Kosaraju, `:run`
+relaxation, merge-sets, repair passes) were retired after tree-wide A/B
+comparison showed identical action multisets and identical runtime.
+See `Documentation/Designs/ordering-engine.md`.
+
 Key files:
-- `Source/Pipeline/prover.pl`: inductive proof search; cycles become prover cycle-break assumptions (`assumed(rule(Lit))` in proof, `assumed(Lit)` in model).
-- `Source/Domain/Gentoo/rules.pl`: domain rules; domain assumptions appear as `rule(assumed(X), [])` and show as “Domain assumptions”.
-- `Source/Pipeline/planner.pl`: wave planner; returns (Plan, RemainderRules).
-- `Source/Pipeline/scheduler.pl`: SCC/merge-set scheduling for remainder; acts only on :run SCCs.
-- `Source/Pipeline/pipeline.pl`: orchestrates prover+planner+scheduler. Two canonical entry points with 5-tier committed-choice progressive relaxation (strict, keyword_acceptance, blockers, unmask, keyword_unmask): `prove_plan_with_fallback/5` (full pipeline) and `prove_with_fallback/4` (prover only, for layered tests and --bugs).
+- `Source/Pipeline/prover.pl`: generic proof engine, parameterized by rule module; cycles become prover cycle-break assumptions (`assumed(rule(Lit))` in proof, `assumed(Lit)` in model).
+- `Source/Pipeline/resolver.pl`: resolve stage — `resolver:resolve/9` plus the resolve-stage test harnesses (`resolver:test/1`, `resolver:test_latest/1`, `resolver:test_stats/1`, `resolver:test_stats_pkgs/2`).
+- `Source/Domain/Gentoo/Rules/resolving.pl` (+ `Rules/Resolving/` submodules): resolve rule set; domain assumptions appear as `rule(assumed(X), [])` and show as “Domain assumptions”.
+- `Source/Pipeline/orderer.pl`: order stage — pass-2 driver `orderer:order/5`, wave projection, preference honoring, merge-order bias (within-wave refcount ordering), `orderer:test/1` harnesses.
+- `Source/Domain/Gentoo/Rules/ordering.pl`: order rule set — planning laws (`rule/2`: scheduled/available/unreachable) + Gentoo bindings `step/1`, `requires/2`, `prefers/2` (runtime groups, order_after, PDEPEND completion #18/#19, configure closure #21, assumed-dep alias #95), `world/2` (VDB citations).
+- `Source/Pipeline/pipeline.pl`: orchestrates resolver+orderer. Two canonical entry points with 5-tier committed-choice progressive relaxation (strict, keyword_acceptance, blockers, unmask, keyword_unmask): `prove_plan_with_fallback/5` (full pipeline) and `prove_with_fallback/4` (resolve only, for layered tests and --bugs).
 - `Source/Pipeline/printer.pl`: output + warnings; distinguishes domain assumptions vs prover cycle-breaks.
 - `Source/Domain/Gentoo/version.pl`: version domain model (`version_domain(Slots, Bounds)`), domain meet/intersection, consistency checks.
 
@@ -48,7 +70,8 @@ Version representation:
 
 PDEPEND handling:
 - PDEPEND is always enabled; there is no preference flag for it.
-- PDEPEND deps are resolved single-pass inside the prover via `rules:literal_hook/4`.
+- PDEPEND deps are resolved single-pass inside the prover via the
+  `heuristic:proof_obligation/4` hook.
 
 Assumption taxonomy (do not mix these up):
 
@@ -122,7 +145,7 @@ proof retries (managed by `with_cn_domain_reprove_state`):
 - Merge semantics: `feature_unification:val_hook` (e.g., domain intersection)
 - Literal format: `cn_domain(Category, Name, Slot)` for version domains
 
-Rules uses this store in four ways:
+The resolving rule set uses this store in four ways:
 1. **Candidate narrowing**: `grouped_dep_effective_domain` intersects the
    local+context domain with any learned domain (`apply_learned_domain`).
 2. **Conflict learning**: constraint guards learn the domain when a conflict
@@ -158,11 +181,13 @@ When testing changes to the learned constraint mechanism, ALWAYS verify:
 
 - Source filenames must NOT contain hyphens (`-`) or underscores (`_`).
   Use concatenated lowercase words (e.g. `gentoo.pl`, `knowledgebase.pl`).
-  Exceptions (grandfathered, do not add new ones):
-  - `portage-ng.pl` (project entry point / name)
-  - `binpkg_exec.pl`, `binpkg_index.pl`, `binpkg_extract.pl`,
-    `ebuild_exec.pl` (underscore-named for readability of the
-    `binpkg`/`ebuild` prefix; their module names match the filename)
+ Exceptions (grandfathered, do not add new ones):
+ - `portage-ng.pl` (project entry point / name)
+ - `binpkg_exec.pl`, `binpkg_index.pl`, `binpkg_extract.pl`,
+ `ebuild_exec.pl`, `missing_provider.pl` (underscore-named for
+ readability of their prefixes; their module names match the filename)
+ - host-local templates under `Source/Config/Private/` (configuration,
+ not source modules)
 - Prolog module names follow the same rule (e.g. `:- module(gentoo, [])`).
 - Subdirectory names under `Source/` may use CamelCase (e.g. `Application/`, `Domain/`, `Config/`, `Pipeline/`).
 
@@ -335,9 +360,9 @@ For quick iteration and for reproducible debugging, prefer running a *scripted* 
 
 ```sh
 ./Source/Application/Wrapper/portage-ng-dev --mode standalone --shell --timeout 60 <<'PL'
-prover:test_stats(portage).
+resolver:test_stats(portage).
 % Any other queries you want:
-% prover:test_stats_pkgs(portage, ['kde-apps'-'kde-apps-meta']).
+% resolver:test_stats_pkgs(portage, ['kde-apps'-'kde-apps-meta']).
 halt.
 PL
 ```
@@ -345,13 +370,13 @@ PL
 This keeps the full project load graph intact (same as interactive `--shell`), while letting you run multi-line “scripts” non-interactively.
 
 ### Running test_stats in Cursor (IMPORTANT)
-The full `prover:test_stats(portage)` run processes ~31k ebuilds and takes
+The full `resolver:test_stats(portage)` run processes ~31k ebuilds and takes
 ~2.5 minutes. Its progress lines overflow Cursor’s 1MB terminal buffer,
 so the stats summary at the end gets truncated. **Always redirect to a file**:
 
 ```sh
 ./Source/Application/Wrapper/portage-ng-dev --mode standalone --shell --timeout 600 <<'PL' > /tmp/portage-ng-test-stats.log 2>&1
-prover:test_stats(portage).
+resolver:test_stats(portage).
 halt.
 PL
 ```
@@ -363,13 +388,13 @@ For spot-checking a few packages (fast, no file redirect needed):
 
 ```sh
 ./Source/Application/Wrapper/portage-ng-dev --mode standalone --shell --timeout 60 <<'PL'
-prover:test_stats_pkgs(portage, ['dev-libs'-'glib', 'app-misc'-'geneweb']).
+resolver:test_stats_pkgs(portage, ['dev-libs'-'glib', 'app-misc'-'geneweb']).
 halt.
 PL
 ```
 
 ### test_stats vs .merge accuracy
-`prover:test_stats` uses `prove_with_fallback` (prover-only) while `.merge`
+`resolver:test_stats` uses `prove_with_fallback` (resolve only) while `.merge`
 files use `prove_plan_with_fallback` (full pipeline). Both share the same
 5-tier fallback chain and produce **identical domain assumptions per ebuild**.
 Aggregate differences between test_stats and the compare report are explained by:
@@ -380,7 +405,7 @@ Aggregate differences between test_stats and the compare report are explained by
   break section in `.merge` output, so the compare script reports 0
 - Blockers: count differences track the coverage gap above
 
-Bottom line: `prover:test_stats` is a valid substitute for regenerating
+Bottom line: `resolver:test_stats` is a valid substitute for regenerating
 `.merge` files when checking domain assumption accuracy.
 
 The canonical load graph for standalone is in `portage-ng.pl`:
@@ -397,14 +422,17 @@ The canonical load graph for standalone is in `portage-ng.pl`:
 - Proof/Model/Triggers are assoc/AVL-based; avoid repeated full traversals when possible.
 - Query performance uses `goal_expansion/2` macros in `Source/Knowledge/query.pl`.
 - `query:search(model(dependency(Merged,Phase)):config?{Ctx}, Repo://Id)` is
-  not cached.  The goal-expansion inlines self-context injection, `prove_model`,
-  and `group_dependencies` directly at compile time.  A cache was attempted but
-  removed because model construction depends on mutable proof state:
+  cached per proof (`memo:dep_model_cache_/5`, gated by
+  `config:dep_model_cache/1`).  The goal-expansion inlines self-context
+  injection, `prove_model`, and `group_dependencies` at compile time.
+  Model construction depends on mutable proof state, so every hazard is
+  encoded in the cache key rather than clearing the cache (two earlier
+  clear-based attempts were unsound):
   (1) `build_with_use` context varies per dependency path,
   (2) `prover:assuming` flags change between fallback attempts,
   (3) `memo:selected_cn_snap_` evolves during the proof (affects OR group ordering),
   (4) `variant:use_override` / `variant:branch_prefer` change during variant mode.
-  Profiling shows 25-30% of proving time in these queries, with up to 88%
+  Profiling showed 25-30% of proving time in these queries, with up to 88%
   of calls redundant for complex packages. See top-of-file comment in `query.pl`.
 
 ## Development flow
@@ -422,7 +450,7 @@ The canonical load graph for standalone is in `portage-ng.pl`:
 
 ## Resolver regression testing via tinderbox-ng (vm-linux.local)
 
-After a resolver change (rules, prover, planner, scheduler, printer)
+After a resolver change (resolving rules, prover, resolver, orderer, printer)
 the authoritative regression check is a side-by-side compare against
 traditional Gentoo `emerge` run by
 [tinderbox-ng](https://github.com/pvdabeel/tinderbox-ng) on the Linux
@@ -435,12 +463,12 @@ in fresh, identical OverlayFS sessions and diffs their plan/build logs.
 # 1. From this macOS host, push the new portage-ng source into the VM
 #    baseline. Does NOT regenerate kb.qlf — only do that (refresh-kb)
 #    after parser / grammar / knowledge-base schema changes; resolver
-#    edits (prover / planner / scheduler / printer / rules) need only
+#    edits (prover / resolver / orderer / printer / rule sets) need only
 #    refresh-portage-ng.
 cd ~/Desktop/tinderbox-ng
 bin/deploy-host.sh --refresh-portage-ng root@vm-linux.local
 
-# 2. Quick per-target sanity check (planner only, fresh sessions on
+# 2. Quick per-target sanity check (plan only, fresh sessions on
 #    both sides, both destroyed at the end):
 ssh root@vm-linux.local 'tinderbox-ng compare <category>/<package>'
 
@@ -475,8 +503,8 @@ snapshots that previously lived in the now-removed `Reports/` directory.
   `/usr/local/share/tinderbox-ng/share/tinderbox-ng/` in the deployed
   layout.
 - `tinderbox-ng refresh-kb` on the VM — ONLY after parser / grammar /
-  knowledge-base changes (regenerates `kb.qlf`). For prover / planner /
-  scheduler / printer / rules edits, `refresh-portage-ng` is enough.
+  knowledge-base changes (regenerates `kb.qlf`). For prover / resolver / orderer /
+  printer / rules edits, `refresh-portage-ng` is enough.
 - `tinderbox-ng phase-stats` — consolidate per-session
   `phase_stats.pl` files into a master forecast for build-time
   estimation; orthogonal to the merge-vs-emerge regression check.

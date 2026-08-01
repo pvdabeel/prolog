@@ -14,16 +14,16 @@ digraph literal_flow {
   prover [shape=box, style="filled,rounded", fillcolor="#ffeedd",
     label="Prover\nprove/9\nProof + Model"];
 
-  planner [shape=box, style="filled,rounded", fillcolor="#ddffee",
-    label="Planner\nKahn's algorithm\nwaves"];
+  orderer [shape=box, style="filled,rounded", fillcolor="#ddffee",
+    label="Orderer\nscheduled/available\nproofs -> waves"];
 
   printer [shape=box, style="filled,rounded", fillcolor="#eeeeee",
     label="Printer\nformatted\noutput"];
 
   // Data flowing between stages
   rules -> prover [label="  R://E:A?{C}\n  (full literals)  "];
-  prover -> planner [label="  R://L:A\n  (core keys in\n  Proof + Triggers)  "];
-  planner -> printer [label="  Plan\n  (ordered waves)  "];
+  prover -> orderer [label="  R://L:A\n  (core keys in\n  Proof + Triggers)  "];
+  orderer -> printer [label="  Plan\n  (ordered waves)  "];
 
   // Side annotations
   model [shape=note, fillcolor="#fff5ee",

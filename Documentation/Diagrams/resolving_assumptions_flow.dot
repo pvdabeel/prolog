@@ -1,7 +1,7 @@
-digraph rules_assumptions_bpmn {
+digraph resolving_assumptions_bpmn {
   rankdir=TD;
   labelloc="t";
-  label="portage-ng: rules/prover assumption flow (current implementation, BPMN-style)";
+  label="portage-ng: resolving/prover assumption flow (current implementation, BPMN-style)";
   fontsize=12;
   node [fontname="Helvetica", fontsize=10];
   edge [fontname="Helvetica", fontsize=9, arrowsize=0.7];
@@ -23,7 +23,7 @@ digraph rules_assumptions_bpmn {
   }
 
   subgraph cluster_blockers_conflicts {
-    label="rules.pl : blocker + conflict assumption controls";
+    label="resolving.pl : blocker + conflict assumption controls";
     color="#888888";
 
     b_start [shape=circle, label="start"];
@@ -38,21 +38,21 @@ digraph rules_assumptions_bpmn {
     b_grouped_weak [shape=box, label="grouped_package_dependency(weak):\ncandidate:grouped_blocker_specs → all assumed\n+ make_blocker_constraint"];
     b_grouped_strong [shape=box, label="grouped_package_dependency(strong):\ncandidate:grouped_blocker_specs_partition(...,\nEnforceSpecs, AssumeSpecs)"];
 
-    b_assume_blockers [shape=diamond, label="rules:assume_blockers?"];
+    b_assume_blockers [shape=diamond, label="candidate:assume_blockers?"];
     b_strong_assume_all [shape=box, label="assume all strong blockers:\nassume Enforce + Assume"];
     b_strong_enforce [shape=box, label="strict strong blockers:\nconstraint(blocked_cn) for Enforce\n+ assume for Assume"];
 
     b_conflict [shape=diamond, label="rule(conflict(A,B),...)"];
-    b_conflict_assume [shape=box, label="rules:assume_conflicts →\n[assumed(conflict(A,B))]"];
+    b_conflict_assume [shape=box, label="candidate:assume_conflicts →\n[assumed(conflict(A,B))]"];
     b_conflict_fail [shape=box, label="strict conflict → fail"];
 
     b_anyof_guard [shape=diamond, label="any_of_config_dep_ok/2\n(USE-dep option unsatisfied?)"];
-    b_anyof_assume [shape=box, label="rules:assume_conflicts →\nallow option"];
+    b_anyof_assume [shape=box, label="candidate:assume_conflicts →\nallow option"];
     b_anyof_fail [shape=box, label="strict → reject option (fail)"];
   }
 
   subgraph cluster_grouped_dep {
-    label="rules.pl + candidate.pl + use.pl + dependency.pl :\nrule(grouped_package_dependency(no,C,N,PackageDeps):Action?{Context}, Conditions)";
+    label="resolving.pl + candidate.pl + use.pl + dependency.pl :\nrule(grouped_package_dependency(no,C,N,PackageDeps):Action?{Context}, Conditions)";
     color="#888888";
 
     g_start [shape=circle, label="start"];
@@ -128,7 +128,7 @@ digraph rules_assumptions_bpmn {
   }
 
   subgraph cluster_bwu_cross_dep {
-    label="rules.pl : :install / :run BWU cross-dep REQUIRED_USE check";
+    label="resolving.pl : :install / :run BWU cross-dep REQUIRED_USE check";
     color="#888888";
     fontcolor="#555555";
 
@@ -145,7 +145,7 @@ digraph rules_assumptions_bpmn {
   }
 
   subgraph cluster_cn_domain_conflict {
-    label="rules.pl : constraint_unify_hook(cn_domain) — slot conflict detection";
+    label="resolving.pl : constraint_unify_hook(cn_domain) — slot conflict detection";
     color="#888888";
     fontcolor="#555555";
 

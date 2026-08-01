@@ -36,8 +36,6 @@ sandbox:safe_primitive(config:force_emerge_regen(_)).
 sandbox:safe_primitive(config:print_prover_cycles(_)).
 sandbox:safe_primitive(config:print_prover_cycles_max_total(_)).
 sandbox:safe_primitive(config:print_prover_cycles_max_depth(_)).
-sandbox:safe_primitive(config:print_scc(_)).
-sandbox:safe_primitive(config:print_scc_max_members(_)).
 sandbox:safe_primitive(config:print_blockers(_)).
 sandbox:safe_primitive(config:bugreport_drafts_enabled(_)).
 sandbox:safe_primitive(config:bugreport_drafts_max_assumptions(_)).
@@ -170,10 +168,11 @@ sandbox:safe_primitive(config:llm_knowledge_max_bytes(_)).
 sandbox:safe_primitive(config:llm_knowledge_max_source_lines(_)).
 
 % -----------------------------------------------------------------------------
-%  Prover
+%  Prover (generic engine) + Resolver (pass-1 stage)
 % -----------------------------------------------------------------------------
 
-sandbox:safe_primitive(prover:prove(_,_,_,_,_,_,_,_,_)).
+sandbox:safe_primitive(prover:prove(_,_,_,_,_,_,_,_,_,_)).
+sandbox:safe_primitive(prover:prove_once(_,_,_,_,_,_,_,_,_,_)).
 sandbox:safe_primitive(prover:prove_model(_,_,_,_,_)).
 sandbox:safe_primitive(prover:proven(_,_,_)).
 sandbox:safe_primitive(prover:assumed_proven(_,_)).
@@ -187,15 +186,16 @@ sandbox:safe_primitive(prover:learned(_,_)).
 % prover:learn/3 is intentionally NOT safelisted: Pengines clients must
 % not poison the server's learned-constraint store. Learning still runs
 % inside server-side prove (safe_primitive prove body is not re-sandboxed).
-sandbox:safe_primitive(prover:test(_)).
-sandbox:safe_primitive(prover:test(_,_)).
-sandbox:safe_primitive(prover:test_latest(_)).
-sandbox:safe_primitive(prover:test_latest(_,_)).
-sandbox:safe_primitive(prover:test_stats(_)).
-sandbox:safe_primitive(prover:test_stats(_,_)).
-sandbox:safe_primitive(prover:test_stats(_,_,_)).
-sandbox:safe_primitive(prover:test_stats_pkgs(_,_)).
-sandbox:safe_primitive(prover:test_stats_pkgs(_,_,_,_)).
+sandbox:safe_primitive(resolver:resolve(_,_,_,_,_,_,_,_,_)).
+sandbox:safe_primitive(resolver:test(_)).
+sandbox:safe_primitive(resolver:test(_,_)).
+sandbox:safe_primitive(resolver:test_latest(_)).
+sandbox:safe_primitive(resolver:test_latest(_,_)).
+sandbox:safe_primitive(resolver:test_stats(_)).
+sandbox:safe_primitive(resolver:test_stats(_,_)).
+sandbox:safe_primitive(resolver:test_stats(_,_,_)).
+sandbox:safe_primitive(resolver:test_stats_pkgs(_,_)).
+sandbox:safe_primitive(resolver:test_stats_pkgs(_,_,_,_)).
 
 sandbox:safe_primitive(plancompare:run(_,_)).
 sandbox:safe_primitive(plancompare:diff(_,_)).
@@ -237,32 +237,23 @@ sandbox:safe_primitive(choicelog:maybe_dump).
 sandbox:safe_primitive(choicelog:with_logging(_)).
 
 % -----------------------------------------------------------------------------
-%  Rules
+%  Rule sets
 % -----------------------------------------------------------------------------
 
-sandbox:safe_primitive(rules:rule(_,_)).
+sandbox:safe_primitive(resolving:rule(_,_)).
+sandbox:safe_primitive(ordering:rule(_,_)).
 
 % -----------------------------------------------------------------------------
-%  Planner & Scheduler
+%  Orderer
 % -----------------------------------------------------------------------------
 
-sandbox:safe_primitive(planner:plan(_,_,_,_)).
-sandbox:safe_primitive(planner:plan(_,_,_,_,_)).
-sandbox:safe_primitive(planner:test(_)).
-sandbox:safe_primitive(planner:test(_,_)).
-sandbox:safe_primitive(planner:test_latest(_)).
-sandbox:safe_primitive(planner:test_latest(_,_)).
-sandbox:safe_primitive(planner:test_stats(_)).
-sandbox:safe_primitive(planner:test_stats(_,_)).
-
-sandbox:safe_primitive(scheduler:schedule(_,_,_,_,_,_)).
-sandbox:safe_primitive(scheduler:schedule(_,_,_,_,_,_,_)).
-sandbox:safe_primitive(scheduler:test(_)).
-sandbox:safe_primitive(scheduler:test(_,_)).
-sandbox:safe_primitive(scheduler:test_latest(_)).
-sandbox:safe_primitive(scheduler:test_latest(_,_)).
-sandbox:safe_primitive(scheduler:test_stats(_)).
-sandbox:safe_primitive(scheduler:test_stats(_,_)).
+sandbox:safe_primitive(orderer:order(_,_,_,_,_)).
+sandbox:safe_primitive(orderer:test(_)).
+sandbox:safe_primitive(orderer:test(_,_)).
+sandbox:safe_primitive(orderer:test_latest(_)).
+sandbox:safe_primitive(orderer:test_latest(_,_)).
+sandbox:safe_primitive(orderer:test_stats(_)).
+sandbox:safe_primitive(orderer:test_stats(_,_)).
 
 % -----------------------------------------------------------------------------
 %  Pipeline

@@ -55,9 +55,9 @@ Additional cache predicates store per-ebuild metadata:
 
 | **Predicate** | **Content** |
 | :-- | :-- |
-| `cache:entry_metadata/3` | EAPI, SLOT, KEYWORDS, LICENSE, etc. |
+| `cache:entry_metadata/4` | Per-entry key/value metadata: EAPI, SLOT, KEYWORDS, LICENSE, etc. |
 | `cache:ordered_entry/5` | Entries ordered by version (for candidate selection) |
-| `cache:provides/3` | Virtual package mappings |
+| `cache:manifest/5`, `cache:manifest_metadata/6` | Manifest files and their checksums |
 
 
 ## Why this cache design?
@@ -145,9 +145,9 @@ Each repository instance manages its own cache facts. The `repository`
 class provides methods for syncing, loading, and querying:
 
 ```prolog
-portage:sync.          % Sync from remote
-portage:read.          % Read md5-cache into Prolog facts
-portage:search(Query). % Search entries
+portage:sync.                  % Sync from remote + regenerate caches
+portage:update_cache.          % Re-read md5-cache into Prolog facts
+portage:query(Query, Result).  % Query entries (delegates to query:search/2)
 ```
 
 
@@ -352,14 +352,17 @@ Each of these is expanded at compile time into a sequence of:
 The result `Merged` is a list of grouped dependency terms ready for
 resolution by the rules layer (see [Chapter 11](11-doc-rules.md)).
 
-**Why not cached?**  Model construction depends on mutable proof state
-beyond the explicit context argument: `build_with_use` varies per
+**How is this cached?**  Model construction depends on mutable proof
+state beyond the explicit context argument: `build_with_use` varies per
 dependency path, `prover:assuming` flags change between fallback
-attempts, and `memo:selected_cn_snap_` evolves during the proof.
-A cache was attempted but removed because it could not produce a
-sound cache key that captured all of these dimensions.  See the
-comment at the top of `Source/Knowledge/query.pl` for the full
-rationale.
+attempts, and `memo:selected_cn_snap_` evolves during the proof.  Two
+early cache attempts that tried to *clear* the cache when this state
+changed were abandoned as unsound.  The current design instead encodes
+every mutable input **in the cache key**: results are memoised per
+proof in `memo:dep_model_cache_/5` under a hazard-encoded key
+(proof-context USE state, assumption flags, choice-group signature),
+gated by `config:dep_model_cache/1`.  See the comment at the top of
+`Source/Knowledge/query.pl` for the full key design.
 
 
 ## Further reading

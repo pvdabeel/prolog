@@ -146,11 +146,14 @@ set of versions to choose from.
 ### Consistency check
 
 ```prolog
-version_domain:domain_consistent(Domain)
+version_domain:domain_inconsistent(Domain)
 ```
 
-Verifies that a domain is non-empty — that at least one version in the
-repository satisfies the bounds.
+Detects structurally empty domains — an empty slot set, conflicting
+exact bounds, or a lower bound above an upper bound.  The meet
+operation rejects a result when this check succeeds
+(`\+ domain_inconsistent(...)`); it is purely structural and never
+consults the repository.
 
 
 ## Feature logic intuition
@@ -220,7 +223,7 @@ Chapter 11 ties domains into rule evaluation and candidate generation.
 ### Wildcard domain learning
 
 When a wildcard dependency like `=dev-python/gast-0.6*` cannot be
-satisfied, `candidate:maybe_learn_wildcard_domain/4` derives an
+satisfied, `cnselect:maybe_learn_wildcard_domain/4` derives an
 upper-bound domain from the wildcard: the last numeric component is
 incremented to produce an exclusive upper bound (e.g. `0.6*` → `< 0.7`,
 `1.2.3*` → `< 1.2.4`).  The resulting `version_domain(any, [bound(smaller, UpperVer)])`

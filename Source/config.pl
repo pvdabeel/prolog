@@ -104,7 +104,7 @@ config:use_binpkg(true).
 %! config:binpkg_respect_use(?Mode)
 %
 % Mirrors emerge's `--binpkg-respect-use=y|n`. When `strict`, only binpkgs
-% whose stored `USE:` exactly matches the planner's resolved USE (after
+% whose stored `USE:` exactly matches the resolver's resolved USE (after
 % IUSE_EFFECTIVE projection) are eligible. When `relaxed`, USE-mismatched
 % binpkgs may still be selected (a warning is logged). Default: strict.
 
@@ -798,25 +798,6 @@ config:print_prover_cycles_max_total(10).
 config:print_prover_cycles_max_depth(25).
 
 
-%! config:print_scc(?Bool)
-%
-% Whether to print the scheduler's SCC (strongly connected component)
-% decomposition in plan output.  Shows which packages form cyclic
-% merge-sets in the planner remainder and the linearization order
-% chosen by the scheduler.
-
-config:print_scc(false).
-
-
-%! config:print_scc_max_members(?N)
-%
-% Maximum number of SCC members to display per component.
-% Components larger than this show only the first N members with
-% a summary count.
-
-config:print_scc_max_members(50).
-
-
 %! config:print_blockers(?Style)
 %
 % How to display blocker assumptions in plan output.
@@ -963,6 +944,17 @@ config:bugzilla_user_agent('portage-ng/2026 (https://github.com/pvdabeel/portage
 %  Proving
 % -----------------------------------------------------------------------------
 
+%! config:default_rules(?Module)
+%
+% The rule module the prover falls back to when no pass has scoped one
+% explicitly (prover:rule_module/1). The prover itself is rule-set
+% agnostic: the resolver stage passes `resolving`, the orderer stage
+% passes `ordering`; this default serves query-side model construction
+% running outside any pass (printer, builder, interactive queries).
+
+config:default_rules(resolving).
+
+
 %! config:time_limit(?Limit)
 %
 % When parsing, proving or planning, use the specified time limit to
@@ -974,7 +966,7 @@ config:time_limit(300).
 
 %! config:proving_target(?Target)
 %
-% Fact which controls the test target for prover, planner, printer and builder
+% Fact which controls the test target for prover, orderer, printer and builder
 % Set to either:
 %
 %  - 'install' : Proof using compile-time dependencies only
@@ -987,7 +979,7 @@ config:proving_target(run).
 %
 % Maximum number of iterative reprove retries.
 %
-% This controls the bounded retry loop in prover:prove/9 that handles
+% This controls the bounded retry loop in prover:prove/10 that handles
 % prover_reprove(Info) exceptions.
 %
 % Important distinction from normal Prolog backtracking:
@@ -1836,7 +1828,7 @@ config:llm_capability(context,Capability) :-
                for Gentoo Linux written in SWI-Prolog. portage-ng reads the same Portage
                tree (metadata/md5-cache) and package database (var/db/pkg) as traditional
                Gentoo emerge, but it resolves dependencies using its own Prolog-based
-               prover, planner, and scheduler. It is NOT the standard Portage emerge tool.
+               prover and ordering engine. It is NOT the standard Portage emerge tool.
                When diagnosing issues, keep in mind: (1) the Portage tree, installed
                packages, USE flags, keywords, and profiles are identical to a real Gentoo
                system; (2) dependency resolution errors come from portage-ng's solver, not
@@ -1851,8 +1843,9 @@ config:llm_capability(context,Capability) :-
 config:llm_capability(architecture,Capability) :-
   Description="portage-ng mechanisms (ground yourself before answering code/design
                questions): pipeline is reader/parser -> prover (Proof/Model/Constraints/
-               Triggers AVLs) -> planner (waves+remainder) -> scheduler (:run SCCs) ->
-               printer -> builder. Domain assumptions are proof key rule(assumed(X));
+               Triggers AVLs) -> orderer (second prover pass over planning laws,
+               projects availability proofs to waves) -> printer -> builder. Domain
+               assumptions are proof key rule(assumed(X));
                cycle-breaks are assumed(rule(X)). feedback:* learns build-time deps and
                re-derives plans; prover:learn only narrows version/USE domains. Before
                inventing APIs or file layouts, use sandboxed Prolog to call
@@ -1893,8 +1886,8 @@ config:llm_capability(code,Capability) :-
 config:llm_capability(metacircular,Capability) :-
   Description="You are the metacircular repair advisor for portage-ng. You know how
                plans and proofs are produced: reader/parser builds cache facts; the
-               prover builds ProofAVL/ModelAVL/Constraints/TriggersAVL; the planner
-               yields waves plus a remainder; the scheduler SCCs :run remainder; the
+               prover builds ProofAVL/ModelAVL/Constraints/TriggersAVL; the orderer
+               re-proves ordering laws over the proof and projects waves; the
                printer renders the plan. Domain assumptions use proof key
                rule(assumed(X)); prover cycle-breaks use assumed(rule(X)). Positive
                (actionable) domain assumptions: masked, keyword_filtered, license,
@@ -1918,7 +1911,7 @@ config:llm_capability(metacircular,Capability) :-
                Never invent out-of-tree packages. Prefer record_discovery when a
                missing command/header/lib maps to an in-tree Category/Name.
                Evidence should be a structured term citing phase/log lines.
-               Do not propose edits to rules.pl, prover, or planner.",
+               Do not propose edits to resolving.pl, prover, resolver, or orderer.",
   normalize_space(string(Capability),Description).
 
 

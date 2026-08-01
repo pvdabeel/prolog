@@ -259,7 +259,7 @@ worker:post_result(Host, Port, Job, Result) :-
 
 %! worker:execute_job(+Job, -Result)
 %
-% Run the canonical pipeline (prover + planner + scheduler) for a single
+% Run the canonical pipeline (prover + orderer) for a single
 % target through pipeline:prove_plan_with_fallback/6, so workers use the
 % same 5-tier committed-choice fallback chain (strict, keyword_acceptance,
 % blockers, unmask, keyword_unmask) as standalone mode.

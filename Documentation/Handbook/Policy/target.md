@@ -11,7 +11,7 @@ selection. Sets expand before resolution.
 - `target(Q, Arg):run|fetchonly|uninstall?{Ctx}`
 - Expands to `Repo://Ebuild:Action?{Ctx}` (and optional `world/1` side effects)
 
-**Owns:** `Rules/target.pl`, `rules.pl` TARGET section, `Preference/sets.pl`
+**Owns:** `Rules/Resolving/target.pl`, `resolving.pl` TARGET section, `Preference/sets.pl`
 (set expansion before prove).
 
 **Invariants:**

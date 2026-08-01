@@ -3,7 +3,7 @@
 A **read-only** view of Gentoo resolver policy for newcomers.
 These cards answer *what must hold*, not *how the search engine walks
 candidates*. Procedural detail stays in
-[`Source/Domain/Gentoo/Rules/`](../../../Source/Domain/Gentoo/Rules/)
+[`Source/Domain/Gentoo/Rules/Resolving/`](../../../Source/Domain/Gentoo/Rules/Resolving/)
 and the narrative walkthrough in
 [Chapter 11](../11-doc-rules.md).
 

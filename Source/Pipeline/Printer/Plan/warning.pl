@@ -49,7 +49,7 @@ warning:unwrap_ctx(Ctx0, Ctx) :-
 %
 % There are two distinct assumption mechanisms in this codebase:
 %
-% - Domain (rules.pl) assumptions:
+% - Domain (resolving.pl) assumptions:
 %   A rule body may contain an `assumed(X)` literal to represent an unprovable
 %   domain fact (e.g. missing dependency). The prover then proves `assumed(X)`
 %   via `rule(assumed(_), [])`, resulting in a proof key of the shape:
@@ -1134,7 +1134,7 @@ warning:print_assumption_detail(rule(R://E:unmask,_)) :- !,
     message:print('  '),
     message:print(R://E), nl.
 
-% Blocker assumptions (introduced by rules.pl when we print a "plan with blocker
+% Blocker assumptions (introduced by resolving.pl when we print a "plan with blocker
 % assumptions" after a failed strict solve).
 warning:print_assumption_detail(rule(blocker(Strength, Phase, C, N, _O, _V, _SlotReq)?{Ctx}, _)) :- !,
     message:color(lightred),

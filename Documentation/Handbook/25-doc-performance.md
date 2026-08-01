@@ -51,13 +51,13 @@ High-level queries in the knowledge layer are written for clarity; at
 **compile time** they are rewritten into **direct cache access**, so the
 runtime path never pays for meta-interpretation over generic search.
 
-`goal_expansion/2` in `Source/Knowledge/query.pl` performs this rewrite. For
-example, a search by repository, category, and package name expands straight
-to an ordered cache entry lookup:
-
-```prolog
-user:goal_expansion(query:search(R, C, N), cache:ordered_entry(R, _, C, N, _)).
-```
+A module-local `query:goal_expansion/2` hook in
+`Source/Knowledge/query.pl` performs this rewrite (deliberately *not*
+`user:goal_expansion/2`, so only code compiled inside the `query` module
+is affected — portage-ng#59).  It expands `search(Query, Repo://Id)`
+goals at compile time: `compile_query_list/3` / `compile_query_compound/3`
+translate each query term into direct indexed cache lookups such as
+`cache:ordered_entry/5` conjunctions.
 
 The expanded code calls the indexed predicate **directly**. SWI-Prolog’s
 **first-argument indexing** on `cache:entry/5` (and related entry predicates)
@@ -134,33 +134,34 @@ production-like runs.
 ### Hook performance
 
 ```prolog
-sampler:phase_walltime(Phase, Goal)
+sampler:phase_walltime(-T)
 ```
 
-Wraps `Goal` and records wall-clock time for the named `Phase`. Used by the
-pipeline to time each stage (prove, plan, schedule).
+Captures a wall-clock snapshot.  The pipeline takes three snapshots —
+before resolving, between resolving and ordering, and after ordering.
 
 ```prolog
-sampler:phase_record(Phase, Duration)
+sampler:phase_record(T0, T1, T2)
 ```
 
-Records a phase timing for later retrieval.
+Computes and records the per-phase deltas (resolve ms, order ms) from
+the three snapshots for later retrieval.
 
 ### Test statistics
 
 ```prolog
-prover:test_stats(Repository)
-prover:test_stats_pkgs(Repository, PackageList)
+resolver:test_stats(Repository)
+resolver:test_stats_pkgs(Repository, PackageList)
 ```
 
-Run the prover across all packages (or a specific list) in a repository and
-collect aggregate statistics:
+Run the resolver across all packages (or a specific list) in a repository
+and collect aggregate statistics:
 
-- Total packages attempted
-- Success rate (no assumptions)
-- Cycle-break-only rate
-- Domain assumption rate
-- Average proof time
+- Totals: entries processed, proved, failed
+- Share of entries with domain assumptions and with cycle breaks
+  (as percentages)
+- Failure and assumption-type breakdowns
+- Slowest entries and packages
 
 ### Feature term unification sampling
 
@@ -175,7 +176,7 @@ pattern:
 
 ```bash
 ./Source/Application/Wrapper/portage-ng-dev --mode standalone --shell --timeout 60 <<'PL'
-prover:test_stats(portage).
+resolver:test_stats(portage).
 halt.
 PL
 ```
@@ -184,7 +185,7 @@ For specific packages:
 
 ```bash
 ./Source/Application/Wrapper/portage-ng-dev --mode standalone --shell <<'PL'
-prover:test_stats_pkgs(portage, ['kde-apps'-'kde-apps-meta']).
+resolver:test_stats_pkgs(portage, ['kde-apps'-'kde-apps-meta']).
 halt.
 PL
 ```
@@ -203,7 +204,7 @@ not how long the actual builds take.
 - **Portage** uses `emerge -vp <target>`, which runs the Python
   `depgraph.py` resolver with greedy selection and backtracking.
 - **portage-ng** uses `--mode standalone --pretend <target>`, which
-  runs the Prolog prover, planner, and scheduler.
+  runs the Prolog prover and ordering pass.
 
 
 ### Resolution speed (emerge_ok packages)
@@ -260,7 +261,7 @@ thousands of packages:
 | Graph construction | Build full graph, then check for conflicts | Single-pass proof — no separate graph phase |
 | Conflict recovery | Discard entire graph, rebuild from scratch | Retry only the affected subtree with learned constraints |
 | Repeated queries | Each `emerge -vp` starts cold | In-memory facts persist; subsequent queries are instant |
-| Parallelism | Sequential graph walk | Wave planner identifies parallel steps automatically |
+| Parallelism | Sequential graph walk | Ordering pass identifies parallel waves automatically |
 
 The largest single factor is the **qcompiled cache** (Pillar 1): once
 loaded, all 32,000 ebuilds are in memory as indexed Prolog facts, and

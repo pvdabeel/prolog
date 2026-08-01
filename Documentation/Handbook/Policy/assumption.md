@@ -13,7 +13,7 @@ printed plan shows *what would work* after a stated change.
 - Proof key: `rule(assumed(X))` (domain)
 - Not the same as prover cycle-breaks: `assumed(rule(X))`
 
-**Owns:** `rules.pl` assumed catch-alls, fallback tiers in
+**Owns:** `resolving.pl` assumed catch-alls, fallback tiers in
 `pipeline.pl` / prover, classification in
 `Pipeline/Printer/Plan/assumption.pl`.
 

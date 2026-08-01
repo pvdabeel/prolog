@@ -23,18 +23,18 @@ policy card. Procedural “how” lives in the **Owns** column of each card.
 | Eligibility inside resolve | Not masked / keyword / license OK | [test12](examples.md#test12) | [Visibility](visibility.md) |
 | Slot ops on atoms | `:N`, `:*`, `:=`, sub-slot | [test41](examples.md#test41)–[test44](../../Tests/test44/README.md) | [Slots](slot.md) |
 | `rule(assumed(X))` | Domain assumption (pos/neg polarity) | [test09](examples.md#test09), [test12](examples.md#test12) | [Assumptions](assumption.md) |
-| `assumed(rule(Lit))` | Prover cycle-break (benign axis) | [test03](examples.md#test03), [test47](examples.md#test47) | [Cycle](cycle.md) |
+| `assumed(rule(Lit))` | Prover cycle-break (benign axis) | [test03](examples.md#test03), [test05](examples.md#test05) | [Cycle](cycle.md) |
 
 
 ## Where “how” still lives
 
 | Concern | Search / tactic modules (OK to be procedural) |
 | :--- | :--- |
-| Candidate enum + reprove | `Rules/candidate.pl`, `Rules/heuristic.pl` |
-| `\|\|` preference fold/sort | `Rules/ranking.pl` |
-| USE eval + REQUIRED_USE | `Rules/use.pl` |
-| Dep model / ctx threading | `Rules/dependency.pl`, `query.pl` |
-| Learned domains | `prover:learn/3`, `Rules/cnselect.pl` |
+| Candidate enum + reprove | `Rules/Resolving/candidate.pl`, `Rules/Resolving/heuristic.pl` |
+| `\|\|` preference fold/sort | `Rules/Resolving/ranking.pl` |
+| USE eval + REQUIRED_USE | `Rules/Resolving/use.pl` |
+| Dep model / ctx threading | `Rules/Resolving/dependency.pl`, `query.pl` |
+| Learned domains | `prover:learn/3`, `Rules/Resolving/cnselect.pl` |
 | Progressive relaxation | `pipeline:prove_*_with_fallback` |
 
 

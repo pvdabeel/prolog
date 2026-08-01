@@ -15,15 +15,15 @@ digraph ctx_evolution {
     portage [label="portage-3.0.77-r3:install\nContext: {}", fillcolor="#cce5ff"];
 
     // Level 3: deps of portage
-    python_dep [label="grouped_dep(python):install\n\nself(portage://portage-3.0.77-r3)\nbwu:use_state([ssl,threads],[])\nafter(portage:install)", fillcolor="#d4edda"];
-    tar_dep [label="grouped_dep(tar):install\n\nself(portage://portage-3.0.77-r3)\nbwu:use_state([],[])\nafter_only(portage:install)", fillcolor="#fff3cd"];
+    python_dep [label="grouped_dep(python):install\n\nself(portage://portage-3.0.77-r3)\nbuild_with_use:use_state([ssl,threads],[])", fillcolor="#d4edda"];
+    tar_dep [label="grouped_dep(tar):install\n\nself(portage://portage-3.0.77-r3)\nbuild_with_use:use_state([],[])", fillcolor="#d4edda"];
 
     // Level 4: python resolved
-    python [label="python-3.13.2:install\n\nself(portage://portage-3.0.77-r3)\nbwu:use_state([ssl,threads],[])\nafter(portage:install)\n\nemits: selected_cn(dev-lang,python)", fillcolor="#d4edda"];
+    python [label="python-3.13.2:install\n\nself(portage://portage-3.0.77-r3)\nbuild_with_use:use_state([ssl,threads],[])\n\nemits: selected_cn(dev-lang,python)", fillcolor="#d4edda"];
 
     // Level 5: deps of python
-    openssl_dep [label="grouped_dep(openssl):install\n\nself(portage://python-3.13.2)\nbwu:use_state([],[])\nslot(dev-libs,openssl,0/3.4.1)\nafter(portage:install)", fillcolor="#d4edda"];
-    mime_dep [label="grouped_dep(mime-types):install\n\nself(portage://python-3.13.2)\nbwu:use_state([],[])\nafter_only(python:install)", fillcolor="#fff3cd"];
+    openssl_dep [label="grouped_dep(openssl):install\n\nself(portage://python-3.13.2)\nbuild_with_use:use_state([],[])\nslot(dev-libs,openssl,0/3.4.1)", fillcolor="#d4edda"];
+    mime_dep [label="grouped_dep(mime-types):install\n\nself(portage://python-3.13.2)\nbuild_with_use:use_state([],[])", fillcolor="#d4edda"];
 
     // Legend
     subgraph cluster_legend {
@@ -31,8 +31,9 @@ digraph ctx_evolution {
         node [shape=plaintext, fillcolor=white, fontsize=6, margin="0.02,0.01"];
         leg [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="1">
             <TR><TD BGCOLOR="#cce5ff" WIDTH="10"> </TD><TD ALIGN="LEFT"> root / no context</TD></TR>
-            <TR><TD BGCOLOR="#d4edda" WIDTH="10"> </TD><TD ALIGN="LEFT"> DEPEND (after propagates)</TD></TR>
-            <TR><TD BGCOLOR="#fff3cd" WIDTH="10"> </TD><TD ALIGN="LEFT"> RDEPEND (after_only, stops)</TD></TR>
+            <TR><TD BGCOLOR="#d4edda" WIDTH="10"> </TD><TD ALIGN="LEFT"> dep context (self + build_with_use rebuilt per edge)</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT"> world anchors seed after/1 (propagates);</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT"> PDEPEND edges carry after_only/1 (pass-2 soft preference)</TD></TR>
         </TABLE>>];
     }
 

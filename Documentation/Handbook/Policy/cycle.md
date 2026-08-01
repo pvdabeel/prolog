@@ -13,7 +13,7 @@ runtime edges with little ceremony. portage-ng’s inductive prover must
 - Distinct from domain `rule(assumed(X))`
 
 **Owns:** `Source/Pipeline/prover.pl` (cycle detection / assume),
-benignity checks in `Rules/heuristic.pl`, printer cycle section
+benignity checks in `Rules/Resolving/heuristic.pl`, printer cycle section
 (`config:print_prover_cycles/1`).
 
 **Invariants:**
@@ -27,8 +27,10 @@ benignity checks in `Rules/heuristic.pl`, printer cycle section
 - PDEPEND cycles use the same break mechanism; PDEPEND is never disabled
   to avoid them.
 
-**Examples:** [test03](examples.md#test03), [test06](examples.md#test06),
-[test47](examples.md#test47), [test61](examples.md#test61),
-[test79](examples.md#test79).  
+**Examples:** [test03](examples.md#test03) and
+[test05](examples.md#test05) (actual cycle-break assumptions);
+[test06](examples.md#test06), [test47](examples.md#test47),
+[test61](examples.md#test61) and [test79](examples.md#test79)
+(cycles dissolved by the install/run action split — no break needed).  
 **See also:** [Assumptions](assumption.md), [Run](run.md),
 [Chapter 9](../09-doc-prover-assumptions.md).

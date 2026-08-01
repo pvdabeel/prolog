@@ -1,0 +1,53 @@
+// Chapter 12 — Ordering a cycle through the installed world (pass 2)
+// Render: dot -Tsvg 12-ordering-cycle.dot -o 12-ordering-cycle.svg
+
+digraph ordering_cycle {
+    rankdir=LR;
+    fontname="Helvetica";
+    fontsize=11;
+    node [fontname="Helvetica", fontsize=11, style=filled, shape=box];
+    edge [fontname="Helvetica", fontsize=10];
+
+    // The cyclic build-time loop (pass-1 solution steps)
+    subgraph cluster_steps {
+        label="Plan steps  (scheduled/1 proofs)";
+        labeljust=l;
+        style=filled;
+        fillcolor="#e6f0ff";
+        color="#4a86c8";
+
+        node [fillcolor="#cce5ff"];
+        python_inst     [label="install\npython-3.14.7\n[tk]"];
+        tk_inst         [label="install\ntk"];
+        fontconfig_inst [label="install\nfontconfig"];
+    }
+
+    // The installed world (VDB facts)
+    subgraph cluster_world {
+        label="Installed world  (VDB)";
+        labeljust=l;
+        style=filled;
+        fillcolor="#e6ffe6";
+        color="#4a8c4a";
+
+        node [fillcolor="#ccf2cc"];
+        python_vdb [label="python-3.14.6\n(installed)"];
+    }
+
+    // Hard requires edges forming the loop
+    python_inst     -> tk_inst         [label="requires (DEPEND)"];
+    tk_inst         -> fontconfig_inst [label="requires (DEPEND)"];
+    fontconfig_inst -> python_inst     [label="requires (DEPEND)",
+                                        style=dashed, color="#c84a4a",
+                                        fontcolor="#c84a4a"];
+
+    // The world citation that bridges the cycle
+    fontconfig_inst -> python_vdb [label="available: world/2 citation",
+                                   color="#4a8c4a", fontcolor="#4a8c4a",
+                                   penwidth=2];
+
+    // Resulting justification
+    node [shape=plaintext, fillcolor=white, style=""];
+    note [label=<<I>fontconfig is buildable now because<BR/>python-3.14.6 is already installed;<BR/>the new python builds afterwards</I>>];
+    python_vdb -> note [style=invis];
+}

@@ -17,7 +17,7 @@ the architecture.
 
 Package repositories (`portage`, `pkg`, `binpkg`) identify entries by
 **CPVN** — category, package name, and `version/7` — via
-`cache:ordered_entry/5`. Every prover, planner, and rules consumer
+`cache:ordered_entry/5`. Every prover, orderer, and rules consumer
 assumes that shape. A GLSA id such as `202501-03` is not a package
 version; inventing a fake `glsa://…` CPVN would either pollute those
 paths or require permanent exclusion filters.

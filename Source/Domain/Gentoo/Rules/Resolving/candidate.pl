@@ -11,7 +11,7 @@
 /** <module> CANDIDATE
 Grouped-dependency resolution pipeline for the portage-ng resolver.
 
-Called by the grouped_package_dependency rule/2 clauses in rules.pl and
+Called by the grouped_package_dependency rule/2 clauses in resolving.pl and
 by the candidate:resolve/2 protocol clauses in target.pl. Slot
 canonicalization lives in slotmeta.pl, CN-consistency and learned-domain
 bookkeeping in cnselect.pl, keyword/mask/license acceptance in
@@ -1210,9 +1210,9 @@ candidate:record_visibility_override(C, N, Conditions) :-
 % packages (portage-ng#20 fallout). Instead the assumption is emitted and
 % tagged (assumption_reason / required_use_violation) so the prover
 % completes with a domain assumption; the printer classifies it as a
-% domain assumption downstream. The scheduler's assumed-dep aliasing
-% still orders the consumer after any concrete planned action for the
-% same package — that aliasing is existence-gated, so a true phantom
+% domain assumption downstream. The ordering engine's assumed-dep alias
+% preference still orders the consumer after any concrete planned action
+% for the same package — that aliasing is existence-gated, so a true phantom
 % (provider absent from the plan) never inherits a wave, while a
 % provider that IS planned keeps its ordering edge (portage-ng#95).
 %

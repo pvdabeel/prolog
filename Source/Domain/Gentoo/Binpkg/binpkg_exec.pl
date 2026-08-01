@@ -19,9 +19,9 @@ acceptable in lieu of a source build.
 # Public surface
 
   - `binpkg_exec:available_for(+SrcRepo, +SrcEntry, +Ctx, -BinpkgEntryId)`
-    is the dispatch probe. Given the planner's resolved (SrcRepo,
+    is the dispatch probe. Given the resolver's resolved (SrcRepo,
     SrcEntry, Ctx), find a binpkg variant whose stored USE / SLOT /
-    KEYWORDS are compatible with what the planner asked for. Fails (no
+    KEYWORDS are compatible with what the resolver asked for. Fails (no
     side-effects) if no candidate fits or if the binpkg repo is not
     registered. When multiple candidates pass the filters, the highest
     BUILD_ID wins (mirrors emerge's "newer wins" tie-breaker). The
@@ -39,7 +39,7 @@ acceptable in lieu of a source build.
       4. Delegate extraction to `binpkg_extract:prepare_builddir/3`.
       5. Spawn `ebuild --skip-manifest <SRC_EBUILD> qmerge` with
          `MERGE_TYPE=binary`, `PORTAGE_BINPKG_FILE=<gpkg>`,
-         `PORTAGE_BUILDDIR=<builddir>`, and the planner's USE.
+         `PORTAGE_BUILDDIR=<builddir>`, and the resolver's USE.
       6. Bind Outcome to `done` on success, `failed(qmerge_exit(N))` on
          non-zero exit, or `failed(Reason)` for setup errors.
 
@@ -424,7 +424,7 @@ binpkg_exec:built_gpkg(Cat, Name, Version, RelPath, BuildId) :-
 % needs to accept this freshly-built binpkg:
 %
 %   - build_id / path : binpkg-specific identity (qmerge needs `path`).
-%   - use             : the planner's resolved positive USE -- by
+%   - use             : the resolver's resolved positive USE -- by
 %                       construction identical to what a later probe
 %                       recomputes, so the strict USE filter matches.
 %   - slot            : the source entry's SLOT (`slot/subslot` when a
@@ -437,7 +437,7 @@ binpkg_exec:built_gpkg(Cat, Name, Version, RelPath, BuildId) :-
 % for this host's arch).
 
 binpkg_exec:built_binpkg_metadata(SrcRepo, SrcEntry, Ctx, BuildId, RelPath, Meta) :-
-  binpkg_exec:planner_positive_use(SrcRepo, SrcEntry, Ctx, UseToks),
+  binpkg_exec:resolver_positive_use(SrcRepo, SrcEntry, Ctx, UseToks),
   atomic_list_concat(UseToks, ' ', UseAtom),
   ( binpkg_exec:src_slot_combined(SrcRepo, SrcEntry, SlotComb)
   -> SlotPairs = [slot-SlotComb]
@@ -649,16 +649,16 @@ binpkg_exec:host_arch(Arch) :-
 
 %! binpkg_exec:use_compatible(+SrcRepo, +SrcEntry, +BinpkgEid, +Ctx) is semidet.
 %
-% Compares the planner's resolved USE flag set against the binpkg's
+% Compares the resolver's resolved USE flag set against the binpkg's
 % stored USE, restricted to the ebuild's IUSE so that profile-level
 % flags (abi_x86_64, elibc_glibc, kernel_linux, ...) don't pollute the
 % comparison.
 %
 % Modes (see `config:binpkg_respect_use/1`):
 %   strict  : sets must be exactly equal (intersected with IUSE)
-%   relaxed : binpkg's positive set must be a superset of the planner's
+%   relaxed : binpkg's positive set must be a superset of the resolver's
 %             positive set (i.e. the binpkg has at least all flags the
-%             planner wants enabled; extras are tolerated)
+%             resolver wants enabled; extras are tolerated)
 %
 % Defensive: if the binpkg has no `use` metadata, accept; if the source
 % has no IUSE, accept (degenerate ebuild with no USE flags).
@@ -668,18 +668,18 @@ binpkg_exec:use_compatible(SrcRepo, SrcEntry, BinpkgEid, Ctx) :-
   -> binpkg_exec:tokenize_use(BinpkgUseAtom, BinpkgUseSet)
   ;  BinpkgUseSet = []
   ),
-  binpkg_exec:planner_positive_use(SrcRepo, SrcEntry, Ctx, PlannerSet),
+  binpkg_exec:resolver_positive_use(SrcRepo, SrcEntry, Ctx, ResolverSet),
   binpkg_exec:ebuild_iuse(SrcRepo, SrcEntry, IuseSet),
   ( IuseSet == []
   -> true
   ;  intersection(BinpkgUseSet, IuseSet, BinpkgIuse),
-     intersection(PlannerSet,   IuseSet, PlannerIuse),
+     intersection(ResolverSet,   IuseSet, ResolverIuse),
      config:binpkg_respect_use(Mode),
-     binpkg_exec:use_sets_match(Mode, BinpkgIuse, PlannerIuse)
+     binpkg_exec:use_sets_match(Mode, BinpkgIuse, ResolverIuse)
   ).
 
 
-%! binpkg_exec:use_sets_match(+Mode, +BinpkgIuse, +PlannerIuse) is semidet.
+%! binpkg_exec:use_sets_match(+Mode, +BinpkgIuse, +ResolverIuse) is semidet.
 
 binpkg_exec:use_sets_match(strict, A, B)  :- !, msort(A, S), msort(B, S).
 binpkg_exec:use_sets_match(relaxed, A, B) :- subtract(B, A, []).
@@ -697,15 +697,15 @@ binpkg_exec:tokenize_use(UseAtom, Tokens) :-
   sort(NonEmpty, Tokens).
 
 
-%! binpkg_exec:planner_positive_use(+SrcRepo, +SrcEntry, +Ctx, -Tokens) is det.
+%! binpkg_exec:resolver_positive_use(+SrcRepo, +SrcEntry, +Ctx, -Tokens) is det.
 %
 % Reuses `ebuild_exec:collect_use_string/4` (the same logic that builds
 % the USE env var for a source build), then keeps only the positive
 % tokens (those without a `-` prefix). This guarantees the binpkg
-% comparison uses the *exact* USE the planner would have shipped to
+% comparison uses the *exact* USE the resolver would have shipped to
 % `ebuild merge`.
 
-binpkg_exec:planner_positive_use(SrcRepo, SrcEntry, Ctx, Tokens) :-
+binpkg_exec:resolver_positive_use(SrcRepo, SrcEntry, Ctx, Tokens) :-
   ebuild_exec:collect_use_string(SrcRepo, SrcEntry, Ctx, UseAtom),
   atomic_list_concat(Raw, ' ', UseAtom),
   include(binpkg_exec:is_positive_token, Raw, Positive),
@@ -1141,7 +1141,7 @@ binpkg_exec:inner_name_for(BinpkgEntryId, InnerName) :-
 %   MERGE_TYPE=binary           tells ebuild.sh this is a binary merge
 %   PORTAGE_BINPKG_FILE=<gpkg>  binpkg path (used for VDB BINPKGMD5)
 %   PORTAGE_BUILDDIR=<dir>      where image/, build-info/, temp/ live
-%   USE=<planner USE>           planner's resolved USE (matches binpkg's)
+%   USE=<resolver USE>          resolver's resolved USE (matches binpkg's)
 %
 % Id is the binpkg entry id (used for the deconfliction record). Under
 % config:deconflict_collisions=override the qmerge is recovered from a

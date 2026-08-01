@@ -34,7 +34,7 @@ digraph sync_architecture {
   profqlf [label="Knowledge/profile.qlf", shape=note, fillcolor="#FFFACD"];
 
   // Prover
-  prover [label="Prover / Planner\n(pipeline.pl)", shape=box, fillcolor="#FFD6D6"];
+  prover [label="Prover / Orderer\n(pipeline.pl)", shape=box, fillcolor="#FFD6D6"];
 
   // Edges
   cli -> kb [label="--sync\n--sync portage\n--sync myoverlay"];

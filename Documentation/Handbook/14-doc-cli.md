@@ -43,7 +43,7 @@ available.
 ### Daemon
 
 Keeps the same in-memory footprint as standalone — full knowledge
-base, resolver, planner — but listens on a **Unix domain socket**
+base, resolver, orderer — but listens on a **Unix domain socket**
 for incoming requests.  Use `--background` to fork the daemon into a
 detached process.  The daemon avoids the startup cost of reloading
 the knowledge base on every invocation, making repeated queries fast.
@@ -69,7 +69,7 @@ the CLI, but proving and KB access happen on the server side.  Use
 ### Server
 
 Runs the full standalone pipeline first (local KB, resolver,
-planner), then adds an HTTPS Pengine server, TLS, and Bonjour
+orderer), then adds an HTTPS Pengine server, TLS, and Bonjour
 service advertisement.  The server exposes job and result message
 queues so that workers can poll for proving tasks.  Use
 `--background` to fork the server process.  See [Chapter 17:
@@ -109,8 +109,8 @@ everyday workflows.
 | :--- | :--- |
 | `--search <query>` | Search packages (supports natural-language via embeddings) |
 | `--similar <target>` | Find packages similar to target (vector similarity) |
-| `--info` | Display repository statistics and configuration |
-| `--installed` | List installed packages |
+| `--info` | System overview (version, hostname, repositories, world set) without arguments; per-package details with a target |
+| `--pretend @installed` | List installed packages (via the computed `@installed` set) |
 
 ### Repository management
 
@@ -131,7 +131,8 @@ everyday workflows.
 
 | **Flag** | **Action** |
 | :--- | :--- |
-| `--bugs <target>` | Search Gentoo Bugzilla for known issues |
+| `--bugs <target>` | Prove the target (resolve-only) and print Gentoo Bugzilla bug-report drafts for its domain assumptions |
+| `--search-bugs <term>` | Search Gentoo Bugzilla for known issues |
 | `--upstream <target>` | Check upstream versions via Repology |
 | `--explain` / `--llm` | Get AI-assisted plan explanation |
 | `--diagnose` / `--log` | Metacircular LLM diagnose of a failed build |
@@ -159,7 +160,7 @@ everyday workflows.
 | `--quiet` | Minimal output |
 | `--ci` | Non-interactive CI mode (exit codes 0/1/2) |
 | `--jobs N` | Number of parallel jobs |
-| `--timeout N` | Kill after N seconds (requires Python 3) |
+| `--timeout N` | Abort proving/planning after N seconds (0 = no limit) |
 
 
 ## Target syntax
@@ -265,7 +266,7 @@ here-doc:
 
 ```bash
 ./Source/Application/Wrapper/portage-ng-dev --shell --timeout 60 <<'PL'
-prover:test_stats(portage).
+resolver:test_stats(portage).
 halt.
 PL
 ```
@@ -310,7 +311,7 @@ Short recipes that match how people actually use the tool:
 
   ```sh
   portage-ng --mode standalone --shell <<'PL'
-  prover:test_stats(portage).
+  resolver:test_stats(portage).
   halt.
   PL
   ```
@@ -326,8 +327,12 @@ Short recipes that match how people actually use the tool:
 - **Check for upstream updates**  
   `portage-ng --upstream cat/pkg` — Repology-oriented upstream comparison.
 
+- **Draft bug reports**  
+  `portage-ng --bugs cat/pkg` — prove the target (resolve-only) and print
+  Bugzilla-style bug-report drafts for its domain assumptions.
+
 - **Search Bugzilla**  
-  `portage-ng --bugs cat/pkg` — Bugzilla-oriented diagnostics for the target.
+  `portage-ng --search-bugs term` — query Gentoo Bugzilla for known issues.
 
 
 ## Search query language

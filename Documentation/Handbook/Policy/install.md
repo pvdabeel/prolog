@@ -14,8 +14,8 @@ are skipped (unless emptytree / forced rebuild).
   deps / slot constraints / `selected_cn` domain locks
 - May rewrite to `:update` when installed USE ≠ requested `build_with_use`
 
-**Owns:** `rules.pl` (`:install`), `Rules/candidate.pl` (`eligible`,
-`resolve`), `Rules/use.pl`, `Rules/dependency.pl`.
+**Owns:** `resolving.pl` (`:install`), `Rules/Resolving/candidate.pl` (`eligible`,
+`resolve`), `Rules/Resolving/use.pl`, `Rules/Resolving/dependency.pl`.
 
 **Invariants:**
 

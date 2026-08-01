@@ -5,8 +5,9 @@ This directory contains documentation for portage-ng.
   - `Shell/Completion/` — shell completion scripts (`portage-ng.bash`)
   - `Shell/Profile/` — example shell profiles (`.bash_profile`, `.zshrc`)
 - `Diagrams/` — architecture and flow visualizations
-  - `architecture.dot` / `.svg` — module dependency diagram
-  - `rules_assumptions_flow.dot` / `.svg` — BPMN-style flow diagram of the rules/prover assumption pipeline
+  - `architecture.dot` / `.svg` — top-level system architecture and data flow (module-group granularity; details live in the dedicated diagrams below and in `Handbook/Diagrams/`)
+  - `resolving_assumptions_flow.dot` / `.svg` — BPMN-style flow diagram of the resolving/prover assumption pipeline
+  - `resolving_dispatch.dot` / `.svg` — visual overview of `resolving:rule/2` dispatch
 - `Handbook/` — topic guides
   - `doc-context-terms.md` — how context terms evolve across dependencies (self, build_with_use, constraints, feature logic)
   - `doc-contextual-logic-programming.md` — object-oriented paradigm for Prolog with contexts, classes, and inheritance

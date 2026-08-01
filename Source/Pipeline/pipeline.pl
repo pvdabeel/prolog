@@ -9,22 +9,22 @@
 
 
 /** <module> PIPELINE
-The Pipeline orchestrates the three core resolution stages — prover,
-planner, and scheduler — into a single entry point.
+The Pipeline orchestrates the two core resolution stages — prover
+(pass 1) and orderer (pass 2) — into a single entry point.
 
 Architecture context:
 
-  reader/parser  →  prover  →  planner  →  scheduler  →  printer
-                    └──────── pipeline ────────┘
+  reader/parser  →  prover  →  orderer  →  printer
+                    └───── pipeline ────┘
 
 The pipeline sits between the parsing layer (reader + eapi grammar) and
 the output layer (printer + writer).  It takes a list of proof goals and
-returns a completed proof, model, scheduled plan, and triggers AVL:
+returns a completed proof, model, ordered plan, and triggers AVL:
 
   prove_plan(+Goals, -ProofAVL, -ModelAVL, -Plan, -TriggersAVL)
 
 Two canonical entry points with 5-tier progressive relaxation:
-- prove_plan_with_fallback/5  — full pipeline (prove + plan + schedule)
+- prove_plan_with_fallback/5  — full pipeline (prove + order)
 - prove_with_fallback/4       — prover only (for layered tests)
 
 Callers:
@@ -32,21 +32,22 @@ Callers:
 - writer.pl     — batch file generation    (--graph)
 - builder.pl    — build testing            (--build)
 - bugs.pl       — bug report drafts        (--bugs)
-- prover.pl     — prover tests             (prover:test/1, test_stats)
-- planner.pl    — planner tests            (planner:test/1, test_stats)
-- scheduler.pl  — scheduler tests          (scheduler:test/1, test_stats)
+- resolver.pl   — resolve tests            (resolver:test/1, test_stats)
+- orderer.pl    — ordering tests           (orderer:test/1, test_stats)
 
-Pipeline stages:
-1. prover:prove/9   — inductive proof search, builds ProofAVL + ModelAVL
-2. planner:plan/5   — wave planning for acyclic portion, yields Plan + Remainder
-3. scheduler:schedule/6 — SCC / merge-set scheduling for Remainder
+Pipeline stages (both are thin wrappers handing the generic prover
+their rule set — `resolving` and `ordering` respectively):
+1. resolver:resolve/9 — pass 1: inductive proof search, builds
+                        ProofAVL + ModelAVL (what — versions, USE, slots)
+2. orderer:order/5    — pass 2: prove over the planning laws, project
+                        the availability proofs to the wave plan (when)
 
 Each stage is timed via sampler:phase_walltime and recorded via
 sampler:phase_record for performance analysis.
 
 PDEPEND handling:
 Post-dependencies are normally resolved single-pass inside the prover
-(see rules:literal_hook/4).  The prove_plan_with_pdepend/5 variant
+(see heuristic:proof_obligation/4).  The prove_plan_with_pdepend/5 variant
 provides an alternative multi-pass approach that delegates PDEPEND goal
 extraction to dependency:pdepend_goals_from_plan/2 and re-runs the
 pipeline with the extended goal set.  It is retained for experimentation
@@ -57,13 +58,13 @@ but not currently used in the default path.
 
 
 % =============================================================================
-%  Core pipeline: prove + plan + schedule
+%  Core pipeline: prove + order
 % =============================================================================
 
 %! pipeline:prove_plan(+Goals, -ProofAVL, -ModelAVL, -Plan, -TriggersAVL)
 %
-% Standard entry point.  Proves Goals, plans the proof, and schedules
-% the remainder into a fully ordered Plan.
+% Standard entry point.  Proves Goals, then orders the proof into a
+% wave-list Plan.
 
 pipeline:prove_plan(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL) :-
   pipeline:prove_plan_basic(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, _SCCs).
@@ -71,8 +72,9 @@ pipeline:prove_plan(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL) :-
 
 %! pipeline:prove_plan(+Goals, -ProofAVL, -ModelAVL, -Plan, -TriggersAVL, -SCCs)
 %
-% Same as prove_plan/5 but also returns the scheduler's SCC decomposition
-% info (see scheduler:schedule/7) for the printer.
+% Same as prove_plan/5 but also returns the SCCs argument the printer's
+% signature expects (always [] — the ordering engine builds no
+% condensation).
 
 pipeline:prove_plan(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, SCCs) :-
   pipeline:prove_plan_basic(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, SCCs).
@@ -142,15 +144,15 @@ pipeline:with_fallback_tiers([Tier|Rest], Goal, FallbackUsed) :-
 % prove_plan_with_fallback.  Clears memo caches and computes multislot
 % initial constraints.
 %
-% Used by layered tests (prover:test, planner:test, scheduler:test and
-% their test_stats/test_latest variants) and by --bugs, so each stage
+% Used by layered tests (resolver:test, orderer:test and their
+% test_stats/test_latest variants) and by --bugs, so each stage
 % exercises the same proving semantics as production.
 
 pipeline:prove_with_fallback(Goals, ProofAVL, ModelAVL, TriggersAVL) :-
   memo:clear_caches,
   pipeline:multislot_initial_constraints(Goals, InitCons),
   pipeline:with_fallback(
-    prover:prove(Goals, t, ProofAVL, t, ModelAVL, InitCons, _Constraints, t, TriggersAVL),
+    resolver:resolve(Goals, t, ProofAVL, t, ModelAVL, InitCons, _Constraints, t, TriggersAVL),
     _FallbackUsed).
 
 
@@ -177,11 +179,10 @@ pipeline:prove_plan_with_fallback(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, 
 
 %! pipeline:prove_plan_with_fallback(+Goals, -Proof, -Model, -Plan, -Triggers, -SCCs, -FallbackUsed)
 %
-% Same as prove_plan_with_fallback/6 but additionally returns the
-% scheduler's SCC decomposition info (see scheduler:schedule/7), which
-% plan-printing callers pass to printer:print so the SCC section reflects
-% the schedule that produced the Plan (explicit handoff, no thread-local
-% scheduler state).
+% Same as prove_plan_with_fallback/6 but additionally returns the SCCs
+% argument plan-printing callers pass through to printer:print. Always
+% [] — the ordering engine builds no condensation; the argument is
+% retained for the printer's signature.
 
 pipeline:prove_plan_with_fallback(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, SCCs, FallbackUsed) :-
   pipeline:prove_plan_with_fallback_base(Goals, Proof0, Model0, Plan0, Triggers0, SCCs0, Fallback0),
@@ -207,20 +208,20 @@ pipeline:prove_plan_with_fallback_base(Goals, ProofAVL, ModelAVL, Plan, Triggers
 % Single-pass pipeline with per-stage wall-time instrumentation.
 % Pre-injects selected_cn_allow_multislot constraints when the goal
 % list contains multiple targets for the same Category-Name (different
-% versions/slots). SCCs is the scheduler's SCC decomposition info
-% (see scheduler:schedule/7).
+% versions/slots). SCCs is always [] (retained printer argument).
 
 pipeline:prove_plan_basic(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, SCCs) :-
   memo:clear_caches,
   sampler:phase_walltime(T0),
   pipeline:multislot_initial_constraints(Goals, InitCons),
-  prover:prove(Goals, t, ProofAVL, t, ModelAVL, InitCons, _Constraints, t, TriggersAVL),
+  resolver:resolve(Goals, t, ProofAVL0, t, ModelAVL, InitCons, _Constraints, t, TriggersAVL),
   sampler:phase_walltime(T1),
-  planner:plan(ProofAVL, TriggersAVL, t, Plan0, Remainder0),
+  % Ordering pass: a second prover run over the generic planning laws.
+  % ProofAVL gains the pass-2 unreachable/2 assumptions so the printer
+  % reports them through the standard domain-assumption machinery.
+  orderer:order(ProofAVL0, TriggersAVL, ProofAVL, Plan, SCCs),
   sampler:phase_walltime(T2),
-  scheduler:schedule(ProofAVL, TriggersAVL, Plan0, Remainder0, Plan, _Remainder, SCCs),
-  sampler:phase_walltime(T3),
-  sampler:phase_record(T0, T1, T2, T3).
+  sampler:phase_record(T0, T1, T2).
 
 
 % -----------------------------------------------------------------------------

@@ -76,9 +76,9 @@ Each test under `Documentation/Tests/testNN/` contains:
 
 ### Failure testing
 
-Tests 59 and 60 are explicitly marked as expected failures (XFAIL) via
-`test:xfail/2` — known limitations that are documented but not yet
-fixed.
+Test 58 is explicitly marked as an expected failure (XFAIL) via
+`test:xfail/2` — it exercises PROVIDE-based virtuals, deprecated in
+PMS; a documented limitation that will not be fixed.
 
 
 ## Merge vs emerge comparison
@@ -91,7 +91,7 @@ analyses the resulting plan logs.
 
 ### Running a comparison
 
-Per-target compare (planner only, fresh sessions on both sides):
+Per-target compare (plan only, fresh sessions on both sides):
 
 ```sh
 tinderbox-ng compare www-servers/apache
@@ -100,9 +100,12 @@ tinderbox-ng compare www-servers/apache
 Whole-tree matrix run plus aggregate analysis:
 
 ```sh
-sudo tinderbox-ng compare-matrix
-sudo tinderbox-ng analyze                       # latest matrix run
-sudo tinderbox-ng analyze --run /srv/tinderbox-ng/reports/compare-matrix-<stamp>
+tinderbox-ng new regress
+tinderbox-ng exec regress -- \
+  tinderbox-matrix resolver \
+  /usr/local/share/tinderbox-ng/share/tinderbox-ng/manifest-1000.txt
+tinderbox-ng analyze \
+  --md5-cache /srv/tinderbox-ng/baseline/var/db/repos/gentoo/metadata/md5-cache
 ```
 
 `tinderbox-ng analyze` feeds each `portage-ng.plan.log` / `emerge.plan.log`
@@ -144,8 +147,8 @@ tinderbox-ng compare sys-apps/portage
 
 ## Bulk plan fingerprint comparison
 
-`Source/Test/plancompare.pl` fingerprints the full pipeline (prove + plan +
-schedule) for every ebuild in a repository.  Use it to verify that a
+`Source/Test/plancompare.pl` fingerprints the full pipeline (resolve +
+order) for every ebuild in a repository.  Use it to verify that a
 resolver change produces identical plans before committing:
 
 ```sh
@@ -188,6 +191,6 @@ Options: `repo(Atom)` (default `portage`), `limit(N)` (0 = all),
 - [Chapter 2: Installation and Quick Start](02-doc-installation.md) — `make test`
   commands
 - [Chapter 25: Performance and Profiling](25-doc-performance.md) —
-  `prover:test_stats` for bulk testing
+  `resolver:test_stats` for bulk testing
 - [Chapter 26: Contributing](26-doc-contributing.md) — development workflow
   with regression testing

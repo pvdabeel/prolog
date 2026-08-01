@@ -29,12 +29,14 @@ Source/
 
   Pipeline/                            (reasoning pipeline — domain-agnostic)
     reader.pl, parser.pl               Ingestion: read md5-cache, parse via EAPI grammar
-    prover.pl + Prover/                Inductive proof search with constraint learning
-    planner.pl + Planner/              Wave planning (Kahn's algorithm) for acyclic graphs
-    scheduler.pl                       SCC decomposition (Kosaraju) for cyclic remainders
+    prover.pl + Prover/                Generic proof engine, parameterized by a rule module
+    resolver.pl                        Resolve stage (pass 1): proves with the resolving rules
+    orderer.pl                         Order stage (pass 2): proves with the ordering rules,
+                                       projects availability proofs to the wave plan
+    Planner/kahn.pl                    Kahn topological sort (used by depclean)
     printer.pl + Printer/              Plan rendering: assumptions, warnings, suggestions
     builder.pl + Builder/              Build execution, downloads, jobserver, snapshots
-    pipeline.pl                        Orchestration: prove → plan → schedule with fallback
+    pipeline.pl                        Orchestration: resolve → order with fallback
 
   Logic/                               (reasoning framework)
     context.pl                         Declarative OOP: classes, instances, inheritance
@@ -43,7 +45,8 @@ Source/
 
   Domain/Gentoo/                       (Gentoo domain model)
     eapi.pl                            DCG grammar for PMS 9 / EAPI 9
-    rules.pl + Rules/                  Domain rules: candidates, USE, dependencies, heuristics
+    Rules/resolving.pl + Rules/Resolving/  Resolve rule set: candidates, USE, dependencies, heuristics
+    Rules/ordering.pl                  Order rule set: planning laws + step/requires/prefers/world
     version.pl                         Version domain model (Zeller-style feature logic)
     profile.pl, preference.pl          Profile reading, USE/KEYWORDS/mask resolution
     vdb.pl                             Installed-package repository (VDB)

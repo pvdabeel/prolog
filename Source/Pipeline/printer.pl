@@ -43,8 +43,8 @@ The prove+plan+schedule pipeline lives in Source/Pipeline/pipeline.pl.
 
 %! printer:print(+Target, +ModelAVL, +ProofAVL, +Plan, +TriggersAVL, +SCCs)
 %
-% Thin wrapper — delegates to plan:print/6. SCCs is the scheduler's SCC
-% decomposition info (scheduler:schedule/7); pass [] when unavailable.
+% Thin wrapper — delegates to plan:print/6. SCCs is retained in the
+% signature for compatibility; the ordering engine always passes [].
 
 printer:print(Target, ModelAVL, ProofAVL, Plan, TriggersAVL, SCCs) :-
   plan:print(Target, ModelAVL, ProofAVL, Plan, TriggersAVL, SCCs).
@@ -86,9 +86,8 @@ printer:test(Repository,Style) :-
               'Printing',
               Repository://Entry,
               (Repository:entry(Entry)),
-              ( prover:prove(Repository://Entry:Action?{[]},t,ProofAVL,t,ModelAVL,t,_Constraint,t,Triggers),
-                planner:plan(ProofAVL,Triggers,t,Plan0,Remainder0),
-                scheduler:schedule(ProofAVL,Triggers,Plan0,Remainder0,Plan,_Remainder,SCCs)
+              ( resolver:resolve(Repository://Entry:Action?{[]},t,ProofAVL0,t,ModelAVL,t,_Constraint,t,Triggers),
+                orderer:order(ProofAVL0,Triggers,ProofAVL,Plan,SCCs)
               ),
               ( sampler:record(entry(Repository://Entry, ModelAVL, ProofAVL, Triggers, false)),
                 sampler:set_current_entry(Repository://Entry),
@@ -119,9 +118,8 @@ printer:test_latest(Repository,Style) :-
               'Printing latest',
               Repository://Entry,
               (Repository:package(C,N),once(Repository:ebuild(Entry,C,N,_))),
-              ( prover:prove(Repository://Entry:Action?{[]},t,ProofAVL,t,ModelAVL,t,_Constraint,t,Triggers),
-                planner:plan(ProofAVL,Triggers,t,Plan0,Remainder0),
-                scheduler:schedule(ProofAVL,Triggers,Plan0,Remainder0,Plan,_Remainder,SCCs)
+              ( resolver:resolve(Repository://Entry:Action?{[]},t,ProofAVL0,t,ModelAVL,t,_Constraint,t,Triggers),
+                orderer:order(ProofAVL0,Triggers,ProofAVL,Plan,SCCs)
               ),
               ( sampler:record(entry(Repository://Entry, ModelAVL, ProofAVL, Triggers, false)),
                 sampler:set_current_entry(Repository://Entry),

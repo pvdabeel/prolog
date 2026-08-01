@@ -293,8 +293,7 @@ llmknowledge:topic_text(architecture, Text) :-
   Text = 'portage-ng pipeline (standalone):\n\c
 reader/parser (eapi.md5-cache) -> cache facts\n\c
 prover -> ProofAVL, ModelAVL, ConstraintsAVL, TriggersAVL\n\c
-planner -> waves + RemainderRules\n\c
-scheduler -> SCC/merge-sets on :run remainder\n\c
+orderer -> second prover pass over planning laws -> wave plan\n\c
 printer -> plan + assumptions\n\c
 builder -> ebuild phases; fixup + feedback may replan\n\c
 \n\c
@@ -340,9 +339,10 @@ draft_fixup sketches under Knowledge/drafts/ after confirm.'.
 
 llmknowledge:topic_text(code_map, Text) :-
   Text = 'Key Source files:\n\c
-Source/Pipeline/{prover,planner,scheduler,pipeline,printer,builder}.pl\n\c
+Source/Pipeline/{prover,resolver,orderer,pipeline,printer,builder}.pl\n\c
+Source/Domain/Gentoo/Rules/ordering.pl (pass-2 rule set: laws + bindings)\n\c
 Source/Pipeline/Prover/{explainer,explanation}.pl\n\c
-Source/Domain/Gentoo/rules.pl + Rules/*.pl\n\c
+Source/Domain/Gentoo/Rules/resolving.pl + Rules/Resolving/*.pl (pass-1 rule set)\n\c
 Source/Domain/Gentoo/Exceptions/{fixup,missing_provider,useenable,...}.pl\n\c
 Source/Domain/Gentoo/{eapi,version,vdb,profile}.pl\n\c
 Source/Knowledge/{cache,query,feedback,repository,knowledgebase}.pl\n\c

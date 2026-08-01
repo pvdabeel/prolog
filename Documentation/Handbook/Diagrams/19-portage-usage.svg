@@ -156,7 +156,7 @@
 <g id="node8" class="node">
 <title>prover</title>
 <ellipse fill="#e8e8e8" stroke="black" cx="390" cy="-253.58" rx="43.68" ry="33.06"/>
-<text text-anchor="middle" x="390" y="-267.43" font-family="Helvetica Neue" font-size="7.00">Prover / Planner</text>
+<text text-anchor="middle" x="390" y="-267.43" font-family="Helvetica Neue" font-size="7.00">Prover / Orderer</text>
 <text text-anchor="middle" x="390" y="-251.18" font-family="Helvetica Neue" font-size="7.00">portage://Entry</text>
 <text text-anchor="middle" x="390" y="-242.93" font-family="Helvetica Neue" font-size="7.00">pkg://Entry</text>
 <text text-anchor="middle" x="390" y="-234.68" font-family="Helvetica Neue" font-size="7.00">overlay://Entry</text>

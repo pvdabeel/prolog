@@ -11,7 +11,7 @@
 /** <module> FEATURETERM
 Proof-context list manipulation helpers for rule/2 bodies.
 
-The planner uses `after/1` and `after_only/1` markers in dependency
+The resolver uses `after/1` and `after_only/1` markers in dependency
 contexts to express ordering constraints between actions.  The
 predicates in this module thread, extract, and strip these markers.
 
@@ -74,7 +74,7 @@ featureterm:get_after_with_mode(Context0, After, AfterForDeps, Context) :-
 %
 % Prepends an ordering constraint to Conds0 based on the extracted markers.
 % `after/1` becomes a real dependency; `after_only/1` becomes a
-% `constraint(order_after(...))` that the planner uses for ordering only.
+% `constraint(order_after(...))` that the orderer uses for ordering only.
 
 featureterm:add_after_condition(none, _AfterForDeps, Conditions, Conditions) :- !.
 featureterm:add_after_condition(After, none, Conditions0, [constraint(order_after(After):{[]} )|Conditions0]) :-

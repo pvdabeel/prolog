@@ -30,6 +30,14 @@ timing statistics when the run completes.
 %  Helpers
 % -----------------------------------------------------------------------------
 
+%! tester:test_action(+Action0, -Action) is det
+%
+% Map a configured target action to the action used by test harnesses.
+% Identity mapping (historically run was mapped to merge).
+
+tester:test_action(Action, Action).
+
+
 %! tester:trace_to_string(+Trace, -String)
 %
 % Converts a prover trace (list of terms) into a bounded string suitable

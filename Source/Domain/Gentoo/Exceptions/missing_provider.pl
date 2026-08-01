@@ -40,7 +40,7 @@ dispatcher:
 A concrete discovery is recorded via feedback:record_discovery/4 (durable,
 unioned into BDEPEND on the next proof) and fixup:record/3 (so it surfaces
 in the build summary). Declared-but-unbuilt providers (a real resolver/
-scheduler bug) are logged loudly and never minted as a discovery.
+ordering bug) are logged loudly and never minted as a discovery.
 
 Registered with the generic fixup registry (Source/Domain/Gentoo/
 Exceptions/fixup.pl); the builder and printer stay generic.
@@ -231,7 +231,7 @@ missing_provider:package_in_tree(Package) :-
 %
 % True when Package (Category/Name) already appears in the target's
 % declared dependency metadata -- meaning the provider WAS declared but
-% not built (a resolver/scheduler bug), not an undeclared upstream gap.
+% not built (a resolver/ordering bug), not an undeclared upstream gap.
 
 missing_provider:already_declared(Repo, Entry, Package) :-
   atomic_list_concat([C, N], '/', Package),
@@ -280,7 +280,7 @@ missing_provider:log_discovery(Entry, Package, symbol(Kind, Name)) :-
 
 missing_provider:log_declared_but_unbuilt(Entry, Package, symbol(Kind, Name)) :-
   message:color(red),
-  format('!!! ~w failed on missing ~w ~w, but ~w IS a declared dependency -- resolver/scheduler ordering bug, not an undeclared dep (#102)~n',
+  format('!!! ~w failed on missing ~w ~w, but ~w IS a declared dependency -- resolver ordering bug, not an undeclared dep (#102)~n',
          [Entry, Kind, Name, Package]),
   message:color(normal).
 

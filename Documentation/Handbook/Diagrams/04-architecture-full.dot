@@ -51,18 +51,18 @@ digraph portage_ng_architecture {
 
   // ── Column 4: Prover + Rules ────────────────────────────────────────
   subgraph cluster_prover {
-    label="Prover"; labeljust=l; fontsize=7;
+    label="Prover (generic engine)"; labeljust=l; fontsize=7;
     color="#cc6644"; fontcolor="#cc6644"; style=rounded;
-    prove_entry [shape=box, style="filled,bold", label="prover\nprove/9", fillcolor="#ffeedd"];
+    prove_entry [shape=box, style="filled,bold", label="prover\nprove(Rules, ...)", fillcolor="#ffeedd"];
     constraint  [shape=box, label="constraints", fillcolor="#fff5ee"];
     learned     [shape=box, label="learned store", fillcolor="#ffe8cc"];
     reprove     [shape=box, label="reprove", fillcolor="#fff5ee"];
   }
 
   subgraph cluster_rules {
-    label="Rules (domain)"; labeljust=l; fontsize=7;
+    label="Resolving rules (domain)"; labeljust=l; fontsize=7;
     color="#8855aa"; fontcolor="#8855aa"; style=rounded;
-    rule_hook      [shape=box, style="filled,bold", label="rules · rule/2", fillcolor="#eeddff"];
+    rule_hook      [shape=box, style="filled,bold", label="resolving · rule/2", fillcolor="#eeddff"];
     rule_candidate [shape=box, label="candidate", fillcolor="#f5eeff"];
     rule_use       [shape=box, label="use", fillcolor="#f5eeff"];
     rule_dep       [shape=box, label="dependency", fillcolor="#f5eeff"];
@@ -77,8 +77,9 @@ digraph portage_ng_architecture {
     label="Pipeline"; labeljust=l; fontsize=7;
     color="#338866"; fontcolor="#338866"; style=rounded;
     pipeline  [shape=box, style="filled,bold", label="pipeline\nprove_plan", fillcolor="#e8f5e8"];
-    planner   [shape=box, label="planner (Kahn)", fillcolor="#ddffee"];
-    scheduler [shape=box, label="scheduler (Kosaraju)", fillcolor="#ddffee"];
+    resolver  [shape=box, label="resolver (pass 1)", fillcolor="#ddffee"];
+    orderer   [shape=box, label="orderer (pass 2)", fillcolor="#ddffee"];
+    ordering  [shape=box, label="ordering rules\n(laws + bindings)", fillcolor="#ddffee"];
   }
 
   subgraph cluster_network {
@@ -124,14 +125,15 @@ digraph portage_ng_architecture {
 
   query -> prove_entry;
   interface -> pipeline;
-  pipeline -> prove_entry;
+  pipeline -> resolver;
+  resolver -> prove_entry [label="prove(resolving, ...)"];
 
-  prove_entry -> rule_hook [label="rule/2"];
+  prove_entry -> rule_hook [label="Rules:rule/2"];
   prove_entry -> proof_out;
 
-  proof_out -> planner;
-  planner -> scheduler;
-  scheduler -> printer;
+  proof_out -> orderer;
+  orderer -> ordering [style=dashed, label="prove_once(ordering, ...)\nstep · requires · prefers · world"];
+  orderer -> printer;
   printer -> terminal;
   grapher -> terminal;
 

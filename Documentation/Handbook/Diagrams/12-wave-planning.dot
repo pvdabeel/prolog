@@ -1,4 +1,4 @@
-// Chapter 12 — Wave planning via Kahn's algorithm
+// Chapter 12 — Wave plan projected from pass-2 availability proofs
 // Render: dot -Tsvg 12-wave-planning.dot -o 12-wave-planning.svg
 
 digraph wave_planning {
@@ -10,7 +10,7 @@ digraph wave_planning {
 
     // Wave 1
     subgraph cluster_w1 {
-        label="Wave 1  (in-degree 0)";
+        label="Wave 1  (no unmet requirements)";
         labeljust=l;
         style=filled;
         fillcolor="#e6f0ff";

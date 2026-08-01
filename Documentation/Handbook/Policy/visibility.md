@@ -10,10 +10,12 @@ Unmask / keyword / license acceptance are config actions, not tree edits.
 **Literals:**
 
 - Eligibility guards on `Repo://Ebuild:install|run|…`
-- Domain assumptions: `assumed(masked(…))`, `assumed(keyword_filtered(…))`,
-  license-related assumptions (printed with `suggestion/2` tags)
+- Domain assumptions: assumed action literals whose `?{Context}` carries
+  `assumption_reason(masked|keyword_filtered|…)` plus
+  `suggestion(unmask, …)` / `suggestion(accept_keyword, …)` tags
+  (plus `R://E:unmask` literals for the masked case)
 
-**Owns:** `Rules/candidate.pl` (eligibility), preference / profile mask
+**Owns:** `Rules/Resolving/candidate.pl` (eligibility), preference / profile mask
 and keyword layers, printer assumption suggestions.
 
 **Invariants:**

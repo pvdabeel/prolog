@@ -1,13 +1,13 @@
 /*
-  rules_dispatch.dot — Visual overview of rules:rule/2 dispatch in rules.pl
+  resolving_dispatch.dot — Visual overview of resolving:rule/2 dispatch in resolving.pl
 
   Shows which rule literals delegate to which candidate:/target: predicates
   and what kind of proof conditions each resolve path produces.
 
-  Generate SVG:  dot -Tsvg rules_dispatch.dot -o rules_dispatch.svg
+  Generate SVG:  dot -Tsvg resolving_dispatch.dot -o resolving_dispatch.svg
 */
 
-digraph rules_dispatch {
+digraph resolving_dispatch {
   rankdir=LR;
   fontname="Helvetica";
   node [fontname="Helvetica", fontsize=10, shape=box, style="rounded,filled", fillcolor="#f0f4ff"];

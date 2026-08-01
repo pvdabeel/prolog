@@ -16,14 +16,13 @@ digraph layers {
         fillcolor="#e6f0ff";
         color="#4a86c8";
 
-        prover      [label="prover.pl", fillcolor="#cce5ff"];
-        planner     [label="planner.pl\nkahn.pl", fillcolor="#cce5ff"];
-        scheduler   [label="scheduler.pl", fillcolor="#cce5ff"];
+        prover      [label="prover.pl\n(generic engine)", fillcolor="#cce5ff"];
+        orderer     [label="orderer.pl\n(pass-2 stage)", fillcolor="#cce5ff"];
         constraint  [label="constraint.pl", fillcolor="#cce5ff"];
         featunify   [label="feature_unification\nunify.pl", fillcolor="#cce5ff"];
         context     [label="context.pl\n(OO / CONTEXT)", fillcolor="#cce5ff"];
 
-        prover -> planner -> scheduler [style=invis];
+        prover -> orderer [style=invis];
     }
 
     // rule/2 interface
@@ -37,12 +36,13 @@ digraph layers {
         fillcolor="#e6ffe6";
         color="#4a8c4a";
 
-        rules       [label="rules.pl", fillcolor="#ccf2cc"];
-        candidate   [label="Rules/\ncandidate.pl", fillcolor="#ccf2cc"];
-        use         [label="Rules/\nuse.pl", fillcolor="#ccf2cc"];
-        heuristic   [label="Rules/\nheuristic.pl", fillcolor="#ccf2cc"];
-        dependency  [label="Rules/\ndependency.pl", fillcolor="#ccf2cc"];
-        memo        [label="Rules/\nmemo.pl", fillcolor="#ccf2cc"];
+        rules       [label="resolving.pl", fillcolor="#ccf2cc"];
+        ordering    [label="ordering.pl\n(planning laws + bindings)", fillcolor="#ccf2cc"];
+        candidate   [label="Rules/Resolving/\ncandidate.pl", fillcolor="#ccf2cc"];
+        use         [label="Rules/Resolving/\nuse.pl", fillcolor="#ccf2cc"];
+        heuristic   [label="Rules/Resolving/\nheuristic.pl", fillcolor="#ccf2cc"];
+        dependency  [label="Rules/Resolving/\ndependency.pl", fillcolor="#ccf2cc"];
+        memo        [label="Rules/Resolving/\nmemo.pl", fillcolor="#ccf2cc"];
         version     [label="version.pl", fillcolor="#ccf2cc"];
         eapi        [label="eapi.pl", fillcolor="#ccf2cc"];
         preference  [label="preference.pl\nprofile.pl", fillcolor="#ccf2cc"];
@@ -54,8 +54,10 @@ digraph layers {
     }
 
     // Connections through rule/2
-    prover -> rule_iface [label="calls rule/2"];
-    rule_iface -> rules [label="Head -> Body"];
+    prover -> rule_iface [label="calls Rules:rule/2"];
+    rule_iface -> rules [label="pass 1\n(resolving)"];
+    rule_iface -> ordering [label="pass 2\n(ordering)", style=dashed];
+    orderer -> ordering [label="step · requires\nprefers · world", style=dashed];
 
     // Hooks back
     heuristic -> constraint [label="constraint_unify_hook\nconstraint_guard", style=dashed];

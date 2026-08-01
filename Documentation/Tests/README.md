@@ -5158,7 +5158,7 @@ Total: 12 actions (5 downloads, 5 installs, 2 runs), grouped into 6 steps.
 **Category:** Installed
 
 This test case is a regression test for use:installed_entry_satisfies_build_with_use/2,
-the check the rebuild paths key on (the rules:rule install/run short-circuit and
+the check the rebuild paths key on (the resolving:rule install/run short-circuit and
 candidate:update_requires_use_rebuild). It finds an installed VDB entry with an
 IUSE flag that was disabled at build time and verifies the check in both
 directions. Flags outside a package's IUSE are ignored by design (they cannot

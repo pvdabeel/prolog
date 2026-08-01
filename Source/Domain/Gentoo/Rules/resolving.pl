@@ -8,16 +8,19 @@
 */
 
 
-/** <module> RULES
-Domain rules for the Gentoo package resolver.
+/** <module> RESOLVING
+Resolve rule set (pass 1): domain rules for the Gentoo package resolver.
 
-Each clause of rules:rule(+Literal, -Conditions) defines when a literal
-holds and what sub-goals must be proved for it.  The prover drives proof
-search by calling rule/2; this file supplies the domain knowledge that
-tells the prover what "installing a package" or "satisfying a dependency"
-actually means in a Gentoo context.
+Each clause of resolving:rule(+Literal, -Conditions) defines when a
+literal holds and what sub-goals must be proved for it.  The resolver
+stage (Source/Pipeline/resolver.pl) hands this module to the generic
+prover (`prover:prove(resolving, ...)`); this file supplies the domain
+knowledge that tells the prover what "installing a package" or
+"satisfying a dependency" actually means in a Gentoo context.  Its
+pass-2 counterpart is Source/Domain/Gentoo/Rules/ordering.pl, the rule set
+the orderer proves with.
 
-Helper predicates used by these rules live in the Rules/ submodules.
+Helper predicates used by these rules live in the Resolving/ submodules.
 
 For a declarative (newbie-oriented) view of Gentoo policy — PMS meaning,
 literals, invariants, and overlay specimens — see
@@ -60,18 +63,19 @@ remains the executable rule/2 surface; Policy/ must not drift from it.
   5. *Required USE / blocking / prover primitives* -- naf, conflict, assumed.
 */
 
-:- module(rules, [rule/2]).
+:- module(resolving, [rule/2]).
 
 
 % =============================================================================
-%  Rule declarations
+%  RESOLVING declarations
 % =============================================================================
 %
 %  Each rule/2 clause maps a literal to a list of proof conditions.
-%  The prover calls rules:rule(+Literal, -Conditions) to expand the proof
-%  tree.  Conditions may include sub-goals (proved recursively),
-%  constraint/1 terms (merged into the constraint store), and assumed/1
-%  terms (domain assumptions recorded in the proof).
+%  The prover expands the proof tree against this module when the
+%  resolver passes it in (`prover:prove(resolving, ...)`).  Conditions
+%  may include sub-goals (proved recursively), constraint/1 terms
+%  (merged into the constraint store), and assumed/1 terms (domain
+%  assumptions recorded in the proof).
 %
 %  == Delegation protocol ==
 %
@@ -105,7 +109,7 @@ remains the executable rule/2 surface; Policy/ must not drift from it.
 %          - constraint(selected_cn(C,N):{...}) + ...  candidate selection + deps
 %          - assumed(non_existent(...))                 assumption fallback
 %
-%  See Documentation/Diagrams/rules_dispatch.dot for a visual overview.
+%  See Documentation/Diagrams/resolving_dispatch.dot for a visual overview.
 
 
 % =============================================================================
@@ -117,19 +121,20 @@ remains the executable rule/2 surface; Policy/ must not drift from it.
 % -----------------------------------------------------------------------------
 %
 % KB-independent unit tests (Source/Test/unittest.pl, issue #73) drive the
-% prover and planner over tiny hand-built rule sets without a loaded
+% prover and orderer over tiny hand-built rule sets without a loaded
 % knowledge base.  While the store is active, rule/2 resolves EXCLUSIVELY
 % against the dynamic test_rule/2 clauses (committed choice), so synthetic
 % literals can never fall through to the production ruleset below and the
 % production ruleset can never leak into a synthetic proof.  When inactive
 % (the default), the only cost is a single failing dynamic-predicate call
-% per rule/2 expansion.
+% per rule/2 expansion.  (Pass-2 needs no dispatch here: the orderer hands
+% the prover the `ordering` module directly.)
 
 :- dynamic test_rules_active/0.
 :- dynamic test_rule/2.
 
 
-%! rules:enable_test_rules
+%! resolving:enable_test_rules
 %
 % Activate the synthetic rule store (unit tests only).
 
@@ -137,7 +142,7 @@ enable_test_rules :-
   ( test_rules_active -> true ; assertz(test_rules_active) ).
 
 
-%! rules:disable_test_rules
+%! resolving:disable_test_rules
 %
 % Deactivate the synthetic rule store and clear all synthetic rules.
 
@@ -146,11 +151,11 @@ disable_test_rules :-
   retractall(test_rule(_, _)).
 
 
-%! rules:rule(+Literal, -Conditions) — synthetic store dispatch
+%! resolving:rule(+Literal, -Conditions) — synthetic store dispatch
 %
-% Must remain the FIRST rule/2 clause.  When the synthetic store is active,
-% strip an optional ?{Ctx} proof-context wrapper and resolve against
-% test_rule/2 only.
+% Must remain the FIRST rule/2 clause.  When the synthetic store is
+% active, strip an optional ?{Ctx} proof-context wrapper and resolve
+% against test_rule/2 only.
 
 rule(Literal, Body) :-
   test_rules_active,
@@ -163,12 +168,13 @@ rule(Literal, Body) :-
 %  Ruleset: TARGET
 % =============================================================================
 
-%! rules:rule(+Literal, -Conditions)
+%! resolving:rule(+Literal, -Conditions)
 %
 % Domain `rule/2` families (this file). Each clause maps a proof literal to
-% ordered proof conditions. The prover calls `rules:rule(+Literal, -Conditions)`
-% and never interprets Gentoo meaning itself. Families below are grouped by
-% head pattern; helpers live in `Rules/` submodules.
+% ordered proof conditions. The prover expands `resolving:rule/2` (via the
+% rule module the resolver passes in) and never interprets Gentoo meaning
+% itself. Families below are grouped by head pattern; helpers live in
+% `Resolving/` submodules.
 %
 % | Head family | Purpose |
 % |-------------|--------|
@@ -389,7 +395,7 @@ rule(Repository://Ebuild:install?{Context}, Conditions) :-
           % `sys-devel/gcc objc` carried only as suggestion(use_change),
           % portage-ng#85). Re-emit the request as a transactional :update so
           % candidate:resolve walks DEPEND/BDEPEND under the new USE state and
-          % the planner can schedule the newly-required deps before the
+          % the orderer can place the newly-required deps before the
           % rebuild.
           feature_unification:unify([replaces(VdbRepo://Ebuild),
                                      rebuild_reason(build_with_use)],
@@ -429,7 +435,7 @@ rule(Repository://Ebuild:run?{Context}, Conditions) :-
           )
       ;   % Already-installed but the requested USE differs from the installed
           % one. Re-emit as a transactional :update so the prover walks
-          % RDEPEND/DEPEND under the new USE state and the planner schedules
+          % RDEPEND/DEPEND under the new USE state and the orderer places
           % the newly-required deps before the rebuild. Without this, a parent
           % dep like `iptables[nftables]` -- or a self USE flip such as
           % `sys-devel/gcc objc` carried only as suggestion(use_change)

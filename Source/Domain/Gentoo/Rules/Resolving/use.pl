@@ -12,7 +12,7 @@
 USE flag evaluation, conditionals, and build-with-use state management.
 
 This module implements all USE-flag-related logic for the portage-ng resolver.
-The rule/2 clauses in rules.pl delegate USE decisions here: effective USE
+The rule/2 clauses in resolving.pl delegate USE decisions here: effective USE
 resolution, IUSE default lookup, USE conditional activation, candidate USE
 satisfaction checks, and build-with-use constraint propagation.
 
@@ -923,7 +923,7 @@ use:installed_entry_satisfies_build_with_use(VdbRepo://InstalledEntry, Context) 
 % `use_change(Flag, enable|disable)` in Changes. Flags not in the package's
 % recorded IUSE are ignored (they cannot influence the build). Mirrors the
 % semantics of installed_entry_satisfies_build_with_use/2 but for the
-% planner's suggestion(use_change) self-flips rather than bracketed USE.
+% resolver's suggestion(use_change) self-flips rather than bracketed USE.
 
 use:installed_entry_satisfies_use_change(_Installed, []) :- !.
 use:installed_entry_satisfies_use_change(VdbRepo://InstalledEntry, Changes) :-
@@ -1741,7 +1741,7 @@ use:shared_dep_use_forcing_enabled :-
 % per *level* of the cascade instead of one aborted pass per *flag*
 % (app-text/ktikz: 14 reproves -> 2). This replaced the original
 % throw(prover_reprove(bwu_force(...)))-per-flag design, which doubled
-% prover:test_stats on KDE/GNOME stacks.
+% resolver:test_stats on KDE/GNOME stacks.
 %
 % Narrow + self-limiting: fires only for an already-committed provider, only
 % for HARD (forcing) enable flags that are seedable (not profile-masked) and

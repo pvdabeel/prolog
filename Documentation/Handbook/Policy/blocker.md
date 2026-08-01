@@ -17,7 +17,7 @@ Versioned forms (`!<pkg-ver`) restrict which versions are blocked.
   actionable: unmerge or pick another `||` arm)
 - Ranking interaction: blocked arms demoted or excluded
 
-**Owns:** `rules.pl` grouped dependency clauses, ranking / candidate
+**Owns:** `resolving.pl` grouped dependency clauses, ranking / candidate
 filters, printer blocker reporting.
 
 **Invariants:**

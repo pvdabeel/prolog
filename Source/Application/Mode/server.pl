@@ -27,7 +27,7 @@ Three roles interact in the portage-ng architecture:
     tasks like proving. Discovers the server via Bonjour, syncs its local 
     portage tree to the server's advertised git snapshot, then polls the 
     server's job queue for prove targets. Each worker spawns one thread per 
-    CPU, runs prover/planner/scheduler locally, and posts results back.
+    CPU, runs prover/orderer locally, and posts results back.
 */
 
 :- module(server, []).
@@ -176,7 +176,7 @@ server:reply(Request) :-
 server:reply(Request) :-
     member(path('/prove'), Request),
     !,
-    server:chunked_reply('/prove', prover:test_latest(portage,parallel_verbose)).
+    server:chunked_reply('/prove', resolver:test_latest(portage,parallel_verbose)).
 
 server:reply(Request) :-
     member(path('/import-vdb'), Request),

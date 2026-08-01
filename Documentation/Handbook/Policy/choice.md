@@ -18,7 +18,7 @@ a multi-key ranking on admitted arms.
 - `exactly_one_of_group(Deps):…`
 - `at_most_one_of_group(Deps):…`
 
-**Owns:** `rules.pl` choice section, `Rules/ranking.pl`
+**Owns:** `resolving.pl` choice section, `Rules/Resolving/ranking.pl`
 (`prioritize_deps_keep_all`), Handbook 11 “Any-of (`||`) arm selection”.
 
 **Diagnostics:** `--choice-log` via `portage-ng-dev` sets
