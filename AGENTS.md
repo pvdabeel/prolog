@@ -18,31 +18,47 @@ file only records durable, non-obvious guidance for cloud agents.
   empty values), so their absence is not fatal; recreating them just mirrors CI
   and enables LLM/server features.
 
-### No Gentoo tree in the sandbox (important)
-- There is **no full Gentoo Portage tree and no `Knowledge/kb.qlf`** here. The
-  hostname resolves to `cursor`, so the default host config
-  (`Source/Config/default.pl`) points the `portage` repo at
-  `Repository/portage-git`, which does **not** exist. Real
-  `--pretend <category/package>` against the `portage` repo will therefore find
-  no candidates in this environment.
-- Per `.cursorrules`, do **not** run `--sync` or `--graph` inside the sandbox
-  (they mutate state / need network + a real tree); the user runs those
-  externally.
+### Sandbox scope (read this before running anything heavy)
+Cloud agents **cannot** do full-tree Gentoo proving or regression. Two
+independent limits stack:
 
-### How to test / demonstrate in the sandbox
-Everything runs through the wrapper `./Source/Application/Wrapper/portage-ng-dev`
-(never raw `swipl`). The in-repo synthetic overlay (`Repository/Overlay`, ships
-its own md5-cache) is the substitute for a real tree:
-- Boot check: `--mode standalone --shell` and `halt.` (prints the banner).
-- PLUnit suite (fast, no tree): `make test` (518 tests).
-- Overlay regression (full resolve+order+print pipeline, 80 cases):
+1. **No Portage knowledge base on disk.** There is no Gentoo tree
+   (`Repository/portage-git` is absent), and no checked-in
+   `Knowledge/{kb,profile,preference}.{raw,qlf}`. Hostname resolves to
+   `cursor`, so `Source/Config/default.pl` points the `portage` repo at a
+   path that does not exist. Real `--pretend <category/package>` against
+   `portage` finds no candidates.
+2. **Not enough CPU for whole-tree resolver work anyway.** Even if a
+   `kb.qlf` (+ `profile.qlf` + `preference.qlf`) snapshot were committed,
+   workloads like `resolver:test(portage)`, `resolver:test_stats(portage)`,
+   whole-tree `--graph`, and tinderbox-ng matrix runs need a powerful local
+   machine (or `vm-linux.local`). Do **not** attempt them in the cloud VM.
+
+Local-only / external (ask the user; do not run here):
+- `--sync`, `--graph`
+- `resolver:test(portage)`, `resolver:test_stats(portage)` (and other
+  whole-tree harnesses)
+- tinderbox-ng regression on `vm-linux.local` (see `.cursorrules`)
+
+Note on a hypothetical committed KB: proving against cached facts would also
+need `profile.qlf` (masks/keywords/USE) **and** `preference.qlf` (materialized
+`/etc/portage` + profile preferences). That path is intentionally **not**
+set up for cloud agents; use the overlay instead.
+
+### What to run in the sandbox
+Everything goes through `./Source/Application/Wrapper/portage-ng-dev` (never
+raw `swipl`). The in-repo synthetic overlay (`Repository/Overlay`, ships its
+own md5-cache) is the substitute for a real tree:
+
+- Boot check: `--mode standalone --shell` then `halt.`
+- PLUnit (fast, no tree): `make test`
+- Overlay regression (full resolve+order+print, 80 cases):
   ```sh
   ./Source/Application/Wrapper/portage-ng-dev --mode standalone --shell --timeout 900 <<'PL'
   ( catch(test:run(cases,batch),E,(print_message(error,E),fail)) -> halt(0) ; halt(1) ).
   PL
   ```
-- Hello-world build plan against the overlay (registers the overlay first via
-  `test:ensure_overlay`, then runs the canonical pipeline entry point):
+- Spot prove against the overlay (hello-world style):
   ```sh
   ./Source/Application/Wrapper/portage-ng-dev --mode standalone --shell --timeout 120 <<'PL'
   test:ensure_overlay,
@@ -52,7 +68,9 @@ its own md5-cache) is the substitute for a real tree:
   halt.
   PL
   ```
+- Small scripted queries via `--shell` + here-doc are fine; keep timeouts
+  modest and avoid anything that walks the full `portage` repo.
 
 ### Building
-- `make build` produces the standalone `portage-ng` binary (gitignored via
-  `make clean`); day-to-day development uses the wrapper, not the binary.
+- `make build` produces the standalone `portage-ng` binary (`make clean`
+  removes it); day-to-day development uses the wrapper, not the binary.
