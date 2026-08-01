@@ -30,9 +30,9 @@ digraph context_lifecycle {
 
         node [shape=box, fillcolor="#ccf2cc"];
         dep_edge [label="Dependency edge\nfrom parent to child"];
-        add_self [label="ctx_set_self\nself(parent_entry)\n(replaces, not accumulates)"];
+        add_self [label="dependency:ctx_set_self\nself(parent_entry)\n(replaces, not accumulates)"];
         add_bwu [label="process_build_with_use\nbuild_with_use:use_state(En,Dis)\n(per-edge, fresh)"];
-        add_after [label="ctx_add_after\nafter(parent) — propagates\nafter_only(parent) — local only"];
+        add_after [label="featureterm:add_after_to_dep_contexts\npropagate incoming after/1 (world anchors)\nPDEPEND edges: after_only — local only"];
         add_slot [label="process_slot\nslot(C,N,Ss):{Candidate}\n(from := operator)"];
 
         dep_edge -> add_self -> add_bwu -> add_after -> add_slot;
@@ -65,7 +65,7 @@ digraph context_lifecycle {
 
         node [shape=box, fillcolor="#e6ccff"];
         memo_check [label="Before memoisation lookup"];
-        strip_plan [label="ctx_strip_planning\nremove after/1, world_atom/1\n(ordering is not part of key)"];
+        strip_plan [label="featureterm:strip_planning\nremove after/1, world_atom/1\n(ordering is not part of key)"];
         memo_key [label="Cleaned context\nused as memo key"];
 
         memo_check -> strip_plan -> memo_key;

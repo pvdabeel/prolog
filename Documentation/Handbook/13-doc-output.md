@@ -1,6 +1,6 @@
 # Output and Visualization
 
-After the prover completes and the planner produces a parallel plan,
+After the prover completes and the ordering pass produces a parallel plan,
 the next step is to present the result to the user.  This happens
 before any building — even a `--pretend` run produces the full plan
 output.  portage-ng offers several output formats: a colour-coded
@@ -67,14 +67,15 @@ red bubbles to draw attention.
 
 ### Printing styles
 
-portage-ng supports two printing styles, selectable via
-`config:printing_style/1`:
+portage-ng supports three printing styles, selectable via
+`config:printing_style/1` (default: `fancy`):
 
-- **Bubble style** (default) — a compact visual layout where each
-  action line includes colour-coded indicators and right-edge
-  annotations.
-- **Column style** — a tabular layout that aligns version, slot, USE,
+- **`fancy`** (default) — the bubble style: a compact visual layout
+  where each action line includes colour-coded indicators and
+  right-edge annotations.
+- **`column`** — a tabular layout that aligns version, slot, USE,
   and repository information in fixed columns for easy scanning.
+- **`short`** — a minimal one-line-per-action format.
 
 ### Pre-action steps
 
@@ -93,8 +94,8 @@ corresponding `/etc/portage/package.*` file.
 ### Summary line
 
 At the bottom, a summary line shows the total number of actions
-(new installs, upgrades, reinstalls, etc.) and the predicted
-download and disk space usage.
+(new installs, upgrades, reinstalls, etc.), the step count, and the
+predicted download sizes (to be downloaded vs. already downloaded).
 
 
 ## Assumption and warning output
@@ -199,7 +200,7 @@ dependency tree.
 ## Gantt charts
 
 The `gantt` module produces Gantt charts that visualise the parallel
-build schedule computed by the planner.  Each horizontal bar
+build schedule computed by the ordering pass.  Each horizontal bar
 represents a package, positioned on a timeline according to its wave
 assignment and estimated build duration.
 
@@ -257,7 +258,7 @@ The printer pipeline is split across focused submodules:
 
 ## Further reading
 
-- [Chapter 12: Planning and Scheduling](12-doc-planning.md) — how
+- [Chapter 12: Ordering — Plans as Proofs](12-doc-planning.md) — how
   waves and parallelism are computed
 - [Chapter 14: Command-Line Interface](14-doc-cli.md) — `--graph`,
   `--verbose`, `--quiet`, and other output flags

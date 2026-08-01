@@ -541,10 +541,12 @@ An imperative resolver would either fail or silently accept the keyword.
 portage-ng records:
 
 ```prolog
-rule(assumed(portage://dev-libs/foo-1.0:merge), [])
+rule(assumed(portage://dev-libs/foo-1.0:run), [])
 ```
 
-This assumption appears in the proof, flows through the planner, and is
+(The real literal's context also carries `assumption_reason(...)` and
+`suggestion(accept_keyword, ...)` tags.)  This assumption appears in the
+proof, flows through the plan, and is
 presented to the user as: "I assumed dev-libs/foo-1.0 could be merged.
 To make this work, I will add it for you to package.accept_keywords."
 
@@ -575,7 +577,7 @@ Gentoo ebuilds, dependencies, USE flags, slots, and all related metadata
 must be interpreted) — is captured in a set of DCG grammar rules and
 Prolog clauses.  When EAPI 9
 added new features, the implementation required adding new grammar rules
-and clauses.  The reasoning engine — prover, planner, and scheduler — did
+and clauses.  The reasoning engine — the prover and the ordering laws — did
 not change at all, because it is domain-agnostic.
 
 ### Beyond pure Prolog
@@ -648,7 +650,7 @@ version domain intersection) to participate in unification without modifying
 the core.
 
 The result is that every literal in a proof carries a complete, machine-readable
-description of its resolved configuration.  The planner and printer can read
+description of its resolved configuration.  The orderer and printer can read
 this directly — there is no need to re-derive "which USE flags were active"
 after the fact.
 
@@ -712,7 +714,7 @@ To illustrate, here is a simplified example of a `person` context:
 :- dpublic([person/1, '~person'/0]).
 :- dpublic([get_name/1, set_name/1]).
 :- dpublic([get_age/1, set_age/1]).
-:- dpublic([add_title/1, remove_title/1]).
+:- dpublic([get_title/1, add_title/1, remove_title/1]).
 :- dprivate(age/1).
 :- dprivate(title/1).
 :- dprotected(name/1).
@@ -730,8 +732,14 @@ get_name(Name) ::-
 set_name(Name) ::-
   <=name(Name).
 
+get_age(Age) ::-
+  ::age(Age).
+
 set_age(Age) ::-
   <=age(Age).
+
+get_title(Title) ::-
+  ::title(Title).
 
 add_title(Title) ::-
   <+title(Title).

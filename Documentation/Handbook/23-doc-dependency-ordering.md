@@ -132,7 +132,7 @@ this structure.
 ### Intra-group dependency ordering
 
 Before proving the dependencies within a single package,
-`candidate:dep_priority/2` sorts them by constraint tightness.
+`ranking:dep_priority/2` sorts them by constraint tightness.
 Tightly constrained dependencies are proved first so that their
 `selected_cn` locks early, preventing greedy conflicts where an
 unconstrained sibling picks a version that later clashes.  The
@@ -149,14 +149,17 @@ slot specificity further refines the order.  See
 - **RDEPEND** create edges to `:run` actions with `after_only()`
   context tags that stop at the immediate children.  This makes them
   naturally softer.
-- **PDEPEND** are handled by `literal_hook` in a single pass during
-  proof search, without creating explicit ordering edges in the proof.
+- **PDEPEND** are handled by the `heuristic:proof_obligation/4` hook in a
+  single pass during proof search, without creating explicit ordering
+  edges in the proof.
 
-When cycles appear, the wave planner produces an acyclic plan for the
-majority of the graph.  The remaining cyclic portion goes to the
-scheduler, which uses Kosaraju's algorithm to find SCCs.  Runtime-only
-SCCs are treated as freely orderable (matching Paludis's insight),
-while build-dep SCCs require special handling.
+When cycles appear, the ordering pass (Chapter 12) resolves them at
+proof time: a requirement whose provider is still being scheduled falls
+through to a citation of the installed world (VDB), or — when nothing
+bridges the loop — to an honest `unreachable` assumption.  Runtime-only
+cycles never bind at all, because RDEPEND edges are soft preferences
+(matching Paludis's insight) that are simply dropped when they would
+close a cycle.
 
 ### PDEPEND completion ordering
 
@@ -167,36 +170,25 @@ PDEPEND closure is installed, its build can fail (e.g. a Ruby extension's
 `extconf.rb` hits a `LoadError`, or a CMake `CMAKE_C_COMPILER` check fails
 because a toolchain component is not yet on `PATH`).
 
-The scheduler closes this gap in `scheduler:repair_ordering_violations`,
-keyed only on the generic `order_after` marker (no package-specific logic).
-The repair pass builds an effective dependency graph over all planned rule
-heads (direct body deps, assumed-dep aliases, RDEPEND configure deps and
-PDEPEND completion edges), condenses it with Kosaraju's SCC algorithm and
-assigns waves by longest path over the acyclic condensation.  Members of a
-true cycle share a wave; everything acyclic is strictly ordered.  Because
-the condensation is a DAG, the pass always converges — a cycle anywhere in
-the plan can never collapse the ordering of an unrelated acyclic chain
-(portage-ng#26).
+The ordering bindings close this gap with a **completion preference**
+(`ordering:prefers/2` in `Source/Domain/Gentoo/Rules/ordering.pl`): a consumer
+whose dependency carries an `order_after` anchor on a PDEPEND provider
+prefers the install heads of that provider's PDEPEND targets — i.e. it is
+ordered after `P`'s whole post-install group, matching emerge's behaviour
+(portage-ng#18).
 
-- `build_pdepend_anchor_map` maps each provider `(C,N)` to its PDEPEND-target
-  heads, and `build_pdepend_closure_map` computes the forward closure of those
-  targets.
-- A consumer outside that closure gets edges to the **install heads** of `P`'s
-  PDEPEND targets — i.e. it is ordered after `P`'s whole post-install group,
-  matching emerge's behaviour.
+Because this is a *preference*, not a hard requirement, it is inherently
+cycle-safe: the wave projection accepts each preference exactly when it
+closes no cycle against the hard edges and the previously accepted
+preferences.  A consumer that is itself a member of the provider's
+PDEPEND group is therefore never bumped — the preference back onto its
+own group would close a cycle and is dropped silently (portage-ng#19).
+Densely cyclic toolchain closures (e.g. LLVM) are safe for the same
+reason: no preference can collapse the ordering of an acyclic chain
+elsewhere in the plan (portage-ng#26).
 
-This bump is made **cycle-safe per target** so it does not collapse densely
-cyclic toolchain closures (e.g. LLVM):
-
-- The PDEPEND closure is collapsed to package `(C,N)` identity, so a cycle that
-  is only visible as a grouped or cross-slot literal is still detected.
-- The closure is computed *per PDEPEND target* and cyclic targets are filtered
-  individually, so a consumer is ordered after the provider's *acyclic*
-  post-deps but never after a post-dep that requires it back.
-- A consumer that is itself a member of the provider's PDEPEND group is never
-  bumped (a sibling must not wait for its sibling).
-
-A fast no-op path leaves plans without any PDEPEND provider unchanged.
+A per-pass PDEPEND anchor index makes the preference lookup cheap; plans
+without any PDEPEND provider pay only an empty index probe.
 
 
 ## How the three approaches compare
@@ -212,9 +204,9 @@ indicates the weakest (post-dependency) constraints.
 | :--- | :--- | :--- | :--- |
 | DEPEND/BDEPEND | Hard edge, never broken | Hard edge, never broken | `:install` + `after()`, hard |
 | RDEPEND | Soft edge, broken for cycles | Soft edge, cycles freely ordered | `:run` + `after_only()`, soft |
-| PDEPEND | Weak edge, first to break | No edge at all | `literal_hook`, no proof edge; scheduler adds completion ordering |
-| Cycle strategy | Progressive relaxation | SCC classification | Wave plan + SCC scheduling |
-| Build-time cycles | Error / merge group | Relax met edges, then error | SCC merge-set |
+| PDEPEND | Weak edge, first to break | No edge at all | proof obligation hook, no proof edge; completion preference in ordering pass |
+| Cycle strategy | Progressive relaxation | SCC classification | World citation (VDB) or `unreachable` assumption |
+| Build-time cycles | Error / merge group | Relax met edges, then error | Bridged by installed world; honest bootstrap boundary otherwise |
 
 
 ## Annex: overlay test cases
@@ -376,7 +368,7 @@ then `app`.  portage-ng installs `lib` and `plugin` in parallel in
 step 2, since PDEPEND creates no ordering constraint between them here.
 The plugin's `:run` action comes last, after the main target.  (When a
 package *outside* the PDEPEND closure consumes the provider, the
-scheduler's [PDEPEND completion ordering](#pdepend-completion-ordering)
+ordering pass's [PDEPEND completion preference](#pdepend-completion-ordering)
 additionally orders that consumer after the provider's post-install
 group; this minimal test has no such external consumer.)
 

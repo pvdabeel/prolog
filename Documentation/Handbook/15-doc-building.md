@@ -7,8 +7,8 @@ must actually be compiled:
 - **Cache generation** — portage-ng includes its own md5-cache
   generator, so it does not depend on Portage's `egencache` or any
   other external tool to produce the cache files it reasons over.
-- **Dependency resolution and planning** — the prover, planner, and
-  scheduler are entirely internal (see Chapters 8-12).
+- **Dependency resolution and ordering** — the prover and the
+  ordering engine are entirely internal (see Chapters 8-12).
 - **Downloading** — source archive fetching, mirror selection, hash
   verification, and resume are handled by portage-ng's own download
   module (see [Download management](#download-management) below).
@@ -30,7 +30,7 @@ plan.  The command is configurable via `config:ebuild_command/1`
 (default: `ebuild`).
 
 The builder processes the plan wave by wave, respecting the
-parallelism computed by the planner.  Within each wave, independent
+parallelism computed by the ordering pass.  Within each wave, independent
 actions can run concurrently.
 
 
@@ -245,15 +245,15 @@ knowledge.  The only resolver change is in `query.pl`, which unions
 `feedback:discovered_dep(Target, Provider, bdepend, _)` into the
 target's build-dependency model.  The mechanism also distinguishes an
 *undeclared* dependency (the upstream-gap case above — mint a discovery)
-from a *declared-but-unbuilt* one (a genuine resolver/scheduler ordering
+from a *declared-but-unbuilt* one (a genuine resolver ordering
 bug — logged loudly, never papered over).
 
 The control loop lives in the builder: `builder:build/1` is a bounded
 replan loop (`builder:build_loop/2`, capped by
 `config:missing_provider_max_replan/1`).  When a build pass fails *and*
 recorded a new discovery, the builder re-enters the pipeline; on the
-re-proof the provider is part of the closure, so the planner and
-scheduler order it — and its own transitive dependencies — before the
+re-proof the provider is part of the closure, so the ordering pass
+orders it — and its own transitive dependencies — before the
 target.  Everything already built satisfies from the VDB via the
 existing reconciliation fast path, so the retry pass only builds the
 provider and recompiles the target.  Walkthrough for the selinux case:
@@ -265,7 +265,7 @@ provider and recompiles the target.  Walkthrough for the selinux case:
    discovery and re-enters the pipeline.
 4. `rules`/`query` now yield
    `BDEPEND(selinux-base) ⊇ {sys-apps/semodule-utils}`; the prover
-   proves it, the scheduler orders `semodule-utils` (and its transitive
+   proves it, the orderer places `semodule-utils` (and its transitive
    `sys-libs/libsepol`) first.
 5. Retry pass: the provider builds, `selinux-base` recompiles, and the
    300+ downstream `selinux-*` packages never fail — the discovery is
@@ -501,9 +501,9 @@ The `download.pl` module handles source archive fetching:
 - Hash verification via `openssl dgst`
 - Resume support for interrupted downloads
 
-Downloads are scheduled as early as possible in the plan — the planner
-treats `:download` actions as the first wave, so packages can download
-while others are building.
+Downloads are scheduled as early as possible in the plan — `:download`
+actions have no unmet requirements, so they land in the earliest waves
+and packages can download while others are building.
 
 
 ## Snapshot support
@@ -515,9 +515,10 @@ system state before a merge and roll back to it afterwards.
 
 ### How a snapshot is created
 
-When a merge begins, portage-ng automatically creates a snapshot
-identified by a timestamp (e.g. `20260405-143012`).  The snapshot
-directory contains three files:
+When a merge begins with `--snapshot` (or with `config:snapshot_enabled`
+asserted in the per-machine config — snapshots are disabled by default),
+portage-ng creates a snapshot identified by a timestamp
+(e.g. `20260405-143012`).  The snapshot directory contains three files:
 
 - **`manifest.pl`** — a Prolog fact file listing every package
   currently installed in the VDB, with category, name, version, and
@@ -545,7 +546,7 @@ quickpkg'd; they remain unchanged on the system.
 
 ### Listing and diffing snapshots
 
-`--snapshot list` shows all available snapshots with their
+`--snapshots` shows all available snapshots with their
 timestamp, installed package count, and the number of binary
 packages stored:
 
@@ -555,7 +556,7 @@ Available snapshots:
   20260402-091544       2026-04-02 09:15:44   1843 pkgs    5 binpkgs
 ```
 
-`--snapshot diff <id>` compares a snapshot's manifest against the
+`--rollback <id> --pretend` compares a snapshot's manifest against the
 current VDB and shows what changed — packages installed since the
 snapshot, packages removed, and packages whose version changed:
 
@@ -576,7 +577,7 @@ Diff against snapshot "20260405-143012":
 
 ### Rolling back
 
-`--snapshot rollback <id>` reinstalls the saved binary packages
+`--rollback <id>` reinstalls the saved binary packages
 from the snapshot's `binpkgs/` directory and restores the world set
 file.  Each binary package is merged back onto the system via
 `ebuild <binpkg> merge`, downgrading the affected packages to their
@@ -587,13 +588,14 @@ shows what would be reinstalled without actually making changes.
 
 After the merge completes (whether successfully or not), the
 snapshot remains on disk so it can be used for rollback at any
-later time.  Old snapshots can be removed with
-`--snapshot delete <id>` to reclaim disk space.
+later time.  There is no delete flag; to reclaim disk space, call
+`snapshot:delete(Id)` from `--shell` (or remove the snapshot
+directory by hand).
 
 
 ## Further reading
 
-- [Chapter 12: Planning and Scheduling](12-doc-planning.md) — how the
+- [Chapter 12: Ordering — Plans as Proofs](12-doc-planning.md) — how the
   plan is constructed
 - [Chapter 13: Output and Visualization](13-doc-output.md) — plan
   display and `.merge` file generation

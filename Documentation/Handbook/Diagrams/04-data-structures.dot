@@ -51,7 +51,7 @@ digraph data_structures {
   }
 
   // Consumers
-  planner [label="Planner", shape=box, fillcolor="#E8E8E8"];
+  orderer [label="Orderer", shape=box, fillcolor="#E8E8E8"];
   printer [label="Printer", shape=box, fillcolor="#E8E8E8"];
   explainer [label="Explainer", shape=box, fillcolor="#E8E8E8"];
 
@@ -61,8 +61,8 @@ digraph data_structures {
   prover -> constraints [label="writes"];
   prover -> triggers [label="writes"];
 
-  proof -> planner [label="plan from"];
-  triggers -> planner;
+  proof -> orderer [label="order from"];
+  triggers -> orderer;
   proof -> printer [label="display"];
   model -> printer;
   proof -> explainer [label="explain"];

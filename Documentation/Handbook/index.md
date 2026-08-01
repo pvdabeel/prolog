@@ -22,7 +22,7 @@ software configuration, applied to Gentoo Linux.
     - [Policy cards](Policy/README.md) — what Gentoo policy requires
     - [Policy by example](Policy/examples.md) — overlay curriculum
     - [One-page map](Policy/map.md) — `rule/2` → schema → test → card
-12. [Planning and Scheduling](12-doc-planning.md)
+12. [Ordering: Plans as Proofs](12-doc-planning.md)
 13. [Output and Visualization](13-doc-output.md)
 
 ## Part III — Features

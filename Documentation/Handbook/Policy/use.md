@@ -14,7 +14,7 @@ on a shared child; the effective set is a meet / merge.
 - Proof-term context: `build_with_use/1`, `required_use/1`,
   `suggestion(use_change, …)`
 
-**Owns:** `Rules/use.pl`, `Rules/featureterm.pl`, `rules.pl` USE section,
+**Owns:** `Rules/Resolving/use.pl`, `Rules/Resolving/featureterm.pl`, `resolving.pl` USE section,
 feature unification for context meet.
 
 **Invariants:**

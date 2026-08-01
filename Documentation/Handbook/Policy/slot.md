@@ -12,7 +12,7 @@ and sub-slots (`:1/A`). Same slot, different versions conflict.
 - Slot occupancy constraints attached during `:install` resolve
 - Assumptions: `slot_conflict`, related model issues
 
-**Owns:** `Rules/candidate.pl`, `Rules/cnselect.pl`, slot-aware ranking
+**Owns:** `Rules/Resolving/candidate.pl`, `Rules/Resolving/cnselect.pl`, slot-aware ranking
 keys, version/slot facts from the knowledge cache.
 
 **Invariants:**

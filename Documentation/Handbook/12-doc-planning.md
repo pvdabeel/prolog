@@ -1,4 +1,4 @@
-# Planning and Scheduling
+# Ordering: Plans as Proofs
 
 ## Why parallel planning?
 
@@ -11,10 +11,9 @@ portage-ng takes a different stance: it produces **parallel** plans from the
 start.  Wave 1 might download *A*, *B*, and *C* concurrently; wave 2 might
 install *A* while *D* is still downloading; wave 3 might install *B* and *C*
 together, and so on.  This is **not** a post-processing optimization layered
-on top of a linear schedule.  Parallelism is computed **during** planning, as
-a natural consequence of Kahn’s topological sort: at each step, every literal
-whose prerequisites are satisfied is eligible at once, and that set is exactly
-one parallel wave.
+on top of a linear schedule.  Parallelism falls out of the ordering proofs
+themselves: two actions may share a wave exactly when neither one's
+availability proof depends on the other.
 
 On a multi-core machine with fast I/O, overlapping work this way can
 dramatically reduce wall-clock time compared to a strictly sequential narrative.
@@ -25,213 +24,245 @@ and so on.  Those actions can therefore land in different waves: one package
 can still be downloading while another is already installing, whenever the
 dependency graph allows it.
 
-After the prover completes, the proof must be converted into an executable
-plan — an ordered sequence of actions with maximal parallelism.  This is
-done in two stages: wave planning for the acyclic portion, and SCC
-scheduling for any cyclic remainder.
+
+## From proof to plan: a second proving pass
+
+The prover (Chapter 8) answers a question about the **final world**: does a
+consistent solution exist — which packages, which versions, which USE flags?
+Its output is a proof, and every fact in that proof carries a justification.
+
+But a proof is not a plan.  To execute anything, the actions must be ordered
+in time.  Earlier versions of portage-ng produced that ordering with
+procedural graph algorithms (Kahn's topological sort for the acyclic
+portion, Kosaraju SCC decomposition for cycles).  The machinery worked, but
+its answers came with no justification: a package landed in wave 7 because
+"the algorithm said so", and diagnosing a mis-ordered plan meant archaeology
+across several procedural passes.
+
+The ordering engine (`Source/Pipeline/orderer.pl`) gives the *when* the same
+treatment as the *what*: **it runs the same prover core a second time**.
+
+- **Pass 1** proves a solution exists.  It is the existing prover with the
+  existing domain rules, completely unchanged.  All *choice* lives here —
+  versions, USE flags, OR-group selection.
+- **Pass 2** constructs an ordering of that solution.  The prover core is
+  re-entered over a small set of generic **planning laws**, with the pass-1
+  proof and the installed system (VDB) as its facts.  Its output is a
+  second proof object in which every placement is justified.
+
+The pass-2 proof reads the way a Linux From Scratch book reads: *fontconfig
+can be built at step 8 because python-3.14.6 is already installed; the new
+python is built at step 12*.  A plan is no longer certified by empirical
+testing of an algorithm's output — the plan **is** a proof.
 
 
-## Dependency types and scheduling
+## The planning laws
 
-Gentoo’s dependency classes do not all impose the same ordering strength.
-The rules layer records that distinction in **proof-term context** (`?{…}` on
-each literal): dependency edges and ordering hints are derived from markers
-such as `after/1` and `after_only/1`.  The planner turns those into edges in
-its dependency graph (including ordering-only constraints where appropriate).
+Pass 2 needs only a handful of generic laws.  They are the `rule/2`
+clauses of the `ordering` module (`ordering.pl`, alongside the Gentoo
+bindings) and own no Gentoo vocabulary at all:
 
-Roughly:
+```prolog
+% A step can be placed once everything it requires is available:
+rule(scheduled(H), Conds) :-
+  ordering:step(H),
+  findall(available(H, D), ordering:requires(H, D), Conds).
+
+% A requirement is available when an earlier plan step provides it, or —
+% failing that — when the world as it stands already provides it, or —
+% failing that too — by recording the bootstrap failure as a negative
+% domain assumption instead of failing the pass:
+rule(available(H, D), Body) :-
+  (   ordering:step(D),
+      \+ prover:currently_proving(scheduled(D))
+  ->  Body = [scheduled(D)]
+  ;   ordering:world(H, D)
+  ->  Body = []
+  ;   Body = [assumed(unreachable(H, D))]
+  ).
+
+rule(assumed(unreachable(_, _)), []).
+```
+
+Three literals make up the entire pass-2 language:
+
+- **`scheduled(H)`** — step *H* can be placed; its proof is the placement
+  justification.
+- **`available(H, D)`** — hard requirement *D* of step *H* is satisfiable
+  in time: by an earlier plan step, or by the installed world.
+- **`assumed(unreachable(H, D))`** — a **negative domain assumption**: no
+  plan step and no installed package can provide *D* for *H*.  This is the
+  genuine bootstrap boundary, reported honestly instead of papered over.
+
+The consumer *H* appears in the availability literal on purpose: whether a
+requirement can be bridged by the installed world depends on the consumer's
+position in the derivation (cycle membership), so availability proofs are
+never shared across consumers.  `scheduled/1` proofs are
+position-independent and memoize globally through the prover's proven fast
+path — each step is scheduled once, no matter how many consumers cite it.
+
+
+## The Gentoo bindings
+
+The laws ask three questions they cannot answer themselves: what is a step,
+what does a step require, and what does the world already provide.  One
+domain file — `Source/Domain/Gentoo/Rules/ordering.pl` — answers them by reading
+the pass-1 proof and the VDB:
+
+| Binding | Question answered | Source |
+| :--- | :--- | :--- |
+| `step/1` | What are the plan's steps? | Pass-1 proof rule heads |
+| `requires/2` | What must exist before a step? | Build-time deps (DEPEND/BDEPEND) in the step's pass-1 rule body |
+| `prefers/2` | What would we like earlier, without insisting? | Runtime deps (RDEPEND), PDEPEND completion, ordering hints |
+| `world/2` | What does the system already provide? | VDB (installed packages) |
+
+This is the same split that keeps Gentoo semantics out of the prover core:
+the laws are the engine, the bindings are microcode loaded from disk.  An
+ordering quirk in the tree becomes a rule edit in `ordering.pl`, never
+engine surgery in `orderer.pl`.
+
+The orderer hands the `ordering` rule module directly to the generic
+prover (`prover:prove_once(ordering, ...)`), so the prover core itself
+needs no knowledge of which pass it is running — it just expands
+whatever rule set it was given.
+
+
+## Dependency types and ordering strength
+
+Gentoo's dependency classes do not all impose the same ordering strength.
+The bindings translate each class into either a hard requirement or a soft
+preference:
 
 - **DEPEND** and **BDEPEND** — build-time dependencies.  They must be
-  satisfied before the build can start, so they contribute **hard ordering**:
-  the consumer’s build-related actions wait on the resolved dependencies.
+  satisfied before the build can start, so they become **`requires/2`**
+  edges: the consumer's `scheduled/1` proof waits on them.
 
 - **RDEPEND** — runtime dependencies.  They must be satisfied before the
-  package can be *used* at runtime.  The ordering is **looser** than pure
-  build ordering: the prover and feature-term layer can represent this with
-  `after_only/1` so that runtime ordering is enforced where needed without
-  treating every runtime edge like a build blocker.
+  package is *used*, not before it is built.  They become **`prefers/2`**
+  edges: honored whenever that closes no cycle, never allowed to force a
+  world bridge or an unreachable assumption.
 
-- **PDEPEND** — post-install dependencies.  They are resolved **after** the
-  main proof pass (via hooks in the rules layer).  That late binding can
-  introduce or surface **cycles** that wave planning alone cannot schedule;
-  those literals become **remainder** work for the SCC scheduler.
+- **PDEPEND** — post-install dependencies.  They are resolved inside the
+  pass-1 proof (via `heuristic:proof_obligation/4`, see Chapter 8) and create no proof
+  edge.  The bindings add a **completion preference**: a consumer of a
+  PDEPEND provider prefers to wait for the provider's post-install group,
+  matching emerge's behaviour (portage-ng#18).  The preference is dropped
+  for consumers inside the provider's own PDEPEND cycle (portage-ng#19).
 
-- **IDEPEND** — install-time dependencies (EAPI 8+).  They constrain ordering
-  around the install phase specifically, again flowing through the same
-  context and planner machinery as the other classes.
+- **IDEPEND** — install-time dependencies (EAPI 8+).  They constrain
+  ordering around the install phase and flow through the same context
+  machinery as DEPEND.
 
-For the exact mapping from PMS ordering to internal edges and constraints, see
-[Chapter 23: Dependency Ordering](23-doc-dependency-ordering.md).  The
-implementation detail lives in the rules and `featureterm` helpers: `after/1`
-propagates as a real dependency relation, while `after_only/1` can be lowered
-to ordering constraints (for example `constraint(order_after(…))`) that the
-planner respects without overstating build-time blocking.
+For the exact mapping from PMS ordering semantics to internal edges, see
+[Chapter 23: Dependency Ordering](23-doc-dependency-ordering.md).
 
 
-## Wave planning (Kahn's algorithm)
+## Cycles: citing the installed world
 
-![Wave planning example](Diagrams/12-wave-planning.svg)
+Dependency cycles are where the rule-based engine differs most visibly from
+its predecessor.  Consider the classic loop: python depends on tk at build
+time when built with `tk` support, tk depends on fontconfig, and fontconfig
+needs python to build.
 
-The planner (`Source/Pipeline/planner.pl`) uses Kahn's algorithm to
-produce a topological ordering of the proof graph with parallelism
-computed from the start.
+![Ordering a cycle through the installed world](Diagrams/12-ordering-cycle.svg)
 
-### Why Kahn's algorithm?
+When pass 2 proves `scheduled(fontconfig:install)` and reaches the
+requirement on python, the first clause of the availability law — "an
+earlier plan step provides it" — is refused: the guard
+`\+ prover:currently_proving(scheduled(D))` detects that python's own
+scheduling proof is still open on the derivation stack, i.e. citing it
+would close a loop.  The law falls through to the next question: does the
+*world as it stands* provide python?
 
-Kahn’s algorithm is simple, correct for DAGs, and **naturally** exposes
-parallelism.  At each iteration it collects every node whose **in-degree**
-has dropped to zero — that set is precisely the set of actions that may run
-**concurrently** at that stage.  No second pass is required to “discover”
-parallel groups.
+- **If an older python is installed**, `world/2` answers yes, and the proof
+  records a **citation of the VDB entry**: *fontconfig is buildable now
+  because python-3.14.6 is already installed*.  This is exactly how Linux
+  From Scratch reasons about its temporary toolchain — a fact about the
+  present system, not a heuristic about graphs.
 
-A common alternative is a **DFS-based** topological sort.  That yields a
-**single** linear ordering (one valid sequence), but it does **not** identify
-which steps are independent: you get *a* order, not *all* maximal parallel
-layers.  For a build planner that wants explicit waves, Kahn’s layer-by-layer
-behavior is the better fit.
+- **If nothing bridges the loop** (a bare system bootstrapping from
+  nothing), the plan reports an honest `unreachable` assumption — the
+  genuine bootstrap boundary — instead of an arbitrary cut.
 
-### How it works
+Note what disappeared: there is no SCC decomposition, no merge-set
+post-pass, no progressive edge relaxation.  A cycle is not a special case
+to be repaired after the fact; it is simply the situation in which the
+first clause of a law fails and the next one is consulted.
 
-1. **Build dependency counts.** For each rule in the Proof AVL, count how
-   many of its body literals are "real" dependencies (not already installed,
-   not assumed).
-
-2. **Initialize the ready queue.** Literals with zero dependencies form the
-   first wave — they can be executed immediately.
-
-3. **Process waves.** For each wave:
-   - Remove all ready literals from the graph.
-   - Decrement dependency counts for all heads that depended on them.
-   - Literals whose count reaches zero join the next wave.
-
-4. **Repeat** until no more literals can be scheduled.
-
-The result is a list of waves, where all literals within a wave can be
-executed concurrently:
-
-```
-Wave 1: [download(A), download(B), download(C)]
-Wave 2: [install(A), download(D)]
-Wave 3: [install(B), install(C)]
-Wave 4: [install(D), run(A)]
-```
-
-### Parallelism
-
-Actions within a wave are independent and can run in parallel.  The planner
-computes the maximum parallelism at each wave, enabling the printer to show
-concurrent execution groups and the builder to schedule actual parallel
-builds.
-
-### Remainder
-
-Literals that are part of cycles cannot be scheduled by Kahn's algorithm
-(their dependency counts never reach zero).  These are returned as the
-**remainder** for the scheduler to handle.
+The pass-1 prover still records its own **cycle-break assumptions**
+(Chapter 9) — those concern the existence proof.  Pass-2 world citations
+and `unreachable` assumptions concern the *ordering* and appear in the
+plan's assumption report separately.
 
 
-## SCC decomposition (Kosaraju)
+## Preferences: honored exactly when safe
 
-### From planner remainder to scheduler
+A preference is not a promise.  Runtime-ish edges are collected separately
+from hard requirements and are folded into the plan **after** the hard
+structure is fixed: each preference is accepted exactly when it closes no
+cycle against the hard edges and the previously accepted preferences.  A
+preference that would deadlock the plan is dropped silently — matching how
+Portage treats runtime cycles as freely orderable.
 
-The wave planner (section 12.3) processes the acyclic portion of the
-proof graph and produces a parallel plan.  But not every literal can
-be scheduled this way.  When the dependency graph contains cycles —
-for example, Python depends on setuptools at runtime, and setuptools
-depends on Python — Kahn's algorithm can never reduce their in-degree
-to zero: they keep waiting for each other.  These unscheduled literals
-are returned as the **remainder**.
+The bindings currently derive preferences from five sources:
 
-The scheduler (`Source/Pipeline/scheduler.pl`) picks up where the
-planner left off.  Its job is to decompose the remainder into groups
-of mutually dependent literals and decide how to handle each group.
-The tool it uses for this is **strongly connected component (SCC)
-decomposition**.
+1. **RDEPEND groups** — a package prefers its runtime providers earlier.
+2. **`order_after` hints** — ordering-only constraints recorded in proof
+   context by the rules layer (see Chapter 5).
+3. **PDEPEND completion** (portage-ng#18/#19) — consumers of a PDEPEND
+   provider prefer the provider's post-install group first.
+4. **Configure closure** (portage-ng#21) — an `:install` action prefers
+   the runtime providers of its `:run` sibling, so packages whose
+   configure phase probes runtime tools are ordered correctly.
+5. **Assumed-dep aliases** (portage-ng#95) — when a grouped dependency
+   degraded to a domain assumption in pass 1 but a concrete action for
+   the same package *is* planned, the consumer prefers that action.
 
-### What is a strongly connected component?
+Within a wave, actions are finally reordered by **merge-order bias**: the
+actions other packages wait on most (highest reference count in the
+Triggers AVL) are listed first, so the builder starts the most-blocking
+work as early as possible.
 
-A **strongly connected component** is a maximal set of nodes in a
-directed graph where every node can reach every other node by
-following directed edges.  In dependency terms, an SCC is a group of
-packages that all depend on each other, directly or indirectly —
-a dependency cycle.
 
-A single-node SCC (a node with no self-loop) simply means that node
-is not part of any cycle and can be scheduled on its own.  A
-multi-node SCC is a genuine cycle that must be handled as a group.
+## Wave projection and plan output
 
-### Why Kosaraju?
+The wave-list plan is a **projection** over the pass-2 proofs — an
+evaluator, not a decider.  Every ordering decision was already made (and
+justified) during the proving pass; the projection merely assigns wave
+numbers by reading availability proofs:
 
-The two best-known algorithms for SCC decomposition are **Tarjan's
-algorithm** and **Kosaraju's algorithm**.  Both run in linear time
-(O(V + E)), so performance is not the deciding factor.  The choice
-comes down to implementation characteristics:
+- a step whose requirements are all world-bridged or assumption-bridged
+  can start in wave 1;
+- a step that cites earlier plan steps lands one wave after the last of
+  them;
+- accepted preferences raise a step's wave further, never lower it.
 
-- **Tarjan's algorithm** uses a single DFS pass with an explicit
-  stack and "lowlink" bookkeeping.  It is compact but harder to
-  implement correctly — the lowlink update rules are subtle, and a
-  small mistake can silently produce wrong components.
-- **Kosaraju's algorithm** uses two straightforward DFS passes: one
-  on the original graph to compute a finish order, and one on the
-  transposed graph (edges reversed) to extract SCCs.  Each pass is a
-  plain DFS with no extra bookkeeping beyond a visited set.
+![Wave plan produced by the ordering pass](Diagrams/12-wave-planning.svg)
 
-portage-ng uses Kosaraju because its two-pass structure is easier to
-verify, easier to debug, and maps naturally to Prolog's
-depth-first search: each pass is a standard recursive traversal with
-no mutable lowlink state.  The transposed graph is cheap to build
-since the dependency edges are already stored as Prolog facts.
+The output contract is unchanged from earlier releases: a list of waves,
+each containing full-format pass-1 rule terms.  All actions within a wave
+are independent and can run concurrently.  The printer renders the waves
+as numbered steps (Chapter 13); the builder executes them with real
+parallelism (Chapter 15).  Neither consumer knows or cares that the waves
+are now backed by proofs.
 
-### How the scheduler works
-
-![SCC scheduling example](Diagrams/12-scc-scheduling.svg)
-
-The scheduler uses Kosaraju's algorithm in four steps:
-
-1. **Build the dependency graph** from the remainder rules — the
-   literals the planner could not schedule and the edges between them.
-2. **First DFS pass** — traverse the original graph depth-first,
-   recording the order in which nodes finish (all children explored).
-3. **Second DFS pass** — traverse the **transposed** graph (all edges
-   reversed) in reverse finish order.  Each DFS tree discovered in
-   this pass is one SCC.
-4. **Classify each SCC:**
-   - **Single-node SCCs** are scheduled directly as regular plan
-     entries.
-   - **Multi-node SCCs** are examined for merge-set eligibility (see
-     below).
-
-### Merge-sets
-
-When a multi-node SCC consists entirely of `:run` (runtime) edges,
-the scheduler produces a **merge-set** — a group of packages that
-must be treated as available together.  This matches how Gentoo's PMS
-handles runtime dependency cycles: the packages are merged as a
-group, and the cycle is not considered an ordering error.
-
-The merge-set appears in the plan as a special group entry.  The
-printer renders it with a cycle explanation so the user can see which
-packages form the loop and why they are grouped together.
-
-## Plan output
-
-The final plan is a list of entries, each annotated with:
+The plan is annotated per entry with:
 
 - **Wave number** — which parallel wave it belongs to
 - **Action** — download, install, run, etc.
 - **Literal** — the full `Repo://Entry:Action?{Context}` term
-- **Group** — for merge-sets, which SCC group it belongs to
-
-The plan is consumed by the printer for terminal output and by the builder
-for execution.
 
 
 ## Further reading
 
 - [Chapter 8: The Prover](08-doc-prover.md) — how the Proof AVL is constructed
+- [Chapter 9: Prover Assumptions](09-doc-prover-assumptions.md) — pass-1
+  cycle breaking
 - [Chapter 13: Output and Visualization](13-doc-output.md) — how the plan is
   rendered
 - [Chapter 15: Building and Execution](15-doc-building.md) — how the plan is
   executed
 - [Chapter 23: Dependency Ordering](23-doc-dependency-ordering.md) — PMS
   ordering semantics
+- `Documentation/Designs/ordering-engine.md` — the full design document,
+  including the Q&A record of the design decisions

@@ -1,26 +1,34 @@
 # Architecture Overview
 
-Reasoning about software configurations is not a single algorithm you “run once.” It is a chain of transformations: turn repository facts into a logical problem, search for a proof that explains *why* each step is needed, turn that proof into an ordered plan, and finally render or execute it. portage-ng is structured as a **pipeline** because that sequence is the natural shape of the work. Each stage has a clean role—parse facts, prove a plan, schedule it, print (or build) it—and can be characterized in isolation: the reader produces a fixed vocabulary of literals; the prover produces a justified partial order of dependencies; the planner and scheduler refine that into something a human or a build system can follow. Treating the system as a pipeline is therefore a **design decision**: it keeps stages testable, replaceable, and easier to reason about than a monolith where parsing, search, ordering, and output are tangled together.
+Reasoning about software configurations is not a single algorithm you “run once.” It is a chain of transformations: turn repository facts into a logical problem, search for a proof that explains *why* each step is needed, turn that proof into an ordered plan, and finally render or execute it. portage-ng is structured as a **pipeline** because that sequence is the natural shape of the work. Each stage has a clean role—parse facts, resolve a configuration, order it, print (or build) it—and can be characterized in isolation: the reader produces a fixed vocabulary of literals; the resolver produces a justified configuration with its dependencies; the orderer refines that into something a human or a build system can follow. Treating the system as a pipeline is therefore a **design decision**: it keeps stages testable, replaceable, and easier to reason about than a monolith where parsing, search, ordering, and output are tangled together.
 
 ## The pipeline
 
-portage-ng processes a user request through a linear pipeline of six stages:
+portage-ng processes a user request through a linear pipeline of five stages:
 
 ![Pipeline overview](Diagrams/04-pipeline-overview.svg)
 
 ```
-reader/parser  →  prover  →  planner  →  scheduler  →  printer  →  builder
-                  └──────── pipeline ────────┘
+reader/parser  →  resolver  →  orderer  →  printer  →  builder
+                  └────── pipeline ─────┘
+                     (both passes run on the generic prover)
 ```
 
-The prover produces four AVL trees — **Proof**, **Model**,
+The resolver and orderer are thin stage wrappers around one generic
+proving engine, `prover.pl`.  The prover knows nothing about resolving
+or ordering: callers hand it a rule module together with the goals
+(`prover:prove(Rules, ...)`).  The resolver passes the `resolving` rule
+set (pass 1: *what* — versions, USE, slots); the orderer passes the
+`ordering` rule set (pass 2: *when* — waves).
+
+The resolve pass produces four AVL trees — **Proof**, **Model**,
 **Constraints**, and **Triggers** — that flow through the rest of the
 pipeline.  Together they capture *why* each literal was accepted, *what*
 is known, *what restrictions* must hold, and *who depends on whom*.
 Section [Data structures](#data-structures) describes each one in
 detail.
 
-The prover, planner, and scheduler together form the `pipeline` module.
+The resolver and orderer together form the `pipeline` module.
 Two canonical entry points share the same 5-tier committed-choice
 progressive relaxation (strict, keyword_acceptance, blockers, unmask,
 keyword_unmask):
@@ -30,16 +38,15 @@ pipeline:prove_plan_with_fallback(Goals, Proof, Model, Plan, Triggers)
 pipeline:prove_with_fallback(Goals, Proof, Model, Triggers)
 ```
 
-The first runs the full pipeline (prove + plan + schedule) and is used
-by all production paths.  The second runs the prover only and is used
-by layered tests and `--bugs`.
+The first runs the full pipeline (resolve + order) and is used
+by all production paths.  The second runs the resolve pass only and is
+used by layered tests and `--bugs`.
 
 | **Stage** | **Module** | **Input** | **Output** |
 |:---|:---|:---|:---|
 | **Reader / Parser** | `reader.pl`, `parser.pl`, `eapi.pl` | Ebuild md5-cache files | Prolog facts (`cache:entry/5`) |
-| **Prover** | `prover.pl` | Goal literals (from user) | Proof, Model, Constraints, Triggers |
-| **Planner** | `planner.pl`, `kahn.pl` | Proof, Triggers | Plan + Remainder |
-| **Scheduler** | `scheduler.pl` | Plan, Remainder | Plan (with SCC merge-sets) |
+| **Resolver** | `resolver.pl` → `prover.pl` + `resolving.pl` | Goal literals (from user) | Proof, Model, Constraints, Triggers |
+| **Orderer** | `orderer.pl` → `prover.pl` + `ordering.pl` | Proof, Triggers | Ordering proof + wave-list Plan |
 | **Printer** | `printer.pl`, `Printer/` | Proof, Model, Plan | Terminal output, `.merge` files |
 | **Builder** | `builder.pl`, `Builder/` | Plan | Ebuild phase execution |
 
@@ -51,7 +58,7 @@ portage-ng can run in several modes, each tailored to a different deployment sce
 
 ### Standalone
 
-The default and most common mode.  A single process on a single machine loads the full knowledge base, runs the complete pipeline (prover, planner, scheduler, printer, builder), and produces results locally.  This is what you use for day-to-day `--pretend`, `--merge`, `--shell`, and `--sync`.
+The default and most common mode.  A single process on a single machine loads the full knowledge base, runs the complete pipeline (resolver, orderer, printer, builder), and produces results locally.  This is what you use for day-to-day `--pretend`, `--merge`, `--shell`, and `--sync`.
 
 ![Standalone mode](Diagrams/04-mode-standalone.svg)
 
@@ -84,7 +91,7 @@ Worker mode enables **distributed proving** across multiple machines.  A central
 
 Each worker machine maintains its own local copy of the Portage tree (typically via a **git snapshot**) and runs `--sync` locally to build its own knowledge base.  This ensures all workers reason against the same set of ebuilds — tree synchronisation is a prerequisite for consistent results across the cluster.
 
-Once a worker discovers the server, it polls the job queue for proving tasks: the server breaks a large proof (e.g. `@world`) into independent sub-goals, distributes them to available workers, and collects the results.  Each worker runs the full pipeline locally (prover, planner, scheduler), so proving scales horizontally — adding more worker machines reduces wall-clock time for large proof sets.
+Once a worker discovers the server, it polls the job queue for proving tasks: the server breaks a large proof (e.g. `@world`) into independent sub-goals, distributes them to available workers, and collects the results.  Each worker runs the full pipeline locally (resolver, orderer), so proving scales horizontally — adding more worker machines reduces wall-clock time for large proof sets.
 
 See [Chapter 14: Command-Line Interface](14-doc-cli.md) for the full mode reference and [Chapter 17: Distributed Proving](17-doc-distributed.md) for TLS certificate setup and cluster configuration.
 
@@ -99,13 +106,15 @@ a different subset of modules:
 ```
 load_common_modules        — SWI-Prolog libraries, OO context, config, OS,
                              interface, EAPI, reader, subprocess, bonjour,
-                             feature unification, daemon
+                             feature unification
+                             (daemon mode adds its server loop separately
+                             via load_daemon_modules)
 
 load_standalone_modules    — Full pipeline: KB (cache, repository, query),
-                             Gentoo domain (version, rules, ebuild, VDB,
-                             preference, exceptions), prover, planner,
-                             scheduler, printer, builder, grapher, writer,
-                             test
+                             Gentoo domain (version, resolving, ordering,
+                             ebuild, VDB, preference, exceptions), prover,
+                             resolver, orderer, printer, builder, grapher,
+                             writer, test
 
 load_server_modules        — HTTP server, Pengines, sandbox
 
@@ -130,7 +139,7 @@ portage-ng deliberately **separates** a domain-agnostic core from a Gentoo-speci
 The **`rule/2` interface** is the contract between the domain-agnostic core and the domain-specific layer. Everything Gentoo-specific—consulting the knowledge base, evaluating USE conditionals, resolving candidates, emitting constraint terms—lives on the far side of that boundary.
 
 ```prolog
-rules:rule(Head, Body)
+resolving:rule(Head, Body)
 ```
 
 The prover calls `rule/2` to expand a literal into its dependencies.  The
@@ -156,8 +165,8 @@ The prover maintains these four structures during proof construction:
 
 | **Structure** | **Key** | **Value** | **Purpose** |
 |:---|:---|:---|:---|
-| **Proof** | `rule(Lit)` or `assumed(rule(Lit))` | `dep(N, Body)` | Which rule and body justified each literal; `N` is the dependency count |
-| **Model** | `Lit` or `assumed(Lit)` | proven | Every literal that has been established |
+| **Proof** | `rule(Lit)` or `assumed(rule(Lit))` | `dep(N, Body)?Ctx` | Which rule and body justified each literal; `N` is the dependency count, `Ctx` the proof context |
+| **Model** | `Lit` or `assumed(Lit)` | `Ctx` | Every literal that has been established, mapped to the context under which it was proven |
 | **Constraints** | e.g. `cn_domain(dev-libs, openssl, 0)` | `version_domain(...)` | Accumulated invariants: version domains, slot locks (`slot(3)`), blockers |
 | **Triggers** | body literal | `[head, ...]` | Reverse-dependency index: which heads depend on this body literal |
 
@@ -175,7 +184,7 @@ assumption taxonomy.
 
 ## Architecture diagram
 
-The following page shows the full system architecture in landscape orientation, covering all layers from external inputs through the knowledge base, prover, planner, and output pipeline.
+The following page shows the full system architecture in landscape orientation, covering all layers from external inputs through the knowledge base, prover, orderer, and output pipeline.
 
 ```{=typst}
 #page(flipped: true, margin: (left: 15mm, right: 15mm, top: 20mm, bottom: 20mm))[
@@ -194,5 +203,5 @@ The following page shows the full system architecture in landscape orientation, 
 - [Chapter 5: Proof Literals](05-doc-proof-literals.md) — the
   `Repo://Entry:Action?{Context}` term format
 - [Chapter 8: The Prover](08-doc-prover.md) — inductive proof search in detail
-- [Chapter 12: Planning and Scheduling](12-doc-planning.md) — wave planning and
-  SCC decomposition
+- [Chapter 12: Ordering — Plans as Proofs](12-doc-planning.md) — the
+  second proving pass and wave projection

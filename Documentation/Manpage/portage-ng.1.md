@@ -588,9 +588,8 @@ portage-ng --mode standalone --pretend --deep --changed-deps @world
 | Stage | Source |
 |-------|--------|
 | **Reader/Parser** | Reads ebuild md5-cache files using a PMS-conformant DCG grammar (`Source/Domain/Gentoo/eapi.pl`) and builds Prolog cache facts. |
-| **Prover** | Performs inductive proof search over the dependency rules to produce a proof tree, model, constraint set, and trigger map (`Source/Pipeline/prover.pl`). |
-| **Planner** | Generates a topologically sorted, wave-based build plan from the proof (`Source/Pipeline/planner.pl`). |
-| **Scheduler** | Post-processes cyclic remainder: SCC decomposition (Kosaraju) and merge-set computation (`Source/Pipeline/scheduler.pl`). |
+| **Resolver** | Hands the generic prover (`Source/Pipeline/prover.pl`) the resolving rule set to produce a proof tree, model, constraint set, and trigger map (`Source/Pipeline/resolver.pl`, `Source/Domain/Gentoo/Rules/resolving.pl`). |
+| **Orderer** | Runs the same prover a second time over the ordering rule set (generic planning laws + Gentoo bindings) to construct a wave-based build plan whose placements are proofs (`Source/Pipeline/orderer.pl`, `Source/Domain/Gentoo/Rules/ordering.pl`). |
 | **Printer** | Renders the plan with assumptions and warnings (`Source/Pipeline/Printer/`). |
 | **Builder** | Orchestrates downloads and ebuild phase execution with a job server (`Source/Pipeline/builder.pl`). |
 

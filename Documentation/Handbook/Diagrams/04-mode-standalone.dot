@@ -25,8 +25,7 @@ digraph mode_standalone {
 
       kb     [label="Knowledge\nBase", shape=cylinder, fillcolor="#D4EDDA"];
       prover [label="Prover", shape=box, fillcolor="#CCE5FF"];
-      planner [label="Planner", shape=box, fillcolor="#CCE5FF"];
-      scheduler [label="Scheduler", shape=box, fillcolor="#CCE5FF"];
+      orderer [label="Orderer", shape=box, fillcolor="#CCE5FF"];
       printer [label="Printer /\nBuilder", shape=box, fillcolor="#CCE5FF"];
     }
 
@@ -34,7 +33,7 @@ digraph mode_standalone {
 
     user -> prover [label="goals"];
     kb -> prover [label="query", style=dashed];
-    prover -> planner -> scheduler -> printer;
+    prover -> orderer -> printer;
     tree -> kb [label="--sync", style=dashed];
   }
 }

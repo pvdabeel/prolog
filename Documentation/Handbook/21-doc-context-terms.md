@@ -26,7 +26,7 @@ A context is a Prolog list.  Each element is either a plain term or a
 | **Form** | **Example** | **Merge behaviour** |
 | :------ | :--------- | :----------------- |
 | Plain term | `self(R://E)` | Identity match; duplicates dropped |
-| Feature:Value | `bwu:use_state(En,Dis)` | Value-merged by `val_hook/3` |
+| Feature:Value | `build_with_use:use_state(En,Dis)` | Value-merged by `val_hook/3` |
 | Feature:Compound | `slot(C,N,Ss):{...}` | Compound feature key |
 
 For example, `self(portage://sys-apps/portage-3.0.77-r3)` is a plain
@@ -53,13 +53,16 @@ constraints from the dependency atom (e.g. `dev-libs/foo[bar,-baz]`).
 **`slot(C,N,Ss):{Candidate}`** — set by `dependency:process_slot`.
 Records a slot lock from `:=` (subslot rebuild) semantics.
 
-**`after(Literal)`** — set by `rules:ctx_add_after`.  Ordering
-constraint: this dependency must come after `Literal` in the plan.
+**`after(Literal)`** — seeded at world-set anchors
+(`world(Arg):register?{[after(Repo://Ebuild:run)]}`) and propagated
+into dependency contexts by `featureterm:add_after_to_dep_contexts`.
+Ordering hint: this subtree should come after `Literal` in the plan.
 Propagates to children.
 
-**`after_only(Literal)`** — set by
-`rules:add_after_only_to_dep_contexts`.  Ordering constraint that
-does **not** propagate to children.
+**`after_only(Literal)`** — injected on PDEPEND edges (via
+`featureterm:add_after_only_to_dep_contexts`).  Becomes an
+`order_after` soft preference honored by the pass-2 orderer; does
+**not** propagate to children.
 
 **`replaces(pkg://Entry)`** — set by install/update rules.  Records
 which installed package this action replaces.
@@ -68,16 +71,17 @@ which installed package this action replaces.
 fallback.  Records why a domain assumption was made (e.g. `missing`,
 `masked`, `keyword_filtered`).
 
-**`suggestion(Type,Detail)`** — set by the relaxation fallback.
-Records an actionable suggestion (e.g. `accept_keyword`, `unmask`,
-`use_change`).
+**`suggestion(Type[, Detail...])`** — set by the relaxation fallback.
+Records an actionable suggestion; arity varies with the suggestion
+type (e.g. `suggestion(unmask)`, `suggestion(accept_keyword, Kw)`,
+`suggestion(use_change, Ebuild, Changes)`).
 
 **`domain_reason(cn_domain(C,N,Tags))`** — set by
-`candidate:add_domain_reason_context`.  Diagnostic tags for version
+`cnselect:add_domain_reason_context/5`.  Diagnostic tags for version
 domain narrowing.
 
-**`constraint(cn_domain(C,N):{Domain})`** — set by the constraint
-system.  Carries an inline constraint for domain scoping.
+**`constraint(cn_domain(C,N,Slot):{Domain})`** — set by the constraint
+system.  Carries an inline per-slot constraint for domain scoping.
 
 
 ## Context lifecycle
@@ -98,14 +102,15 @@ As rules expand dependencies, contexts grow:
 target(sys-apps/portage)?{}
   └─ install(portage://sys-apps/portage-3.0.77-r3):install?{...}
        ├─ dep(dev-lang/python):install?{self(portage://sys-apps/portage-3.0.77-r3),
-       │                                 build_with_use:use_state([ssl,threads],[]),
-       │                                 after(install(portage://...))}
+       │                                 build_with_use:use_state([ssl,threads],[])}
        │    └─ dep(dev-libs/openssl):install?{self(portage://dev-lang/python-3.13),
-       │                                       build_with_use:use_state([],[]),
-       │                                       after(install(portage://dev-lang/python-3.13))}
-       └─ dep(app-arch/tar):install?{self(portage://sys-apps/portage-3.0.77-r3),
-                                      after(install(portage://...))}
+       │                                       build_with_use:use_state([],[])}
+       └─ dep(app-arch/tar):install?{self(portage://sys-apps/portage-3.0.77-r3)}
 ```
+
+(Had the goal been seeded from a world-set anchor —
+`world(Arg):register?{[after(Repo://Ebuild:run)]}` — an `after/1`
+marker would additionally flow down every dependency edge.)
 
 Key propagation rules:
 
@@ -116,7 +121,7 @@ Key propagation rules:
 - **`after/1`** propagates transitively (children inherit it).
 - **`after_only/1`** does **not** propagate (ordering is local to this edge).
 - **`assumption_reason`** and **`build_with_use`** are dropped on PDEPEND
-  edges (via `ctx_drop_build_with_use_and_assumption_reason`).
+  edges (via `featureterm:drop_build_with_use_and_assumption_reason/2`).
 
 
 ### 3. Merging (join points)
@@ -147,7 +152,7 @@ Before checking whether a literal has already been proven, planning markers
 are stripped so they don't pollute the memoisation key:
 
 ```prolog
-rules:ctx_strip_planning(Context0, Context)
+featureterm:strip_planning(Context0, Context)
 ```
 
 This removes `after/1` and `world_atom/1` — ordering and planning concerns
@@ -290,12 +295,12 @@ constraints ensure that if another dependency path also needs
 **From constraint to context.**  Sometimes a parent dependency wants
 to narrow the version domain for a child before candidate selection
 even begins.  It does this by placing an inline constraint term like
-`constraint(cn_domain(C,N):{Domain})` directly in the context list.
+`constraint(cn_domain(C,N,Slot):{Domain})` directly in the context list.
 When the child's rule fires, it reads this term and applies the
 domain restriction.
 
 **Constraint guards.**  After each new constraint is merged into the
-global store, `rules:constraint_guard/2` fires to check consistency.
+global store, `heuristic:constraint_guard/2` fires to check consistency.
 The guard verifies that version domains are compatible with selected
 candidates, that each slot has at most one selected version, and that
 no selected package is blocked by another.
@@ -310,17 +315,26 @@ from repeating the same dead-end choice (see
 
 ## Ordering: `after` vs `after_only`
 
-Both create ordering edges in the plan, but they differ in propagation:
+Both influence ordering in the plan, but they differ in origin and
+propagation:
 
-| **Marker** | **Propagates to child deps?** | **Use case** |
-| :-------- | :-------------------------- | :---------- |
-| `after(Lit)` | Yes | Build deps: the package and all its deps must come after `Lit` |
-| `after_only(Lit)` | No | Runtime deps: only this package (not its deps) must come after `Lit` |
+| **Marker** | **Propagates to child deps?** | **Origin / use case** |
+| :-------- | :-------------------------- | :------------------- |
+| `after(Lit)` | Yes | World-set anchors: the package and all its deps should come after `Lit` |
+| `after_only(Lit)` | No | PDEPEND completion: only this package (not its deps) prefers to come after `Lit` |
+
+In `after_only` mode the marker is rewritten to a
+`constraint(order_after(...):{[]})` term — an ordering-only **soft
+preference** that the pass-2 orderer (`prefers/2` in
+`Source/Domain/Gentoo/Rules/ordering.pl`) honors exactly when doing so
+closes no cycle.  Neither marker is minted per DEPEND/RDEPEND edge;
+build-time vs runtime ordering is decided in pass 2 by the ordering
+rule set (`requires/2` / `prefers/2`), not by context markers.
 
 ### Extraction
 
 ```prolog
-rules:ctx_take_after_with_mode(Context, After, AfterForDeps, ContextRest)
+featureterm:get_after_with_mode(Context, After, AfterForDeps, ContextRest)
 ```
 
 - If `after(X)` → `After = X`, `AfterForDeps = X` (propagate).
@@ -354,9 +368,12 @@ dependency atom gets its own context, built from three operations:
   atom.  For `dev-lang/python[ssl,threads]`, this produces
   `build_with_use:use_state([ssl,threads],[])`.  For `app-arch/tar`
   (no brackets), the USE state is empty.
-- **`ctx_add_after`** adds an ordering constraint.  DEPEND atoms get
-  `after(portage:install)` (propagates to children).  RDEPEND atoms
-  get `after_only(portage:install)` (does not propagate).
+- **`featureterm:get_after_with_mode`** +
+  **`featureterm:add_after_to_dep_contexts`** propagate any incoming
+  `after/1` marker (e.g. from an `@world` anchor) into the dep
+  contexts.  No new markers are minted here — DEPEND and RDEPEND
+  atoms are treated alike; their relative ordering is a pass-2
+  concern.
 
 ### Step 3 — Resolving python
 
@@ -374,14 +391,15 @@ is rebuilt at this level:
 - **`build_with_use`** is replaced based on the new atom.
   `dev-libs/openssl:=` has no bracketed flags, so the USE state
   becomes empty.
-- **`after`** is propagated from the parent (portage's install
-  constraint travels down through DEPEND edges).
+- **`after`** — if an `after/1` marker arrived with the incoming
+  context (e.g. the target was an `@world` anchor), it is propagated
+  onward into python's dep contexts.
 - **Slot lock** — the `:=` operator on `dev-libs/openssl:=` adds a
   `slot(dev-libs,openssl,0/3.4.1)` tag to the context, recording the
   sub-slot for rebuild tracking.
-- **`after_only`** — the RDEPEND on `app-misc/mime-types` gets
-  `after_only(python:install)`, which will not propagate to
-  mime-types's own children.
+- **`after_only`** — had python carried a PDEPEND, that edge would get
+  `after_only(python:install)`, later rewritten to an `order_after`
+  soft preference that does not propagate to the child's own deps.
 
 ### Key observations
 
@@ -389,8 +407,9 @@ is rebuilt at this level:
   accumulates along the chain.
 - **`build_with_use`** is replaced at each edge based on the
   dependency atom's bracketed flags.
-- **`after/1`** from DEPEND propagates down the tree;
-  **`after_only/1`** from RDEPEND does not.
+- **`after/1`** (from world-set anchors) propagates down the tree;
+  **`after_only/1`** (from PDEPEND edges) does not.  DEPEND-vs-RDEPEND
+  ordering is decided in pass 2, not by context markers.
 - **Slot locks** (`:=`) add `slot/3` entries to the context.
 - **Constraint emissions** (e.g. `selected_cn`) go into the global
   ConstraintsAVL, not into the context.

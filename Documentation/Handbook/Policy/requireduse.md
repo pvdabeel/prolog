@@ -13,7 +13,7 @@ build; emerge often suggests USE changes (autounmask).
 - Choice-group `*:validate` for REQUIRED_USE cardinality
 - Assumptions: `assumed(conflict(required,…))`, `required_use_violation`
 
-**Owns:** `Rules/use.pl`, `rules.pl` required/blocking clauses.
+**Owns:** `Rules/Resolving/use.pl`, `resolving.pl` required/blocking clauses.
 
 **Invariants:**
 

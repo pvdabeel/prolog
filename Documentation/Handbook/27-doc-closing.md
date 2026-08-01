@@ -27,8 +27,9 @@ The book traced this idea from concept to implementation:
   and indexes package metadata; how the EAPI grammar parses dependency
   specifications; how the prover searches for consistent models; how
   assumptions, constraint learning, and version domains handle
-  conflicts; how rules encode Gentoo's domain logic; and how the
-  planner and scheduler turn a proof into a concrete build order.
+  conflicts; how rules encode Gentoo's domain logic; and how a second
+  proving pass over planning laws turns a proof into a concrete build
+  order.
 
 - **Part III** covered the features built on top of that foundation:
   the command-line interface, build execution, semantic search with
@@ -62,8 +63,8 @@ out explicitly:
   starting over with a blank slate on each retry.
 
 - **Separation of concerns.**  The prover knows nothing about Gentoo.
-  The rules layer knows nothing about proof search.  The planner knows
-  nothing about dependency types.  Each layer has a clean interface,
+  The rules layer knows nothing about proof search.  The planning laws
+  know nothing about dependency types.  Each layer has a clean interface,
   and domain-specific knowledge stays in domain-specific modules.
 
 - **Transparency.**  Assumptions are not silent failures — they are
@@ -80,7 +81,7 @@ exploration:
 
 - **Broader platform support.**  The reasoning engine is not tied to
   Gentoo — any system that can express its dependencies as structured
-  rules could use the same prover and planner.
+  rules could use the same prover and ordering laws.
 
 - **Richer learning.**  The current constraint learning mechanism
   handles version domains and parent narrowing.  More sophisticated

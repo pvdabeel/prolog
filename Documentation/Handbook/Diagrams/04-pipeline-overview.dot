@@ -27,11 +27,10 @@ digraph pipeline {
         fontcolor="#666666";
         fontsize=9;
 
-        prover     [label="Prover", shape=box, fillcolor="#cce5ff"];
-        planner    [label="Planner", shape=box, fillcolor="#cce5ff"];
-        scheduler  [label="Scheduler", shape=box, fillcolor="#cce5ff"];
+        resolver   [label="Resolver\n(prover + resolving rules)", shape=box, fillcolor="#cce5ff"];
+        orderer    [label="Orderer\n(prover + ordering rules)", shape=box, fillcolor="#cce5ff"];
 
-        prover -> planner -> scheduler;
+        resolver -> orderer;
     }
 
     // Output row
@@ -43,10 +42,10 @@ digraph pipeline {
     // Flow
     md5cache  -> reader;
     reader    -> facts;
-    facts     -> prover  [style=dashed];
-    user      -> prover;
-    scheduler -> printer;
-    prover    -> printer [style=dashed, constraint=false];
+    facts     -> resolver [style=dashed];
+    user      -> resolver;
+    orderer   -> printer;
+    resolver  -> printer [style=dashed, constraint=false];
     printer   -> output;
     printer   -> builder [style=dashed];
     builder   -> builds;

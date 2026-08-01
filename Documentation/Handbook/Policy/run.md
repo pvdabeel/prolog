@@ -11,9 +11,9 @@ via a prover literal hook (always on).
 
 - `Repo://Ebuild:run?{Ctx}`
 - Body themes: install (if needed) + runtime grouped deps
-- PDEPEND injected through `rules:literal_hook/4` (not a separate preference)
+- PDEPEND injected through `heuristic:proof_obligation/4` (not a separate preference)
 
-**Owns:** `rules.pl` (`:run`), `Rules/candidate.pl`, `Rules/dependency.pl`,
+**Owns:** `resolving.pl` (`:run`), `Rules/Resolving/candidate.pl`, `Rules/Resolving/dependency.pl`,
 prover hook path in `Source/Pipeline/prover.pl`.
 
 **Invariants:**

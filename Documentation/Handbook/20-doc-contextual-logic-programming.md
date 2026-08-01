@@ -230,7 +230,7 @@ config file (e.g. `Source/Config/mac-pro.local.pl`):
 :- portage:init('/Volumes/Storage/Repository/portage-git',
                 '/Volumes/Storage/Repository/portage-git/metadata/md5-cache',
                 'https://github.com/gentoo/gentoo.git',
-                'git', 'portage').
+                'git', 'eapi').
 
 :- pkg:newinstance(repository).
 :- pkg:init('/Volumes/Storage/Repository/pkg', '', '', 'local', 'vdb').
@@ -272,12 +272,12 @@ data members.  This connection is explored in detail in
 Context instances support serialization through the knowledge
 base's `save` and `load` predicates.  When `kb://save` is called,
 the cached facts from all registered repository instances are
-written to a QLC file (`Knowledge/kb.qlf`).  On the next startup,
+written to a QLF file (`Knowledge/kb.qlf`).  On the next startup,
 `kb://load` reads the compiled file back, restoring all repository
 instances to their previous state without re-parsing the Portage
 tree from disk.  This is what makes portage-ng's startup fast —
 the full knowledge base (30,000+ ebuilds with all metadata) loads
-from the QLC file in under a second.
+from the QLF file in under a second.
 
 
 ## Further reading

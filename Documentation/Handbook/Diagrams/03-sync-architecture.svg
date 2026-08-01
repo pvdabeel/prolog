@@ -165,7 +165,7 @@
 <g id="node11" class="node">
 <title>prover</title>
 <polygon fill="#ffd6d6" stroke="black" points="521.62,-345.5 434.38,-345.5 434.38,-309.5 521.62,-309.5 521.62,-345.5"/>
-<text text-anchor="middle" x="478" y="-330" font-family="Helvetica Neue" font-size="10.00">Prover / Planner</text>
+<text text-anchor="middle" x="478" y="-330" font-family="Helvetica Neue" font-size="10.00">Prover / Orderer</text>
 <text text-anchor="middle" x="478" y="-318" font-family="Helvetica Neue" font-size="10.00">(pipeline.pl)</text>
 </g>
 <!-- prover&#45;&gt;kb -->

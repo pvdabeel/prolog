@@ -22,12 +22,11 @@ testing practices for contributing to portage-ng.
    make test-overlay    # Overlay regression tests
    ```
 
-4. **Regenerate `.merge` files** by asking the maintainer to run `--graph`
-   to produce updated `.merge` output for the graph directory.
-
-5. **Run compare analysis** to detect regressions. The compare harness
+4. **Run compare analysis** to detect regressions. The compare harness
    lives in the [tinderbox-ng](https://github.com/pvdabeel/tinderbox-ng)
-   repository:
+   repository and generates its own plan logs in fresh sessions (the
+   legacy `--graph` + `.merge` regeneration loop is no longer part of
+   this workflow):
 
    ```sh
    # Whole-tree matrix run (on the tinderbox host):
@@ -67,7 +66,7 @@ For reproducible, non-interactive debugging:
 
 ```bash
 ./Source/Application/Wrapper/portage-ng-dev --mode standalone --shell --timeout 60 <<'PL'
-prover:test_stats(portage).
+resolver:test_stats(portage).
 halt.
 PL
 ```
@@ -171,7 +170,12 @@ module:predicate_name(Arg1, Arg2) :-
   Use concatenated lowercase words: `knowledgebase.pl`, not
   `knowledge_base.pl`.
 
-- Exception: `portage-ng.pl` (project entry point).
+- Exceptions (grandfathered, do not add new ones): `portage-ng.pl`
+  (project entry point / name); `binpkg_exec.pl`, `binpkg_index.pl`,
+  `binpkg_extract.pl`, `ebuild_exec.pl` and `missing_provider.pl`
+  (underscore-named for readability of their prefixes; module names
+  match the filenames).  Host-local templates under `Source/Config/Private/`
+  are configuration, not source modules, and are also exempt.
 
 - Prolog module names follow the same rule: `:- module(gentoo, [])`.
 

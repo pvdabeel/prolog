@@ -40,11 +40,16 @@ applied within the plan for you to review before committing.
 portage-ng succeeds for every target, including targets where traditional
 resolvers give up.  Assumptions are explicit, never silent.
 
-## Planning and scheduling
+## Ordering and planning
+
+**Plans as proofs.**
+Ordering is a second pass of the same prover over a handful of generic
+planning laws: a step is placed once everything it requires is available.
+Every placement in the plan carries a human-readable justification.
 
 **Wave planning.**
-The proven dependency graph is scheduled using Kahn's algorithm, exposing
-maximal parallelism per wave.  Packages that can build concurrently are grouped
+Wave numbers are projected from the availability proofs, exposing maximal
+parallelism per wave.  Packages that can build concurrently are grouped
 into the same step from the start -- parallelism is a first-class property of
 the plan, not an afterthought.
 
@@ -52,10 +57,11 @@ the plan, not an afterthought.
 Downloads, installs, runtime checks, and confirmations are independent actions.
 Packages can install while others are still downloading.
 
-**SCC scheduling.**
-Cyclic remainders from the wave planner are decomposed with Kosaraju's
-algorithm.  Strongly Connected Components are scheduled with merge-set
-semantics, matching PMS ordering requirements.
+**Cycle handling via the installed world.**
+A dependency loop is bridged by citing an already-installed package (VDB),
+the way Linux From Scratch reasons about its temporary toolchain.  Where
+nothing bridges the loop, the plan reports an honest `unreachable`
+assumption -- the genuine bootstrap boundary.
 
 **Build-time estimation.**
 `--estimate` predicts per-package and total build duration using VDB sizes and
@@ -356,7 +362,7 @@ thousands of packages:
 | Graph construction | Build full graph, then check for conflicts         | Single-pass proof -- no separate graph phase             |
 | Conflict recovery  | Discard entire graph, rebuild from scratch         | Retry only the affected subtree with learned constraints |
 | Repeated queries   | Each `emerge -vp` starts cold                      | In-memory facts persist; subsequent queries are instant  |
-| Parallelism        | Sequential graph walk                              | Wave planner identifies parallel steps automatically     |
+| Parallelism        | Sequential graph walk                              | Ordering pass identifies parallel waves automatically    |
 
 
 The largest single factor is the **qcompiled cache**: once loaded, all 32,000
@@ -368,8 +374,8 @@ packages, portage-ng needs no retries at all.
 ## Architecture
 
 **Domain-agnostic core.**
-The prover, planner, and scheduler operate on abstract literals, rules, and
-dependency graphs.  All Gentoo-specific logic lives in a pluggable rules layer
+The prover and the planning laws operate on abstract literals and rules.
+All Gentoo-specific logic lives in pluggable rules and ordering bindings
 behind a `rule/2` hook.  The same engine could reason about any domain that
 encodes its constraints as rules.
 
@@ -378,6 +384,6 @@ A runtime object system for Prolog with contexts, classes, instances,
 inheritance, and access control -- used internally and available as a
 general-purpose programming paradigm.
 
-**Six-stage pipeline.**
-Reader → Prover → Planner → Scheduler → Printer → Builder.  Each stage is
+**Five-stage pipeline.**
+Reader → Prover → Orderer → Printer → Builder.  Each stage is
 independently testable and replaceable.

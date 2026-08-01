@@ -12,8 +12,8 @@ intersect; one version (per slot policy) is chosen.
 - `grouped_package_dependency(Strength, C, N, PackageDeps):Action?{Ctx}`
 - Learned constraints: `cn_domain(C, N, Slot)` via `prover:learn/3`
 
-**Owns:** `Rules/dependency.pl`, `Rules/candidate.pl`, `Rules/cnselect.pl`,
-`Rules/ranking.pl`, version domain meet ([Chapter 10](../10-doc-version-domains.md)).
+**Owns:** `Rules/Resolving/dependency.pl`, `Rules/Resolving/candidate.pl`, `Rules/Resolving/cnselect.pl`,
+`Rules/Resolving/ranking.pl`, version domain meet ([Chapter 10](../10-doc-version-domains.md)).
 
 **Invariants:**
 

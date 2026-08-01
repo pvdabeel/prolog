@@ -50,7 +50,7 @@ digraph portage_usage {
     kb -> dist [label="register", style=dashed];
 
     // Usage
-    prover [label="Prover / Planner\n\nportage://Entry\npkg://Entry\noverlay://Entry", fillcolor="#e8e8e8", shape=ellipse];
+    prover [label="Prover / Orderer\n\nportage://Entry\npkg://Entry\noverlay://Entry", fillcolor="#e8e8e8", shape=ellipse];
 
     prover -> kb [label="kb://query(...)"];
     prover -> portage [label="portage://entry(...)"];

@@ -2,7 +2,7 @@
 
 ## The universal literal format
 
-Every term that flows through the portage-ng pipeline — from rules to prover to planner to printer — uses the same universal format:
+Every term that flows through the portage-ng pipeline — from rules to prover to orderer to printer — uses the same universal format:
 
 ```
 Repo://Entry:Action?{Context}
@@ -14,7 +14,7 @@ Each component answers a question that arises at a different stage of the pipeli
 
 - **`Entry`** — *what* package version is meant?  When the rules expand a dependency, they select a concrete cache entry (`'category/name-version'`).  This identifier is the key the **prover** uses to look up and store proof work — two dependency paths that resolve to the same entry share the same proof node.
 
-- **`Action`** — *how* should the pipeline treat this entry?  The rules assign an action (`:install`, `:run`, `:download`, `:update`, ...) that tells the **planner** which phase of work this literal represents and how to order it relative to others.
+- **`Action`** — *how* should the pipeline treat this entry?  The rules assign an action (`:install`, `:run`, `:download`, `:update`, ...) that tells the **orderer** which phase of work this literal represents and how to order it relative to others.
 
 - **`Context`** — *why* and *under what conditions* was this literal introduced?  As the prover expands the dependency graph, each literal accumulates a feature-term context: which parent introduced it (`self`), which USE flags are required (`build_with_use`), ordering constraints (`after`), slot locks, and so on.  At join points where two dependency paths reach the same literal, the prover **merges** their contexts via feature unification.  The **printer** reads the final context to display USE flags, slot information, and assumption reasons.
 
@@ -175,11 +175,12 @@ The chosen dependency enters the model; the others are discarded. This means
 that by the time the main proof begins, every OR group has been resolved to a
 single concrete dependency.
 
-In the default pipeline this commit is final (a cut after the first viable
-alternative). Under the prover's multi-model enumeration mode the cut is
-dropped, so the same `choice_group` resolution instead leaves a backtrackable
-choicepoint that yields one model per branch — see
-[Multiple stable models](08-doc-prover.md#multiple-stable-models).
+This commit is always final (a cut after the first viable alternative).
+Variant exploration does not remove that cut: it **re-runs the prover**
+with thread-local branch-preference overrides
+(`variant:use_override`, `variant:branch_prefer`) that reorder the
+candidates, so the same cut selects a different branch on the re-proof —
+see [Multiple stable models](08-doc-prover.md#multiple-stable-models).
 
 | **Action** | **Literal head** | **Meaning** |
 | :-- | :-- | :-- |
@@ -366,9 +367,9 @@ marking flags that were pulled in by dependency requirements.
 
 ### `after` — ordering constraints
 
-The planner needs to know the order in which actions should be scheduled. The
-`after(Literal)` tag expresses a hard ordering constraint: "this literal must
-come after the specified literal in the final plan."
+The ordering pass needs to know the order in which actions should be
+scheduled. The `after(Literal)` tag expresses a hard ordering constraint:
+"this literal must come after the specified literal in the final plan."
 
 ```prolog
 portage://'dev-lang/python-3.13.2':download?{[
@@ -395,8 +396,9 @@ post-dependency’s own children should not inherit that ordering constraint.
 after_only(portage://'app-editors/neovim-0.12.0':run)
 ```
 
-The planner reads both `after` and `after_only` from every literal’s context
-to build the dependency edges that drive Kahn’s topological sort.
+The ordering bindings (`Source/Domain/Gentoo/Rules/ordering.pl`) read both `after`
+and `after_only` from every literal’s context to derive the hard requirements
+and soft preferences that drive the second proving pass (Chapter 12).
 
 ### Summary of context tags
 
@@ -476,9 +478,9 @@ contexts rather than creating a duplicate.
    and the context as the value. The Proof AVL uses `rule(R://L:A)` as the
    key, with the rule body and context as the value.
 
-3. **Planner** extracts rule heads from the Proof AVL, using `canon_literal/3`
-   to get core literals. Kahn's algorithm schedules these into concurrent
-   waves based on dependency edges.
+3. **Orderer** treats each rule head in the Proof AVL as a plan step and
+   proves `scheduled/1` for it through the planning laws; wave numbers are
+   projected from the resulting availability proofs.
 
 4. **Printer** reads the Plan (a list of waves), looks up each literal in the
    Model AVL to recover its context, and formats the output.
@@ -486,7 +488,10 @@ contexts rather than creating a duplicate.
 
 ## Worked example
 
-Tracing `target('sys-apps/portage'):run?{[]}` through the pipeline:
+Tracing `target('sys-apps/portage'):run?{[]}` through the pipeline
+(term shapes simplified: the real goal wraps a `qualified_target/6`
+term parsed from the CLI argument, and the non-oneshot run-target rule
+also adds a `world(...):register` condition):
 
 ```
 1. User runs: portage-ng --pretend sys-apps/portage
@@ -514,7 +519,7 @@ Tracing `target('sys-apps/portage'):run?{[]}` through the pipeline:
    Key: portage://'sys-apps/portage-3.0.77-r3':run
    Val: [] (context)
 
-8. Planner places :download in wave 1, :install in wave 2, :run in wave 3
+8. Orderer places :download in wave 1, :install in wave 2, :run in wave 3
 
 9. Printer outputs:
    [1] portage://sys-apps/portage-3.0.77-r3  download

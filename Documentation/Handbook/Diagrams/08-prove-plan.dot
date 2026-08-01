@@ -14,14 +14,12 @@ digraph prove_plan {
     goals [label="Goal\nliterals", shape=ellipse, fillcolor="#FFF3CD"];
 
     // Stages
-    prove [label="prover:prove/9\nbackward chaining\ncycle handling", fillcolor="#cce5ff"];
-    plan  [label="planner:plan/5\nwave planning\n(acyclic portion)", fillcolor="#cce5ff"];
-    sched [label="scheduler:schedule/6\nSCC decomposition\n(remainder)", fillcolor="#cce5ff"];
+    prove [label="resolver:resolve/9\nprover:prove(resolving, ...)\nbackward chaining, cycle handling", fillcolor="#cce5ff"];
+    order [label="orderer:order/5\nprover:prove_once(ordering, ...)\nsecond proving pass over planning laws", fillcolor="#cce5ff"];
 
     // Outputs
     proof_model [label="Proof, Model\nConstraints, Triggers", shape=ellipse, fillcolor="#d4edda"];
-    plan_out    [label="Plan +\nRemainder", shape=ellipse, fillcolor="#d4edda"];
-    final_plan  [label="Fully ordered\nPlan", shape=ellipse, fillcolor="#d4edda"];
+    final_plan  [label="Ordering proof +\nwave-list Plan", shape=ellipse, fillcolor="#d4edda"];
 
     // Wrapper
     subgraph cluster_pipeline {
@@ -31,11 +29,10 @@ digraph prove_plan {
         color="#666666";
         fontcolor="#666666";
         fontsize=10;
-        prove -> plan -> sched;
+        prove -> order;
     }
 
     goals -> prove;
     prove -> proof_model [style=dashed, constraint=false];
-    plan -> plan_out [style=dashed, constraint=false];
-    sched -> final_plan;
+    order -> final_plan;
 }

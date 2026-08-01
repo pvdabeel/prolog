@@ -2,8 +2,8 @@
 
 For testing purposes, the full Gentoo tree must be walked through the
 resolver — tens of thousands of ebuilds — and even on capable hardware
-that adds up.  On a single machine, `prover:test_stats(portage)` typically
-finishes proving every single ebuild in **under a minute** on a twenty-eight-core workstation — fast
+that adds up.  On a single machine, `resolver:test_stats(portage)` typically
+finishes proving every single ebuild in **a few minutes** on a twenty-eight-core workstation — fast
 enough for day-to-day development, but not the only shape the problem
 takes.
 
@@ -50,7 +50,7 @@ and adds the target to its job queue.
 
 **Steps 4-6 (worker loop).** Workers continuously poll the job queue
 for work.  When a worker picks up a job, it runs the full proving
-pipeline locally — proof search, planning, and scheduling — using its
+pipeline locally — proof search (resolving) and ordering — using its
 own copy of the knowledge base.  When the proof is complete, the
 worker posts the result back to the server.
 
@@ -71,8 +71,8 @@ execute.
 
 Each worker is an independent OS process with its own Prolog VM.  On
 startup it loads the knowledge base, then enters a poll loop: it asks
-the server for the next job, runs the full pipeline (prove, plan,
-schedule), and posts the result back.  Workers are stateless between
+the server for the next job, runs the full pipeline (resolve and
+order), and posts the result back.  Workers are stateless between
 jobs, so you can add or remove them at any time without affecting
 other workers or the server.
 

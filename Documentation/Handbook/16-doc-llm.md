@@ -39,7 +39,7 @@ accelerated embedding computation.
 
 Semantic search requires:
 - A running Ollama instance
-- A loaded embedding model (configured via `config:embedding_model/1`)
+- A loaded embedding model (configured via `config:semantic_model/1`)
 
 
 ## LLM-assisted plan explanation
@@ -338,7 +338,7 @@ repair_proposal([
   `config:llm_server_calls(false)` keeps it off the Pengines safelist
   so authenticated clients cannot burn server API keys or exfiltrate
   prompts. LLM features are then **host-local**: run `--explain` /
-  `--diagnose` / `--chat` on standalone or client processes (own
+  `--diagnose` / `--llm` on standalone or client processes (own
   `Source/Config/Private/api_key.pl`). To allow server-side LLM via
   RPC on a trusted cluster, set in a host config or
   `Source/Config/Private/`:
@@ -457,14 +457,14 @@ All predicates are called with the `explainer:` module prefix.
 Run the pipeline to get the proof, model, plan, and triggers:
 
 ```prolog
-Goals = [portage://'dev-libs'-'openssl':run?{[]}],
+Goals = [portage://'dev-libs/openssl-3.5.4':run?{[]}],
 pipeline:prove_plan_with_fallback(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL).
 ```
 
 Or from a `--shell` session after loading a repository:
 
 ```prolog
-pipeline:prove_plan_with_fallback([portage://'dev-libs'-'openssl':run?{[]}],
+pipeline:prove_plan_with_fallback([portage://'dev-libs/openssl-3.5.4':run?{[]}],
                                   Proof, Model, Plan, Triggers).
 ```
 
@@ -474,13 +474,13 @@ pipeline:prove_plan_with_fallback([portage://'dev-libs'-'openssl':run?{[]}],
 **Why is a package in the proof?**
 
 ```prolog
-Target = portage://'dev-libs'-'libffi':install,
+Target = portage://'dev-libs/libffi-3.5.2':install,
 explainer:why_in_proof(ProofAVL, Target, Why).
 % Why = why_in_proof(
-%          portage://'dev-libs'-'libffi':install,
-%          proof_key(rule(portage://'dev-libs'-'libffi':install)),
+%          portage://'dev-libs/libffi-3.5.2':install,
+%          proof_key(rule(portage://'dev-libs/libffi-3.5.2':install)),
 %          depcount(3),
-%          body([portage://'sys-devel'-'gcc':install, ...]),
+%          body([portage://'sys-devel/gcc-15.2.0':install, ...]),
 %          ctx([...]),
 %          domain_reasons([...]))      % <-- added by explanation hook
 ```
@@ -488,27 +488,27 @@ explainer:why_in_proof(ProofAVL, Target, Why).
 **Why is a package in the plan?**
 
 ```prolog
-Proposal = [portage://'dev-libs'-'openssl':run?{[]}],
+Proposal = [portage://'dev-libs/openssl-3.5.4':run?{[]}],
 explainer:why_in_plan(Proposal, Plan, ProofAVL, TriggersAVL,
-                      portage://'sys-libs'-'zlib':install, Why).
+                      portage://'sys-libs/zlib-1.3.1-r1':install, Why).
 % Why = why_in_plan(
-%          portage://'sys-libs'-'zlib':install,
-%          location(step(1), portage://'sys-libs'-'zlib'-'1.3.1':install?{...}),
-%          required_by(path([portage://'sys-libs'-'zlib':install,
-%                           portage://'dev-libs'-'openssl':install,
-%                           portage://'dev-libs'-'openssl':run])))
+%          portage://'sys-libs/zlib-1.3.1-r1':install,
+%          location(step(1), portage://'sys-libs/zlib-1.3.1-r1':install?{...}),
+%          required_by(path([portage://'sys-libs/zlib-1.3.1-r1':install,
+%                           portage://'dev-libs/openssl-3.5.4':install,
+%                           portage://'dev-libs/openssl-3.5.4':run])))
 ```
 
 **Why is something assumed?**
 
 ```prolog
-Key = assumed(portage://'dev-foo'-'bar':install),
+Key = assumed(portage://'dev-foo/bar-1.0':install),
 explainer:why_assumption(ModelAVL, ProofAVL, Key, Type, Why).
 % Type = domain,
 % Why  = why_assumption(
-%          assumed(portage://'dev-foo'-'bar':install),
+%          assumed(portage://'dev-foo/bar-1.0':install),
 %          type(domain),
-%          term(portage://'dev-foo'-'bar':install?{[assumption_reason(missing)]}),
+%          term(portage://'dev-foo/bar-1.0':install?{[assumption_reason(missing)]}),
 %          reason(missing),
 %          domain_reasons([...]))      % <-- added by explanation hook
 ```
@@ -552,7 +552,7 @@ explanation:assumption_reason_for_grouped_dep(
   'dev-libs', 'missing-pkg',                    % Category, Name
   [package_dependency(install,no,'dev-libs','missing-pkg',
                       none,version_none,[],[])],
-  [self(portage://'app-misc'-'foo'-'1.0')],     % Context
+  [self(portage://'app-misc/foo-1.0')],         % Context
   Reason).
 % Reason = missing
 ```

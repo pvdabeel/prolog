@@ -127,15 +127,16 @@ package_dependency(
   'dev-libs',
   openssl,
   greaterequal,
-  version([3, 0], '', 4, 0, '', 0, '3.0'),
+  version([3, 0], '', 4, 0, [], 0, '3.0'),
   [slot('0'), subslot('3'), equal],
   [use(enable(ssl), none), use(disable(test), none)])
 ```
 
 The first argument (`install` / `run` / `compile`) records *which* PMS
-dependency class is being parsed (`DEPEND` vs `RDEPEND` vs `BDEPEND`), so the
-same DCG surface syntax feeds slightly different typing in the abstract
-syntax.
+dependency class is being parsed, so the same DCG surface syntax feeds
+slightly different typing in the abstract syntax: `install` for
+DEPEND/BDEPEND/IDEPEND, `run` for RDEPEND/PDEPEND (PDEPEND is re-tagged
+`pdepend` at the query layer), and `compile` for CDEPEND.
 
 
 ## Why DCG instead of regex or ad hoc code?

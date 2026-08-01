@@ -48,14 +48,14 @@ See [Preference cache](#preference-cache) for the materialized preference cache.
 | **Setting** | **Purpose** |
 |:---|:---|
 | `config:portage_confdir/1` | Path to the `/etc/portage` directory (or a development copy).  Determines where `make.conf`, `package.use`, `package.mask`, etc. are read from.  Comment out to use built-in fallback defaults. |
-| `config:pkg_directory/1` | Path to the VDB directory (`/var/db/pkg` on a standard Gentoo system).  Defined per host in `Source/Config/<host>.pl`. |
+| `config:pkg_directory/1` | Path to the VDB directory (`/var/db/pkg` on a standard Gentoo system).  Defined per host in `Source/Config/<host>.local.pl`. |
 | `config:world_file/1` | Path to the world set file (auto-resolved from hostname). |
 | `config:set_dir/1` | Directory of named set files (one atom list per file). |
 | `config:glsa_dir/1` | Optional override for `$PORTDIR/metadata/glsa` (GLSA XML). |
 | `config:glsa_injected_file/1` | Applied-GLSA id file (Portage `glsa_injected` equivalent). |
 | `config:preserved_libs_registry/1` | Path to Portage’s `preserved_libs_registry` JSON used by `@preserved-rebuild`. Default maps `…/db/pkg` → `…/lib/portage/preserved_libs_registry`. |
 | `config:preserved_libs_registry_override/1` | Host-specific override for the preserve-libs registry path (multifile / dynamic). |
-| `config:graph_directory/1` | Output directory for generated dependency graphs and `.merge` files.  Defined per host in `Source/Config/<host>.pl`. |
+| `config:graph_directory/1` | Output directory for generated dependency graphs and `.merge` files.  Defined per host in `Source/Config/<host>.local.pl`. |
 | `config:build_root/1` | Root directory for build work (equivalent to Portage's `PORTAGE_TMPDIR`). |
 | `config:build_log_dir/1` | Directory for per-package build logs. |
 
@@ -110,11 +110,11 @@ retry chain and the domain exception fixups work.
 
 ### LLM integration (optional)
 
-LLM integration is entirely optional.  If you do not need `--explain`, `--chat`, or semantic search, the LLM modules can be removed from the load graph without affecting core functionality (proving, planning, building).
+LLM integration is entirely optional.  If you do not need `--explain`, `--llm`, or semantic search, the LLM modules can be removed from the load graph without affecting core functionality (resolving, ordering, building).
 
 | **Setting** | **Default** | **Purpose** |
 |:---|:---|:---|
-| `config:llm_default/1` | `claude` | Default LLM service for `--explain` and `--chat`. |
+| `config:llm_default/1` | `claude` | Default LLM service for `--explain` and `--llm`. |
 | `config:llm_model/2` | (per service) | Model version for each LLM provider (ChatGPT, Claude, Gemini, Ollama, etc.). |
 | `config:llm_use_tools/1` | `true` | Whether the LLM may execute Prolog code locally during a conversation. |
 | `config:llm_server_calls/1` | `false` | Allow Pengines clients to call `explainer:call_llm/3` on the server (uses server API keys). |
@@ -439,7 +439,7 @@ preference state** to disk:
 | **File** | **Role** |
 |:---------|:---------|
 | `Knowledge/preference.raw` | Textual serialization of preference facts (intermediate) |
-| `Knowledge/preference.qlf` | QLC-compiled reload unit |
+| `Knowledge/preference.qlf` | QLF-compiled reload unit |
 | `Knowledge/preference.stamp` | Fingerprint of inputs (file mtimes + env vars) |
 
 The cache is **regenerated automatically** when the stamp no longer matches — for

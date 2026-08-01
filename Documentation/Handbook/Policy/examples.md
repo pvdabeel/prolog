@@ -67,10 +67,19 @@ eligible.
 `assumed(rule(…:install))` cycle-break (exit 1 if alone).  
 **Read:** [test03/README.md](../../Tests/test03/README.md)
 
+### test05
+
+**Cards:** [Cycle](cycle.md)  
+**Story:** Self-dep on both compile and runtime legs; the compile leg
+needs a cycle-break assumption on `os:install`, the runtime leg
+resolves via the install/run action split.  
+**Read:** [test05/README.md](../../Tests/test05/README.md)
+
 ### test06
 
 **Cards:** [Cycle](cycle.md)  
-**Story:** Indirect compile-time cycle; same break taxonomy as self-dep.  
+**Story:** Indirect compile-time cycle; dissolved by the install/run
+action split — no cycle-break assumption needed (unlike self-dep test03).  
 **Read:** [test06/README.md](../../Tests/test06/README.md)
 
 ### test09
@@ -174,7 +183,8 @@ assumption with `suggestion(accept_keyword, …)`.
 ### test47
 
 **Cards:** [Cycle](cycle.md)  
-**Story:** Three-way dependency cycle; benign breaks, not domain failure.  
+**Story:** Three-way dependency cycle; resolved without any break —
+the install/run action split dissolves it.  
 **Read:** [test47/README.md](../../Tests/test47/README.md)
 
 ### test48
@@ -301,7 +311,8 @@ with merged USE.
 ### test79
 
 **Cards:** [Run](run.md), [Cycle](cycle.md)  
-**Story:** PDEPEND cycle A↔B; break taxonomy, not “disable PDEPEND”.  
+**Story:** PDEPEND cycle A↔B; resolved via the proof-obligation hook with
+no assumptions — PDEPEND is never disabled to avoid it.  
 **Read:** [test79/README.md](../../Tests/test79/README.md)
 
 ### test80

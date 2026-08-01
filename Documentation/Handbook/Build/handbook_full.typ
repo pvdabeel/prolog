@@ -29,7 +29,7 @@ configuration management],
       affiliation: [],
       email: [pvdabeel\@mac.com] ),
     ),
-  date: [July 2026],
+  date: [August 2026],
   abstract-title: [Abstract],
   paper: "a4",
   sectionnumbering: "1.1.1",
@@ -612,12 +612,14 @@ accepted. An imperative resolver would either fail or silently accept
 the keyword. portage-ng records:
 
 ```prolog
-rule(assumed(portage://dev-libs/foo-1.0:merge), [])
+rule(assumed(portage://dev-libs/foo-1.0:run), [])
 ```
 
-This assumption appears in the proof, flows through the planner, and is
-presented to the user as: "I assumed dev-libs/foo-1.0 could be merged.
-To make this work, I will add it for you to package.accept\_keywords."
+\(The real literal's context also carries `assumption_reason(...)` and
+`suggestion(accept_keyword, ...)` tags.) This assumption appears in the
+proof, flows through the plan, and is presented to the user as: "I
+assumed dev-libs/foo-1.0 could be merged. To make this work, I will add
+it for you to package.accept\_keywords."
 
 #strong[Inspecting proof trees.] The explainer module queries the proof
 AVL to answer "why is this package in the plan?" without re-running the
@@ -646,7 +648,7 @@ how Gentoo ebuilds, dependencies, USE flags, slots, and all related
 metadata must be interpreted) --- is captured in a set of DCG grammar
 rules and Prolog clauses. When EAPI 9 added new features, the
 implementation required adding new grammar rules and clauses. The
-reasoning engine --- prover, planner, and scheduler --- did not change
+reasoning engine --- the prover and the ordering laws --- did not change
 at all, because it is domain-agnostic.
 
 === Beyond pure Prolog
@@ -724,7 +726,7 @@ value types (e.g. version domain intersection) to participate in
 unification without modifying the core.
 
 The result is that every literal in a proof carries a complete,
-machine-readable description of its resolved configuration. The planner
+machine-readable description of its resolved configuration. The orderer
 and printer can read this directly --- there is no need to re-derive
 "which USE flags were active" after the fact.
 
@@ -791,7 +793,7 @@ To illustrate, here is a simplified example of a `person` context:
 :- dpublic([person/1, '~person'/0]).
 :- dpublic([get_name/1, set_name/1]).
 :- dpublic([get_age/1, set_age/1]).
-:- dpublic([add_title/1, remove_title/1]).
+:- dpublic([get_title/1, add_title/1, remove_title/1]).
 :- dprivate(age/1).
 :- dprivate(title/1).
 :- dprotected(name/1).
@@ -809,8 +811,14 @@ get_name(Name) ::-
 set_name(Name) ::-
   <=name(Name).
 
+get_age(Age) ::-
+  ::age(Age).
+
 set_age(Age) ::-
   <=age(Age).
+
+get_title(Title) ::-
+  ::title(Title).
 
 add_title(Title) ::-
   <+title(Title).
@@ -1484,7 +1492,7 @@ preference cache.
     use built-in fallback defaults.],
     [`config:pkg_directory/1`], [Path to the VDB directory
     (`/var/db/pkg` on a standard Gentoo system). Defined per host in
-    `Source/Config/<host>.pl`.],
+    `Source/Config/<host>.local.pl`.],
     [`config:world_file/1`], [Path to the world set file (auto-resolved
     from hostname).],
     [`config:set_dir/1`], [Directory of named set files (one atom list
@@ -1501,7 +1509,7 @@ preference cache.
     dynamic).],
     [`config:graph_directory/1`], [Output directory for generated
     dependency graphs and `.merge` files. Defined per host in
-    `Source/Config/<host>.pl`.],
+    `Source/Config/<host>.local.pl`.],
     [`config:build_root/1`], [Root directory for build work (equivalent
     to Portage's `PORTAGE_TMPDIR`).],
     [`config:build_log_dir/1`], [Directory for per-package build logs.],
@@ -1618,8 +1626,10 @@ how the retry chain and the domain exception fixups work.
     align: (left,left,left,),
     table.header([#strong[Setting]], [#strong[Default]], [#strong[Purpose]],),
     table.hline(),
-    [`config:server_host/1`], [`'mac-pro.local'`], [Server hostname for
-    client-server mode.],
+    [`config:server_host/1`], [`'mac-pro.local'`], [Server hostname pin
+    for client/worker mode (Bonjour must match).],
+    [`config:server_bind/1`], [`localhost`], [Interface the Pengine
+    server binds (`localhost` or `*`).],
     [`config:server_port/1`], [`4000`], [HTTPS port for the Pengine
     server.],
     [`config:bonjour_service/1`], [`'_portage-ng._tcp.'`], [mDNS service
@@ -1631,8 +1641,8 @@ how the retry chain and the domain exception fixups work.
 === LLM integration (optional)
 <llm-integration-optional>
 LLM integration is entirely optional. If you do not need `--explain`,
-`--chat`, or semantic search, the LLM modules can be removed from the
-load graph without affecting core functionality (proving, planning,
+`--llm`, or semantic search, the LLM modules can be removed from the
+load graph without affecting core functionality (resolving, ordering,
 building).
 
 #figure(
@@ -1642,11 +1652,17 @@ building).
     table.header([#strong[Setting]], [#strong[Default]], [#strong[Purpose]],),
     table.hline(),
     [`config:llm_default/1`], [`claude`], [Default LLM service for
-    `--explain` and `--chat`.],
+    `--explain` and `--llm`.],
     [`config:llm_model/2`], [\(per service)], [Model version for each
     LLM provider (ChatGPT, Claude, Gemini, Ollama, etc.).],
     [`config:llm_use_tools/1`], [`true`], [Whether the LLM may execute
     Prolog code locally during a conversation.],
+    [`config:llm_server_calls/1`], [`false`], [Allow Pengines clients to
+    call `explainer:call_llm/3` on the server (uses server API keys).],
+    [`config:curl_allow_http/1`], [`false`], [Permit cleartext http
+    distfile mirrors (ftp never allowed).],
+    [`config:file_integrity/1`], [`prefer`], [Knowledge sidecar policy:
+    `prefer`, `require`, or `off`.],
   )]
   , kind: table
   )
@@ -2154,7 +2170,7 @@ To avoid repeating that on every startup, portage-ng can persist the
     table.hline(),
     [`Knowledge/preference.raw`], [Textual serialization of preference
     facts (intermediate)],
-    [`Knowledge/preference.qlf`], [QLC-compiled reload unit],
+    [`Knowledge/preference.qlf`], [QLF-compiled reload unit],
     [`Knowledge/preference.stamp`], [Fingerprint of inputs (file mtimes
     \+ env vars)],
   )]
@@ -2218,18 +2234,18 @@ a logical problem, search for a proof that explains #emph[why] each step
 is needed, turn that proof into an ordered plan, and finally render or
 execute it. portage-ng is structured as a #strong[pipeline] because that
 sequence is the natural shape of the work. Each stage has a clean
-role---parse facts, prove a plan, schedule it, print (or build) it---and
-can be characterized in isolation: the reader produces a fixed
-vocabulary of literals; the prover produces a justified partial order of
-dependencies; the planner and scheduler refine that into something a
-human or a build system can follow. Treating the system as a pipeline is
+role---parse facts, resolve a configuration, order it, print (or build)
+it---and can be characterized in isolation: the reader produces a fixed
+vocabulary of literals; the resolver produces a justified configuration
+with its dependencies; the orderer refines that into something a human
+or a build system can follow. Treating the system as a pipeline is
 therefore a #strong[design decision]: it keeps stages testable,
 replaceable, and easier to reason about than a monolith where parsing,
 search, ordering, and output are tangled together.
 
 == The pipeline
 <the-pipeline>
-portage-ng processes a user request through a linear pipeline of six
+portage-ng processes a user request through a linear pipeline of five
 stages:
 
 #figure(image("Diagrams/04-pipeline-overview.svg", alt: "Pipeline overview"),
@@ -2239,19 +2255,27 @@ stages:
 )
 
 ```
-reader/parser  →  prover  →  planner  →  scheduler  →  printer  →  builder
-                  └──────── pipeline ────────┘
+reader/parser  →  resolver  →  orderer  →  printer  →  builder
+                  └────── pipeline ─────┘
+                     (both passes run on the generic prover)
 ```
 
-The prover produces four AVL trees --- #strong[Proof], #strong[Model],
-#strong[Constraints], and #strong[Triggers] --- that flow through the
-rest of the pipeline. Together they capture #emph[why] each literal was
-accepted, #emph[what] is known, #emph[what restrictions] must hold, and
-#emph[who depends on whom]. Section
+The resolver and orderer are thin stage wrappers around one generic
+proving engine, `prover.pl`. The prover knows nothing about resolving or
+ordering: callers hand it a rule module together with the goals
+(`prover:prove(Rules, ...)`). The resolver passes the `resolving` rule
+set (pass 1: #emph[what] --- versions, USE, slots); the orderer passes
+the `ordering` rule set (pass 2: #emph[when] --- waves).
+
+The resolve pass produces four AVL trees --- #strong[Proof],
+#strong[Model], #strong[Constraints], and #strong[Triggers] --- that
+flow through the rest of the pipeline. Together they capture #emph[why]
+each literal was accepted, #emph[what] is known, #emph[what
+restrictions] must hold, and #emph[who depends on whom]. Section
 #link(<data-structures>)[Data structures] describes each one in detail.
 
-The prover, planner, and scheduler together form the `pipeline` module.
-Two canonical entry points share the same 5-tier committed-choice
+The resolver and orderer together form the `pipeline` module. Two
+canonical entry points share the same 5-tier committed-choice
 progressive relaxation (strict, keyword\_acceptance, blockers, unmask,
 keyword\_unmask):
 
@@ -2260,8 +2284,8 @@ pipeline:prove_plan_with_fallback(Goals, Proof, Model, Plan, Triggers)
 pipeline:prove_with_fallback(Goals, Proof, Model, Triggers)
 ```
 
-The first runs the full pipeline (prove + plan + schedule) and is used
-by all production paths. The second runs the prover only and is used by
+The first runs the full pipeline (resolve + order) and is used by all
+production paths. The second runs the resolve pass only and is used by
 layered tests and `--bugs`.
 
 #figure(
@@ -2273,12 +2297,12 @@ layered tests and `--bugs`.
     [#strong[Reader / Parser]], [`reader.pl`, `parser.pl`,
     `eapi.pl`], [Ebuild md5-cache files], [Prolog facts
     (`cache:entry/5`)],
-    [#strong[Prover]], [`prover.pl`], [Goal literals (from
-    user)], [Proof, Model, Constraints, Triggers],
-    [#strong[Planner]], [`planner.pl`, `kahn.pl`], [Proof,
-    Triggers], [Plan + Remainder],
-    [#strong[Scheduler]], [`scheduler.pl`], [Plan, Remainder], [Plan
-    (with SCC merge-sets)],
+    [#strong[Resolver]], [`resolver.pl` → `prover.pl` +
+    `resolving.pl`], [Goal literals (from user)], [Proof, Model,
+    Constraints, Triggers],
+    [#strong[Orderer]], [`orderer.pl` → `prover.pl` +
+    `ordering.pl`], [Proof, Triggers], [Ordering proof + wave-list
+    Plan],
     [#strong[Printer]], [`printer.pl`, `Printer/`], [Proof, Model,
     Plan], [Terminal output, `.merge` files],
     [#strong[Builder]], [`builder.pl`, `Builder/`], [Plan], [Ebuild
@@ -2299,10 +2323,9 @@ specified, standalone is used.
 === Standalone
 <standalone>
 The default and most common mode. A single process on a single machine
-loads the full knowledge base, runs the complete pipeline (prover,
-planner, scheduler, printer, builder), and produces results locally.
-This is what you use for day-to-day `--pretend`, `--merge`, `--shell`,
-and `--sync`.
+loads the full knowledge base, runs the complete pipeline (resolver,
+orderer, printer, builder), and produces results locally. This is what
+you use for day-to-day `--pretend`, `--merge`, `--shell`, and `--sync`.
 
 #figure(image("Diagrams/04-mode-standalone.svg", alt: "Standalone mode"),
   caption: [
@@ -2382,9 +2405,9 @@ consistent results across the cluster.
 Once a worker discovers the server, it polls the job queue for proving
 tasks: the server breaks a large proof (e.g.~`@world`) into independent
 sub-goals, distributes them to available workers, and collects the
-results. Each worker runs the full pipeline locally (prover, planner,
-scheduler), so proving scales horizontally --- adding more worker
-machines reduces wall-clock time for large proof sets.
+results. Each worker runs the full pipeline locally (resolver, orderer),
+so proving scales horizontally --- adding more worker machines reduces
+wall-clock time for large proof sets.
 
 See #link("14-doc-cli.md")[Chapter 14: Command-Line Interface] for the
 full mode reference and
@@ -2402,13 +2425,15 @@ loads a different subset of modules:
 ```
 load_common_modules        — SWI-Prolog libraries, OO context, config, OS,
                              interface, EAPI, reader, subprocess, bonjour,
-                             feature unification, daemon
+                             feature unification
+                             (daemon mode adds its server loop separately
+                             via load_daemon_modules)
 
 load_standalone_modules    — Full pipeline: KB (cache, repository, query),
-                             Gentoo domain (version, rules, ebuild, VDB,
-                             preference, exceptions), prover, planner,
-                             scheduler, printer, builder, grapher, writer,
-                             test
+                             Gentoo domain (version, resolving, ordering,
+                             ebuild, VDB, preference, exceptions), prover,
+                             resolver, orderer, printer, builder, grapher,
+                             writer, test
 
 load_server_modules        — HTTP server, Pengines, sandbox
 
@@ -2456,7 +2481,7 @@ conditionals, resolving candidates, emitting constraint terms---lives on
 the far side of that boundary.
 
 ```prolog
-rules:rule(Head, Body)
+resolving:rule(Head, Body)
 ```
 
 The prover calls `rule/2` to expand a literal into its dependencies. The
@@ -2511,10 +2536,12 @@ The prover maintains these four structures during proof construction:
     table.header([#strong[Structure]], [#strong[Key]], [#strong[Value]], [#strong[Purpose]],),
     table.hline(),
     [#strong[Proof]], [`rule(Lit)` or
-    `assumed(rule(Lit))`], [`dep(N, Body)`], [Which rule and body
-    justified each literal; `N` is the dependency count],
-    [#strong[Model]], [`Lit` or `assumed(Lit)`], [proven], [Every
-    literal that has been established],
+    `assumed(rule(Lit))`], [`dep(N, Body)?Ctx`], [Which rule and body
+    justified each literal; `N` is the dependency count, `Ctx` the proof
+    context],
+    [#strong[Model]], [`Lit` or `assumed(Lit)`], [`Ctx`], [Every literal
+    that has been established, mapped to the context under which it was
+    proven],
     [#strong[Constraints]], [e.g.~`cn_domain(dev-libs, openssl, 0)`], [`version_domain(...)`], [Accumulated
     invariants: version domains, slot locks (`slot(3)`), blockers],
     [#strong[Triggers]], [body
@@ -2541,7 +2568,7 @@ assumption taxonomy.
 <architecture-diagram>
 The following page shows the full system architecture in landscape
 orientation, covering all layers from external inputs through the
-knowledge base, prover, planner, and output pipeline.
+knowledge base, prover, orderer, and output pipeline.
 
 #page(flipped: true, margin: (left: 15mm, right: 15mm, top: 20mm, bottom: 20mm))[
   #set text(size: 9pt)
@@ -2557,15 +2584,15 @@ knowledge base, prover, planner, and output pipeline.
   `Repo://Entry:Action?{Context}` term format
 - #link("08-doc-prover.md")[Chapter 8: The Prover] --- inductive proof
   search in detail
-- #link("12-doc-planning.md")[Chapter 12: Planning and Scheduling] ---
-  wave planning and SCC decomposition
+- #link("12-doc-planning.md")[Chapter 12: Ordering --- Plans as Proofs]
+  --- the second proving pass and wave projection
 
 = Proof Literals
 <proof-literals>
 == The universal literal format
 <the-universal-literal-format>
 Every term that flows through the portage-ng pipeline --- from rules to
-prover to planner to printer --- uses the same universal format:
+prover to orderer to printer --- uses the same universal format:
 
 ```
 Repo://Entry:Action?{Context}
@@ -2588,7 +2615,7 @@ the pipeline:
 
 - #strong[`Action`] --- #emph[how] should the pipeline treat this entry?
   The rules assign an action (`:install`, `:run`, `:download`,
-  `:update`, …) that tells the #strong[planner] which phase of work this
+  `:update`, …) that tells the #strong[orderer] which phase of work this
   literal represents and how to order it relative to others.
 
 - #strong[`Context`] --- #emph[why] and #emph[under what conditions] was
@@ -2786,10 +2813,12 @@ one choice. The chosen dependency enters the model; the others are
 discarded. This means that by the time the main proof begins, every OR
 group has been resolved to a single concrete dependency.
 
-In the default pipeline this commit is final (a cut after the first
-viable alternative). Under the prover's multi-model enumeration mode the
-cut is dropped, so the same `choice_group` resolution instead leaves a
-backtrackable choicepoint that yields one model per branch --- see
+This commit is always final (a cut after the first viable alternative).
+Variant exploration does not remove that cut: it #strong[re-runs the
+prover] with thread-local branch-preference overrides
+(`variant:use_override`, `variant:branch_prefer`) that reorder the
+candidates, so the same cut selects a different branch on the re-proof
+--- see
 #link("08-doc-prover.md#multiple-stable-models")[Multiple stable models].
 
 #figure(
@@ -3015,7 +3044,7 @@ flag set, marking flags that were pulled in by dependency requirements.
 
 === `after` --- ordering constraints
 <after-ordering-constraints>
-The planner needs to know the order in which actions should be
+The ordering pass needs to know the order in which actions should be
 scheduled. The `after(Literal)` tag expresses a hard ordering
 constraint: "this literal must come after the specified literal in the
 final plan."
@@ -3046,9 +3075,10 @@ constraint.
 after_only(portage://'app-editors/neovim-0.12.0':run)
 ```
 
-The planner reads both `after` and `after_only` from every literal's
-context to build the dependency edges that drive Kahn's topological
-sort.
+The ordering bindings (`Source/Domain/Gentoo/Rules/ordering.pl`) read
+both `after` and `after_only` from every literal's context to derive the
+hard requirements and soft preferences that drive the second proving
+pass (Chapter 12).
 
 === Summary of context tags
 <summary-of-context-tags>
@@ -3149,9 +3179,9 @@ merge the contexts rather than creating a duplicate.
   `rule(R://L:A)` as the key, with the rule body and context as the
   value.
 
-+ #strong[Planner] extracts rule heads from the Proof AVL, using
-  `canon_literal/3` to get core literals. Kahn's algorithm schedules
-  these into concurrent waves based on dependency edges.
++ #strong[Orderer] treats each rule head in the Proof AVL as a plan step
+  and proves `scheduled/1` for it through the planning laws; wave
+  numbers are projected from the resulting availability proofs.
 
 + #strong[Printer] reads the Plan (a list of waves), looks up each
   literal in the Model AVL to recover its context, and formats the
@@ -3159,7 +3189,10 @@ merge the contexts rather than creating a duplicate.
 
 == Worked example
 <worked-example>
-Tracing `target('sys-apps/portage'):run?{[]}` through the pipeline:
+Tracing `target('sys-apps/portage'):run?{[]}` through the pipeline (term
+shapes simplified: the real goal wraps a `qualified_target/6` term
+parsed from the CLI argument, and the non-oneshot run-target rule also
+adds a `world(...):register` condition):
 
 ```
 1. User runs: portage-ng --pretend sys-apps/portage
@@ -3187,7 +3220,7 @@ Tracing `target('sys-apps/portage'):run?{[]}` through the pipeline:
    Key: portage://'sys-apps/portage-3.0.77-r3':run
    Val: [] (context)
 
-8. Planner places :download in wave 1, :install in wave 2, :run in wave 3
+8. Orderer places :download in wave 1, :install in wave 2, :run in wave 3
 
 9. Printer outputs:
    [1] portage://sys-apps/portage-3.0.77-r3  download
@@ -3284,10 +3317,12 @@ Additional cache predicates store per-ebuild metadata:
     align: (left,left,),
     table.header([#strong[Predicate]], [#strong[Content]],),
     table.hline(),
-    [`cache:entry_metadata/3`], [EAPI, SLOT, KEYWORDS, LICENSE, etc.],
+    [`cache:entry_metadata/4`], [Per-entry key/value metadata: EAPI,
+    SLOT, KEYWORDS, LICENSE, etc.],
     [`cache:ordered_entry/5`], [Entries ordered by version (for
     candidate selection)],
-    [`cache:provides/3`], [Virtual package mappings],
+    [`cache:manifest/5`, `cache:manifest_metadata/6`], [Manifest files
+    and their checksums],
   )]
   , kind: table
   )
@@ -3382,9 +3417,9 @@ Each repository instance manages its own cache facts. The `repository`
 class provides methods for syncing, loading, and querying:
 
 ```prolog
-portage:sync.          % Sync from remote
-portage:read.          % Read md5-cache into Prolog facts
-portage:search(Query). % Search entries
+portage:sync.                  % Sync from remote + regenerate caches
+portage:update_cache.          % Re-read md5-cache into Prolog facts
+portage:query(Query, Result).  % Query entries (delegates to query:search/2)
 ```
 
 == Syncing and cache regeneration
@@ -3606,13 +3641,17 @@ The result `Merged` is a list of grouped dependency terms ready for
 resolution by the rules layer (see
 #link("11-doc-rules.md")[Chapter 11]).
 
-#strong[Why not cached?] Model construction depends on mutable proof
+#strong[How is this cached?] Model construction depends on mutable proof
 state beyond the explicit context argument: `build_with_use` varies per
 dependency path, `prover:assuming` flags change between fallback
-attempts, and `memo:selected_cn_snap_` evolves during the proof. A cache
-was attempted but removed because it could not produce a sound cache key
-that captured all of these dimensions. See the comment at the top of
-`Source/Knowledge/query.pl` for the full rationale.
+attempts, and `memo:selected_cn_snap_` evolves during the proof. Two
+early cache attempts that tried to #emph[clear] the cache when this
+state changed were abandoned as unsound. The current design instead
+encodes every mutable input #strong[in the cache key]: results are
+memoised per proof in `memo:dep_model_cache_/5` under a hazard-encoded
+key (proof-context USE state, assumption flags, choice-group signature),
+gated by `config:dep_model_cache/1`. See the comment at the top of
+`Source/Knowledge/query.pl` for the full key design.
 
 == Further reading
 <further-reading-5>
@@ -3774,15 +3813,16 @@ package_dependency(
   'dev-libs',
   openssl,
   greaterequal,
-  version([3, 0], '', 4, 0, '', 0, '3.0'),
+  version([3, 0], '', 4, 0, [], 0, '3.0'),
   [slot('0'), subslot('3'), equal],
   [use(enable(ssl), none), use(disable(test), none)])
 ```
 
 The first argument (`install` / `run` / `compile`) records #emph[which]
-PMS dependency class is being parsed (`DEPEND` vs `RDEPEND` vs
-`BDEPEND`), so the same DCG surface syntax feeds slightly different
-typing in the abstract syntax.
+PMS dependency class is being parsed, so the same DCG surface syntax
+feeds slightly different typing in the abstract syntax: `install` for
+DEPEND/BDEPEND/IDEPEND, `run` for RDEPEND/PDEPEND (PDEPEND is re-tagged
+`pdepend` at the query layer), and `compile` for CDEPEND.
 
 == Why DCG instead of regex or ad hoc code?
 <why-dcg-instead-of-regex-or-ad-hoc-code>
@@ -3968,10 +4008,10 @@ could --- in principle --- prove goals in any domain that encodes its
 constraints as Horn-style expansions behind a single hook.
 
 The prover's only contract with the outside world is this: #strong[given
-a literal, `rules:rule/2` (or the configured `rule/2` delegate) returns
-a body --- a list of sub-literals that must hold for the head to hold.]
-Everything that makes Gentoo "Gentoo" --- USE flags, slots, version
-domains, PDEPEND side effects --- lives in the rule layer and in
+a literal, `resolving:rule/2` (or the configured `rule/2` delegate)
+returns a body --- a list of sub-literals that must hold for the head to
+hold.] Everything that makes Gentoo "Gentoo" --- USE flags, slots,
+version domains, PDEPEND side effects --- lives in the rule layer and in
 proof-term annotations (`?{Context}`), not in the prover's control flow.
 The prover walks literals; the domain explains what each literal means.
 
@@ -4019,14 +4059,14 @@ each literal in the proof queue:
 + #strong[Check the cycle stack.] If the literal is currently being
   proved (on the stack), handle the cycle:
 
-  - If `heuristic:cycle_benign/1` succeeds, treat it as already proven
-    (benign cycle --- no assumption recorded).
+  - If `heuristic:cycle_benign/2` (literal + cycle path) succeeds, treat
+    it as already proven (benign cycle --- no assumption recorded).
   - Otherwise, record a cycle-break assumption (`assumed(rule(Lit))` in
     Proof, `assumed(Lit)` in Model).
 
-+ #strong[Expand via `rule/2`.] Call `rules:rule(Lit, Body)` to get the
-  rule body --- the list of sub-literals that must be proven to justify
-  `Lit`.
++ #strong[Expand via `rule/2`.] Call `resolving:rule(Lit, Body)` to get
+  the rule body --- the list of sub-literals that must be proven to
+  justify `Lit`.
 
 + #strong[Record in Proof.] Store `rule(Lit) → dep(N, Body)?Ctx` in the
   Proof AVL, where `N` is the dependency count.
@@ -4066,12 +4106,10 @@ rule(Lit) → dep(DepCount, Body)?Ctx
   )
 
 The dependency count is stored alongside the body because it is used by
-downstream stages without having to recompute it. The planner uses it to
-determine the #strong[fan-out] of each node when building topological
-waves: a literal with many dependencies is heavier to schedule than one
-with few. The printer uses it to produce indentation and step counts in
-the plan output. Storing the count once, at proof time, avoids repeated
-`length/2` calls over the same body list during planning and printing.
+downstream consumers without having to recompute it: the explainer reads
+it when reconstructing justifications, and the special value `-1` marks
+cycle-break assumptions. Storing the count once, at proof time, avoids
+repeated `length/2` calls over the same body list.
 
 Special keys: - `assumed(rule(Lit))` with `dep(-1, Body)?Ctx` --- prover
 cycle-break - `rule(assumed(Lit))` with `dep(0, [])?Ctx` --- domain
@@ -4118,8 +4156,9 @@ two purposes:
   literal (when the incoming context is not already equivalent to the
   stored one --- see below).
 
-+ #strong[Plan generation.] The planner reads the model to determine
-  which literals are in the proof and what contexts they carry.
++ #strong[Plan generation.] The ordering pass and the printer read the
+  model to determine which literals are in the proof and what contexts
+  they carry.
 
 A lightweight variant, `prove_model`, skips Proof and Triggers
 bookkeeping for internal query-side model construction where only the
@@ -4301,12 +4340,12 @@ to heads.
 
 === Downstream use
 <downstream-use>
-Later phases --- planners, schedulers, diagnostics --- use Triggers to
-answer #strong["if this literal moves, what else moves?"] in logarithmic
-time per lookup. Without these reverse edges, nothing in the pipeline
-could enumerate which install heads depended on a given dependency
-literal, and the graph carried out of proving would be incomplete for
-anything that walks dependencies backwards.
+Later phases --- the orderer (merge-order bias), diagnostics --- use
+Triggers to answer #strong["if this literal moves, what else moves?"] in
+logarithmic time per lookup. Without these reverse edges, nothing in the
+pipeline could enumerate which install heads depended on a given
+dependency literal, and the graph carried out of proving would be
+incomplete for anything that walks dependencies backwards.
 
 == Entry rules and the pipeline
 <entry-rules-and-the-pipeline>
@@ -4320,23 +4359,24 @@ The pipeline module provides two canonical entry points, both with the
 same 5-tier committed-choice progressive relaxation (strict,
 keyword\_acceptance, blockers, unmask, keyword\_unmask):
 
-- `pipeline:prove_plan_with_fallback/5` --- full pipeline (prove + plan
-  - schedule). Used by production paths (`--pretend`, `--graph`,
-    `--build`) and `pipeline:test_stats`.
-- `pipeline:prove_with_fallback/4` --- prover only. Used by layered
-  tests (`prover:test`, `planner:test`, `scheduler:test`) and `--bugs`.
-  Each test layer adds its own stages on top.
+- `pipeline:prove_plan_with_fallback/5` --- full pipeline (prove +
+  order). Used by production paths (`--pretend`, `--graph`, `--build`)
+  and `pipeline:test_stats`.
+- `pipeline:prove_with_fallback/4` --- resolve pass only. Used by
+  layered tests (`resolver:test`, `orderer:test`) and `--bugs`. Each
+  test layer adds its own stages on top.
 
-Underneath, `prove_plan_basic/5` chains three stages:
+Underneath, `prove_plan_basic/6` chains two stages (the trailing SCCs
+argument is always `[]` --- the rule-based orderer leaves no remainder):
 
 ```prolog
-pipeline:prove_plan_basic(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL)
+pipeline:prove_plan_basic(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, SCCs)
 ```
 
-+ `prover:prove/9` --- constructs Proof, Model, Constraints, and
-  Triggers
-+ `planner:plan/5` --- wave planning for the acyclic portion
-+ `scheduler:schedule/6` --- SCC/merge-set scheduling for the remainder
++ `resolver:resolve/9` --- hands the `resolving` rule set to
+  `prover:prove/10`\; constructs Proof, Model, Constraints, and Triggers
++ `orderer:order/5` --- hands the `ordering` rule set to the same prover
+  for a second proving pass; projects the wave-list plan (Chapter 12)
 
 The prover is wrapped in `with_reprove_state` which saves and restores
 the learned constraint store across reprove retries. Inside that,
@@ -4356,9 +4396,10 @@ for the reprove mechanism in detail.
 )
 
 The prover can produce different solutions (stable models) of the USE
-flag configuration space. Using Prolog's built-in backtracking,
-different valid configurations of the same target can be explored and
-compared.
+flag configuration space. Variants are explored by re-proving the target
+under thread-local branch-preference overrides (`variant:use_override`,
+`variant:branch_prefer`) that steer the committed choices --- the
+choice-group cut is never removed within a single proof.
 
 For example, a `REQUIRED_USE="|| ( linux macos )"` constraint yields two
 stable models:
@@ -4381,7 +4422,7 @@ semantics.
 
 PDEPEND dependencies are handled this way: they are discovered only
 after a literal is resolved and are injected as proof obligations via
-`rules:literal_hook/4`.
+`heuristic:proof_obligation/4`.
 
 == Choice-event log
 <choice-event-log>
@@ -4633,8 +4674,10 @@ rule(assumed(_), []) :- !.
 This stores `rule(assumed(X))` in the Proof tree.
 
 #strong[Where they appear:] - Proof: `rule(assumed(X))` →
-`dep(0, [])?Ctx` - Model: the enclosing literal's entry (normal) - Plan:
-rendered as "verify" steps + "Domain assumptions" warning block
+`dep(0, [])?Ctx` - Model: `assumed(X)` → `Ctx` (the `assumed(X)` body
+literal is proved as a regular literal; exit-code detection scans for
+these keys) - Plan: rendered as "verify" steps + "Domain assumptions"
+warning block
 
 === Prover Cycle-Break Assumptions (`assumed(rule(X))`)
 <prover-cycle-break-assumptions-assumedrulex>
@@ -4649,8 +4692,9 @@ put_assoc(assumed(Lit), Model, Ctx, NewModel)
 ```
 
 #strong[Where they appear:] - Proof: `assumed(rule(Lit))` →
-`dep(-1, Body)?Ctx` - Model: `assumed(Lit)` → `Ctx` - Plan: SCC /
-merge-set scheduling; cycle explanation via `cycle:*`
+`dep(-1, Body)?Ctx` - Model: `assumed(Lit)` → `Ctx` - Plan: ordered
+normally by the ordering pass; cycle explanation via the printer's cycle
+section (`Printer/Plan/cycle.pl`)
 
 === Summary Table
 <summary-table>
@@ -4662,11 +4706,11 @@ merge-set scheduling; cycle explanation via `cycle:*`
       Assumption]], [#strong[Prover Cycle-Break]],),
     table.hline(),
     [Proof key], [`rule(assumed(X))`], [`assumed(rule(X))`],
-    [Model key], [\(normal literal)], [`assumed(Lit)`],
+    [Model key], [`assumed(X)`], [`assumed(Lit)`],
     [dep count], [0], [-1],
     [Introduced by], [rules layer], [prover layer],
     [Represents], [unsatisfiable dependency], [cyclic dependency],
-    [Printed as], ["Domain assumptions"], [cycle break (SCC)],
+    [Printed as], ["Domain assumptions"], [cycle break],
     [Exit code contribution], [2], [1],
   )]
   , kind: table
@@ -4737,7 +4781,7 @@ steps:
 <learned-constraint-store>
 The `prover:learn/3` and `prover:learned/2` predicates maintain a
 key-value store that #strong[persists across reprove retries] within the
-same top-level `prove/9` invocation. This is distinct from the reject
+same top-level `prove/10` invocation. This is distinct from the reject
 set (which accumulates and is cleared on exhaustion).
 
 The domain uses learned constraints for:
@@ -4844,8 +4888,10 @@ three quick gate checks run in order:
 + #strong[Keyword gate] --- if no accepted keyword exists and
   `keyword_acceptance` is not active, the rule fails.
 + #strong[Already-installed short-circuit] --- if the package is already
-  installed (and `--emptytree` was not requested), the rule succeeds
-  with an empty condition list. Nothing further needs to be proved.
+  installed (and `--emptytree` was not requested) with USE flags that
+  match the request, the rule succeeds with an empty condition list.
+  When the installed USE differs, the entry is re-emitted as a
+  transactional `:update` action instead (portage-ng\#85).
 
 #strong[USE model verification.] When none of the gates apply, the rule
 queries the ebuild's metadata and computes the full USE model (combining
@@ -4871,7 +4917,7 @@ version would resolve.
 == Constraint guards and reprove integration
 <constraint-guards-and-reprove-integration>
 Every time the prover unifies a new constraint term into the proof, it
-calls `rules:constraint_guard(Key, Constraints)` to verify that the
+calls `heuristic:constraint_guard(Key, Constraints)` to verify that the
 constraint is consistent with what has already been proved. The guard
 has three possible outcomes:
 
@@ -4885,8 +4931,8 @@ has three possible outcomes:
   records a learned constraint, and restarts the proof from scratch with
   the new knowledge (see section 9.7).
 
-Three specialised guards in `candidate.pl` cover the most common
-conflict types:
+Three specialised guards in `cnselect.pl` cover the most common conflict
+types:
 
 - #strong[`selected_cn_unique_or_reprove`] checks that the selected
   category/name pair is consistent with prior selections. If two
@@ -4923,7 +4969,9 @@ obstacle, the pipeline applies #strong[progressive relaxation]: it
 re-runs the entire proof under successively weaker constraints until a
 complete plan emerges.
 
-The mechanism lives in `pipeline:prove_plan_with_fallback/6`. Each tier
+The mechanism lives in the pipeline's shared fallback driver
+(`pipeline:fallback_tiers/1` + `pipeline:with_fallback/2`), used by both
+`prove_plan_with_fallback/5` and `prove_with_fallback/4`. Each tier
 wraps the prover call inside `prover:assuming/2`, which sets a dynamic
 flag that the domain rules consult at decision points.
 
@@ -4953,25 +5001,23 @@ or `keyword_unmask`).
 The same 5-tier fallback chain is shared by two canonical entry points
 in the pipeline module:
 
-- `prove_plan_with_fallback/5` --- full pipeline (prove + plan +
-  schedule), used by production paths (`--pretend`, `--graph`,
-  `--build`).
-- `prove_with_fallback/4` --- prover only (no plan/schedule), used by
-  layered tests (`prover:test`, `planner:test`, `scheduler:test`) and
-  `--bugs`. Each test layer adds its own stages on top.
+- `prove_plan_with_fallback/5` --- full pipeline (prove + order), used
+  by production paths (`--pretend`, `--graph`, `--build`).
+- `prove_with_fallback/4` --- resolve pass only (no ordering pass), used
+  by layered tests (`resolver:test`, `orderer:test`) and `--bugs`. Each
+  test layer adds its own stages on top.
 
 === How `assuming/2` works
 <how-assuming2-works>
 `prover:assuming(Flag, Goal)` stores a dynamic flag
 (`prover_assuming_<Flag>`) for the duration of `Goal`, using
 `setup_call_cleanup` to guarantee cleanup even on exceptions. Domain
-predicates test this flag with the zero-argument
-`prover:assuming(Flag)`:
+predicates test this flag with the unary `prover:assuming(Flag)`:
 
 - #strong[`candidate:eligible/1`] --- when `keyword_acceptance` is
   active, candidates with any keyword are accepted; when `unmask` is
   active, masked candidates pass.
-- #strong[`candidate:accepted_keyword_candidate/7`] --- two fallback
+- #strong[`acceptance:accepted_keyword_candidate/7`] --- two fallback
   clauses widen the candidate pool: one for unstable keywords, one for
   masked packages.
 - #strong[`candidate:assume_blockers/0`] --- returns `true` when blocker
@@ -5002,7 +5048,7 @@ change would eliminate the need for the relaxation:
   )
 
 These tags flow through the proof into the plan output. In builder mode,
-`builder:dispatch_suggestions/1` can apply the suggestions automatically
+`builder:dispatch_suggestions/3` can apply the suggestions automatically
 (writing to `/etc/portage/package.*` files); in pretend mode, they
 appear as actionable hints in the plan output.
 
@@ -5142,8 +5188,9 @@ following checklist helps catch regressions quickly:
   few seconds. A significant increase compared to previous runs suggests
   excessive reprove retries or a learning bug.
 - #strong[Test suite] --- the overlay and portage test suites
-  (`prover:test_stats/1`) should maintain their previous pass rate. Any
-  drop indicates that a change has broken handling of a known edge case.
+  (`resolver:test_stats/1`) should maintain their previous pass rate.
+  Any drop indicates that a change has broken handling of a known edge
+  case.
 
 == Source File Map
 <source-file-map>
@@ -5155,15 +5202,17 @@ following checklist helps catch regressions quickly:
     table.hline(),
     [`Source/Pipeline/prover.pl`], [Core proof engine, reprove retry
     loop, cycle detection, learned store],
-    [`Source/Domain/Gentoo/rules.pl`], [Domain rules: entry rules,
-    grouped deps, `rule(assumed(_),[])`],
-    [`Source/Domain/Gentoo/Rules/candidate.pl`], [Candidate selection,
-    reprove triggers, parent narrowing],
-    [`Source/Domain/Gentoo/Rules/heuristic.pl`], [Reprove state
-    management, reject accumulation],
-    [`Source/Domain/Gentoo/Rules/memo.pl`], [Thread-local caches
-    including `requse_violation_/3`],
-    [`Source/Domain/Gentoo/Rules/use.pl`], [`verify_required_use_with_bwu`,
+    [`Source/Domain/Gentoo/Rules/resolving.pl`], [Domain rules: entry
+    rules, grouped deps, `rule(assumed(_),[])`],
+    [`Source/Domain/Gentoo/Rules/Resolving/candidate.pl`], [Candidate
+    selection and eligibility],
+    [`Source/Domain/Gentoo/Rules/Resolving/cnselect.pl`], [Constraint
+    guards, reprove triggers, parent narrowing, learned domains],
+    [`Source/Domain/Gentoo/Rules/Resolving/heuristic.pl`], [Reprove
+    state management, reject accumulation],
+    [`Source/Domain/Gentoo/Rules/Resolving/memo.pl`], [Thread-local
+    caches including `requse_violation_/3`],
+    [`Source/Domain/Gentoo/Rules/Resolving/use.pl`], [`verify_required_use_with_bwu`,
     `describe_required_use_violation`],
     [`Source/Pipeline/Prover/explanation.pl`], [`assumption_reason_for_grouped_dep`
     diagnosis],
@@ -5379,11 +5428,14 @@ there is no shared non-empty set of versions to choose from.
 === Consistency check
 <consistency-check>
 ```prolog
-version_domain:domain_consistent(Domain)
+version_domain:domain_inconsistent(Domain)
 ```
 
-Verifies that a domain is non-empty --- that at least one version in the
-repository satisfies the bounds.
+Detects structurally empty domains --- an empty slot set, conflicting
+exact bounds, or a lower bound above an upper bound. The meet operation
+rejects a result when this check succeeds
+(`\+ domain_inconsistent(...)`); it is purely structural and never
+consults the repository.
 
 == Feature logic intuition
 <feature-logic-intuition>
@@ -5461,7 +5513,7 @@ Chapter 11 ties domains into rule evaluation and candidate generation.
 === Wildcard domain learning
 <wildcard-domain-learning>
 When a wildcard dependency like `=dev-python/gast-0.6*` cannot be
-satisfied, `candidate:maybe_learn_wildcard_domain/4` derives an
+satisfied, `cnselect:maybe_learn_wildcard_domain/4` derives an
 upper-bound domain from the wildcard: the last numeric component is
 incremented to produce an exclusive upper bound (e.g.~`0.6*` → `< 0.7`,
 `1.2.3*` → `< 1.2.4`). The resulting
@@ -5557,8 +5609,8 @@ produces sub-literals that drive the rest of the proof.
 The resolution then branches depending on the action:
 
 - #strong[`:run`] resolves runtime dependencies (RDEPEND). PDEPEND is
-  handled in the same pass through the prover's literal hook (see
-  #link(<hooks>)[Hooks]).
+  handled in the same pass through the prover's proof-obligation hook
+  (see #link(<hooks>)[Hooks]).
 - #strong[`:install`] resolves build-time dependencies (DEPEND and
   BDEPEND) and attaches ordering constraints (`after/1`) that express
   which packages must be installed before others.
@@ -5588,7 +5640,7 @@ records an assumption.
 The single entry point between the prover and the domain logic is:
 
 ```prolog
-rules:rule(+Head, -Body)
+resolving:rule(+Head, -Body)
 ```
 
 The prover passes a literal as `Head`, and the rules layer returns a
@@ -5642,14 +5694,15 @@ for when no candidate works.
 === Eligibility filtering
 <eligibility-filtering>
 Before a candidate version is considered, `candidate:eligible/1` checks
-three things:
+two things:
 
 - #strong[Masking] --- is the ebuild masked by the profile or user
   configuration?
 - #strong[Keyword acceptance] --- does the ebuild have an accepted
   keyword for the current architecture?
-- #strong[Installed status] --- is the package already installed
-  (checked against the VDB)?
+
+\(Installed status is a separate check, `candidate:installed/1`, used by
+the entry rules' already-installed short-circuit.)
 
 If a candidate fails these checks and no relaxation tier is active (see
 #link("09-doc-prover-assumptions.md#progressive-relaxation")[Chapter 9, Progressive Relaxation]),
@@ -5657,14 +5710,14 @@ the entry rule fails and Prolog backtracks to try the next candidate.
 
 === Version-ordered selection
 <version-ordered-selection>
-`candidate:resolve/2` resolves a query to a specific
+`target:resolve_candidate/2` resolves a query to a specific
 `Repository://Ebuild` pair. Candidates are tried newest-first via
 `cache:ordered_entry/5`, so the prover naturally prefers the latest
 eligible version.
 
 === Dependency ordering within a group
 <dependency-ordering-within-a-group>
-Before proving the dependencies of a package, `candidate:dep_priority/2`
+Before proving the dependencies of a package, `ranking:dep_priority/2`
 sorts them so that tightly constrained siblings are proved first. This
 reduces greedy conflicts where an unconstrained sibling selects a
 version that later clashes with a tighter constraint:
@@ -5684,10 +5737,11 @@ version that later clashes with a tighter constraint:
   , kind: table
   )
 
-Lower keys are proved first. Within each tier, slot specificity further
-refines the order. The effect is that tilde and wildcard dependencies
-lock their `selected_cn` before unconstrained siblings pick a
-potentially conflicting version.
+Lower keys are proved first. Slot specificity is folded into the base
+key via `min` --- a fully slot-qualified dependency (slot + subslot)
+gets key 0 and outranks every tier above. The effect is that slotted,
+tilde and wildcard dependencies lock their `selected_cn` before
+unconstrained siblings pick a potentially conflicting version.
 
 === Self-dependencies and cross-slot handling
 <self-dependencies-and-cross-slot-handling>
@@ -5750,10 +5804,10 @@ example, cycles that pass through `:run` (RDEPEND paths) are often
 treated as ordering-style cycles rather than hard failures --- mirroring
 how traditional resolvers tolerate certain cyclic patterns.
 
-After the proof is complete, cyclic portions of the `:run` side of the
-graph are grouped into #strong[strongly connected components (SCCs)] by
-the scheduler, so that the merge ordering respects the cycle structure.
-For more on proof search and assumptions, see
+After the proof is complete, the ordering pass (Chapter 12) resolves
+cyclic portions of the graph by citing the installed world (VDB) where
+possible, so that the merge ordering respects the cycle structure. For
+more on proof search and assumptions, see
 #link("08-doc-prover.md")[Chapter 8] and
 #link("09-doc-prover-assumptions.md")[Chapter 9].
 
@@ -5771,9 +5825,12 @@ path. USE-conditional dependencies like `ssl? ( dev-libs/openssl )` are
 evaluated against this set: if the flag is active, the dependency is
 included; otherwise it is skipped.
 
-The key predicates are `use:effective_use/3` (computes the full
-effective USE set for an ebuild) and `use:evaluate_conditional/3`
-(evaluates a single flag condition).
+The key predicate is `use:effective_use_for_entry/3` (with the context
+wrapper `use:effective_use_in_context/3`), which computes the full
+effective USE set for an ebuild. Whether a USE-conditional group is
+active is decided by the `candidate:eligible(use_conditional(...))`
+clauses together with the `use_conditional_group` rules in
+`resolving.pl`.
 
 === `build_with_use`
 <build_with_use>
@@ -5925,7 +5982,8 @@ index `I` breaks remaining ties (left-to-right).
     [`Overlap`], [Prefer arms that appear in several sibling `\|\|`
     groups], [Soft stand-in for minimize-slots pressure],
     [`VerScore`], [Prefer the arm that admits the newest tree version
-    (same-CN ranges)], [Intra-bin `has_upgrade and not has_downgrade`],
+    --- only active when #emph[all] arms target the same
+    (C,N)], [Intra-bin `has_upgrade and not has_downgrade`],
     [`UEScore`], [Prefer USE\_EXPAND profile alignment], [Profile target
     preference],
     [index `I`], [Stable left-to-right when all else equal], [Ebuild
@@ -5944,6 +6002,14 @@ Worked examples:
 - An arm whose packages are already in `selected_cn` beats a fresh CN →
   `SnapAll`.
 
+`VerScore` is gated to same-CN groups because comparing newest tree
+versions of #emph[different] packages is meaningless and overrides
+ebuild order: `virtual/mta` would pick `notqmail` (a `-9999` live ebuild
+inflates its score) over the intended `nullmailer`, and `virtual/jdk`
+would pick source `dev-java/openjdk` over `openjdk-bin`
+(portage-ng\#115, portage-ng\#116). Emerge never version-ranks across
+CPs inside a choice; it falls back to ebuild order there.
+
 `virtual/` atoms are skipped for `SnapAll`, `InstScore`, and
 `NoDowngrade` (Portage's zero-cost treatment of virtuals in those
 checks). Scores are computed once per arm per
@@ -5955,7 +6021,7 @@ also #link("25-doc-performance.md")[Chapter 25]).
 === What we deliberately do not implement
 <what-we-deliberately-do-not-implement>
 These Portage mechanisms are #strong[design omissions], not open bugs.
-The inductive prover and planner already provide the effects they
+The inductive prover and ordering pass already provide the effects they
 target.
 
 #strong[Overlapping-`||` DNF (`_overlap_dnf`) and `minimize_slots` /
@@ -5981,9 +6047,9 @@ and fight proven-provider reuse.
 
 #strong[Circular-dep demotion inside `||`.] Portage demotes arms that
 close a known cycle with the parent (or `--onlydeps` parent CP) into
-`other`. portage-ng handles cycles in the prover, planner, and scheduler
-(cycle-break assumptions, wave remainder, SCC merge-sets) --- see
-#link("08-doc-prover.md")[Chapter 8],
+`other`. portage-ng handles cycles in the prover and the ordering pass
+(cycle-break assumptions, world citations, `unreachable` assumptions)
+--- see #link("08-doc-prover.md")[Chapter 8],
 #link("09-doc-prover-assumptions.md")[Chapter 9], and
 #link("12-doc-planning.md")[Chapter 12]. Demoting at ranking time would
 second-guess cycle-break polarity and needs a parent circular map that
@@ -6062,11 +6128,12 @@ runtime but are not required at build time. Unlike DEPEND and RDEPEND,
 they do not block the build --- they are installed afterwards.
 
 In portage-ng, PDEPEND is handled in a single pass inside the prover via
-the `rules:literal_hook/4` hook. Whenever a literal is successfully
-proved, the hook checks whether the corresponding ebuild has PDEPEND
-entries. If it does, those entries are injected as additional proof
-obligations on the spot. This avoids a separate PDEPEND resolution pass
-and ensures that post-dependencies are part of the same proof and plan.
+the `heuristic:proof_obligation/4` hook. Whenever a literal is
+successfully proved, the hook checks whether the corresponding ebuild
+has PDEPEND entries. If it does, those entries are injected as
+additional proof obligations on the spot. This avoids a separate PDEPEND
+resolution pass and ensures that post-dependencies are part of the same
+proof and plan.
 
 == Assumptions as proposals
 <assumptions-as-proposals>
@@ -6094,8 +6161,9 @@ For the full story on assumptions and constraint learning, see
 == Rules submodules
 <rules-submodules>
 The rules layer is not a single monolithic file. It is split across
-several focused submodules under `Source/Domain/Gentoo/Rules/`, each
-handling a distinct concern:
+several focused submodules under
+`Source/Domain/Gentoo/Rules/Resolving/`, each handling a distinct
+concern:
 
 #figure(
   align(center)[#table(
@@ -6103,20 +6171,28 @@ handling a distinct concern:
     align: (left,left,left,),
     table.header([#strong[Module]], [#strong[File]], [#strong[Purpose]],),
     table.hline(),
-    [`memo`], [`memo.pl`], [Thread-local caches for selected candidates
-    and violations],
-    [`use`], [`use.pl`], [USE flag evaluation and REQUIRED\_USE
-    checking],
-    [`candidate`], [`candidate.pl`], [Candidate selection, eligibility,
-    and reprove triggers],
-    [`heuristic`], [`heuristic.pl`], [Reprove state, retry budgets, and
-    cycle benignity checks],
-    [`dependency`], [`dependency.pl`], [Dependency model construction
-    and context threading],
-    [`target`], [`target.pl`], [Target resolution (translating a query
-    to a candidate)],
-    [`featureterm`], [`featureterm.pl`], [Context stripping for
-    memoisation keys],
+    [`acceptance`], [`acceptance.pl`], [Keyword, mask, and license
+    acceptance; keyword-aware candidate enumeration],
+    [`candidate`], [`candidate.pl`], [Grouped-dep resolution pipeline,
+    blocker matching, eligibility protocol],
+    [`cnselect`], [`cnselect.pl`], [CN-consistency: selected\_cn reuse,
+    CN-domain reject map, learned-domain narrowing],
+    [`dependency`], [`dependency.pl`], [Self-entry injection,
+    USE-requirement collection, slot/BWU proof-context propagation],
+    [`featureterm`], [`featureterm.pl`], [Proof-context list helpers
+    (`after/1`, strip `build_with_use`, etc.)],
+    [`heuristic`], [`heuristic.pl`], [Prover hooks: constraint guard,
+    cycle classification, PDEPEND obligations, reprove state],
+    [`memo`], [`memo.pl`], [Thread-local caching declarations,
+    `clear_caches/0`],
+    [`ranking`], [`ranking.pl`], [Dependency ordering
+    (`dep_priority/2`), choice-group ranking, BWU memo seeding],
+    [`slotmeta`], [`slotmeta.pl`], [Slot canonicalization, restriction
+    merging, constraint queries],
+    [`target`], [`target.pl`], [Target resolution, update/downgrade
+    transactions, depclean, `--exclude` helpers],
+    [`use`], [`use.pl`], [USE evaluation, conditionals,
+    `build_with_use`, newuse, REQUIRED\_USE, BWU conflicts],
   )]
   , kind: table
   )
@@ -6147,8 +6223,8 @@ this chapter for the end-to-end narrative and `||` ranking detail.
 - #link("Policy/README.md")[Policy cards] --- declarative Gentoo policy
   surface
 
-= Planning and Scheduling
-<planning-and-scheduling>
+= Ordering: Plans as Proofs
+<ordering-plans-as-proofs>
 == Why parallel planning?
 <why-parallel-planning>
 Traditional package managers (Portage, apt, and similar) typically
@@ -6162,10 +6238,9 @@ from the start. Wave 1 might download #emph[A], #emph[B], and #emph[C]
 concurrently; wave 2 might install #emph[A] while #emph[D] is still
 downloading; wave 3 might install #emph[B] and #emph[C] together, and so
 on. This is #strong[not] a post-processing optimization layered on top
-of a linear schedule. Parallelism is computed #strong[during] planning,
-as a natural consequence of Kahn's topological sort: at each step, every
-literal whose prerequisites are satisfied is eligible at once, and that
-set is exactly one parallel wave.
+of a linear schedule. Parallelism falls out of the ordering proofs
+themselves: two actions may share a wave exactly when neither one's
+availability proof depends on the other.
 
 On a multi-core machine with fast I/O, overlapping work this way can
 dramatically reduce wall-clock time compared to a strictly sequential
@@ -6177,237 +6252,281 @@ install, run, and so on. Those actions can therefore land in different
 waves: one package can still be downloading while another is already
 installing, whenever the dependency graph allows it.
 
-After the prover completes, the proof must be converted into an
-executable plan --- an ordered sequence of actions with maximal
-parallelism. This is done in two stages: wave planning for the acyclic
-portion, and SCC scheduling for any cyclic remainder.
+== From proof to plan: a second proving pass
+<from-proof-to-plan-a-second-proving-pass>
+The prover (Chapter 8) answers a question about the #strong[final
+world]: does a consistent solution exist --- which packages, which
+versions, which USE flags? Its output is a proof, and every fact in that
+proof carries a justification.
 
-== Dependency types and scheduling
-<dependency-types-and-scheduling>
+But a proof is not a plan. To execute anything, the actions must be
+ordered in time. Earlier versions of portage-ng produced that ordering
+with procedural graph algorithms (Kahn's topological sort for the
+acyclic portion, Kosaraju SCC decomposition for cycles). The machinery
+worked, but its answers came with no justification: a package landed in
+wave 7 because "the algorithm said so", and diagnosing a mis-ordered
+plan meant archaeology across several procedural passes.
+
+The ordering engine (`Source/Pipeline/orderer.pl`) gives the #emph[when]
+the same treatment as the #emph[what]: #strong[it runs the same prover
+core a second time].
+
+- #strong[Pass 1] proves a solution exists. It is the existing prover
+  with the existing domain rules, completely unchanged. All
+  #emph[choice] lives here --- versions, USE flags, OR-group selection.
+- #strong[Pass 2] constructs an ordering of that solution. The prover
+  core is re-entered over a small set of generic #strong[planning laws],
+  with the pass-1 proof and the installed system (VDB) as its facts. Its
+  output is a second proof object in which every placement is justified.
+
+The pass-2 proof reads the way a Linux From Scratch book reads:
+#emph[fontconfig can be built at step 8 because python-3.14.6 is already
+installed; the new python is built at step 12]. A plan is no longer
+certified by empirical testing of an algorithm's output --- the plan
+#strong[is] a proof.
+
+== The planning laws
+<the-planning-laws>
+Pass 2 needs only a handful of generic laws. They are the `rule/2`
+clauses of the `ordering` module (`ordering.pl`, alongside the Gentoo
+bindings) and own no Gentoo vocabulary at all:
+
+```prolog
+% A step can be placed once everything it requires is available:
+rule(scheduled(H), Conds) :-
+  ordering:step(H),
+  findall(available(H, D), ordering:requires(H, D), Conds).
+
+% A requirement is available when an earlier plan step provides it, or —
+% failing that — when the world as it stands already provides it, or —
+% failing that too — by recording the bootstrap failure as a negative
+% domain assumption instead of failing the pass:
+rule(available(H, D), Body) :-
+  (   ordering:step(D),
+      \+ prover:currently_proving(scheduled(D))
+  ->  Body = [scheduled(D)]
+  ;   ordering:world(H, D)
+  ->  Body = []
+  ;   Body = [assumed(unreachable(H, D))]
+  ).
+
+rule(assumed(unreachable(_, _)), []).
+```
+
+Three literals make up the entire pass-2 language:
+
+- #strong[`scheduled(H)`] --- step #emph[H] can be placed; its proof is
+  the placement justification.
+- #strong[`available(H, D)`] --- hard requirement #emph[D] of step
+  #emph[H] is satisfiable in time: by an earlier plan step, or by the
+  installed world.
+- #strong[`assumed(unreachable(H, D))`] --- a #strong[negative domain
+  assumption]: no plan step and no installed package can provide
+  #emph[D] for #emph[H]. This is the genuine bootstrap boundary,
+  reported honestly instead of papered over.
+
+The consumer #emph[H] appears in the availability literal on purpose:
+whether a requirement can be bridged by the installed world depends on
+the consumer's position in the derivation (cycle membership), so
+availability proofs are never shared across consumers. `scheduled/1`
+proofs are position-independent and memoize globally through the
+prover's proven fast path --- each step is scheduled once, no matter how
+many consumers cite it.
+
+== The Gentoo bindings
+<the-gentoo-bindings>
+The laws ask three questions they cannot answer themselves: what is a
+step, what does a step require, and what does the world already provide.
+One domain file --- `Source/Domain/Gentoo/Rules/ordering.pl` --- answers
+them by reading the pass-1 proof and the VDB:
+
+#figure(
+  align(center)[#table(
+    columns: (33.33%, 33.33%, 33.33%),
+    align: (left,left,left,),
+    table.header([Binding], [Question answered], [Source],),
+    table.hline(),
+    [`step/1`], [What are the plan's steps?], [Pass-1 proof rule heads],
+    [`requires/2`], [What must exist before a step?], [Build-time deps
+    (DEPEND/BDEPEND) in the step's pass-1 rule body],
+    [`prefers/2`], [What would we like earlier, without
+    insisting?], [Runtime deps (RDEPEND), PDEPEND completion, ordering
+    hints],
+    [`world/2`], [What does the system already provide?], [VDB
+    (installed packages)],
+  )]
+  , kind: table
+  )
+
+This is the same split that keeps Gentoo semantics out of the prover
+core: the laws are the engine, the bindings are microcode loaded from
+disk. An ordering quirk in the tree becomes a rule edit in
+`ordering.pl`, never engine surgery in `orderer.pl`.
+
+The orderer hands the `ordering` rule module directly to the generic
+prover (`prover:prove_once(ordering, ...)`), so the prover core itself
+needs no knowledge of which pass it is running --- it just expands
+whatever rule set it was given.
+
+== Dependency types and ordering strength
+<dependency-types-and-ordering-strength>
 Gentoo's dependency classes do not all impose the same ordering
-strength. The rules layer records that distinction in #strong[proof-term
-context] (`?{…}` on each literal): dependency edges and ordering hints
-are derived from markers such as `after/1` and `after_only/1`. The
-planner turns those into edges in its dependency graph (including
-ordering-only constraints where appropriate).
-
-Roughly:
+strength. The bindings translate each class into either a hard
+requirement or a soft preference:
 
 - #strong[DEPEND] and #strong[BDEPEND] --- build-time dependencies. They
-  must be satisfied before the build can start, so they contribute
-  #strong[hard ordering]: the consumer's build-related actions wait on
-  the resolved dependencies.
+  must be satisfied before the build can start, so they become
+  #strong[`requires/2`] edges: the consumer's `scheduled/1` proof waits
+  on them.
 
 - #strong[RDEPEND] --- runtime dependencies. They must be satisfied
-  before the package can be #emph[used] at runtime. The ordering is
-  #strong[looser] than pure build ordering: the prover and feature-term
-  layer can represent this with `after_only/1` so that runtime ordering
-  is enforced where needed without treating every runtime edge like a
-  build blocker.
+  before the package is #emph[used], not before it is built. They become
+  #strong[`prefers/2`] edges: honored whenever that closes no cycle,
+  never allowed to force a world bridge or an unreachable assumption.
 
 - #strong[PDEPEND] --- post-install dependencies. They are resolved
-  #strong[after] the main proof pass (via hooks in the rules layer).
-  That late binding can introduce or surface #strong[cycles] that wave
-  planning alone cannot schedule; those literals become
-  #strong[remainder] work for the SCC scheduler.
+  inside the pass-1 proof (via `heuristic:proof_obligation/4`, see
+  Chapter 8) and create no proof edge. The bindings add a
+  #strong[completion preference]: a consumer of a PDEPEND provider
+  prefers to wait for the provider's post-install group, matching
+  emerge's behaviour (portage-ng\#18). The preference is dropped for
+  consumers inside the provider's own PDEPEND cycle (portage-ng\#19).
 
 - #strong[IDEPEND] --- install-time dependencies (EAPI 8+). They
-  constrain ordering around the install phase specifically, again
-  flowing through the same context and planner machinery as the other
-  classes.
+  constrain ordering around the install phase and flow through the same
+  context machinery as DEPEND.
 
-For the exact mapping from PMS ordering to internal edges and
-constraints, see
+For the exact mapping from PMS ordering semantics to internal edges, see
 #link("23-doc-dependency-ordering.md")[Chapter 23: Dependency Ordering].
-The implementation detail lives in the rules and `featureterm` helpers:
-`after/1` propagates as a real dependency relation, while `after_only/1`
-can be lowered to ordering constraints (for example
-`constraint(order_after(…))`) that the planner respects without
-overstating build-time blocking.
 
-== Wave planning (Kahn's algorithm)
-<wave-planning-kahns-algorithm>
-#figure(image("Diagrams/12-wave-planning.svg", alt: "Wave planning example"),
+== Cycles: citing the installed world
+<cycles-citing-the-installed-world>
+Dependency cycles are where the rule-based engine differs most visibly
+from its predecessor. Consider the classic loop: python depends on tk at
+build time when built with `tk` support, tk depends on fontconfig, and
+fontconfig needs python to build.
+
+#figure(image("Diagrams/12-ordering-cycle.svg", alt: "Ordering a cycle through the installed world"),
   caption: [
-    Wave planning example
+    Ordering a cycle through the installed world
   ]
 )
 
-The planner (`Source/Pipeline/planner.pl`) uses Kahn's algorithm to
-produce a topological ordering of the proof graph with parallelism
-computed from the start.
+When pass 2 proves `scheduled(fontconfig:install)` and reaches the
+requirement on python, the first clause of the availability law --- "an
+earlier plan step provides it" --- is refused: the guard
+`\+ prover:currently_proving(scheduled(D))` detects that python's own
+scheduling proof is still open on the derivation stack, i.e.~citing it
+would close a loop. The law falls through to the next question: does the
+#emph[world as it stands] provide python?
 
-=== Why Kahn's algorithm?
-<why-kahns-algorithm>
-Kahn's algorithm is simple, correct for DAGs, and #strong[naturally]
-exposes parallelism. At each iteration it collects every node whose
-#strong[in-degree] has dropped to zero --- that set is precisely the set
-of actions that may run #strong[concurrently] at that stage. No second
-pass is required to "discover" parallel groups.
+- #strong[If an older python is installed], `world/2` answers yes, and
+  the proof records a #strong[citation of the VDB entry]:
+  #emph[fontconfig is buildable now because python-3.14.6 is already
+  installed]. This is exactly how Linux From Scratch reasons about its
+  temporary toolchain --- a fact about the present system, not a
+  heuristic about graphs.
 
-A common alternative is a #strong[DFS-based] topological sort. That
-yields a #strong[single] linear ordering (one valid sequence), but it
-does #strong[not] identify which steps are independent: you get #emph[a]
-order, not #emph[all] maximal parallel layers. For a build planner that
-wants explicit waves, Kahn's layer-by-layer behavior is the better fit.
+- #strong[If nothing bridges the loop] (a bare system bootstrapping from
+  nothing), the plan reports an honest `unreachable` assumption --- the
+  genuine bootstrap boundary --- instead of an arbitrary cut.
 
-=== How it works
-<how-it-works>
-+ #strong[Build dependency counts.] For each rule in the Proof AVL,
-  count how many of its body literals are "real" dependencies (not
-  already installed, not assumed).
+Note what disappeared: there is no SCC decomposition, no merge-set
+post-pass, no progressive edge relaxation. A cycle is not a special case
+to be repaired after the fact; it is simply the situation in which the
+first clause of a law fails and the next one is consulted.
 
-+ #strong[Initialize the ready queue.] Literals with zero dependencies
-  form the first wave --- they can be executed immediately.
+The pass-1 prover still records its own #strong[cycle-break assumptions]
+(Chapter 9) --- those concern the existence proof. Pass-2 world
+citations and `unreachable` assumptions concern the #emph[ordering] and
+appear in the plan's assumption report separately.
 
-+ #strong[Process waves.] For each wave:
+== Preferences: honored exactly when safe
+<preferences-honored-exactly-when-safe>
+A preference is not a promise. Runtime-ish edges are collected
+separately from hard requirements and are folded into the plan
+#strong[after] the hard structure is fixed: each preference is accepted
+exactly when it closes no cycle against the hard edges and the
+previously accepted preferences. A preference that would deadlock the
+plan is dropped silently --- matching how Portage treats runtime cycles
+as freely orderable.
 
-  - Remove all ready literals from the graph.
-  - Decrement dependency counts for all heads that depended on them.
-  - Literals whose count reaches zero join the next wave.
+The bindings currently derive preferences from five sources:
 
-+ #strong[Repeat] until no more literals can be scheduled.
++ #strong[RDEPEND groups] --- a package prefers its runtime providers
+  earlier.
++ #strong[`order_after` hints] --- ordering-only constraints recorded in
+  proof context by the rules layer (see Chapter 5).
++ #strong[PDEPEND completion] (portage-ng\#18/\#19) --- consumers of a
+  PDEPEND provider prefer the provider's post-install group first.
++ #strong[Configure closure] (portage-ng\#21) --- an `:install` action
+  prefers the runtime providers of its `:run` sibling, so packages whose
+  configure phase probes runtime tools are ordered correctly.
++ #strong[Assumed-dep aliases] (portage-ng\#95) --- when a grouped
+  dependency degraded to a domain assumption in pass 1 but a concrete
+  action for the same package #emph[is] planned, the consumer prefers
+  that action.
 
-The result is a list of waves, where all literals within a wave can be
-executed concurrently:
+Within a wave, actions are finally reordered by #strong[merge-order
+bias]: the actions other packages wait on most (highest reference count
+in the Triggers AVL) are listed first, so the builder starts the
+most-blocking work as early as possible.
 
-```
-Wave 1: [download(A), download(B), download(C)]
-Wave 2: [install(A), download(D)]
-Wave 3: [install(B), install(C)]
-Wave 4: [install(D), run(A)]
-```
+== Wave projection and plan output
+<wave-projection-and-plan-output>
+The wave-list plan is a #strong[projection] over the pass-2 proofs ---
+an evaluator, not a decider. Every ordering decision was already made
+(and justified) during the proving pass; the projection merely assigns
+wave numbers by reading availability proofs:
 
-=== Parallelism
-<parallelism>
-Actions within a wave are independent and can run in parallel. The
-planner computes the maximum parallelism at each wave, enabling the
-printer to show concurrent execution groups and the builder to schedule
-actual parallel builds.
+- a step whose requirements are all world-bridged or assumption-bridged
+  can start in wave 1;
+- a step that cites earlier plan steps lands one wave after the last of
+  them;
+- accepted preferences raise a step's wave further, never lower it.
 
-=== Remainder
-<remainder>
-Literals that are part of cycles cannot be scheduled by Kahn's algorithm
-(their dependency counts never reach zero). These are returned as the
-#strong[remainder] for the scheduler to handle.
-
-== SCC decomposition (Kosaraju)
-<scc-decomposition-kosaraju>
-=== From planner remainder to scheduler
-<from-planner-remainder-to-scheduler>
-The wave planner (section 12.3) processes the acyclic portion of the
-proof graph and produces a parallel plan. But not every literal can be
-scheduled this way. When the dependency graph contains cycles --- for
-example, Python depends on setuptools at runtime, and setuptools depends
-on Python --- Kahn's algorithm can never reduce their in-degree to zero:
-they keep waiting for each other. These unscheduled literals are
-returned as the #strong[remainder].
-
-The scheduler (`Source/Pipeline/scheduler.pl`) picks up where the
-planner left off. Its job is to decompose the remainder into groups of
-mutually dependent literals and decide how to handle each group. The
-tool it uses for this is #strong[strongly connected component (SCC)
-decomposition].
-
-=== What is a strongly connected component?
-<what-is-a-strongly-connected-component>
-A #strong[strongly connected component] is a maximal set of nodes in a
-directed graph where every node can reach every other node by following
-directed edges. In dependency terms, an SCC is a group of packages that
-all depend on each other, directly or indirectly --- a dependency cycle.
-
-A single-node SCC (a node with no self-loop) simply means that node is
-not part of any cycle and can be scheduled on its own. A multi-node SCC
-is a genuine cycle that must be handled as a group.
-
-=== Why Kosaraju?
-<why-kosaraju>
-The two best-known algorithms for SCC decomposition are #strong[Tarjan's
-algorithm] and #strong[Kosaraju's algorithm]. Both run in linear time
-(O(V + E)), so performance is not the deciding factor. The choice comes
-down to implementation characteristics:
-
-- #strong[Tarjan's algorithm] uses a single DFS pass with an explicit
-  stack and "lowlink" bookkeeping. It is compact but harder to implement
-  correctly --- the lowlink update rules are subtle, and a small mistake
-  can silently produce wrong components.
-- #strong[Kosaraju's algorithm] uses two straightforward DFS passes: one
-  on the original graph to compute a finish order, and one on the
-  transposed graph (edges reversed) to extract SCCs. Each pass is a
-  plain DFS with no extra bookkeeping beyond a visited set.
-
-portage-ng uses Kosaraju because its two-pass structure is easier to
-verify, easier to debug, and maps naturally to Prolog's depth-first
-search: each pass is a standard recursive traversal with no mutable
-lowlink state. The transposed graph is cheap to build since the
-dependency edges are already stored as Prolog facts.
-
-=== How the scheduler works
-<how-the-scheduler-works>
-#figure(image("Diagrams/12-scc-scheduling.svg", alt: "SCC scheduling example"),
+#figure(image("Diagrams/12-wave-planning.svg", alt: "Wave plan produced by the ordering pass"),
   caption: [
-    SCC scheduling example
+    Wave plan produced by the ordering pass
   ]
 )
 
-The scheduler uses Kosaraju's algorithm in four steps:
+The output contract is unchanged from earlier releases: a list of waves,
+each containing full-format pass-1 rule terms. All actions within a wave
+are independent and can run concurrently. The printer renders the waves
+as numbered steps (Chapter 13); the builder executes them with real
+parallelism (Chapter 15). Neither consumer knows or cares that the waves
+are now backed by proofs.
 
-+ #strong[Build the dependency graph] from the remainder rules --- the
-  literals the planner could not schedule and the edges between them.
-+ #strong[First DFS pass] --- traverse the original graph depth-first,
-  recording the order in which nodes finish (all children explored).
-+ #strong[Second DFS pass] --- traverse the #strong[transposed] graph
-  (all edges reversed) in reverse finish order. Each DFS tree discovered
-  in this pass is one SCC.
-+ #strong[Classify each SCC:]
-  - #strong[Single-node SCCs] are scheduled directly as regular plan
-    entries.
-  - #strong[Multi-node SCCs] are examined for merge-set eligibility (see
-    below).
-
-=== Merge-sets
-<merge-sets>
-When a multi-node SCC consists entirely of `:run` (runtime) edges, the
-scheduler produces a #strong[merge-set] --- a group of packages that
-must be treated as available together. This matches how Gentoo's PMS
-handles runtime dependency cycles: the packages are merged as a group,
-and the cycle is not considered an ordering error.
-
-The merge-set appears in the plan as a special group entry. The printer
-renders it with a cycle explanation so the user can see which packages
-form the loop and why they are grouped together.
-
-== Plan output
-<plan-output>
-The final plan is a list of entries, each annotated with:
+The plan is annotated per entry with:
 
 - #strong[Wave number] --- which parallel wave it belongs to
 - #strong[Action] --- download, install, run, etc.
 - #strong[Literal] --- the full `Repo://Entry:Action?{Context}` term
-- #strong[Group] --- for merge-sets, which SCC group it belongs to
-
-The plan is consumed by the printer for terminal output and by the
-builder for execution.
 
 == Further reading
 <further-reading-11>
 - #link("08-doc-prover.md")[Chapter 8: The Prover] --- how the Proof AVL
   is constructed
+- #link("09-doc-prover-assumptions.md")[Chapter 9: Prover Assumptions]
+  --- pass-1 cycle breaking
 - #link("13-doc-output.md")[Chapter 13: Output and Visualization] ---
   how the plan is rendered
 - #link("15-doc-building.md")[Chapter 15: Building and Execution] ---
   how the plan is executed
 - #link("23-doc-dependency-ordering.md")[Chapter 23: Dependency Ordering]
   --- PMS ordering semantics
+- `Documentation/Designs/ordering-engine.md` --- the full design
+  document, including the Q&A record of the design decisions
 
 = Output and Visualization
 <output-and-visualization>
-After the prover completes and the planner produces a parallel plan, the
-next step is to present the result to the user. This happens before any
-building --- even a `--pretend` run produces the full plan output.
-portage-ng offers several output formats: a colour-coded terminal plan,
-`.merge` files for regression testing, interactive SVG dependency
-graphs, Gantt charts, and structured reports.
+After the prover completes and the ordering pass produces a parallel
+plan, the next step is to present the result to the user. This happens
+before any building --- even a `--pretend` run produces the full plan
+output. portage-ng offers several output formats: a colour-coded
+terminal plan, `.merge` files for regression testing, interactive SVG
+dependency graphs, Gantt charts, and structured reports.
 
 == Terminal plan display
 <terminal-plan-display>
@@ -6468,14 +6587,15 @@ bubbles to draw attention.
 
 === Printing styles
 <printing-styles>
-portage-ng supports two printing styles, selectable via
-`config:printing_style/1`:
+portage-ng supports three printing styles, selectable via
+`config:printing_style/1` (default: `fancy`):
 
-- #strong[Bubble style] (default) --- a compact visual layout where each
-  action line includes colour-coded indicators and right-edge
-  annotations.
-- #strong[Column style] --- a tabular layout that aligns version, slot,
-  USE, and repository information in fixed columns for easy scanning.
+- #strong[`fancy`] (default) --- the bubble style: a compact visual
+  layout where each action line includes colour-coded indicators and
+  right-edge annotations.
+- #strong[`column`] --- a tabular layout that aligns version, slot, USE,
+  and repository information in fixed columns for easy scanning.
+- #strong[`short`] --- a minimal one-line-per-action format.
 
 === Pre-action steps
 <pre-action-steps>
@@ -6495,8 +6615,8 @@ corresponding `/etc/portage/package.*` file.
 === Summary line
 <summary-line>
 At the bottom, a summary line shows the total number of actions (new
-installs, upgrades, reinstalls, etc.) and the predicted download and
-disk space usage.
+installs, upgrades, reinstalls, etc.), the step count, and the predicted
+download sizes (to be downloaded vs.~already downloaded).
 
 == Assumption and warning output
 <assumption-and-warning-output>
@@ -6611,9 +6731,9 @@ dependency tree.
 == Gantt charts
 <gantt-charts>
 The `gantt` module produces Gantt charts that visualise the parallel
-build schedule computed by the planner. Each horizontal bar represents a
-package, positioned on a timeline according to its wave assignment and
-estimated build duration.
+build schedule computed by the ordering pass. Each horizontal bar
+represents a package, positioned on a timeline according to its wave
+assignment and estimated build duration.
 
 The chart makes the parallelism visible: packages in the same wave
 appear side by side, and you can see how downloads, installs, and
@@ -6679,8 +6799,8 @@ The printer pipeline is split across focused submodules:
 
 == Further reading
 <further-reading-12>
-- #link("12-doc-planning.md")[Chapter 12: Planning and Scheduling] ---
-  how waves and parallelism are computed
+- #link("12-doc-planning.md")[Chapter 12: Ordering --- Plans as Proofs]
+  --- how waves and parallelism are computed
 - #link("14-doc-cli.md")[Chapter 14: Command-Line Interface] ---
   `--graph`, `--verbose`, `--quiet`, and other output flags
 - #link("15-doc-building.md")[Chapter 15: Building and Execution] ---
@@ -6741,7 +6861,7 @@ generation, and building happens locally. Every CLI action (`--pretend`,
 === Daemon
 <daemon>
 Keeps the same in-memory footprint as standalone --- full knowledge
-base, resolver, planner --- but listens on a #strong[Unix domain socket]
+base, resolver, orderer --- but listens on a #strong[Unix domain socket]
 for incoming requests. Use `--background` to fork the daemon into a
 detached process. The daemon avoids the startup cost of reloading the
 knowledge base on every invocation, making repeated queries fast.
@@ -6766,7 +6886,7 @@ the server.
 
 === Server
 <server>
-Runs the full standalone pipeline first (local KB, resolver, planner),
+Runs the full standalone pipeline first (local KB, resolver, orderer),
 then adds an HTTPS Pengine server, TLS, and Bonjour service
 advertisement. The server exposes job and result message queues so that
 workers can poll for proving tasks. Use `--background` to fork the
@@ -6818,8 +6938,10 @@ search, and everyday workflows.
     via embeddings)],
     [`--similar <target>`], [Find packages similar to target (vector
     similarity)],
-    [`--info`], [Display repository statistics and configuration],
-    [`--installed`], [List installed packages],
+    [`--info`], [System overview (version, hostname, repositories, world
+    set) without arguments; per-package details with a target],
+    [`--pretend @installed`], [List installed packages (via the computed
+    `@installed` set)],
   )]
   , kind: table
   )
@@ -6859,11 +6981,13 @@ search, and everyday workflows.
 <diagnostics>
 #figure(
   align(center)[#table(
-    columns: 2,
+    columns: (50%, 50%),
     align: (left,left,),
     table.header([#strong[Flag]], [#strong[Action]],),
     table.hline(),
-    [`--bugs <target>`], [Search Gentoo Bugzilla for known issues],
+    [`--bugs <target>`], [Prove the target (resolve-only) and print
+    Gentoo Bugzilla bug-report drafts for its domain assumptions],
+    [`--search-bugs <term>`], [Search Gentoo Bugzilla for known issues],
     [`--upstream <target>`], [Check upstream versions via Repology],
     [`--explain` / `--llm`], [Get AI-assisted plan explanation],
     [`--diagnose` / `--log`], [Metacircular LLM diagnose of a failed
@@ -6898,7 +7022,7 @@ search, and everyday workflows.
 <output-options>
 #figure(
   align(center)[#table(
-    columns: 2,
+    columns: (50%, 50%),
     align: (left,left,),
     table.header([#strong[Flag]], [#strong[Effect]],),
     table.hline(),
@@ -6906,7 +7030,8 @@ search, and everyday workflows.
     [`--quiet`], [Minimal output],
     [`--ci`], [Non-interactive CI mode (exit codes 0/1/2)],
     [`--jobs N`], [Number of parallel jobs],
-    [`--timeout N`], [Kill after N seconds (requires Python 3)],
+    [`--timeout N`], [Abort proving/planning after N seconds (0 = no
+    limit)],
   )]
   , kind: table
   )
@@ -7044,7 +7169,7 @@ queries via a here-doc:
 
 ```bash
 ./Source/Application/Wrapper/portage-ng-dev --shell --timeout 60 <<'PL'
-prover:test_stats(portage).
+resolver:test_stats(portage).
 halt.
 PL
 ```
@@ -7088,7 +7213,7 @@ Short recipes that match how people actually use the tool:
 
   ```sh
   portage-ng --mode standalone --shell <<'PL'
-  prover:test_stats(portage).
+  resolver:test_stats(portage).
   halt.
   PL
   ```
@@ -7103,8 +7228,12 @@ Short recipes that match how people actually use the tool:
 - #strong[Check for upstream updates] \ `portage-ng --upstream cat/pkg`
   --- Repology-oriented upstream comparison.
 
-- #strong[Search Bugzilla] \ `portage-ng --bugs cat/pkg` ---
-  Bugzilla-oriented diagnostics for the target.
+- #strong[Draft bug reports] \ `portage-ng --bugs cat/pkg` --- prove the
+  target (resolve-only) and print Bugzilla-style bug-report drafts for
+  its domain assumptions.
+
+- #strong[Search Bugzilla] \ `portage-ng --search-bugs term` --- query
+  Gentoo Bugzilla for known issues.
 
 == Search query language
 <search-query-language>
@@ -7186,8 +7315,8 @@ actually be compiled:
 - #strong[Cache generation] --- portage-ng includes its own md5-cache
   generator, so it does not depend on Portage's `egencache` or any other
   external tool to produce the cache files it reasons over.
-- #strong[Dependency resolution and planning] --- the prover, planner,
-  and scheduler are entirely internal (see Chapters 8-12).
+- #strong[Dependency resolution and ordering] --- the prover and the
+  ordering engine are entirely internal (see Chapters 8-12).
 - #strong[Downloading] --- source archive fetching, mirror selection,
   hash verification, and resume are handled by portage-ng's own download
   module (see #link(<download-management>)[Download management] below).
@@ -7208,8 +7337,8 @@ The command is configurable via `config:ebuild_command/1` (default:
 `ebuild`).
 
 The builder processes the plan wave by wave, respecting the parallelism
-computed by the planner. Within each wave, independent actions can run
-concurrently.
+computed by the ordering pass. Within each wave, independent actions can
+run concurrently.
 
 == Ebuild phase execution
 <ebuild-phase-execution>
@@ -7438,18 +7567,18 @@ knowledge. The only resolver change is in `query.pl`, which unions
 `feedback:discovered_dep(Target, Provider, bdepend, _)` into the
 target's build-dependency model. The mechanism also distinguishes an
 #emph[undeclared] dependency (the upstream-gap case above --- mint a
-discovery) from a #emph[declared-but-unbuilt] one (a genuine
-resolver/scheduler ordering bug --- logged loudly, never papered over).
+discovery) from a #emph[declared-but-unbuilt] one (a genuine resolver
+ordering bug --- logged loudly, never papered over).
 
 The control loop lives in the builder: `builder:build/1` is a bounded
 replan loop (`builder:build_loop/2`, capped by
 `config:missing_provider_max_replan/1`). When a build pass fails
 #emph[and] recorded a new discovery, the builder re-enters the pipeline;
-on the re-proof the provider is part of the closure, so the planner and
-scheduler order it --- and its own transitive dependencies --- before
-the target. Everything already built satisfies from the VDB via the
-existing reconciliation fast path, so the retry pass only builds the
-provider and recompiles the target. Walkthrough for the selinux case:
+on the re-proof the provider is part of the closure, so the ordering
+pass orders it --- and its own transitive dependencies --- before the
+target. Everything already built satisfies from the VDB via the existing
+reconciliation fast path, so the retry pass only builds the provider and
+recompiles the target. Walkthrough for the selinux case:
 
 + `selinux-base` compile → `semodule_package: command not found`.
 + `missing_provider` maps the command to `sys-apps/semodule-utils`,
@@ -7458,7 +7587,7 @@ provider and recompiles the target. Walkthrough for the selinux case:
   discovery and re-enters the pipeline.
 + `rules`/`query` now yield
   `BDEPEND(selinux-base) ⊇ {sys-apps/semodule-utils}`\; the prover
-  proves it, the scheduler orders `semodule-utils` (and its transitive
+  proves it, the orderer places `semodule-utils` (and its transitive
   `sys-libs/libsepol`) first.
 + Retry pass: the provider builds, `selinux-base` recompiles, and the
   300+ downstream `selinux-*` packages never fail --- the discovery is
@@ -7697,9 +7826,9 @@ The `download.pl` module handles source archive fetching:
 - Hash verification via `openssl dgst`
 - Resume support for interrupted downloads
 
-Downloads are scheduled as early as possible in the plan --- the planner
-treats `:download` actions as the first wave, so packages can download
-while others are building.
+Downloads are scheduled as early as possible in the plan --- `:download`
+actions have no unmet requirements, so they land in the earliest waves
+and packages can download while others are building.
 
 == Snapshot support
 <snapshot-support>
@@ -7710,9 +7839,10 @@ system state before a merge and roll back to it afterwards.
 
 === How a snapshot is created
 <how-a-snapshot-is-created>
-When a merge begins, portage-ng automatically creates a snapshot
-identified by a timestamp (e.g.~`20260405-143012`). The snapshot
-directory contains three files:
+When a merge begins with `--snapshot` (or with `config:snapshot_enabled`
+asserted in the per-machine config --- snapshots are disabled by
+default), portage-ng creates a snapshot identified by a timestamp
+(e.g.~`20260405-143012`). The snapshot directory contains three files:
 
 - #strong[`manifest.pl`] --- a Prolog fact file listing every package
   currently installed in the VDB, with category, name, version, and
@@ -7740,7 +7870,7 @@ they remain unchanged on the system.
 
 === Listing and diffing snapshots
 <listing-and-diffing-snapshots>
-`--snapshot list` shows all available snapshots with their timestamp,
+`--snapshots` shows all available snapshots with their timestamp,
 installed package count, and the number of binary packages stored:
 
 ```
@@ -7749,7 +7879,7 @@ Available snapshots:
   20260402-091544       2026-04-02 09:15:44   1843 pkgs    5 binpkgs
 ```
 
-`--snapshot diff <id>` compares a snapshot's manifest against the
+`--rollback <id> --pretend` compares a snapshot's manifest against the
 current VDB and shows what changed --- packages installed since the
 snapshot, packages removed, and packages whose version changed:
 
@@ -7770,7 +7900,7 @@ Diff against snapshot "20260405-143012":
 
 === Rolling back
 <rolling-back>
-`--snapshot rollback <id>` reinstalls the saved binary packages from the
+`--rollback <id>` reinstalls the saved binary packages from the
 snapshot's `binpkgs/` directory and restores the world set file. Each
 binary package is merged back onto the system via
 `ebuild <binpkg> merge`, downgrading the affected packages to their
@@ -7780,14 +7910,14 @@ would be reinstalled without actually making changes.
 === Lifecycle
 <lifecycle>
 After the merge completes (whether successfully or not), the snapshot
-remains on disk so it can be used for rollback at any later time. Old
-snapshots can be removed with `--snapshot delete <id>` to reclaim disk
-space.
+remains on disk so it can be used for rollback at any later time. There
+is no delete flag; to reclaim disk space, call `snapshot:delete(Id)`
+from `--shell` (or remove the snapshot directory by hand).
 
 == Further reading
 <further-reading-14>
-- #link("12-doc-planning.md")[Chapter 12: Planning and Scheduling] ---
-  how the plan is constructed
+- #link("12-doc-planning.md")[Chapter 12: Ordering --- Plans as Proofs]
+  --- how the plan is constructed
 - #link("13-doc-output.md")[Chapter 13: Output and Visualization] ---
   plan display and `.merge` file generation
 - #link("14-doc-cli.md")[Chapter 14: Command-Line Interface] ---
@@ -7808,7 +7938,7 @@ The semantic search module (`Source/Application/Llm/semantic.pl`)
 enables natural-language queries over the package knowledge base.
 
 === How it works
-<how-it-works-1>
+<how-it-works>
 + Package descriptions are converted to vector embeddings via Ollama's
   embedding API (default endpoint: `http://localhost:11434`).
 + Embeddings are stored in an in-memory index.
@@ -7832,7 +7962,7 @@ accelerated embedding computation.
 === Prerequisites
 <prerequisites-1>
 Semantic search requires: - A running Ollama instance - A loaded
-embedding model (configured via `config:embedding_model/1`)
+embedding model (configured via `config:semantic_model/1`)
 
 == LLM-assisted plan explanation
 <llm-assisted-plan-explanation>
@@ -7974,7 +8104,7 @@ artifacts, and verify its own answers.
 )
 
 === How it works
-<how-it-works-2>
+<how-it-works-1>
 When an LLM responds, portage-ng scans the response for XML-style call
 tags. Two kinds are recognized:
 
@@ -8148,15 +8278,36 @@ repair_proposal([
 <safety-model>
 - Mutations happen #strong[host-side after confirm], never via
   `<call:swi_prolog>`.
+
 - Sandbox may #strong[read] `feedback:*`,
   `missing_provider:package_in_tree/1`, and parse helpers; it cannot
   call `feedback:record_*`.
+
 - New package edges belong in `feedback:*`, not `prover:learn/3`
   (version/USE domains only).
+
 - Kill-switch: `config:llm_metacircular(false)`.
+
 - Skip loading LLM modules entirely: `config:load_llm_modules(false)`.
   Builder and CLI then no-op diagnose paths (stubs + soft
   `explainer:call_llm/3`); no existence errors.
+
+- #strong[`explainer:call_llm/3` on the server is opt-in.] Default
+  `config:llm_server_calls(false)` keeps it off the Pengines safelist so
+  authenticated clients cannot burn server API keys or exfiltrate
+  prompts. LLM features are then #strong[host-local]: run `--explain` /
+  `--diagnose` / `--llm` on standalone or client processes (own
+  `Source/Config/Private/api_key.pl`). To allow server-side LLM via RPC
+  on a trusted cluster, set in a host config or
+  `Source/Config/Private/`:
+
+  ```prolog
+  :- asserta(config:llm_server_calls(true)).
+  ```
+
+  The server must also load LLM modules
+  (`config:load_llm_modules(true)`) and hold valid keys in its
+  `api_key.pl`.
 
 === CLI
 <cli>
@@ -8267,14 +8418,14 @@ All predicates are called with the `explainer:` module prefix.
 Run the pipeline to get the proof, model, plan, and triggers:
 
 ```prolog
-Goals = [portage://'dev-libs'-'openssl':run?{[]}],
+Goals = [portage://'dev-libs/openssl-3.5.4':run?{[]}],
 pipeline:prove_plan_with_fallback(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL).
 ```
 
 Or from a `--shell` session after loading a repository:
 
 ```prolog
-pipeline:prove_plan_with_fallback([portage://'dev-libs'-'openssl':run?{[]}],
+pipeline:prove_plan_with_fallback([portage://'dev-libs/openssl-3.5.4':run?{[]}],
                                   Proof, Model, Plan, Triggers).
 ```
 
@@ -8283,13 +8434,13 @@ pipeline:prove_plan_with_fallback([portage://'dev-libs'-'openssl':run?{[]}],
 #strong[Why is a package in the proof?]
 
 ```prolog
-Target = portage://'dev-libs'-'libffi':install,
+Target = portage://'dev-libs/libffi-3.5.2':install,
 explainer:why_in_proof(ProofAVL, Target, Why).
 % Why = why_in_proof(
-%          portage://'dev-libs'-'libffi':install,
-%          proof_key(rule(portage://'dev-libs'-'libffi':install)),
+%          portage://'dev-libs/libffi-3.5.2':install,
+%          proof_key(rule(portage://'dev-libs/libffi-3.5.2':install)),
 %          depcount(3),
-%          body([portage://'sys-devel'-'gcc':install, ...]),
+%          body([portage://'sys-devel/gcc-15.2.0':install, ...]),
 %          ctx([...]),
 %          domain_reasons([...]))      % <-- added by explanation hook
 ```
@@ -8297,27 +8448,27 @@ explainer:why_in_proof(ProofAVL, Target, Why).
 #strong[Why is a package in the plan?]
 
 ```prolog
-Proposal = [portage://'dev-libs'-'openssl':run?{[]}],
+Proposal = [portage://'dev-libs/openssl-3.5.4':run?{[]}],
 explainer:why_in_plan(Proposal, Plan, ProofAVL, TriggersAVL,
-                      portage://'sys-libs'-'zlib':install, Why).
+                      portage://'sys-libs/zlib-1.3.1-r1':install, Why).
 % Why = why_in_plan(
-%          portage://'sys-libs'-'zlib':install,
-%          location(step(1), portage://'sys-libs'-'zlib'-'1.3.1':install?{...}),
-%          required_by(path([portage://'sys-libs'-'zlib':install,
-%                           portage://'dev-libs'-'openssl':install,
-%                           portage://'dev-libs'-'openssl':run])))
+%          portage://'sys-libs/zlib-1.3.1-r1':install,
+%          location(step(1), portage://'sys-libs/zlib-1.3.1-r1':install?{...}),
+%          required_by(path([portage://'sys-libs/zlib-1.3.1-r1':install,
+%                           portage://'dev-libs/openssl-3.5.4':install,
+%                           portage://'dev-libs/openssl-3.5.4':run])))
 ```
 
 #strong[Why is something assumed?]
 
 ```prolog
-Key = assumed(portage://'dev-foo'-'bar':install),
+Key = assumed(portage://'dev-foo/bar-1.0':install),
 explainer:why_assumption(ModelAVL, ProofAVL, Key, Type, Why).
 % Type = domain,
 % Why  = why_assumption(
-%          assumed(portage://'dev-foo'-'bar':install),
+%          assumed(portage://'dev-foo/bar-1.0':install),
 %          type(domain),
-%          term(portage://'dev-foo'-'bar':install?{[assumption_reason(missing)]}),
+%          term(portage://'dev-foo/bar-1.0':install?{[assumption_reason(missing)]}),
 %          reason(missing),
 %          domain_reasons([...]))      % <-- added by explanation hook
 ```
@@ -8359,7 +8510,7 @@ explanation:assumption_reason_for_grouped_dep(
   'dev-libs', 'missing-pkg',                    % Category, Name
   [package_dependency(install,no,'dev-libs','missing-pkg',
                       none,version_none,[],[])],
-  [self(portage://'app-misc'-'foo'-'1.0')],     % Context
+  [self(portage://'app-misc/foo-1.0')],         % Context
   Reason).
 % Reason = missing
 ```
@@ -8387,10 +8538,11 @@ The hooks are called automatically --- no direct invocation needed.
 <distributed-proving>
 For testing purposes, the full Gentoo tree must be walked through the
 resolver --- tens of thousands of ebuilds --- and even on capable
-hardware that adds up. On a single machine, `prover:test_stats(portage)`
-typically finishes proving every single ebuild in #strong[under a
-minute] on a twenty-eight-core workstation --- fast enough for
-day-to-day development, but not the only shape the problem takes.
+hardware that adds up. On a single machine,
+`resolver:test_stats(portage)` typically finishes proving every single
+ebuild in #strong[a few minutes] on a twenty-eight-core workstation ---
+fast enough for day-to-day development, but not the only shape the
+problem takes.
 
 What if you want the full tree proved #strong[faster] than one box
 allows, or you want to drive resolution from a #strong[thin client] that
@@ -8442,9 +8594,9 @@ target to its job queue.
 
 #strong[Steps 4-6 (worker loop).] Workers continuously poll the job
 queue for work. When a worker picks up a job, it runs the full proving
-pipeline locally --- proof search, planning, and scheduling --- using
-its own copy of the knowledge base. When the proof is complete, the
-worker posts the result back to the server.
+pipeline locally --- proof search (resolving) and ordering --- using its
+own copy of the knowledge base. When the proof is complete, the worker
+posts the result back to the server.
 
 #strong[Steps 7-8 (results back to client).] The server stores the
 completed proof in its result queue. The client retrieves the result as
@@ -8463,10 +8615,10 @@ execute.
 <worker-1>
 Each worker is an independent OS process with its own Prolog VM. On
 startup it loads the knowledge base, then enters a poll loop: it asks
-the server for the next job, runs the full pipeline (prove, plan,
-schedule), and posts the result back. Workers are stateless between
-jobs, so you can add or remove them at any time without affecting other
-workers or the server.
+the server for the next job, runs the full pipeline (resolve and order),
+and posts the result back. Workers are stateless between jobs, so you
+can add or remove them at any time without affecting other workers or
+the server.
 
 === Client
 <client-1>
@@ -8676,7 +8828,7 @@ project root. The table below shows which files are tracked in git
 
 #figure(
   align(center)[#table(
-    columns: 3,
+    columns: (30.77%, 38.46%, 30.77%),
     align: (left,center,left,),
     table.header([#strong[File]], [#strong[Tracked]], [#strong[Description]],),
     table.hline(),
@@ -8688,7 +8840,8 @@ project root. The table below shows which files are tracked in git
     [`<host>.client-cert.pem`], [Yes], [Client certificate for
     `<host>`],
     [`<host>.client-key.pem`], [No], [Client private key],
-    [`passwordfile`], [Yes], [HTTP digest authentication passwords],
+    [`passwordfile`], [No], [HTTP digest authentication passwords
+    (`make passwordfile`)],
   )]
   , kind: table
   )
@@ -8733,7 +8886,18 @@ presents the local client certificate.
 
 An additional layer of security is provided by #strong[HTTP digest
 authentication] (`passwordfile`), so even a node with a valid
-certificate must also know the correct username and password.
+certificate must also know the correct username and password. Set the
+plaintext once in `Source/Config/Private/passwords.pl`, then derive the
+hashed server file (it is not committed):
+
+```bash
+cp Source/Config/Private/template_passwords.pl \
+   Source/Config/Private/passwords.pl
+# edit config:digest_password/2
+make passwordfile
+```
+
+Ship the same `passwords.pl` to every client and worker.
 
 === How certificates are resolved at runtime
 <how-certificates-are-resolved-at-runtime>
@@ -8823,29 +8987,42 @@ host-specific certificate and key.
 portage-ng --mode server
 ```
 
-The server loads the knowledge base and begins listening for
-connections.
+The server loads the knowledge base and listens on
+`config:server_bind/1`:`config:server_port/1` (default
+#strong[localhost:4000]). Mutating POSTs (`/sync`, `/clear`, `/load`, …)
+therefore stay off the public network. Widen the bind
+(`config:server_bind(*)`) only on a trusted VPN/LAN --- with a shared
+cluster CA, mTLS alone is not a strong gate; digest + bind scope are.
 
 #strong[Step 4 --- Start the worker.]
 
 ```text
-portage-ng --mode worker
+portage-ng --mode worker --host server.local
 ```
 
-The worker loads its own copy of the knowledge base and begins looking
-for the server.
+Prefer an explicit `--host` (or a matching `config:server_host/1` pin).
+Bonjour discovery is allowed only as a convenience lookup that still
+must match that pin --- the worker never connects to the first untrusted
+advertisement on a hostile LAN.
 
-#strong[Step 5 --- Discovery.]
+Before tree sync, fetch the portage git objects from your
+#strong[trusted remote] (not from the Pengine server). The server
+advertises a full commit SHA; the worker checks it out only when that
+object already exists locally (`git cat-file -e`). There is no
+fetch-from-server path.
 
-If mDNS/Bonjour is available on the network, the worker finds the server
-automatically via the `_portage-ng._tcp` service advertisement. No IP
-addresses need to be configured.
+#strong[Step 5 --- Discovery (optional).]
+
+If mDNS/Bonjour is available, the worker may resolve `_portage-ng._tcp`
+advertisements, but only a host that matches `config:server_host/1` is
+accepted.
 
 #strong[Step 6 --- Mutual TLS handshake.]
 
 When the worker connects, both sides present certificates signed by the
 shared CA. portage-ng verifies the Common Name and role, so only nodes
-with valid credentials can join the cluster.
+with valid credentials can join the cluster. Digest auth is still
+required on top of mTLS.
 
 #strong[Step 7 --- Proving.]
 
@@ -8861,10 +9038,11 @@ To run a distributed cluster, every node needs two things:
 - Its own host-specific certificate and key pair.
 
 The server is started with `--mode server`, and each worker with
-`--mode worker`. Discovery happens automatically via mDNS/Bonjour, and
-TLS ensures that only nodes sharing the same CA can participate. You can
-add more workers at any time --- they will discover the server and start
-picking up jobs immediately.
+`--mode worker --host <pinned-server>`. Pin `config:server_host/1` on
+workers; Bonjour is only a lookup aid against that pin. TLS ensures
+peers share the same CA, and digest auth supplies the shared secret. You
+can add more workers at any time --- they connect to the pinned server
+and start picking up jobs immediately.
 
 == Further reading
 <further-reading-16>
@@ -8904,7 +9082,7 @@ portage-ng --upstream @world
 ```
 
 === How it works
-<how-it-works-3>
+<how-it-works-2>
 + For each target package, the module queries the Repology API
   (`https://repology.org/api/v1/project/<name>`) for version
   information.
@@ -8935,7 +9113,7 @@ portage-ng --bugs sys-apps/portage
 ```
 
 === How it works
-<how-it-works-4>
+<how-it-works-3>
 + The module queries Gentoo Bugzilla's REST API for bugs matching the
   package atom.
 
@@ -9034,7 +9212,7 @@ the architecture.
 
 Package repositories (`portage`, `pkg`, `binpkg`) identify entries by
 #strong[CPVN] --- category, package name, and `version/7` --- via
-`cache:ordered_entry/5`. Every prover, planner, and rules consumer
+`cache:ordered_entry/5`. Every prover, orderer, and rules consumer
 assumes that shape. A GLSA id such as `202501-03` is not a package
 version; inventing a fake `glsa://…` CPVN would either pollute those
 paths or require permanent exclusion filters.
@@ -9569,7 +9747,7 @@ file (e.g.~`Source/Config/mac-pro.local.pl`):
 :- portage:init('/Volumes/Storage/Repository/portage-git',
                 '/Volumes/Storage/Repository/portage-git/metadata/md5-cache',
                 'https://github.com/gentoo/gentoo.git',
-                'git', 'portage').
+                'git', 'eapi').
 
 :- pkg:newinstance(repository).
 :- pkg:init('/Volumes/Storage/Repository/pkg', '', '', 'local', 'vdb').
@@ -9607,12 +9785,12 @@ connection is explored in detail in
 <serialization>
 Context instances support serialization through the knowledge base's
 `save` and `load` predicates. When `kb://save` is called, the cached
-facts from all registered repository instances are written to a QLC file
+facts from all registered repository instances are written to a QLF file
 (`Knowledge/kb.qlf`). On the next startup, `kb://load` reads the
 compiled file back, restoring all repository instances to their previous
 state without re-parsing the Portage tree from disk. This is what makes
 portage-ng's startup fast --- the full knowledge base (30,000+ ebuilds
-with all metadata) loads from the QLC file in under a second.
+with all metadata) loads from the QLF file in under a second.
 
 == Further reading
 <further-reading-19>
@@ -9657,8 +9835,8 @@ A context is a Prolog list. Each element is either a plain term or a
       behaviour]],),
     table.hline(),
     [Plain term], [`self(R://E)`], [Identity match; duplicates dropped],
-    [Feature:Value], [`bwu:use_state(En,Dis)`], [Value-merged by
-    `val_hook/3`],
+    [Feature:Value], [`build_with_use:use_state(En,Dis)`], [Value-merged
+    by `val_hook/3`],
     [Feature:Compound], [`slot(C,N,Ss):{...}`], [Compound feature key],
   )]
   , kind: table
@@ -9688,13 +9866,16 @@ from the dependency atom (e.g.~`dev-libs/foo[bar,-baz]`).
 `dependency:process_slot`. Records a slot lock from `:=` (subslot
 rebuild) semantics.
 
-#strong[`after(Literal)`] --- set by `rules:ctx_add_after`. Ordering
-constraint: this dependency must come after `Literal` in the plan.
-Propagates to children.
+#strong[`after(Literal)`] --- seeded at world-set anchors
+(`world(Arg):register?{[after(Repo://Ebuild:run)]}`) and propagated into
+dependency contexts by `featureterm:add_after_to_dep_contexts`. Ordering
+hint: this subtree should come after `Literal` in the plan. Propagates
+to children.
 
-#strong[`after_only(Literal)`] --- set by
-`rules:add_after_only_to_dep_contexts`. Ordering constraint that does
-#strong[not] propagate to children.
+#strong[`after_only(Literal)`] --- injected on PDEPEND edges (via
+`featureterm:add_after_only_to_dep_contexts`). Becomes an `order_after`
+soft preference honored by the pass-2 orderer; does #strong[not]
+propagate to children.
 
 #strong[`replaces(pkg://Entry)`] --- set by install/update rules.
 Records which installed package this action replaces.
@@ -9703,16 +9884,19 @@ Records which installed package this action replaces.
 fallback. Records why a domain assumption was made (e.g.~`missing`,
 `masked`, `keyword_filtered`).
 
-#strong[`suggestion(Type,Detail)`] --- set by the relaxation fallback.
-Records an actionable suggestion (e.g.~`accept_keyword`, `unmask`,
-`use_change`).
+#strong[`suggestion(Type[, Detail...])`] --- set by the relaxation
+fallback. Records an actionable suggestion; arity varies with the
+suggestion type (e.g.~`suggestion(unmask)`,
+`suggestion(accept_keyword, Kw)`,
+`suggestion(use_change, Ebuild, Changes)`).
 
 #strong[`domain_reason(cn_domain(C,N,Tags))`] --- set by
-`candidate:add_domain_reason_context`. Diagnostic tags for version
+`cnselect:add_domain_reason_context/5`. Diagnostic tags for version
 domain narrowing.
 
-#strong[`constraint(cn_domain(C,N):{Domain})`] --- set by the constraint
-system. Carries an inline constraint for domain scoping.
+#strong[`constraint(cn_domain(C,N,Slot):{Domain})`] --- set by the
+constraint system. Carries an inline per-slot constraint for domain
+scoping.
 
 == Context lifecycle
 <context-lifecycle>
@@ -9736,14 +9920,15 @@ As rules expand dependencies, contexts grow:
 target(sys-apps/portage)?{}
   └─ install(portage://sys-apps/portage-3.0.77-r3):install?{...}
        ├─ dep(dev-lang/python):install?{self(portage://sys-apps/portage-3.0.77-r3),
-       │                                 build_with_use:use_state([ssl,threads],[]),
-       │                                 after(install(portage://...))}
+       │                                 build_with_use:use_state([ssl,threads],[])}
        │    └─ dep(dev-libs/openssl):install?{self(portage://dev-lang/python-3.13),
-       │                                       build_with_use:use_state([],[]),
-       │                                       after(install(portage://dev-lang/python-3.13))}
-       └─ dep(app-arch/tar):install?{self(portage://sys-apps/portage-3.0.77-r3),
-                                      after(install(portage://...))}
+       │                                       build_with_use:use_state([],[])}
+       └─ dep(app-arch/tar):install?{self(portage://sys-apps/portage-3.0.77-r3)}
 ```
+
+\(Had the goal been seeded from a world-set anchor ---
+`world(Arg):register?{[after(Repo://Ebuild:run)]}` --- an `after/1`
+marker would additionally flow down every dependency edge.)
 
 Key propagation rules:
 
@@ -9757,7 +9942,7 @@ Key propagation rules:
   to this edge).
 - #strong[`assumption_reason`] and #strong[`build_with_use`] are dropped
   on PDEPEND edges (via
-  `ctx_drop_build_with_use_and_assumption_reason`).
+  `featureterm:drop_build_with_use_and_assumption_reason/2`).
 
 === 3. Merging (join points)
 <merging-join-points>
@@ -9787,7 +9972,7 @@ Before checking whether a literal has already been proven, planning
 markers are stripped so they don't pollute the memoisation key:
 
 ```prolog
-rules:ctx_strip_planning(Context0, Context)
+featureterm:strip_planning(Context0, Context)
 ```
 
 This removes `after/1` and `world_atom/1` --- ordering and planning
@@ -9962,13 +10147,13 @@ prover will detect any conflict.
 #strong[From constraint to context.] Sometimes a parent dependency wants
 to narrow the version domain for a child before candidate selection even
 begins. It does this by placing an inline constraint term like
-`constraint(cn_domain(C,N):{Domain})` directly in the context list. When
-the child's rule fires, it reads this term and applies the domain
+`constraint(cn_domain(C,N,Slot):{Domain})` directly in the context list.
+When the child's rule fires, it reads this term and applies the domain
 restriction.
 
 #strong[Constraint guards.] After each new constraint is merged into the
-global store, `rules:constraint_guard/2` fires to check consistency. The
-guard verifies that version domains are compatible with selected
+global store, `heuristic:constraint_guard/2` fires to check consistency.
+The guard verifies that version domains are compatible with selected
 candidates, that each slot has at most one selected version, and that no
 selected package is blocked by another.
 
@@ -9981,27 +10166,36 @@ repeating the same dead-end choice (see
 
 == Ordering: `after` vs `after_only`
 <ordering-after-vs-after_only>
-Both create ordering edges in the plan, but they differ in propagation:
+Both influence ordering in the plan, but they differ in origin and
+propagation:
 
 #figure(
   align(center)[#table(
-    columns: (19.15%, 57.45%, 23.4%),
+    columns: (16.07%, 48.21%, 35.71%),
     align: (left,left,left,),
     table.header([#strong[Marker]], [#strong[Propagates to child
-      deps?]], [#strong[Use case]],),
+      deps?]], [#strong[Origin / use case]],),
     table.hline(),
-    [`after(Lit)`], [Yes], [Build deps: the package and all its deps
-    must come after `Lit`],
-    [`after_only(Lit)`], [No], [Runtime deps: only this package (not its
-    deps) must come after `Lit`],
+    [`after(Lit)`], [Yes], [World-set anchors: the package and all its
+    deps should come after `Lit`],
+    [`after_only(Lit)`], [No], [PDEPEND completion: only this package
+    (not its deps) prefers to come after `Lit`],
   )]
   , kind: table
   )
 
+In `after_only` mode the marker is rewritten to a
+`constraint(order_after(...):{[]})` term --- an ordering-only
+#strong[soft preference] that the pass-2 orderer (`prefers/2` in
+`Source/Domain/Gentoo/Rules/ordering.pl`) honors exactly when doing so
+closes no cycle. Neither marker is minted per DEPEND/RDEPEND edge;
+build-time vs runtime ordering is decided in pass 2 by the ordering rule
+set (`requires/2` / `prefers/2`), not by context markers.
+
 === Extraction
 <extraction>
 ```prolog
-rules:ctx_take_after_with_mode(Context, After, AfterForDeps, ContextRest)
+featureterm:get_after_with_mode(Context, After, AfterForDeps, ContextRest)
 ```
 
 - If `after(X)` → `After = X`, `AfterForDeps = X` (propagate).
@@ -10040,9 +10234,11 @@ dependency atom gets its own context, built from three operations:
   the atom. For `dev-lang/python[ssl,threads]`, this produces
   `build_with_use:use_state([ssl,threads],[])`. For `app-arch/tar` (no
   brackets), the USE state is empty.
-- #strong[`ctx_add_after`] adds an ordering constraint. DEPEND atoms get
-  `after(portage:install)` (propagates to children). RDEPEND atoms get
-  `after_only(portage:install)` (does not propagate).
+- #strong[`featureterm:get_after_with_mode`] +
+  #strong[`featureterm:add_after_to_dep_contexts`] propagate any
+  incoming `after/1` marker (e.g.~from an `@world` anchor) into the dep
+  contexts. No new markers are minted here --- DEPEND and RDEPEND atoms
+  are treated alike; their relative ordering is a pass-2 concern.
 
 === Step 3 --- Resolving python
 <step-3-resolving-python>
@@ -10060,14 +10256,16 @@ rebuilt at this level:
 - #strong[`build_with_use`] is replaced based on the new atom.
   `dev-libs/openssl:=` has no bracketed flags, so the USE state becomes
   empty.
-- #strong[`after`] is propagated from the parent (portage's install
-  constraint travels down through DEPEND edges).
+- #strong[`after`] --- if an `after/1` marker arrived with the incoming
+  context (e.g.~the target was an `@world` anchor), it is propagated
+  onward into python's dep contexts.
 - #strong[Slot lock] --- the `:=` operator on `dev-libs/openssl:=` adds
   a `slot(dev-libs,openssl,0/3.4.1)` tag to the context, recording the
   sub-slot for rebuild tracking.
-- #strong[`after_only`] --- the RDEPEND on `app-misc/mime-types` gets
-  `after_only(python:install)`, which will not propagate to mime-types's
-  own children.
+- #strong[`after_only`] --- had python carried a PDEPEND, that edge
+  would get `after_only(python:install)`, later rewritten to an
+  `order_after` soft preference that does not propagate to the child's
+  own deps.
 
 === Key observations
 <key-observations>
@@ -10075,8 +10273,10 @@ rebuilt at this level:
   accumulates along the chain.
 - #strong[`build_with_use`] is replaced at each edge based on the
   dependency atom's bracketed flags.
-- #strong[`after/1`] from DEPEND propagates down the tree;
-  #strong[`after_only/1`] from RDEPEND does not.
+- #strong[`after/1`] (from world-set anchors) propagates down the tree;
+  #strong[`after_only/1`] (from PDEPEND edges) does not.
+  DEPEND-vs-RDEPEND ordering is decided in pass 2, not by context
+  markers.
 - #strong[Slot locks] (`:=`) add `slot/3` entries to the context.
 - #strong[Constraint emissions] (e.g.~`selected_cn`) go into the global
   ConstraintsAVL, not into the context.
@@ -10413,7 +10613,7 @@ The different dependency types map naturally onto this structure.
 === Intra-group dependency ordering
 <intra-group-dependency-ordering>
 Before proving the dependencies within a single package,
-`candidate:dep_priority/2` sorts them by constraint tightness. Tightly
+`ranking:dep_priority/2` sorts them by constraint tightness. Tightly
 constrained dependencies are proved first so that their `selected_cn`
 locks early, preventing greedy conflicts where an unconstrained sibling
 picks a version that later clashes. The priority ladder (lower = proved
@@ -10433,14 +10633,17 @@ first): tight upper bound (1) → tilde (4) → wildcard (8) → unconstrained
 - #strong[RDEPEND] create edges to `:run` actions with `after_only()`
   context tags that stop at the immediate children. This makes them
   naturally softer.
-- #strong[PDEPEND] are handled by `literal_hook` in a single pass during
-  proof search, without creating explicit ordering edges in the proof.
+- #strong[PDEPEND] are handled by the `heuristic:proof_obligation/4`
+  hook in a single pass during proof search, without creating explicit
+  ordering edges in the proof.
 
-When cycles appear, the wave planner produces an acyclic plan for the
-majority of the graph. The remaining cyclic portion goes to the
-scheduler, which uses Kosaraju's algorithm to find SCCs. Runtime-only
-SCCs are treated as freely orderable (matching Paludis's insight), while
-build-dep SCCs require special handling.
+When cycles appear, the ordering pass (Chapter 12) resolves them at
+proof time: a requirement whose provider is still being scheduled falls
+through to a citation of the installed world (VDB), or --- when nothing
+bridges the loop --- to an honest `unreachable` assumption. Runtime-only
+cycles never bind at all, because RDEPEND edges are soft preferences
+(matching Paludis's insight) that are simply dropped when they would
+close a cycle.
 
 === PDEPEND completion ordering
 <pdepend-completion-ordering>
@@ -10452,38 +10655,26 @@ extension's `extconf.rb` hits a `LoadError`, or a CMake
 `CMAKE_C_COMPILER` check fails because a toolchain component is not yet
 on `PATH`).
 
-The scheduler closes this gap in `scheduler:repair_ordering_violations`,
-keyed only on the generic `order_after` marker (no package-specific
-logic). The repair pass builds an effective dependency graph over all
-planned rule heads (direct body deps, assumed-dep aliases, RDEPEND
-configure deps and PDEPEND completion edges), condenses it with
-Kosaraju's SCC algorithm and assigns waves by longest path over the
-acyclic condensation. Members of a true cycle share a wave; everything
-acyclic is strictly ordered. Because the condensation is a DAG, the pass
-always converges --- a cycle anywhere in the plan can never collapse the
-ordering of an unrelated acyclic chain (portage-ng\#26).
+The ordering bindings close this gap with a #strong[completion
+preference] (`ordering:prefers/2` in
+`Source/Domain/Gentoo/Rules/ordering.pl`): a consumer whose dependency
+carries an `order_after` anchor on a PDEPEND provider prefers the
+install heads of that provider's PDEPEND targets --- i.e.~it is ordered
+after `P`'s whole post-install group, matching emerge's behaviour
+(portage-ng\#18).
 
-- `build_pdepend_anchor_map` maps each provider `(C,N)` to its
-  PDEPEND-target heads, and `build_pdepend_closure_map` computes the
-  forward closure of those targets.
-- A consumer outside that closure gets edges to the #strong[install
-  heads] of `P`'s PDEPEND targets --- i.e.~it is ordered after `P`'s
-  whole post-install group, matching emerge's behaviour.
+Because this is a #emph[preference], not a hard requirement, it is
+inherently cycle-safe: the wave projection accepts each preference
+exactly when it closes no cycle against the hard edges and the
+previously accepted preferences. A consumer that is itself a member of
+the provider's PDEPEND group is therefore never bumped --- the
+preference back onto its own group would close a cycle and is dropped
+silently (portage-ng\#19). Densely cyclic toolchain closures (e.g.~LLVM)
+are safe for the same reason: no preference can collapse the ordering of
+an acyclic chain elsewhere in the plan (portage-ng\#26).
 
-This bump is made #strong[cycle-safe per target] so it does not collapse
-densely cyclic toolchain closures (e.g.~LLVM):
-
-- The PDEPEND closure is collapsed to package `(C,N)` identity, so a
-  cycle that is only visible as a grouped or cross-slot literal is still
-  detected.
-- The closure is computed #emph[per PDEPEND target] and cyclic targets
-  are filtered individually, so a consumer is ordered after the
-  provider's #emph[acyclic] post-deps but never after a post-dep that
-  requires it back.
-- A consumer that is itself a member of the provider's PDEPEND group is
-  never bumped (a sibling must not wait for its sibling).
-
-A fast no-op path leaves plans without any PDEPEND provider unchanged.
+A per-pass PDEPEND anchor index makes the preference lookup cheap; plans
+without any PDEPEND provider pay only an empty index probe.
 
 == How the three approaches compare
 <how-the-three-approaches-compare>
@@ -10508,13 +10699,14 @@ indicates the weakest (post-dependency) constraints.
     broken], [`:install` + `after()`, hard],
     [RDEPEND], [Soft edge, broken for cycles], [Soft edge, cycles freely
     ordered], [`:run` + `after_only()`, soft],
-    [PDEPEND], [Weak edge, first to break], [No edge at
-    all], [`literal_hook`, no proof edge; scheduler adds completion
-    ordering],
+    [PDEPEND], [Weak edge, first to break], [No edge at all], [proof
+    obligation hook, no proof edge; completion preference in ordering
+    pass],
     [Cycle strategy], [Progressive relaxation], [SCC
-    classification], [Wave plan + SCC scheduling],
+    classification], [World citation (VDB) or `unreachable` assumption],
     [Build-time cycles], [Error / merge group], [Relax met edges, then
-    error], [SCC merge-set],
+    error], [Bridged by installed world; honest bootstrap boundary
+    otherwise],
   )]
   , kind: table
   )
@@ -10691,8 +10883,8 @@ then `app`. portage-ng installs `lib` and `plugin` in parallel in step
 2, since PDEPEND creates no ordering constraint between them here. The
 plugin's `:run` action comes last, after the main target. (When a
 package #emph[outside] the PDEPEND closure consumes the provider, the
-scheduler's
-#link(<pdepend-completion-ordering>)[PDEPEND completion ordering]
+ordering pass's
+#link(<pdepend-completion-ordering>)[PDEPEND completion preference]
 additionally orders that consumer after the provider's post-install
 group; this minimal test has no such external consumer.)
 
@@ -10856,9 +11048,9 @@ Each test under `Documentation/Tests/testNN/` contains:
 
 === Failure testing
 <failure-testing>
-Tests 59 and 60 are explicitly marked as expected failures (XFAIL) via
-`test:xfail/2` --- known limitations that are documented but not yet
-fixed.
+Test 58 is explicitly marked as an expected failure (XFAIL) via
+`test:xfail/2` --- it exercises PROVIDE-based virtuals, deprecated in
+PMS; a documented limitation that will not be fixed.
 
 == Merge vs emerge comparison
 <merge-vs-emerge-comparison>
@@ -10870,7 +11062,7 @@ analyses the resulting plan logs.
 
 === Running a comparison
 <running-a-comparison>
-Per-target compare (planner only, fresh sessions on both sides):
+Per-target compare (plan only, fresh sessions on both sides):
 
 ```sh
 tinderbox-ng compare www-servers/apache
@@ -10879,9 +11071,12 @@ tinderbox-ng compare www-servers/apache
 Whole-tree matrix run plus aggregate analysis:
 
 ```sh
-sudo tinderbox-ng compare-matrix
-sudo tinderbox-ng analyze                       # latest matrix run
-sudo tinderbox-ng analyze --run /srv/tinderbox-ng/reports/compare-matrix-<stamp>
+tinderbox-ng new regress
+tinderbox-ng exec regress -- \
+  tinderbox-matrix resolver \
+  /usr/local/share/tinderbox-ng/share/tinderbox-ng/manifest-1000.txt
+tinderbox-ng analyze \
+  --md5-cache /srv/tinderbox-ng/baseline/var/db/repos/gentoo/metadata/md5-cache
 ```
 
 `tinderbox-ng analyze` feeds each `portage-ng.plan.log` /
@@ -10934,9 +11129,9 @@ tinderbox-ng compare sys-apps/portage
 
 == Bulk plan fingerprint comparison
 <bulk-plan-fingerprint-comparison>
-`Source/Test/plancompare.pl` fingerprints the full pipeline (prove +
-plan + schedule) for every ebuild in a repository. Use it to verify that
-a resolver change produces identical plans before committing:
+`Source/Test/plancompare.pl` fingerprints the full pipeline (resolve +
+order) for every ebuild in a repository. Use it to verify that a
+resolver change produces identical plans before committing:
 
 ```sh
 ./Source/Application/Wrapper/portage-ng-dev --mode standalone --shell <<'PL'
@@ -10976,7 +11171,7 @@ Options: `repo(Atom)` (default `portage`), `limit(N)` (0 = all),
 - #link("02-doc-installation.md")[Chapter 2: Installation and Quick Start]
   --- `make test` commands
 - #link("25-doc-performance.md")[Chapter 25: Performance and Profiling]
-  --- `prover:test_stats` for bulk testing
+  --- `resolver:test_stats` for bulk testing
 - #link("26-doc-contributing.md")[Chapter 26: Contributing] ---
   development workflow with regression testing
 
@@ -11035,13 +11230,13 @@ High-level queries in the knowledge layer are written for clarity; at
 access], so the runtime path never pays for meta-interpretation over
 generic search.
 
-`goal_expansion/2` in `Source/Knowledge/query.pl` performs this rewrite.
-For example, a search by repository, category, and package name expands
-straight to an ordered cache entry lookup:
-
-```prolog
-user:goal_expansion(query:search(R, C, N), cache:ordered_entry(R, _, C, N, _)).
-```
+A module-local `query:goal_expansion/2` hook in
+`Source/Knowledge/query.pl` performs this rewrite (deliberately
+#emph[not] `user:goal_expansion/2`, so only code compiled inside the
+`query` module is affected --- portage-ng\#59). It expands
+`search(Query, Repo://Id)` goals at compile time: `compile_query_list/3`
+\/ `compile_query_compound/3` translate each query term into direct
+indexed cache lookups such as `cache:ordered_entry/5` conjunctions.
 
 The expanded code calls the indexed predicate #strong[directly].
 SWI-Prolog's #strong[first-argument indexing] on `cache:entry/5` (and
@@ -11122,33 +11317,34 @@ intended in production-like runs.
 === Hook performance
 <hook-performance>
 ```prolog
-sampler:phase_walltime(Phase, Goal)
+sampler:phase_walltime(-T)
 ```
 
-Wraps `Goal` and records wall-clock time for the named `Phase`. Used by
-the pipeline to time each stage (prove, plan, schedule).
+Captures a wall-clock snapshot. The pipeline takes three snapshots ---
+before resolving, between resolving and ordering, and after ordering.
 
 ```prolog
-sampler:phase_record(Phase, Duration)
+sampler:phase_record(T0, T1, T2)
 ```
 
-Records a phase timing for later retrieval.
+Computes and records the per-phase deltas (resolve ms, order ms) from
+the three snapshots for later retrieval.
 
 === Test statistics
 <test-statistics>
 ```prolog
-prover:test_stats(Repository)
-prover:test_stats_pkgs(Repository, PackageList)
+resolver:test_stats(Repository)
+resolver:test_stats_pkgs(Repository, PackageList)
 ```
 
-Run the prover across all packages (or a specific list) in a repository
-and collect aggregate statistics:
+Run the resolver across all packages (or a specific list) in a
+repository and collect aggregate statistics:
 
-- Total packages attempted
-- Success rate (no assumptions)
-- Cycle-break-only rate
-- Domain assumption rate
-- Average proof time
+- Totals: entries processed, proved, failed
+- Share of entries with domain assumptions and with cycle breaks (as
+  percentages)
+- Failure and assumption-type breakdowns
+- Slowest entries and packages
 
 === Feature term unification sampling
 <feature-term-unification-sampling>
@@ -11163,7 +11359,7 @@ pattern:
 
 ```bash
 ./Source/Application/Wrapper/portage-ng-dev --mode standalone --shell --timeout 60 <<'PL'
-prover:test_stats(portage).
+resolver:test_stats(portage).
 halt.
 PL
 ```
@@ -11172,7 +11368,7 @@ For specific packages:
 
 ```bash
 ./Source/Application/Wrapper/portage-ng-dev --mode standalone --shell <<'PL'
-prover:test_stats_pkgs(portage, ['kde-apps'-'kde-apps-meta']).
+resolver:test_stats_pkgs(portage, ['kde-apps'-'kde-apps-meta']).
 halt.
 PL
 ```
@@ -11190,7 +11386,7 @@ actual builds take.
 - #strong[Portage] uses `emerge -vp <target>`, which runs the Python
   `depgraph.py` resolver with greedy selection and backtracking.
 - #strong[portage-ng] uses `--mode standalone --pretend <target>`, which
-  runs the Prolog prover, planner, and scheduler.
+  runs the Prolog prover and ordering pass.
 
 === Resolution speed (emerge\_ok packages)
 <resolution-speed-emerge_ok-packages>
@@ -11270,8 +11466,8 @@ packages:
     constraints],
     [Repeated queries], [Each `emerge -vp` starts cold], [In-memory
     facts persist; subsequent queries are instant],
-    [Parallelism], [Sequential graph walk], [Wave planner identifies
-    parallel steps automatically],
+    [Parallelism], [Sequential graph walk], [Ordering pass identifies
+    parallel waves automatically],
   )]
   , kind: table
   )
@@ -11310,13 +11506,12 @@ testing practices for contributing to portage-ng.
   make test-overlay    # Overlay regression tests
   ```
 
-+ #strong[Regenerate `.merge` files] by asking the maintainer to run
-  `--graph` to produce updated `.merge` output for the graph directory.
-
 + #strong[Run compare analysis] to detect regressions. The compare
   harness lives in the
   #link("https://github.com/pvdabeel/tinderbox-ng")[tinderbox-ng]
-  repository:
+  repository and generates its own plan logs in fresh sessions (the
+  legacy `--graph` + `.merge` regeneration loop is no longer part of
+  this workflow):
 
   ```sh
   # Whole-tree matrix run (on the tinderbox host):
@@ -11355,7 +11550,7 @@ For reproducible, non-interactive debugging:
 
 ```bash
 ./Source/Application/Wrapper/portage-ng-dev --mode standalone --shell --timeout 60 <<'PL'
-prover:test_stats(portage).
+resolver:test_stats(portage).
 halt.
 PL
 ```
@@ -11464,7 +11659,13 @@ module:predicate_name(Arg1, Arg2) :-
   Use concatenated lowercase words: `knowledgebase.pl`, not
   `knowledge_base.pl`.
 
-- Exception: `portage-ng.pl` (project entry point).
+- Exceptions (grandfathered, do not add new ones): `portage-ng.pl`
+  (project entry point / name); `binpkg_exec.pl`, `binpkg_index.pl`,
+  `binpkg_extract.pl`, `ebuild_exec.pl` and `missing_provider.pl`
+  (underscore-named for readability of their prefixes; module names
+  match the filenames). Host-local templates under
+  `Source/Config/Private/` are configuration, not source modules, and
+  are also exempt.
 
 - Prolog module names follow the same rule: `:- module(gentoo, [])`.
 
@@ -11544,8 +11745,9 @@ The book traced this idea from concept to implementation:
   stores and indexes package metadata; how the EAPI grammar parses
   dependency specifications; how the prover searches for consistent
   models; how assumptions, constraint learning, and version domains
-  handle conflicts; how rules encode Gentoo's domain logic; and how the
-  planner and scheduler turn a proof into a concrete build order.
+  handle conflicts; how rules encode Gentoo's domain logic; and how a
+  second proving pass over planning laws turns a proof into a concrete
+  build order.
 
 - #strong[Part III] covered the features built on top of that
   foundation: the command-line interface, build execution, semantic
@@ -11578,8 +11780,8 @@ explicitly:
   starting over with a blank slate on each retry.
 
 - #strong[Separation of concerns.] The prover knows nothing about
-  Gentoo. The rules layer knows nothing about proof search. The planner
-  knows nothing about dependency types. Each layer has a clean
+  Gentoo. The rules layer knows nothing about proof search. The planning
+  laws know nothing about dependency types. Each layer has a clean
   interface, and domain-specific knowledge stays in domain-specific
   modules.
 
@@ -11596,7 +11798,7 @@ exploration:
 
 - #strong[Broader platform support.] The reasoning engine is not tied to
   Gentoo --- any system that can express its dependencies as structured
-  rules could use the same prover and planner.
+  rules could use the same prover and ordering laws.
 
 - #strong[Richer learning.] The current constraint learning mechanism
   handles version domains and parent narrowing. More sophisticated
