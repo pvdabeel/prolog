@@ -1,15 +1,15 @@
 This repository is a SWI-Prolog application (portage-ng).
 
-## Description 
+## Description
 
-The application reads Gentoo ebuild md5-cache files from a Gentoo portage tree repository into SWI-Prolog cache predicates. 
+The application reads Gentoo ebuild md5-cache files from a Gentoo portage tree repository into SWI-Prolog cache predicates.
 See cache.pl for the datastructure. The actual data is contained in Knowledge/kb.raw (which is qcompiled into Knowledge/kb.qlf).
 
 - `Source/Knowledge/repository.pl`: enables controlling of Portage tree (syncing, loading, saving facts)
-- `Source/Knowledge/knowledgebase.pl`: different repositories register themselves with the knowledge base. 
-- `Source/Knowledge/cache.pl`: the prolog cache data structure 
+- `Source/Knowledge/knowledgebase.pl`: different repositories register themselves with the knowledge base.
+- `Source/Knowledge/cache.pl`: the prolog cache data structure
 - `Source/Domain/Gentoo/eapi.pl`: a Prolog DCG grammar to read md5-cache syntax
-- `Source/Domain/Gentoo/Rules/resolving.pl`: domain specific (Gentoo) specific rules handling dependencies, interpreting use flags, PDEPEND hooks, etc.
+- `Source/Domain/Gentoo/Rules/resolving.pl`: Gentoo-specific rules handling dependencies, interpreting use flags, PDEPEND hooks, etc.
 - `Source/Domain/Gentoo/vdb.pl`: a repository containing information about installed ebuilds
 - `Source/Domain/Gentoo/pkgmoves.pl`: profiles/updates package move / slotmove handling (read-time translation of targets, world/set entries and computed-set tree lookups; world file rewritten post-sync via `pkgmoves:apply_world_moves`; VDB rewriting intentionally left to traditional Portage)
 - `Source/Domain/Gentoo/Exceptions/fixup.pl`: generic registry/dispatcher for build-time domain exception fixups (multifile hooks `fixup:mechanism/1`, `fixup:phase_retry_hook/10`, `fixup:mechanism_note/3`; record via `fixup:record/3`; shared same-version repair rebuild helper `fixup:repair_rebuild/4`); `collision.pl` (#90 collision deconfliction), `ghcabi.pl` (#93 GHC ABI repair, native haskell-updater; #108 boot-lib recache; #112 prove-time `CABAL_CORE_LIB_GHC_PV` filter) and `ocamlabi.pl` (#99 OCaml/findlib ABI repair) register here
@@ -21,7 +21,6 @@ See cache.pl for the datastructure. The actual data is contained in Knowledge/kb
 - `Source/Application/Mode/server.pl`: Pengine HTTP server + job/result queues for distributed proving
 - `Source/Application/Llm/semantic.pl`: semantic (vector) search over the knowledge base via Ollama embeddings
 - `Source/Pipeline/Builder/buildtime.pl`: build time estimation from VDB sizes and emerge.log history
-
 
 ## Architecture (mental model)
 Pipeline (standalone): reader/parser → resolver → orderer → printer → builder.
@@ -137,7 +136,6 @@ The word "context" has three distinct meanings in this codebase:
 When writing comments, always qualify which meaning is intended.  Avoid bare
 "context" or "in context" when it could refer to more than one of the above.
 
-
 ## Learned constraint refinement
 
 The prover offers a generic learned constraint store that persists across
@@ -179,21 +177,19 @@ When testing changes to the learned constraint mechanism, ALWAYS verify:
 4. No "Unknown message" or escaping exceptions in output
 5. Runtime (should be < 10 seconds for single targets)
 
-
 ## Naming conventions
 
 - Source filenames must NOT contain hyphens (`-`) or underscores (`_`).
   Use concatenated lowercase words (e.g. `gentoo.pl`, `knowledgebase.pl`).
- Exceptions (grandfathered, do not add new ones):
- - `portage-ng.pl` (project entry point / name)
- - `binpkg_exec.pl`, `binpkg_index.pl`, `binpkg_extract.pl`,
- `ebuild_exec.pl`, `missing_provider.pl` (underscore-named for
- readability of their prefixes; their module names match the filename)
- - host-local templates under `Source/Config/Private/` (configuration,
- not source modules)
+  Exceptions (grandfathered, do not add new ones):
+  - `portage-ng.pl` (project entry point / name)
+  - `binpkg_exec.pl`, `binpkg_index.pl`, `binpkg_extract.pl`,
+    `ebuild_exec.pl`, `missing_provider.pl` (underscore-named for
+    readability of their prefixes; their module names match the filename)
+  - host-local templates under `Source/Config/Private/` (configuration,
+    not source modules)
 - Prolog module names follow the same rule (e.g. `:- module(gentoo, [])`).
 - Subdirectory names under `Source/` may use CamelCase (e.g. `Application/`, `Domain/`, `Config/`, `Pipeline/`).
-
 
 ## Source file documentation style
 
@@ -295,6 +291,8 @@ module:predicate_name(Arg1, Arg2) :-
 
 ## Configuration
 
+- `Source/config.pl`: configuration file with various configuration settings
+
 ### Portage tree locations
 - `Source/Config/<host>.local.pl` (e.g. `Source/Config/mac-pro.local.pl`): contains the host-specific configuration (location of repository, md5-cache, vdb pkg installation data); `Source/Config/default.pl` holds the defaults
 
@@ -310,12 +308,7 @@ module:predicate_name(Arg1, Arg2) :-
 - When `cached` is set but `Knowledge/profile.qlf` is missing, falls back to `live`
 
 ### Graph location
-- `Source/Config/<host>.local.pl`: config:graph_directory/1 holds the location of the graph directory that contains .emerge files (traditional gentoo emerge output for a given package). 
-
-### Configuration 
-- `Source/config.pl`: configuration file with various configuration settings
-
-
+- `Source/Config/<host>.local.pl`: config:graph_directory/1 holds the location of the graph directory that contains .emerge files (traditional gentoo emerge output for a given package).
 
 ## How to run (IMPORTANT)
 - Do NOT run ad-hoc `swipl -g "..."` snippets; they often miss required operator defs, libraries, and module load order.
@@ -450,7 +443,6 @@ The canonical load graph for standalone is in `portage-ng.pl`:
   [tinderbox-ng](https://github.com/pvdabeel/tinderbox-ng) repository.
 - Ask user for permission to commit.
 
-
 ## Resolver regression testing via tinderbox-ng (vm-linux.local)
 
 After a resolver change (resolving rules, prover, resolver, orderer, printer)
@@ -574,7 +566,6 @@ this section as the source of truth.
 
 - The table output is used to determine regressions.
 
-
 ## Compare tooling (authoritative paths + usage)
 
 Regression tooling is hosted in two places:
@@ -669,7 +660,7 @@ commands work directly with no `PREFIX` indirection.
   user's `PATH`, and it keeps working.
 
 ## Compare to portage source code
-- Tranditional emerge is available on this system and uses the same Portage 
+- Traditional emerge is available on this system and uses the same Portage
   tree and VDB pkg as portage-ng. The alias emerge-vp can be called to compare
   with traditional emerge.
 - The portage source code can be found using `type -p emerge`.
