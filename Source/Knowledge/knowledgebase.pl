@@ -342,7 +342,7 @@ entry(Repository://Entry) ::-
 % proxy client — i.e. the interface layer that resolves user targets
 % before shipping work to the server (target.pl, Action/*.pl,
 % Printer/info.pl). Code that only ever runs where the KB is local
-% (prover, planner, printer plan rendering, builder) should call
+% (prover, orderer, printer plan rendering, builder) should call
 % query:search/2 directly so the compile-time goal-expansion macros
 % inline the cache lookups instead of paying instance dispatch +
 % runtime expansion + meta-call on every query (issue #57).

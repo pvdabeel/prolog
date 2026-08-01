@@ -13,7 +13,7 @@ Test statistics table formatting, aggregation, and display.
 
 Renders the accumulated test_stats summary (success/failure/assumption/cycle
 counts, per-package timing and cost breakdowns, blocker analysis) used by
-prover:test/1 whole-repo runs.
+resolver:test/1 whole-repo runs.
 */
 
 :- module(stats, []).

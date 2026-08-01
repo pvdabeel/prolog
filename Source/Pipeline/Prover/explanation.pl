@@ -164,10 +164,10 @@ explanation:target_ctx(Target, Ctx) :-
 % `phantom_grouped_dep_assumption/3` classifies reasons where a domain
 % assumption stands in for an install that will not happen (portage-ng#10,
 % #14, #15). Classification only — used for reporting/diagnostics. The
-% scheduler does NOT consult it for wave aliasing: its assumed-dep alias
-% is existence-gated on a concrete planned action for the same package,
-% which keeps true phantoms out of concrete waves while preserving
-% ordering edges to providers that ARE planned (portage-ng#95).
+% ordering engine does NOT consult it for wave aliasing: its assumed-dep
+% alias preference is existence-gated on a concrete planned action for the
+% same package, which keeps true phantoms out of concrete waves while
+% preserving ordering edges to providers that ARE planned (portage-ng#95).
 
 %! explanation:phantom_grouped_dep_assumption(+Reason, +C, +N) is semidet.
 %

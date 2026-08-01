@@ -125,7 +125,7 @@ annotation:proof_entry_tag(assumed(rule(Content)), Value, cyclebreak,
 % Fully resolved entries: suggestion tags live in the value context. The
 % self-target's own unmask / keyword / license tags ride on its :install
 % carrier (:run path) or a synthetic :annotate carrier (:fetchonly path,
-% see rules.pl), so the collector never needs to re-derive them from the
+% see resolving.pl), so the collector never needs to re-derive them from the
 % mask state — it just reads whatever the resolver placed in the context.
 annotation:proof_entry_tag(rule(R://E:_Action), _?Ctx0, Type, Term) :-
   !,

@@ -197,8 +197,8 @@ test:skip_case(Case,'requires installed packages (pkg vdb)') :-
 %! test:run(+Suite)
 %
 % Runs a test suite. `application` runs the full application test suite
-% (reader, parser, prover and planner; the builder has no whole-tree
-% test/1 entry point — use prover:test_stats/1 for build statistics).
+% (reader, parser, resolver and orderer; the builder has no whole-tree
+% test/1 entry point — use resolver:test_stats/1 for build statistics).
 % Any other atom names a test case list predicate (e.g. `cases`,
 % `bracketed_use`); each case in the list is run individually with
 % results written to the Tests directory, and failures are collected
@@ -210,10 +210,10 @@ test:run(application) :-
   reader:test(portage),nl,
   message:header(['Testing parser: ']),
   parser:test(portage),nl,
-  message:header(['Testing prover: ']),
-  prover:test(portage),nl,
-  message:header(['Testing planner: ']),
-  planner:test(portage),nl.
+  message:header(['Testing resolver: ']),
+  resolver:test(portage),nl,
+  message:header(['Testing orderer: ']),
+  orderer:test(portage),nl.
 test:run(Cases) :-
   retractall(test:failed(_)),
   config:working_dir(Dir),
@@ -1172,7 +1172,7 @@ test:expect(overlay://'test64/app-1.0':run?{[]},
 % test65: build_with_use vs installed VDB entries. The satisfies-check
 % must accept an installed entry when no bracketed USE is requested,
 % and reject it when a disabled IUSE flag is required. This check is
-% what the rebuild paths key on (rules:rule install/run short-circuit
+% what the rebuild paths key on (resolving:rule install/run short-circuit
 % and candidate:update_requires_use_rebuild); flags outside IUSE are
 % ignored by design. End-to-end bracketed-USE rebuilds are covered by
 % test51 and test76. Requires a populated pkg (vdb) repository --

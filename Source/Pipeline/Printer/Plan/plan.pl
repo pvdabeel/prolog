@@ -33,16 +33,15 @@ rendering lives in removal.pl.
 %! plan:print(+Target, +ModelAVL, +ProofAVL, +Plan, +TriggersAVL, +SCCs)
 %
 % Prints a plan. Triggers are required so the printer can explain assumptions
-% (e.g. dependency cycles) when present. SCCs is the scheduler's SCC
-% decomposition info (list of scc(Id, Kind, Members), as returned by
-% scheduler:schedule/7); pass [] when unavailable.
+% (e.g. dependency cycles) when present. SCCs is retained in the signature
+% for compatibility; the ordering engine always passes [].
 
 plan:print(Target, ModelAVL, ProofAVL, Plan, TriggersAVL, SCCs) :-
   plan:print(Target, ModelAVL, ProofAVL, Plan, plan:dry_run, TriggersAVL, SCCs).
 
 %! plan:print(+Target, +ModelAVL, +ProofAVL, +Plan, +Call, +TriggersAVL, +SCCs)
 
-plan:print(Target, ModelAVL, ProofAVL, Plan, Call, TriggersAVL, SCCs) :-
+plan:print(Target, ModelAVL, ProofAVL, Plan, Call, TriggersAVL, _SCCs) :-
   annotation:collect(ProofAVL, Annotations),
   annotation:blocker_notes(Annotations, BlockerNotes),
   plan:resolve_print_target(Target, ProofAVL, TargetPrint, TargetHeader),
@@ -52,7 +51,6 @@ plan:print(Target, ModelAVL, ProofAVL, Plan, Call, TriggersAVL, SCCs) :-
   plan:inject_cycle_break_verifies(Annotations, Plan, AugmentedPlan),
   plan:print_body(TargetPrint, BlockerNotes, AugmentedPlan, Call, PreSteps, Steps),
   plan:print_footer(AugmentedPlan, ModelAVL, Steps, PreActions),
-  plan:print_scc_decomposition(SCCs),
   warning:print_warnings(ModelAVL, Annotations, ProofAVL, TriggersAVL).
 
 
@@ -307,7 +305,7 @@ plan:sort_by_weight(C,L1,L2) :-
 
 %! plan:stable_sort_by_weight(+Step, -Sorted)
 %
-% Sort by element_weight, preserving the scheduler's within-weight ordering
+% Sort by element_weight, preserving the orderer's within-weight ordering
 % (which reflects merge-order bias / refcount priority).
 plan:stable_sort_by_weight(Step, Sorted) :-
   plan:tag_with_weight_index(Step, 0, Tagged),
@@ -1153,75 +1151,6 @@ plan:already_downloaded_size(Repository, Entry, Bytes) :-
     Bytes), !.
 
 plan:already_downloaded_size(_, _, 0).
-
-
-% -----------------------------------------------------------------------------
-%  SCC decomposition display
-% -----------------------------------------------------------------------------
-%
-% Shows the scheduler's Kosaraju SCC decomposition: which packages form
-% cyclic merge-sets and the linearization order the scheduler chose.
-% The SCC info is returned by scheduler:schedule/7 and passed in explicitly
-% (no cross-thread dynamic handoff). Controlled by config:print_scc/1.
-
-plan:print_scc_decomposition(_SCCs) :-
-  \+ config:print_scc(true),
-  !.
-plan:print_scc_decomposition(SCCs0) :-
-  ( SCCs0 == [] -> true
-  ; sort(SCCs0, SCCs),
-    nl,
-    message:header('Scheduler SCC decomposition'),
-    nl,
-    config:print_scc_max_members(MaxMembers),
-    forall(member(scc(Id, Kind, Members), SCCs),
-           plan:print_scc_component(Id, Kind, Members, MaxMembers)),
-    nl
-  ).
-
-plan:print_scc_component(Id, Kind, Members, MaxMembers) :-
-  length(Members, N),
-  ( Kind == merge_set ->
-      message:color(orange),
-      format('  SCC #~w (merge-set, ~w members):~n', [Id, N])
-  ; message:color(red),
-    format('  SCC #~w (~w, ~w members):~n', [Id, Kind, N])
-  ),
-  message:color(normal),
-  ( N =< MaxMembers ->
-      DisplayMembers = Members,
-      Omitted = 0
-  ; length(DisplayMembers, MaxMembers),
-    append(DisplayMembers, _, Members),
-    Omitted is N - MaxMembers
-  ),
-  forall(member(M, DisplayMembers),
-         plan:print_scc_member(M)),
-  ( Omitted > 0 ->
-      message:color(darkgray),
-      format('    (… ~w more members omitted)~n', [Omitted]),
-      message:color(normal)
-  ; true
-  ),
-  nl.
-
-plan:print_scc_member(Head) :-
-  ( Head = _Repo://Entry:Action ->
-      message:color(darkgray),
-      message:print('    '),
-      message:color(normal),
-      message:bubble(darkgray, Action),
-      message:color(darkgray),
-      message:print(' '),
-      message:color(normal),
-      message:print(Entry),
-      nl
-  ; Head = _Repo://Entry ->
-      message:print('    '),
-      message:print(Entry),
-      nl
-  ; format('    ~w~n', [Head])
-  ).
 
 
 % -----------------------------------------------------------------------------

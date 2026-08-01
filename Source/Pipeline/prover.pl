@@ -11,6 +11,16 @@
 /** <module> PROVER
 Inductive proof search engine for portage-ng.
 
+The prover is a generic inference facility: it knows nothing about
+resolving, ordering, or any other pipeline phase.  Callers hand it a
+rule module together with the goals (`prover:prove(Rules, ...)`), and
+every rule expansion during that pass resolves against `Rules:rule/2`.
+The pipeline stages own the pairing: the resolver proves with the
+`resolving` rule set (pass 1: what — versions, USE, slots), the orderer
+proves with the `ordering` rule set (pass 2: when — waves).  Callers
+that sit outside any pass (e.g. query-side model construction) fall
+back to `config:default_rules/1`.
+
 Given a list of target literals the prover constructs four artefacts
 (all implemented as AVL trees / `library(assoc)`):
 
@@ -46,15 +56,15 @@ Key design points:
   uses this to carry narrowed version domains, exclusion sets, or
   other refinements from one attempt to the next, guiding candidate
   selection towards a conflict-free proof.  The store is reset at
-  the boundary of each top-level `prover:prove/9` invocation.
+  the boundary of each top-level `prover:prove/10` invocation.
 
 - Cycle detection and cycle-break assumptions: during depth-first
   proof search, a per-proof *cycle stack* tracks literals currently
   being proved.  When a literal is encountered that is already on
-  the stack, the prover consults the domain hook `heuristic:cycle_benign/1`
+  the stack, the prover consults the domain hook `heuristic:cycle_benign/2`
   (if defined) before deciding how to handle the cycle:
 
-  * *Benign cycle* (`heuristic:cycle_benign(Lit)` succeeds): the literal
+  * *Benign cycle* (`heuristic:cycle_benign(Lit, CyclePath)` succeeds): the literal
     is already being resolved by an ancestor on the proof stack and
     the domain considers the cycle harmless.  The prover treats it as
     already proven -- it adds `Lit` to the Model and continues without
@@ -73,7 +83,7 @@ Key design points:
 - Triggers form a reverse-dependency index: for each body literal B
   that appears in a proven rule `rule(H, [..., B, ...])`, Triggers
   maps B to the list of head literals H that depend on it.  This
-  allows downstream consumers (planner, scheduler) to answer "which
+  allows downstream consumers (the orderer) to answer "which
   heads are affected if B changes?" in O(1).  Triggers are maintained
   incrementally during the proof: each proven rule adds its body
   literals to Triggers as it is recorded.
@@ -108,23 +118,73 @@ user:goal_expansion(maybe_debug_hook(_, _, _, _), true) :-
 % =============================================================================
 
 % ----------------------------------------------------------------------------- 
+% Rule set parameterization
+% -----------------------------------------------------------------------------
+%
+% The prover never names a rule module itself: the module to prove
+% against is an argument of the public entry points, scoped to the pass
+% via a thread-local global (save/restore, so nested passes are safe).
+% Outside any pass the accessor falls back to `config:default_rules/1`,
+% which keeps query-side model construction (`prove_model/5` inlined by
+% Source/Knowledge/query.pl) working from the printer, builder, and
+% interactive sessions without explicit scoping.
+
+
+%! prover:rule_module(-Rules)
+%
+% The rule module of the pass currently running on this thread, or the
+% configured default when no pass is active.
+
+prover:rule_module(Rules) :-
+  ( nb_current(prover_rule_module, R), R \== [] ->
+      Rules = R
+  ; config:default_rules(Rules)
+  ).
+
+
+%! prover:with_rule_module(+Rules, :Goal)
+%
+% Run Goal with Rules as the active rule module (save/restore).
+
+prover:with_rule_module(Rules, Goal) :-
+  ( nb_current(prover_rule_module, Saved) -> true ; Saved = [] ),
+  setup_call_cleanup(
+    nb_setval(prover_rule_module, Rules),
+    Goal,
+    nb_setval(prover_rule_module, Saved)).
+
+
+%! prover:rule_call(+Full, -Body)
+%
+% Expand a literal against the active rule module.  The single seam
+% through which the proof engines below consult domain knowledge.
+
+prover:rule_call(Full, Body) :-
+  prover:rule_module(Rules),
+  Rules:rule(Full, Body).
+
+
+% ----------------------------------------------------------------------------- 
 % Top-Level Entry Point
 % -----------------------------------------------------------------------------
 
 
-%! prover:prove(+Target, +InProof, -OutProof, +InModel, -OutModel, +InCons, -OutCons, +InTriggers, -OutTriggers)
+%! prover:prove(+Rules, +Target, +InProof, -OutProof, +InModel, -OutModel, +InCons, -OutCons, +InTriggers, -OutTriggers)
 %
-% Main entry point for the prover.
+% Main entry point for the prover: prove Target against the Rules
+% module (its `rule/2` supplies the domain knowledge for this pass).
 % Orchestrates the proving process and the configurable trigger-building strategy.
 %
 % In addition, we support bounded "reprove with scoped rejects" retries for
 % domain conflicts emitted via `prover_reprove(Info)` exceptions.
 
-prover:prove(Target, InProof, OutProof, InModel, OutModel, InCons, OutCons, InTriggers, OutTriggers) :-
+prover:prove(Rules, Target, InProof, OutProof, InModel, OutModel, InCons, OutCons, InTriggers, OutTriggers) :-
   prover:reprove_max_retries(MaxRetries),
-  prover:with_reprove_state(
-    prover:prove_with_retries(
-      Target, InProof, OutProof, InModel, OutModel, InCons, OutCons, InTriggers, OutTriggers, 0, MaxRetries
+  prover:with_rule_module(Rules,
+    prover:with_reprove_state(
+      prover:prove_with_retries(
+        Target, InProof, OutProof, InModel, OutModel, InCons, OutCons, InTriggers, OutTriggers, 0, MaxRetries
+      )
     )
   ).
 
@@ -263,12 +323,25 @@ prover:handle_reprove(Target, InProof, OutProof, InModel, OutModel, InCons, OutC
   ).
 
 
+%! prover:prove_once(+Rules, +Target, +InProof, -OutProof, +InModel, -OutModel, +InCons, -OutCons, +InTriggers, -OutTriggers) is det
+%
+% Single-attempt prove against the Rules module: no reprove harness, no
+% learned-constraint lifecycle.  This is the entry point for passes that
+% need exactly one deterministic attempt (the orderer's pass 2).
+
+prover:prove_once(Rules, Target, InProof, OutProof, InModel, OutModel, InCons, OutCons, InTriggers, OutTriggers) :-
+  prover:with_rule_module(Rules,
+    prover:prove_once(Target, InProof, OutProof, InModel, OutModel, InCons, OutCons, InTriggers, OutTriggers)
+  ).
+
+
 %! prover:prove_once(+Target, +InProof, -OutProof, +InModel, -OutModel, +InCons, -OutCons, +InTriggers, -OutTriggers) is det
 %
 % Single-attempt prove: runs the core recursive engine with cycle-stack
 % bookkeeping.  Triggers are maintained incrementally during the proof;
 % dependent lists are deduplicated once here, after the proof completes
-% (see `prover:add_trigger/4` / issue #53).
+% (see `prover:add_trigger/4` / issue #53).  Internal: runs under the
+% rule module already scoped by prove/10 or prove_once/10.
 
 prover:prove_once(Target, InProof, OutProof, InModel, OutModel, InCons, OutCons, InTriggers, OutTriggers) :-
   prover:debug_hook(Target, InProof, InModel, InCons),
@@ -813,7 +886,7 @@ prover:prove_recursive(Full, Proof, NewProof, Model, NewModel, Constraints, NewC
 
         sampler:rule_call,
         sampler:maybe_timeout_trace(Lit),
-        rule(NewFull,NewBody),
+        prover:rule_call(NewFull,NewBody),
 
         % ==-based diff (NOT subtract/3): body literals may contain
         % unbound variables (e.g. constraints with fresh slot vars),
@@ -920,7 +993,7 @@ prover:prove_recursive(Full, Proof, NewProof, Model, NewModel, Constraints, NewC
 
           sampler:rule_call,
           sampler:maybe_timeout_trace(Lit),
-          rule(Full, Body),
+          prover:rule_call(Full, Body),
 
           length(Body, DepCount),
           put_assoc(rule(Lit), Proof, dep(DepCount, Body)?Ctx, Proof1),
@@ -991,7 +1064,7 @@ prover:prove_model(Full, Model0, Model, Constraints0, Constraints, InProg0) :-
           Constraints = Constraints0
       ; prover:canon_literal(NewFull, Lit, NewCtx),
         sampler:rule_call,
-        rule(NewFull, NewBody),
+        prover:rule_call(NewFull, NewBody),
         prover:prove_model(NewBody, Model0, BodyModel, Constraints0, BodyConstraints, InProg0),
         put_assoc(Lit, BodyModel, NewCtx, Model),
         Constraints = BodyConstraints
@@ -1008,7 +1081,7 @@ prover:prove_model(Full, Model0, Model, Constraints0, Constraints, InProg0) :-
   ;   % Case: regular proof (model-only)
       put_assoc(Lit, InProg0, true, InProg1),
       sampler:rule_call,
-      rule(Full, Body),
+      prover:rule_call(Full, Body),
       prover:prove_model(Body, Model0, BodyModel, Constraints0, BodyConstraints, InProg1),
       del_assoc(Lit, InProg1, _Old, _InProg2),
       put_assoc(Lit, BodyModel, Ctx, Model),
@@ -1366,19 +1439,18 @@ prover:add_trigger(Head, Dep, InTriggers, OutTriggers) :-
         % CRITICAL: dependents are keyed by CANONICAL head (no proof context).
         %
         % The proof AVL keys rules by their canonical head (no `?{Ctx}`
-        % suffix), and the planner's `decrement_and_enqueue/4` also looks
-        % up depcounts by the canonical literal.  If we store the
-        % full head with context here, the same canonical head can end up
-        % multiple times in a single trigger's dependent list (once per
-        % distinct context the rule was proved/re-proved with).  When the
-        % trigger fires, the planner then decrements the canonical
-        % depcount once per ctx-variant — over-counting the satisfied deps
-        % and prematurely promoting the dependent to an earlier wave.
+        % suffix), and trigger consumers (the orderer's refcount-based
+        % merge-order bias) look up heads by the canonical literal.  If we
+        % store the full head with context here, the same canonical head can
+        % end up multiple times in a single trigger's dependent list (once
+        % per distinct context the rule was proved/re-proved with),
+        % over-counting that head's dependents.
         %
-        % Concrete symptom: with `app-misc/mc`, libICE:install (depcount=7)
-        % was being scheduled in the same wave as xorg-proto:install
-        % because non-canonical dedup let elt-patches/pkgconfig/libICE
-        % triggers decrement libICE multiple times in wave 1.
+        % Concrete historical symptom (wave-planner era): with
+        % `app-misc/mc`, libICE:install (depcount=7) was scheduled in the
+        % same wave as xorg-proto:install because non-canonical dedup let
+        % elt-patches/pkgconfig/libICE triggers decrement libICE multiple
+        % times in wave 1.
         %
         % PERFORMANCE (issue #53): insertion is a plain cons — duplicates
         % are allowed here and removed once per completed proof by
@@ -1672,8 +1744,7 @@ prover:rule_body(Rule, Body) :-
 %
 % Look up the full-format rule for a canonical literal in the proof, trying
 % the three proof-key shapes in order: regular rule, prover cycle-break,
-% domain assumption. Shared by planner and scheduler (previously
-% copy-pasted as get_full_rule_from_proof/3, issue #61).
+% domain assumption. Used by the orderer's plan projection (issue #61).
 
 prover:rule_from_proof(Literal, ProofAVL, FullRule) :-
   (   ProofKey = rule(Literal),
@@ -1759,217 +1830,3 @@ prover:list_to_assoc(List, Assoc) :-
 
 prover:add_to_assoc(Key,InAssoc,OutAssoc) :-
   put_assoc(Key,InAssoc,{},OutAssoc).
-
-
-% -----------------------------------------------------------------------------
-%  Automated testing helpers
-% -----------------------------------------------------------------------------
-
-% -----------------------------------------------------------------------------
-%  Test action mapping
-% -----------------------------------------------------------------------------
-%
-%! prover:test_action(+Action0, -Action) is det
-%
-% Map a configured target action to the action used by test harnesses.
-% Identity mapping (historically run was mapped to merge).
-
-prover:test_action(Action, Action).
-
-
-%! prover:test(+Repository) is det
-%
-% Run a whole-repo prove test using the default test style.
-
-prover:test(Repository) :-
-  config:test_style(Style),
-  prover:test(Repository,Style).
-
-
-%! prover:test(+Repository, +Style) is det
-%
-% Run a whole-repo prove test with the given Style (sequential/parallel).
-
-prover:test(Repository,Style) :-
-  config:proving_target(Action0),
-  prover:test_action(Action0, Action),
-  ( current_predicate(sampler:phase_perf_reset/0) ->
-      sampler:phase_perf_reset
-  ; true
-  ),
-  ( current_predicate(scheduler:perf_reset/0) ->
-      scheduler:perf_reset
-  ; true
-  ),
-  sampler:hook_counter_reset,
-  tester:test(Style,
-              'Proving',
-              Repository://Entry,
-              Repository:entry(Entry),
-              ( Target = (Repository://Entry:Action?{[]}),
-                pipeline:prove_with_fallback([Target], _Proof, _Model, _Triggers)
-              )),
-  sampler:hook_counter_report,
-  ( current_predicate(sampler:phase_perf_report/0) ->
-      sampler:phase_perf_report
-  ; true
-  ),
-  ( current_predicate(scheduler:perf_report/0) ->
-      scheduler:perf_report
-  ; true
-  ).
-
-
-%! prover:test_latest(+Repository) is det
-%
-% Run a prove test over only the latest ebuild per package.
-
-prover:test_latest(Repository) :-
-  config:test_style(Style),
-  prover:test_latest(Repository,Style).
-
-
-%! prover:test_latest(+Repository, +Style) is det
-%
-% Run a latest-ebuild prove test with the given Style.
-
-prover:test_latest(Repository,Style) :-
-  config:proving_target(Action0),
-  prover:test_action(Action0, Action),
-  tester:test(Style,
-              'Proving',
-              Repository://Entry,
-              ( Repository:package(C,N),once(Repository:ebuild(Entry,C,N,_)) ),
-              ( Target = (Repository://Entry:Action?{[]}),
-                pipeline:prove_with_fallback([Target], _Proof, _Model, _Triggers)
-              )).
-
-
-% -----------------------------------------------------------------------------
-%  Testing + statistics
-% -----------------------------------------------------------------------------
-
-%! prover:timed_prove_and_record(+Target, +Action) is det
-%
-% Shared instrumentation body for the test_stats loops.  Proves
-% Target (a Repository://Entry) via pipeline:prove_with_fallback,
-% measuring wall time, inferences, rule calls and proof-context union
-% costs, and records the outcome with the sampler (under the
-% test_stats mutex, as the loops may run in parallel).  Failures are
-% recorded as failed(other).  Always succeeds.
-
-prover:timed_prove_and_record(Repository://Entry, Action) :-
-  sampler:reset_counters,
-  statistics(inferences, I0),
-  statistics(walltime, [T0,_]),
-  Target = (Repository://Entry:Action?{[]}),
-  ( pipeline:prove_with_fallback([Target], ProofAVL, ModelAVL, Triggers) ->
-      Proved = true
-  ; Proved = false
-  ),
-  statistics(walltime, [T1,_]),
-  statistics(inferences, I1),
-  TimeMs is T1 - T0,
-  Inferences is I1 - I0,
-  ( Proved == true ->
-      sampler:counters(rule_calls(RuleCalls)),
-      sampler:ctx_counters(ctx_union_calls(CtxUC), ctx_union_cost(CtxCost), ctx_max_len(CtxMax), ctx_union_ms_est(CtxMsEst)),
-      sampler:ctx_distribution(ctx_len_hist(CtxHistPairs),
-                               ctx_cost_mul(CtxMul),
-                               ctx_cost_add(CtxAdd),
-                               ctx_len_samples(CtxLenSamples)),
-      with_mutex(test_stats,
-        ( sampler:record(costs(Repository://Entry, TimeMs, Inferences, RuleCalls)),
-          sampler:record(ctx_costs(Repository://Entry, CtxUC, CtxCost, CtxMax, CtxMsEst)),
-          sampler:record(ctx_dist(CtxHistPairs, CtxMul, CtxAdd, CtxLenSamples))
-        )),
-      sampler:record(entry(Repository://Entry, ModelAVL, ProofAVL, Triggers, true))
-  ; sampler:record(failed(other))
-  ).
-
-
-%! prover:test_stats(+Repository) is det
-%
-% Run a whole-repo prove test with detailed statistics recording
-% and top-N reporting.
-
-prover:test_stats(Repository) :-
-  config:test_style(Style),
-  prover:test_stats(Repository, Style).
-
-
-%! prover:test_stats(+Repository, +TopN) is det
-%
-% Like test_stats/1, but allows choosing the Top-N limit in the output.
-
-prover:test_stats(Repository, TopN) :-
-  integer(TopN),
-  !,
-  config:test_style(Style),
-  prover:test_stats(Repository, Style, TopN).
-
-
-%! prover:test_stats(+Repository, +Style) is det
-%
-% Run test_stats with the given Style and default TopN.
-
-prover:test_stats(Repository, Style) :-
-  ( config:test_stats_top_n(TopN) -> true ; TopN = 25 ),
-  prover:test_stats(Repository, Style, TopN).
-
-
-%! prover:test_stats(+Repository, +Style, +TopN) is det
-%
-% Core test_stats loop: proves each entry, records timing / inference /
-% rule-call / context-union costs, classifies failures, and prints the
-% TopN report at the end.
-
-prover:test_stats(Repository, Style, TopN) :-
-  config:proving_target(Action0),
-  prover:test_action(Action0, Action),
-  aggregate_all(count, (Repository:entry(_E)), ExpectedTotal),
-  sampler:reset('Proving', ExpectedTotal),
-  aggregate_all(count, (Repository:package(_C,_N)), ExpectedPkgs),
-  sampler:set_expected_pkgs(ExpectedPkgs),
-  tester:test(Style,
-              'Proving',
-              Repository://Entry,
-              Repository:entry(Entry),
-              prover:timed_prove_and_record(Repository://Entry, Action)),
-  stats:test_stats_print(TopN).
-
-
-% -----------------------------------------------------------------------------
-%  Focused stats: run prover:test_stats for a specific list of Category/Name pairs
-% -----------------------------------------------------------------------------
-
-
-%! prover:test_stats_pkgs(+Repository, +Pkgs)
-%
-% Run test_stats for a specific list of packages, where Pkgs is a list of C-N pairs.
-% This is intended for fast iteration on the slowest packages reported by test_stats/1.
-prover:test_stats_pkgs(Repository, Pkgs) :-
-  config:test_style(Style),
-  ( config:test_stats_top_n(TopN) -> true ; TopN = 25 ),
-  prover:test_stats_pkgs(Repository, Style, TopN, Pkgs).
-
-
-%! prover:test_stats_pkgs(+Repository, +Style, +TopN, +Pkgs) is det
-%
-% Inner loop for focused test_stats over a specific list of packages.
-
-prover:test_stats_pkgs(Repository, Style, TopN, Pkgs) :-
-  is_list(Pkgs),
-  config:proving_target(Action0),
-  prover:test_action(Action0, Action),
-  length(Pkgs, ExpectedTotal),
-  sampler:reset('Proving', ExpectedTotal),
-  sampler:set_expected_pkgs(ExpectedTotal),
-  tester:test(Style,
-              'Proving',
-              Repository://Entry,
-              ( member(C-N, Pkgs),
-                once(Repository:ebuild(Entry, C, N, _))
-              ),
-              prover:timed_prove_and_record(Repository://Entry, Action)),
-  stats:test_stats_print(TopN).

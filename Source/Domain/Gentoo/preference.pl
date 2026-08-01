@@ -780,7 +780,7 @@ preference:denied_license(L) :-
 %                  before unstable), even if a newer version exists under a
 %                  later keyword.
 %
-% NOTE: This affects how `rules.pl` enumerates dependency candidates.
+% NOTE: This affects how `resolving.pl` enumerates dependency candidates.
 
 % For Portage parity with ACCEPT_KEYWORDS="amd64 ~amd64", Portage generally
 % treats both as accepted and prefers the highest version available (i.e. don't

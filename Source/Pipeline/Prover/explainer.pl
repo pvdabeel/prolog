@@ -169,7 +169,7 @@ why_in_plan(Plan, ProofAVL, TriggersAVL, Target, Why) :-
 %   - `has_dependents([D])` : at least one dependent exists in the trigger graph
 %   - `unknown`             : present in plan but no dependency path found
 %
-% Proposal is a list of target literals (same shape as passed to prover:prove/9).
+% Proposal is a list of target literals (same shape as passed to prover:prove/10).
 % If `explanation:why_in_plan_hook/2` is defined, it may enrich the result.
 
 why_in_plan(Proposal, Plan, _ProofAVL, TriggersAVL, Target0, Why) :-

@@ -260,16 +260,16 @@ ebuild_exec:log_file_size(Path, Size) :-
 % The context overrides take precedence over KB defaults.
 
 ebuild_exec:collect_use_string(Repo, Entry, Ctx, UseString) :-
-  % The base USE state must match the planner's view of the package. Each
+  % The base USE state must match the resolver's view of the package. Each
   % IUSE flag is resolved through use:effective_use_for_entry/3 -- the same
-  % predicate the prover/planner use -- which folds the ebuild default,
+  % predicate the prover uses -- which folds the ebuild default,
   % profile, global and user-config layers in the correct priority order.
   %
   % A prior version collapsed the raw iuse/2 facts with a last-wins dedup.
   % That silently picked the wrong polarity for flags declared with
   % conflicting facts: e.g. x11-libs/wxGTK exposes `X` as
   % [positive:ebuild, negative:default], so last-wins yielded `-X` while
-  % the planner resolved `+X`. The builder then emerged wxGTK with `spell`
+  % the resolver resolved `+X`. The builder then emerged wxGTK with `spell`
   % on but `X` off, breaking REQUIRED_USE="spell? ( X )" in the setup phase
   % (issue #22). Resolving via effective_use_for_entry/3 makes the
   % builder's base USE agree with the plan by construction.
@@ -368,7 +368,7 @@ ebuild_exec:apply_use_override(Flag-State, AssocIn, AssocOut) :-
 %! ebuild_exec:base_use_state(+RepoEntry, +Flag, -State) is det.
 %
 % Effective base polarity (positive/negative) for Flag, matching the
-% planner via use:effective_use_for_entry/3. Falls back to the raw IUSE
+% resolver via use:effective_use_for_entry/3. Falls back to the raw IUSE
 % default polarity (last fact wins) only when the effective lookup cannot
 % resolve the flag, so no IUSE flag is ever dropped from the USE string.
 

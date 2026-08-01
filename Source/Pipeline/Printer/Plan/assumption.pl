@@ -124,6 +124,11 @@ assumption:assumption_type(Term, issue_with_model) :-
   memberchk(issue_with_model(_), Ctx),
   !.
 
+% Rule-based ordering engine (pass 2): no plan step and no installed
+% package can provide D for consumer H — the genuine bootstrap boundary.
+% NEGATIVE / blocking polarity (no config change resolves it).
+assumption:assumption_type(unreachable(_, _),                                  unreachable) :- !.
+
 assumption:assumption_type(required(_),                                        use_requirement_cycle) :- !.
 assumption:assumption_type(blocking(_),                                        use_requirement_cycle) :- !.
 assumption:assumption_type(use_conditional_group(_,_,_,_),                     use_conditional_cycle) :- !.

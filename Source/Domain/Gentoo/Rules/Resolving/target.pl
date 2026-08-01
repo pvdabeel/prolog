@@ -17,7 +17,7 @@ Target resolution (target: prefix) turns a user query into a concrete candidate:
   - `resolve_installed_candidate/2`  — query → installed candidate (pkg)
 
 Candidate resolution (candidate: prefix) resolves proof conditions for a
-concrete candidate.  The rule/2 clauses in rules.pl delegate here:
+concrete candidate.  The rule/2 clauses in resolving.pl delegate here:
 
   - `candidate:resolve(R://E:fetchonly?{Ctx}, Conds)`
   - `candidate:resolve(R://E:install?{Ctx}, Conds)`
@@ -311,7 +311,7 @@ candidate:resolve(choice_group(Deps):Action?{Context}, Conditions) :-
   member(D0, SortedDeps),
   choicelog:wrap_any_of(Context, SortedDeps, D0,
     ( candidate:group_choice_dep(D0, D),
-      rules:rule(D:Action?{Context}, Conditions0),
+      resolving:rule(D:Action?{Context}, Conditions0),
       ( candidate:any_of_reject_assumed_choice(D, Conditions0) ->
           fail
       ; Conditions = Conditions0
@@ -500,7 +500,7 @@ candidate:resolve(Repository://Ebuild:depclean?{Context}, Conditions) :-
 %
 % True when an :update on an already-installed same-version entry must run
 % the transactional resolver (replaces + DEPEND walk), not the empty no-op.
-% Covers suggestion(use_change) from the planner and bracketed-USE mismatch.
+% Covers suggestion(use_change) from the resolver and bracketed-USE mismatch.
 
 candidate:update_requires_use_rebuild(Repository://Ebuild, Context) :-
   memberchk(suggestion(use_change, Repository://Ebuild, _Changes), Context),

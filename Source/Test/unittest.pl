@@ -2558,14 +2558,14 @@ test(seed_conditional_non_entry_recurses, [fail]) :-
 
 
 % =============================================================================
-%  Builder base USE state matches planner (portage-ng#22)
+%  Builder base USE state matches resolver (portage-ng#22)
 % =============================================================================
 %
 % The builder's base USE string (ebuild_exec:collect_use_string/4) must agree
-% with the planner's view of each IUSE flag. Previously the builder folded the
+% with the resolver's view of each IUSE flag. Previously the builder folded the
 % raw iuse/2 facts with a last-wins dedup, which picked the wrong polarity for
 % flags declared with conflicting facts (e.g. x11-libs/wxGTK exposes `X` as
-% [positive:ebuild, negative:default], so last-wins gave `-X` while the planner
+% [positive:ebuild, negative:default], so last-wins gave `-X` while the resolver
 % resolved `+X`, breaking REQUIRED_USE="spell? ( X )" at setup). The fix routes
 % the base polarity through use:effective_use_for_entry/3.
 %
@@ -2782,13 +2782,13 @@ test(any_different_slot, [true(D == any)]) :-
 %  Bracketed-USE rebuild for already-installed packages
 % =============================================================================
 
-% Regression test for the planner gap that caused podman → iptables[nftables]
+% Regression test for the resolver gap that caused podman → iptables[nftables]
 % to schedule libnftnl/libmnl AFTER iptables. Root cause: rule(:install/:run
 % ?{Ctx}) short-circuited to []/[reinstall] for already-installed packages
 % without checking whether the requested build_with_use matched the VDB-
 % recorded USE. Fix: when BWU mismatches, re-emit as a transactional :update
 % with `replaces(pkg://Ebuild)` so candidate:resolve walks DEPEND/BDEPEND
-% under the new BWU and the planner schedules newly-required deps before
+% under the new BWU and the orderer places newly-required deps before
 % the rebuild.
 
 % Find an installed package with at least one IUSE flag the VDB build
@@ -2832,7 +2832,7 @@ test(install_rule_emits_update_on_bwu_mismatch,
      [condition(test_setup_pick(_, _))]) :-
   test_setup_pick(pkg://Ebuild, Flag),
   Ctx = [build_with_use:use_state([Flag],[])],
-  rules:rule(portage://Ebuild:install?{Ctx}, Conds),
+  resolving:rule(portage://Ebuild:install?{Ctx}, Conds),
   Conds = [portage://Ebuild:update?{UpdCtx}],
   memberchk(replaces(pkg://Ebuild), UpdCtx),
   memberchk(rebuild_reason(build_with_use), UpdCtx).
@@ -2844,7 +2844,7 @@ test(run_rule_emits_update_on_bwu_mismatch,
      [condition(test_setup_pick(_, _))]) :-
   test_setup_pick(pkg://Ebuild, Flag),
   Ctx = [build_with_use:use_state([Flag],[])],
-  rules:rule(portage://Ebuild:run?{Ctx}, Conds),
+  resolving:rule(portage://Ebuild:run?{Ctx}, Conds),
   Conds = [portage://Ebuild:update?{UpdCtx}],
   memberchk(replaces(pkg://Ebuild), UpdCtx),
   memberchk(rebuild_reason(build_with_use), UpdCtx).
@@ -2854,7 +2854,7 @@ test(run_rule_emits_update_on_bwu_mismatch,
 test(install_rule_empty_ctx_keeps_short_circuit,
      [condition(test_setup_pick(_, _))]) :-
   test_setup_pick(pkg://Ebuild, _),
-  rules:rule(portage://Ebuild:install?{[]}, Conds),
+  resolving:rule(portage://Ebuild:install?{[]}, Conds),
   Conds == [].
 
 % End-to-end: prove + plan iptables:run with bracketed-[nftables].
@@ -2867,7 +2867,7 @@ test(plan_orders_bwu_dep_before_rebuild,
   !,
   Goal = portage://RepoE:run?{[build_with_use:use_state([nftables],[])]},
   pipeline:prove_with_fallback([Goal], Proof, _Model, Triggers),
-  planner:plan(Proof, Triggers, t, Plan, _Rem),
+  orderer:order(Proof, Triggers, _ProofOut, Plan, _SCCs),
   % Find the wave index of any libnftnl literal vs any iptables-VVV:update.
   nth1(WLib, Plan, WaveLib),
     member(RLib, WaveLib),
@@ -2918,7 +2918,7 @@ test(install_rule_emits_update_on_use_change,
      [condition(test_setup_pick(_, _))]) :-
   test_setup_pick(pkg://Ebuild, Flag),
   Ctx = [suggestion(use_change, portage://Ebuild, [use_change(Flag, enable)])],
-  rules:rule(portage://Ebuild:install?{Ctx}, Conds),
+  resolving:rule(portage://Ebuild:install?{Ctx}, Conds),
   Conds = [portage://Ebuild:update?{UpdCtx}],
   memberchk(replaces(pkg://Ebuild), UpdCtx),
   memberchk(rebuild_reason(build_with_use), UpdCtx).
@@ -2930,7 +2930,7 @@ test(run_rule_emits_update_on_use_change,
      [condition(test_setup_pick(_, _))]) :-
   test_setup_pick(pkg://Ebuild, Flag),
   Ctx = [suggestion(use_change, portage://Ebuild, [use_change(Flag, enable)])],
-  rules:rule(portage://Ebuild:run?{Ctx}, Conds),
+  resolving:rule(portage://Ebuild:run?{Ctx}, Conds),
   Conds = [portage://Ebuild:update?{UpdCtx}],
   memberchk(replaces(pkg://Ebuild), UpdCtx),
   memberchk(rebuild_reason(build_with_use), UpdCtx).
@@ -2942,7 +2942,7 @@ test(install_rule_absent_flag_keeps_short_circuit,
   test_setup_pick(pkg://Ebuild, _),
   Ctx = [suggestion(use_change, portage://Ebuild,
                     [use_change('portage_ng_nonexistent_flag', enable)])],
-  rules:rule(portage://Ebuild:install?{Ctx}, Conds),
+  resolving:rule(portage://Ebuild:install?{Ctx}, Conds),
   Conds == [].
 
 :- end_tests(rules_install_run_use_change_rebuild).
@@ -2992,10 +2992,10 @@ test(other_keyword_filtered_not_phantom, [fail]) :-
 % prover (so the proof completes at tier 1 instead of cascading through all
 % five prove_with_fallback relaxation tiers, portage-ng#20 perf fallout). The
 % emitted assumption carries the assumption_reason tag so the printer can
-% classify it downstream (phantom_grouped_dep_assumption/3). The scheduler
-% no longer filters aliasing on these tags: its assumed-dep alias is
-% existence-gated on a concrete planned action, which handles phantoms
-% naturally while preserving ordering edges to planned providers
+% classify it downstream (phantom_grouped_dep_assumption/3). The ordering
+% engine does not filter aliasing on these tags: its assumed-dep alias
+% preference is existence-gated on a concrete planned action, which handles
+% phantoms naturally while preserving ordering edges to planned providers
 % (portage-ng#95).
 test(build_assumption_emits_phantom_with_reason_tag) :-
   assertz(memo:assumption_reason_cache_(install, 'dev-qt', qtbase, unsatisfied_constraints)),
@@ -3047,492 +3047,6 @@ test(record_visibility_override_noop_without_selection,
   \+ memo:visibility_override_(_, _).
 
 :- end_tests(phantom_grouped_dep_assumption).
-
-
-% =============================================================================
-%  Scheduler: install configure closure (portage-ng#21)
-% =============================================================================
-
-:- begin_tests(scheduler_install_configure_deps).
-
-% KB-independent: `build_pkg_head_map/2` needs `cache:ordered_entry/5`, which
-% CI lacks. Exercise the repair graph + wave assignment with synthetic heads
-% and a hand-built PkgHeadMap (grouped RDEPEND aliasing via run_phase-C-N).
-
-% Repair the wave map for a synthetic rule set: builds the effective repair
-% graph, condenses it (Kosaraju), assigns longest-path waves and linearizes
-% multi-member SCCs.
-repair_waves(AllRules, Map0, PkgHeadMap, Pd, CfgMap, Map1) :-
-  scheduler:build_repair_graph(AllRules, Map0, PkgHeadMap, Pd, CfgMap,
-                               Heads, Forward, Reverse),
-  scheduler:kosaraju_scc(Heads, Forward, Reverse, SCCs),
-  scheduler:repair_comp_map(SCCs, CompMap, CompIds, MembersMap),
-  scheduler:comp_edges(Forward, CompMap, CompEdges),
-  scheduler:remainder_head_rule_map(AllRules, HeadRuleMap),
-  scheduler:assign_repair_waves(CompIds, CompEdges, MembersMap, Forward,
-                                HeadRuleMap, Map0, Map1).
-
-test(install_promoted_past_run_rdepend) :-
-  BifRun = grouped_package_dependency(no, 'dev-haskell', bifunctors, []):run,
-  SgRun = rule(portage://'fake/sg-1':run, [BifRun]),
-  SgInstall = rule(portage://'fake/sg-1':install, []),
-  BifRunRule = rule(portage://'fake/bif-1':run, []),
-  AllRules = [SgInstall, SgRun, BifRunRule],
-  list_to_assoc([ (portage://'fake/sg-1':install)-1,
-                  (portage://'fake/sg-1':run)-2,
-                  (portage://'fake/bif-1':run)-2 ], Map0),
-  list_to_assoc([ ('run_phase'-'dev-haskell'-bifunctors)-(portage://'fake/bif-1':run) ],
-                 PkgHeadMap),
-  scheduler:build_install_configure_dep_map([SgRun], CfgMap),
-  repair_waves(AllRules, Map0, PkgHeadMap, pd(t, t), CfgMap, Map1),
-  get_assoc(portage://'fake/sg-1':install, Map1, WInstall),
-  WInstall >= 3.
-
-test(configure_deps_alias_edge_from_run_body) :-
-  BifRun = grouped_package_dependency(no, 'dev-haskell', bifunctors, []):run,
-  RunRule = rule(portage://'fake/sg-1':run, [BifRun]),
-  list_to_assoc([ ('run_phase'-'dev-haskell'-bifunctors)-(portage://'fake/bif-1':run) ],
-                 PkgHeadMap),
-  list_to_assoc([ (portage://'fake/sg-1':install)-1,
-                  (portage://'fake/bif-1':run)-1 ], Map),
-  scheduler:build_install_configure_dep_map([RunRule], CfgMap),
-  empty_assoc(F0),
-  scheduler:add_repair_edges(Map, PkgHeadMap, pd(t,t), CfgMap,
-                             rule(portage://'fake/sg-1':install, []), F0, F1),
-  get_assoc(portage://'fake/sg-1':install, F1, Deps),
-  memberchk(portage://'fake/bif-1':run, Deps).
-
-% Regression for portage-ng#26: a dependency cycle elsewhere in the plan
-% must not collapse an acyclic downstream chain into a single wave. The
-% earlier fixpoint-sweep repair diverged on the a<->b cycle, hit its
-% iteration cap, and then merged c (BDEPEND consumer) into the same wave
-% as its dependency. Cycle members may now occupy consecutive linearized
-% sub-waves (portage-ng#114); the consumer chain must still start strictly
-% after the later of the two.
-test(cycle_does_not_collapse_downstream_chain) :-
-  ARun = portage://'fake/a-1':run,
-  BRun = portage://'fake/b-1':run,
-  CInstall = portage://'fake/c-1':install,
-  DInstall = portage://'fake/d-1':install,
-  AllRules = [ rule(ARun, [BRun]),
-               rule(BRun, [ARun]),
-               rule(CInstall, [BRun]),
-               rule(DInstall, [CInstall]) ],
-  list_to_assoc([ARun-1, BRun-1, CInstall-1, DInstall-1], Map0),
-  empty_assoc(PkgHeadMap),
-  empty_assoc(CfgMap),
-  repair_waves(AllRules, Map0, PkgHeadMap, pd(t, t), CfgMap, Map1),
-  get_assoc(ARun, Map1, WA),
-  get_assoc(BRun, Map1, WB),
-  get_assoc(CInstall, Map1, WC),
-  get_assoc(DInstall, Map1, WD),
-  CycleEnd is max(WA, WB),
-  WC > CycleEnd,
-  WD > WC.
-
-% Regression for portage-ng#83: a provider's soft/hard blocker against the
-% very consumers that depend on it must NOT seed a "schedule-after" edge.
-% qtbase carries `!<dev-qt/qt*-<ver>` soft blockers against the modules
-% that RDEPEND it; treating those as ordering edges closed a cycle with the
-% configure-closure edge and co-waved qtbase:run with the modules' :install.
-test(soft_blocker_recognized) :-
-  scheduler:dep_is_blocker(grouped_package_dependency(weak, 'dev-qt', qtsvg,
-      [package_dependency(run, weak, 'dev-qt', qtsvg, smaller,
-          version([6,11,1], '', 4, 0, [], 0, '6.11.1'), [slot('6')], [])]):run).
-
-test(hard_blocker_recognized) :-
-  scheduler:dep_is_blocker(grouped_package_dependency(strong, 'dev-qt', qtsvg, []):run?{[]}).
-
-test(normal_dep_not_blocker, [fail]) :-
-  scheduler:dep_is_blocker(grouped_package_dependency(no, 'dev-qt', qtbase, []):run).
-
-% The blocker on a provider's :run body must not appear as a forward repair
-% edge to the consumer it blocks (which would form the spurious SCC cycle).
-test(soft_blocker_creates_no_repair_edge) :-
-  Blocker = grouped_package_dependency(weak, 'dev-qt', qtsvg, []):run,
-  PRun = rule(portage://'fake/qtbase-1':run, [Blocker]),
-  list_to_assoc([ (portage://'fake/qtbase-1':run)-1,
-                  (portage://'fake/qtsvg-1':run)-1 ], Map),
-  list_to_assoc([ ('run_phase'-'dev-qt'-qtsvg)-(portage://'fake/qtsvg-1':run) ],
-                 PkgHeadMap),
-  empty_assoc(CfgMap),
-  empty_assoc(F0),
-  scheduler:add_repair_edges(Map, PkgHeadMap, pd(t,t), CfgMap, PRun, F0, F1),
-  get_assoc(portage://'fake/qtbase-1':run, F1, Deps),
-  \+ memberchk(portage://'fake/qtsvg-1':run, Deps).
-
-% End-to-end wave check: consumer RDEPENDs provider (configure closure) while
-% provider soft-blocks consumer. The consumer's :install must land strictly
-% after the provider's :run merge, never co-waved with it.
-test(blocker_provider_consumer_not_cowaved) :-
-  Rdep    = grouped_package_dependency(no, 'dev-qt', qtbase, []):run,
-  Blocker = grouped_package_dependency(weak, 'dev-qt', qtsvg, []):run,
-  CInstall = rule(portage://'fake/qtsvg-1':install, []),
-  CRun     = rule(portage://'fake/qtsvg-1':run, [Rdep]),
-  PInstall = rule(portage://'fake/qtbase-1':install, []),
-  PRun     = rule(portage://'fake/qtbase-1':run, [Blocker]),
-  AllRules = [CInstall, CRun, PInstall, PRun],
-  list_to_assoc([ (portage://'fake/qtsvg-1':install)-1,
-                  (portage://'fake/qtsvg-1':run)-1,
-                  (portage://'fake/qtbase-1':install)-1,
-                  (portage://'fake/qtbase-1':run)-1 ], Map0),
-  list_to_assoc([ ('run_phase'-'dev-qt'-qtbase)-(portage://'fake/qtbase-1':run),
-                  ('run_phase'-'dev-qt'-qtsvg)-(portage://'fake/qtsvg-1':run) ],
-                 PkgHeadMap),
-  scheduler:build_install_configure_dep_map(AllRules, CfgMap),
-  repair_waves(AllRules, Map0, PkgHeadMap, pd(t, t), CfgMap, Map1),
-  get_assoc(portage://'fake/qtbase-1':run, Map1, WPRun),
-  get_assoc(portage://'fake/qtsvg-1':install, Map1, WCInstall),
-  WCInstall > WPRun.
-
-% portage-ng#83 (second build system, meson/pkg-config): media-libs/libglvnd
-% carries a *versionless* weak blocker `!media-libs/mesa` in both DEPEND and
-% RDEPEND, while mesa DEPEND/RDEPENDs libglvnd. The RDEPEND blocker lands on
-% libglvnd:run as a grouped `:run` literal (matched by grouped_run_dep_pkg_key)
-% and previously closed the same SCC cycle, co-waving libglvnd's merge with
-% mesa's configure. The blocker is strength-based, so the versionless
-% `none/version_none` operator must not matter.
-test(versionless_run_blocker_recognized) :-
-  scheduler:dep_is_blocker(grouped_package_dependency(weak, 'media-libs', mesa,
-      [package_dependency(run, weak, 'media-libs', mesa, none, version_none, [],
-          [use(disable(libglvnd), positive)])]):run).
-
-test(libglvnd_mesa_provider_consumer_not_cowaved) :-
-  Rdep    = grouped_package_dependency(no, 'media-libs', libglvnd, []):run,
-  Blocker = grouped_package_dependency(weak, 'media-libs', mesa,
-      [package_dependency(run, weak, 'media-libs', mesa, none, version_none, [],
-          [use(disable(libglvnd), positive)])]):run,
-  CInstall = rule(portage://'fake/mesa-1':install, []),
-  CRun     = rule(portage://'fake/mesa-1':run, [Rdep]),
-  PInstall = rule(portage://'fake/libglvnd-1':install, []),
-  PRun     = rule(portage://'fake/libglvnd-1':run, [Blocker]),
-  AllRules = [CInstall, CRun, PInstall, PRun],
-  list_to_assoc([ (portage://'fake/mesa-1':install)-1,
-                  (portage://'fake/mesa-1':run)-1,
-                  (portage://'fake/libglvnd-1':install)-1,
-                  (portage://'fake/libglvnd-1':run)-1 ], Map0),
-  list_to_assoc([ ('run_phase'-'media-libs'-libglvnd)-(portage://'fake/libglvnd-1':run),
-                  ('run_phase'-'media-libs'-mesa)-(portage://'fake/mesa-1':run) ],
-                 PkgHeadMap),
-  scheduler:build_install_configure_dep_map(AllRules, CfgMap),
-  repair_waves(AllRules, Map0, PkgHeadMap, pd(t, t), CfgMap, Map1),
-  get_assoc(portage://'fake/libglvnd-1':run, Map1, WPRun),
-  get_assoc(portage://'fake/mesa-1':install, Map1, WCInstall),
-  WCInstall > WPRun.
-
-% Regression for portage-ng#95: a dep that degraded to a domain assumption
-% tagged `required_use_violation` (conflicting REQUIRED_USE on the provider)
-% must STILL alias to the concrete planned install of that provider. The
-% earlier `assumed_inner_phantom` guard skipped the alias unconditionally,
-% severing the qtbase BDEPEND ordering edge for KDE consumers (breeze-icons
-% and plasma-wayland-protocols configured before qtbase merged: "No Qt6
-% qtpaths executable found").
-test(requse_violation_assumed_dep_still_aliases) :-
-  Dep = assumed(grouped_package_dependency('dev-qt', qtbase, []):install
-                ?{[required_use_violation(dummy)]}),
-  scheduler:assumed_dep_alias_key(Dep, Key),
-  Key == 'install_phase'-'dev-qt'-qtbase.
-
-test(requse_violation_consumer_promoted_after_planned_provider) :-
-  AssumedDep = assumed(grouped_package_dependency('dev-qt', qtbase, []):install
-                       ?{[required_use_violation(dummy)]}),
-  Consumer = rule(portage://'fake/breeze-icons-1':install, [AssumedDep]),
-  Provider = rule(portage://'fake/qtbase-1':install, []),
-  AllRules = [Consumer, Provider],
-  % Violation: consumer initially waved BEFORE its (assumed) provider.
-  list_to_assoc([ (portage://'fake/breeze-icons-1':install)-1,
-                  (portage://'fake/qtbase-1':install)-2 ], Map0),
-  list_to_assoc([ ('install_phase'-'dev-qt'-qtbase)-(portage://'fake/qtbase-1':install) ],
-                 PkgHeadMap),
-  scheduler:plan_has_ordering_violation(AllRules, Map0, PkgHeadMap),
-  empty_assoc(CfgMap),
-  repair_waves(AllRules, Map0, PkgHeadMap, pd(t, t), CfgMap, Map1),
-  get_assoc(portage://'fake/qtbase-1':install, Map1, WProvider),
-  get_assoc(portage://'fake/breeze-icons-1':install, Map1, WConsumer),
-  WConsumer > WProvider.
-
-% Regression for portage-ng#114: python[tk] RDEPEND/DEPEND on tk, while tk
-% and fontconfig form a proof-level cycle back through python (fontconfig
-% needs python; tk needs fontconfig; python[tk] needs tk). Sharing one
-% repair wave for the whole SCC co-scheduled python:update with tk:install
-% under builder parallelism (_tkinter configure race). Multi-member repair
-% SCCs must linearize concrete members so the consumer lands strictly after
-% tk:install and tk:run.
-test(grouped_dep_pkg_key_install_phase) :-
-  Dep = grouped_package_dependency(no, 'dev-lang', tk, []):install,
-  scheduler:grouped_dep_pkg_key(Dep, Key),
-  Key == install_phase-'dev-lang'-tk.
-
-test(python_tk_cycle_linearizes_consumer_after_provider) :-
-  TkDepI = grouped_package_dependency(no, 'dev-lang', tk, []):install,
-  TkDepR = grouped_package_dependency(no, 'dev-lang', tk, []):run,
-  FcDepI = grouped_package_dependency(no, 'media-libs', fontconfig, []):install,
-  PyDepI = grouped_package_dependency(no, 'dev-lang', python, []):install,
-  PyUpdate = rule(portage://'fake/python-1':update, [TkDepI, TkDepR]),
-  TkInstall = rule(portage://'fake/tk-1':install, [FcDepI]),
-  TkRun = rule(portage://'fake/tk-1':run, [portage://'fake/tk-1':install]),
-  FcUpdate = rule(portage://'fake/fontconfig-1':update, [PyDepI]),
-  % Grouped meta-heads (proof artifacts) close the cycle the way live plans do.
-  GTkI = rule(TkDepI, [portage://'fake/tk-1':install]),
-  GTkR = rule(TkDepR, [portage://'fake/tk-1':run]),
-  GFcI = rule(FcDepI, [portage://'fake/fontconfig-1':update]),
-  GPyI = rule(PyDepI, [portage://'fake/python-1':update]),
-  AllRules = [PyUpdate, TkInstall, TkRun, FcUpdate, GTkI, GTkR, GFcI, GPyI],
-  list_to_assoc([ (portage://'fake/python-1':update)-1,
-                  (portage://'fake/tk-1':install)-1,
-                  (portage://'fake/tk-1':run)-1,
-                  (portage://'fake/fontconfig-1':update)-1,
-                  TkDepI-1, TkDepR-1, FcDepI-1, PyDepI-1 ], Map0),
-  list_to_assoc([ ('install_phase'-'dev-lang'-tk)-(portage://'fake/tk-1':install),
-                  ('run_phase'-'dev-lang'-tk)-(portage://'fake/tk-1':run),
-                  ('install_phase'-'media-libs'-fontconfig)-(portage://'fake/fontconfig-1':update),
-                  ('install_phase'-'dev-lang'-python)-(portage://'fake/python-1':update) ],
-                 PkgHeadMap),
-  empty_assoc(CfgMap),
-  repair_waves(AllRules, Map0, PkgHeadMap, pd(t, t), CfgMap, Map1),
-  get_assoc(portage://'fake/tk-1':install, Map1, WTkI),
-  get_assoc(portage://'fake/tk-1':run, Map1, WTkR),
-  get_assoc(portage://'fake/python-1':update, Map1, WPy),
-  WTkR > WTkI,
-  WPy > WTkR.
-
-:- end_tests(scheduler_install_configure_deps).
-
-
-% =============================================================================
-%  Scheduler: ordering-violation pre-check (portage-ng#54)
-% =============================================================================
-%
-% `repair_ordering_violations/3` only runs the full SCC-condensation repair
-% when the cheap single-pass scan (`plan_has_ordering_violation/3`) finds a
-% wave-ordering violation. These tests exercise the scan against the same
-% synthetic rule sets used by the repair tests above (KB-independent,
-% hand-built wave map + PkgHeadMap).
-
-:- begin_tests(scheduler_ordering_precheck).
-
-% Every body dep sits in a strictly earlier wave: no violation, the repair
-% fast path returns the plan unchanged.
-test(violation_free_plan_passes_scan, [fail]) :-
-  AInstall = portage://'fake/a-1':install,
-  ARun = portage://'fake/a-1':run,
-  BInstall = portage://'fake/b-1':install,
-  AllRules = [ rule(AInstall, []),
-               rule(ARun, [AInstall]),
-               rule(BInstall, [ARun]) ],
-  list_to_assoc([AInstall-1, ARun-2, BInstall-3], Map),
-  empty_assoc(PkgHeadMap),
-  scheduler:plan_has_ordering_violation(AllRules, Map, PkgHeadMap).
-
-% A rule planned before its direct body dep is a violation.
-test(direct_dep_violation_detected) :-
-  AInstall = portage://'fake/a-1':install,
-  BInstall = portage://'fake/b-1':install,
-  AllRules = [ rule(AInstall, []),
-               rule(BInstall, [AInstall]) ],
-  list_to_assoc([AInstall-2, BInstall-1], Map),
-  empty_assoc(PkgHeadMap),
-  scheduler:plan_has_ordering_violation(AllRules, Map, PkgHeadMap).
-
-% Sharing a wave with a dependency is a violation too (the longest-path
-% repair places a rule STRICTLY after its cross-SCC dependencies).
-test(same_wave_dep_violation_detected) :-
-  AInstall = portage://'fake/a-1':install,
-  BInstall = portage://'fake/b-1':install,
-  AllRules = [ rule(AInstall, []),
-               rule(BInstall, [AInstall]) ],
-  list_to_assoc([AInstall-1, BInstall-1], Map),
-  empty_assoc(PkgHeadMap),
-  scheduler:plan_has_ordering_violation(AllRules, Map, PkgHeadMap).
-
-% Grouped-RDEPEND alias: the grouped head is not a plan head, but the
-% concrete provider (via PkgHeadMap) lands in a later wave.
-test(grouped_rdepend_alias_violation_detected) :-
-  BifRun = grouped_package_dependency(no, 'dev-haskell', bifunctors, []):run,
-  AllRules = [ rule(portage://'fake/sg-1':run, [BifRun]),
-               rule(portage://'fake/bif-1':run, []) ],
-  list_to_assoc([ (portage://'fake/sg-1':run)-1,
-                  (portage://'fake/bif-1':run)-2 ], Map),
-  list_to_assoc([ ('run_phase'-'dev-haskell'-bifunctors)-(portage://'fake/bif-1':run) ],
-                 PkgHeadMap),
-  scheduler:plan_has_ordering_violation(AllRules, Map, PkgHeadMap).
-
-% Assumed-dep alias (Qt6 cmake-find ordering bug): the assumed grouped dep
-% aliases to a concrete planned install in a later wave.
-test(assumed_dep_alias_violation_detected) :-
-  Assumed = assumed(grouped_package_dependency('dev-qt', qtbase, []):install?{[]}),
-  AllRules = [ rule(portage://'fake/consumer-1':install, [Assumed]),
-               rule(portage://'fake/qtbase-1':install, []) ],
-  list_to_assoc([ (portage://'fake/consumer-1':install)-1,
-                  (portage://'fake/qtbase-1':install)-2 ], Map),
-  list_to_assoc([ ('install_phase'-'dev-qt'-qtbase)-(portage://'fake/qtbase-1':install) ],
-                 PkgHeadMap),
-  scheduler:plan_has_ordering_violation(AllRules, Map, PkgHeadMap).
-
-% Configure closure (portage-ng#21): the install sibling of a :run rule is
-% planned before the run rule's RDEPEND provider. The run rule's own body
-% edges are satisfied (provider wave 2 < run wave 3), so only the configure
-% closure check catches this.
-test(configure_closure_violation_detected) :-
-  BifRun = grouped_package_dependency(no, 'dev-haskell', bifunctors, []):run,
-  AllRules = [ rule(portage://'fake/sg-1':install, []),
-               rule(portage://'fake/sg-1':run, [BifRun]),
-               rule(portage://'fake/bif-1':run, []) ],
-  list_to_assoc([ (portage://'fake/sg-1':install)-1,
-                  (portage://'fake/sg-1':run)-3,
-                  (portage://'fake/bif-1':run)-2 ], Map),
-  list_to_assoc([ ('run_phase'-'dev-haskell'-bifunctors)-(portage://'fake/bif-1':run) ],
-                 PkgHeadMap),
-  scheduler:plan_has_ordering_violation(AllRules, Map, PkgHeadMap).
-
-% Same shape but with the install sibling correctly placed after the
-% provider: the scan stays quiet.
-test(configure_closure_satisfied_passes_scan, [fail]) :-
-  BifRun = grouped_package_dependency(no, 'dev-haskell', bifunctors, []):run,
-  AllRules = [ rule(portage://'fake/bif-1':run, []),
-               rule(portage://'fake/sg-1':install, []),
-               rule(portage://'fake/sg-1':run, [BifRun]) ],
-  list_to_assoc([ (portage://'fake/bif-1':run)-1,
-                  (portage://'fake/sg-1':install)-2,
-                  (portage://'fake/sg-1':run)-3 ], Map),
-  list_to_assoc([ ('run_phase'-'dev-haskell'-bifunctors)-(portage://'fake/bif-1':run) ],
-                 PkgHeadMap),
-  scheduler:plan_has_ordering_violation(AllRules, Map, PkgHeadMap).
-
-:- end_tests(scheduler_ordering_precheck).
-
-
-% =============================================================================
-%  Scheduler: PDEPEND completion ordering (portage-ng#18)
-% =============================================================================
-%
-% A provider P that declares PDEPEND is only functionally complete once its
-% post-install group is merged. A consumer of P (e.g. a ruby extension gem
-% whose `configure` phase runs the interpreter) must therefore be ordered
-% after P's whole PDEPEND closure, matching emerge. These tests cover the
-% pure helpers that implement that ordering in `Source/Pipeline/scheduler.pl`
-% (no knowledge base required).
-
-:- begin_tests(scheduler_pdepend_completion).
-
-% Fixtures: a synthetic provider `dev-lang/ruby` with one PDEPEND target
-% `fake/rubygems-1` (installed at wave 9, run at wave 10). The closure map is
-% per-target: target head -> set of (Category,Name) it transitively depends
-% on. Here rubygems' closure is just its own package (no cycle back to the
-% leaf consumer). Consumers are grouped dep literals (head_package resolves
-% them without a cache lookup).
-
-pdepend_fixture(Map, pd(AnchorMap, ClosureMap)) :-
-  list_to_assoc([ (portage://'fake/rubygems-1':install)-9,
-                  (portage://'fake/rubygems-1':run)-10 ], Map),
-  list_to_assoc([ ('dev-lang'-ruby)-[portage://'fake/rubygems-1':run] ], AnchorMap),
-  list_to_assoc([ ('dev-ruby'-rubygems)-true ], TargetCns),
-  list_to_assoc([ (portage://'fake/rubygems-1':run)-TargetCns ], ClosureMap).
-
-% A leaf consumer (outside the target's closure) is ordered after the
-% target's INSTALL head (wave 9), not its cyclic :run head (wave 10). This
-% is the ruby-gem case (portage-ng#18).
-test(consumer_completes_after_pdepend_install_head) :-
-  pdepend_fixture(Map, Pd),
-  scheduler:pdepend_completion_heads(grouped_package_dependency(no,'dev-lang',ruby,[]):install,
-                                     grouped_package_dependency(no,'dev-ruby','mecab-ruby',[]):install,
-                                     Map, Pd, Heads),
-  Heads == [portage://'fake/rubygems-1':install].
-
-% A consumer whose package lies in the target's closure must NOT be bumped
-% (cycle safety, at (C,N) granularity): the target transitively depends on
-% it. This is the LLVM clang/compiler-rt cycle (portage-ng#19).
-test(cyclic_consumer_not_bumped, [fail]) :-
-  pdepend_fixture(Map, Pd),
-  scheduler:pdepend_completion_heads(grouped_package_dependency(no,'dev-lang',ruby,[]):install,
-                                     grouped_package_dependency(no,'dev-ruby',rubygems,[]):install,
-                                     Map, Pd, _).
-
-% Per-target filtering: a provider with two PDEPEND targets, one acyclic
-% (clang-toolchain-symlinks) and one cyclic w.r.t. the consumer
-% (clang-runtime, RDEPENDs the consumer). The consumer (compiler-rt) is
-% ordered after the acyclic target's install head and never after the
-% cyclic one (portage-ng#19).
-test(per_target_cycle_filter_uses_acyclic_targets) :-
-  list_to_assoc([ (portage://'fake/symlinks-1':install)-10,
-                  (portage://'fake/symlinks-1':run)-11,
-                  (portage://'fake/runtime-1':install)-16,
-                  (portage://'fake/runtime-1':run)-17 ], Map),
-  list_to_assoc([ ('llvm-core'-clang)-[portage://'fake/symlinks-1':run,
-                                       portage://'fake/runtime-1':run] ], AnchorMap),
-  empty_assoc(SymCns),
-  list_to_assoc([ ('llvm-runtimes'-'compiler-rt')-true ], RunCns),
-  list_to_assoc([ (portage://'fake/symlinks-1':run)-SymCns,
-                  (portage://'fake/runtime-1':run)-RunCns ], ClosureMap),
-  scheduler:pdepend_completion_heads(grouped_package_dependency(no,'llvm-core',clang,[]):install,
-                                     grouped_package_dependency(no,'llvm-runtimes','compiler-rt',[]):install,
-                                     Map, pd(AnchorMap, ClosureMap), Heads),
-  Heads == [portage://'fake/symlinks-1':install].
-
-% A consumer that is ITSELF one of the provider's PDEPEND targets is never
-% ordered after the group (e.g. clang-toolchain-symlinks must not wait for
-% its sibling clang-runtime; portage-ng#19).
-test(pdepend_target_member_not_bumped, [fail]) :-
-  list_to_assoc([ (portage://'fake/symlinks-1':install)-5 ], Map),
-  GH = grouped_package_dependency(no,'llvm-core','clang-toolchain-symlinks',[]):run,
-  list_to_assoc([ ('llvm-core'-clang)-[GH] ], AnchorMap),
-  empty_assoc(EmptyCns),
-  list_to_assoc([ GH-EmptyCns ], ClosureMap),
-  scheduler:pdepend_completion_heads(grouped_package_dependency(no,'llvm-core',clang,[]):install,
-                                     grouped_package_dependency(no,'llvm-core','clang-toolchain-symlinks',[]):install,
-                                     Map, pd(AnchorMap, ClosureMap), _).
-
-% No PDEPEND provider in plan (empty AnchorMap): fast no-op failure.
-test(empty_anchor_map_is_noop, [fail]) :-
-  pdepend_fixture(Map, _),
-  scheduler:pdepend_completion_heads(grouped_package_dependency(no,'dev-lang',ruby,[]):install,
-                                     grouped_package_dependency(no,'dev-ruby','mecab-ruby',[]):install,
-                                     Map, pd(t,t), _).
-
-% A non-grouped (concrete) dep literal never triggers completion: consumer
-% edges are always grouped deps, and the concrete provider-install node is
-% shared with the post-install group.
-test(concrete_dep_does_not_complete, [fail]) :-
-  pdepend_fixture(Map, Pd),
-  scheduler:pdepend_completion_heads(portage://'fake/ruby-1':install,
-                                     grouped_package_dependency(no,'dev-ruby','mecab-ruby',[]):install,
-                                     Map, Pd, _).
-
-% A dep on a provider without PDEPEND (absent from AnchorMap) fails.
-test(provider_without_pdepend_fails, [fail]) :-
-  pdepend_fixture(Map, Pd),
-  scheduler:pdepend_completion_heads(grouped_package_dependency(no,'dev-libs',glib,[]):install,
-                                     grouped_package_dependency(no,'dev-libs',consumer,[]):install,
-                                     Map, Pd, _).
-
-% pdepend_effective_head prefers the package's :install head over a :run head.
-test(install_head_preferred_over_run) :-
-  list_to_assoc([ (portage://'fake/x-1':install)-3,
-                  (portage://'fake/x-1':run)-5 ], M),
-  scheduler:pdepend_effective_head(M, portage://'fake/x-1':run, EH),
-  EH == portage://'fake/x-1':install.
-
-% Forward closure reaches every transitively-depended head (seeds included).
-test(forward_closure_reaches_transitive_deps) :-
-  list_to_assoc([ a-[b,c], b-[d], c-[], d-[] ], Fwd),
-  empty_assoc(V0),
-  scheduler:forward_closure([a], Fwd, V0, Closure),
-  assoc_to_keys(Closure, Ks),
-  sort(Ks, Sorted),
-  Sorted == [a,b,c,d].
-
-% Collapsing a head closure to package (C,N) identity: grouped heads map to
-% their package, duplicate slots/actions collapse, and non-package heads
-% (assumptions/blockers) are dropped (portage-ng#19).
-test(closure_heads_to_cns_collapses_to_packages) :-
-  list_to_assoc([ (grouped_package_dependency(no,'dev-ruby',rubygems,[]):run)-true,
-                  (grouped_package_dependency(no,'dev-ruby',rubygems,[]):install)-true,
-                  (assumed(blocker(weak,run,a,b,none,version_none,[])))-true ], Closure),
-  scheduler:closure_heads_to_cns(Closure, CnSet),
-  assoc_to_keys(CnSet, Ks),
-  Ks == ['dev-ruby'-rubygems].
-
-:- end_tests(scheduler_pdepend_completion).
 
 
 % -----------------------------------------------------------------------------
@@ -3997,12 +3511,12 @@ test(issue59_eligible_install_uses_masked_macro) :-
 %  Synthetic-rule resolver core tests (issue #73)
 % =============================================================================
 %
-% KB-independent unit tests for the resolver core, in the same spirit as the
-% synthetic scheduler tests above. The rules module exposes a synthetic rule
-% store (rules:enable_test_rules/0, rules:test_rule/2): while active,
-% rules:rule/2 resolves EXCLUSIVELY against hand-built test_rule/2 clauses,
-% so prover:prove/9, planner:plan/5 and the prove_with_fallback tier chain
-% can be exercised over tiny rule sets without a knowledge base.
+% KB-independent unit tests for the resolver core. The resolving module
+% exposes a synthetic rule store (resolving:enable_test_rules/0,
+% resolving:test_rule/2): while active, resolving:rule/2 resolves
+% EXCLUSIVELY against hand-built test_rule/2 clauses, so
+% resolver:resolve/9, orderer:order/5 and the prove_with_fallback tier
+% chain can be exercised over tiny rule sets without a knowledge base.
 %
 % Goals are passed as BARE literals (no ?{[]} proof-context wrapper):
 % prover:canon_literal/3 canonicalizes the R://- and :Action-shaped literal
@@ -4012,9 +3526,9 @@ test(issue59_eligible_install_uses_masked_macro) :-
 
 % Replace the synthetic rule store contents with Head-Body pairs.
 issue73_rules(Pairs) :-
-  rules:enable_test_rules,
-  retractall(rules:test_rule(_, _)),
-  forall(member(H-B, Pairs), assertz(rules:test_rule(H, B))).
+  resolving:enable_test_rules,
+  retractall(resolving:test_rule(_, _)),
+  forall(member(H-B, Pairs), assertz(resolving:test_rule(H, B))).
 
 % Wave index of the rule whose canonical head is Lit (fails when unplanned).
 issue73_wave(Plan, Lit, W) :-
@@ -4028,14 +3542,14 @@ issue73_wave(Plan, Lit, W) :-
 %  Prover core: proof / model / cycle-break shape (issue #73)
 % -----------------------------------------------------------------------------
 
-:- begin_tests(prover_core_synthetic, [cleanup(rules:disable_test_rules)]).
+:- begin_tests(prover_core_synthetic, [cleanup(resolving:disable_test_rules)]).
 
 % A linear chain proves every literal exactly once: the model holds each
 % literal, the proof holds one rule(L) key per literal with the synthetic
 % body and dep count, and the triggers AVL is the reverse dependency index.
 test(chain_proof_model_triggers_shape) :-
   issue73_rules([a-[b], b-[c], c-[]]),
-  prover:prove([a], t, Proof, t, Model, t, _Cons, t, Triggers),
+  resolver:resolve([a], t, Proof, t, Model, t, _Cons, t, Triggers),
   get_assoc(a, Model, _),
   get_assoc(b, Model, _),
   get_assoc(c, Model, _),
@@ -4050,20 +3564,20 @@ test(chain_proof_model_triggers_shape) :-
 % A shared dependency (diamond) is proven once and triggers both parents.
 test(diamond_shared_dep_proved_once) :-
   issue73_rules([a-[b, c], b-[d], c-[d], d-[]]),
-  prover:prove([a], t, Proof, t, Model, t, _Cons, t, Triggers),
+  resolver:resolve([a], t, Proof, t, Model, t, _Cons, t, Triggers),
   get_assoc(rule(d), Proof, dep(0, [])?_),
   get_assoc(d, Model, _),
   get_assoc(d, Triggers, Dependents),
   msort(Dependents, [b, c]).
 
 % A structural cycle yields a prover cycle-break: proof key
-% assumed(rule(Lit)) (dep count -1, body preserved for the scheduler), a
+% assumed(rule(Lit)) (dep count -1, body preserved for the orderer), a
 % cycle_path witness, and assumed(Lit) in the model — while the regular
 % rule(Lit) entry remains. This is the `assumed(rule(X))` axis of the
 % assumption taxonomy, distinct from domain assumptions.
 test(structural_cycle_break_shape) :-
   issue73_rules([a-[b], b-[a]]),
-  prover:prove([a], t, Proof, t, Model, t, _Cons, t, _Triggers),
+  resolver:resolve([a], t, Proof, t, Model, t, _Cons, t, _Triggers),
   get_assoc(assumed(rule(a)), Proof, dep(-1, [b])?_),
   get_assoc(cycle_path(a), Proof, CyclePath),
   CyclePath == [a, b, a],
@@ -4077,7 +3591,7 @@ test(structural_cycle_break_shape) :-
 % is recorded.
 test(benign_run_cycle_no_assumption) :-
   issue73_rules([(p:run)-[q:run], (q:run)-[p:run]]),
-  prover:prove([p:run], t, Proof, t, Model, t, _Cons, t, _Triggers),
+  resolver:resolve([p:run], t, Proof, t, Model, t, _Cons, t, _Triggers),
   get_assoc(p:run, Model, _),
   get_assoc(q:run, Model, _),
   \+ gen_assoc(assumed(_), Model, _),
@@ -4088,7 +3602,7 @@ test(benign_run_cycle_no_assumption) :-
 % and never as a prover cycle-break key.
 test(domain_assumption_shape) :-
   issue73_rules([p-[assumed(q)], assumed(_)-[]]),
-  prover:prove([p], t, Proof, t, Model, t, _Cons, t, _Triggers),
+  resolver:resolve([p], t, Proof, t, Model, t, _Cons, t, _Triggers),
   get_assoc(rule(p), Proof, dep(1, [assumed(q)])?_),
   get_assoc(rule(assumed(q)), Proof, dep(0, [])?_),
   get_assoc(assumed(q), Model, _),
@@ -4098,14 +3612,14 @@ test(domain_assumption_shape) :-
 % naf/1 conflict detection: a body requiring both naf(q) and q has no model.
 test(naf_conflict_fails, [fail]) :-
   issue73_rules([p-[naf(q), q], naf(_)-[], q-[]]),
-  prover:prove([p], t, _Proof, t, _Model, t, _Cons, t, _Triggers).
+  resolver:resolve([p], t, _Proof, t, _Model, t, _Cons, t, _Triggers).
 
 % constraint/1 body literals are routed to the constraint store: they never
 % appear in the model or the triggers, but the head's dep body retains them
 % and the value lands in the constraint AVL.
 test(constraint_routed_to_store) :-
   issue73_rules([p-[constraint(k:{hello})]]),
-  prover:prove([p], t, Proof, t, Model, t, Cons, t, Triggers),
+  resolver:resolve([p], t, Proof, t, Model, t, Cons, t, Triggers),
   get_assoc(rule(p), Proof, dep(1, [constraint(k:{hello})])?_),
   get_assoc(k, Cons, hello),
   \+ gen_assoc(constraint(_), Model, _),
@@ -4115,78 +3629,179 @@ test(constraint_routed_to_store) :-
 
 
 % -----------------------------------------------------------------------------
-%  Planner: wave-ordering invariants over synthetic proofs (issue #73)
+%  Ordering engine: rule-based pass-2 over synthetic proofs
 % -----------------------------------------------------------------------------
+%
+% The rule-based ordering engine (Source/Pipeline/orderer.pl +
+% Source/Domain/Gentoo/Rules/ordering.pl) re-runs the prover core over generic
+% planning laws to order the pass-1 proof. These tests drive it over
+% tiny synthetic rule sets: waves come out of availability proofs,
+% cycles fall through the currently_proving guard into the world clause
+% (ordering:world_override/1 stands in for the VDB), the genuine
+% bootstrap case surfaces as an unreachable/2 domain assumption, and
+% preferences (runtime dep groups, order_after anchors) are honored by
+% the projection exactly when they close no cycle.
 
-:- begin_tests(planner_waves_synthetic, [cleanup(rules:disable_test_rules)]).
+% Helper: prove Goals over the active synthetic rule set (pass 1) and
+% order the proof with the rule-based engine (pass 2).
+ordering_engine_plan(Goals, ProofOut, Plan) :-
+  resolver:resolve(Goals, t, Proof, t, _Model, t, _Cons, t, Triggers),
+  orderer:order(Proof, Triggers, ProofOut, Plan, _SCCs).
 
-% Helper: prove Goals over the active synthetic rule set and plan the proof.
-issue73_plan(Goals, Plan, Remainder) :-
-  prover:prove(Goals, t, Proof, t, _Model, t, _Cons, t, Triggers),
-  planner:plan(Proof, Triggers, t, Plan, Remainder).
+% Unreachable assumptions merged into the output proof, as full keys.
+ordering_engine_unreachables(ProofOut, Unreachables) :-
+  findall(unreachable(H, D),
+          gen_assoc(rule(assumed(unreachable(H, D))), ProofOut, _),
+          Unreachables).
 
-% A linear chain plans leaf-first, one rule per wave, empty remainder.
+:- begin_tests(ordering_engine_synthetic,
+               [cleanup(( resolving:disable_test_rules,
+                          retractall(ordering:world_override(_)) ))]).
+
+% A linear chain orders leaf-first, one step per wave, no assumptions.
 test(chain_waves_dependency_order) :-
   issue73_rules([a-[b], b-[c], c-[]]),
-  issue73_plan([a], Plan, Remainder),
-  Remainder == [],
+  ordering_engine_plan([a], ProofOut, Plan),
+  ordering_engine_unreachables(ProofOut, []),
   issue73_wave(Plan, c, W1),
   issue73_wave(Plan, b, W2),
   issue73_wave(Plan, a, W3),
   W1 < W2, W2 < W3.
 
-% Diamond: independent siblings share a wave; the wave invariant holds
-% (every non-constraint body dep sits in a strictly earlier wave).
+% Diamond: independent siblings share a wave; every hard body dep sits in
+% a strictly earlier wave (the wave invariant, now a proof property).
 test(diamond_siblings_share_wave_and_invariant_holds) :-
   issue73_rules([a-[b, c], b-[d], c-[d], d-[]]),
-  issue73_plan([a], Plan, Remainder),
-  Remainder == [],
+  ordering_engine_plan([a], _ProofOut, Plan),
   issue73_wave(Plan, d, WD),
   issue73_wave(Plan, b, WB),
   issue73_wave(Plan, c, WC),
   issue73_wave(Plan, a, WA),
   WB =:= WC,
-  WD < WB, WB < WA,
-  forall(( nth1(W, Plan, Wave), member(R, Wave),
-           prover:rule_body(R, Body), member(Dep, Body),
-           \+ constraint:is_constraint(Dep) ),
-         ( prover:canon_literal(Dep, DepLit, _),
-           issue73_wave(Plan, DepLit, WDep),
-           WDep < W )).
+  WD < WB, WB < WA.
 
-% A cycle keeps its members (and everything depending on them) out of the
-% wave plan: they are returned as the remainder for the scheduler, while
-% the acyclic portion is still planned.
-test(cycle_members_stay_in_remainder) :-
+% Membership invariant: every pass-1 proof step is planned exactly once —
+% cycles included.
+test(cycle_members_are_planned_with_bootstrap_assumption) :-
   issue73_rules([top-[a, x], a-[b], b-[a], x-[]]),
-  issue73_plan([top], Plan, Remainder),
+  ordering_engine_plan([top], ProofOut, Plan),
   issue73_wave(Plan, x, _),
-  \+ issue73_wave(Plan, a, _),
-  \+ issue73_wave(Plan, b, _),
-  \+ issue73_wave(Plan, top, _),
-  findall(H, ( member(R, Remainder), prover:rule_head(R, H) ), Heads0),
-  msort(Heads0, Heads),
-  Heads == [a, b, top].
+  issue73_wave(Plan, a, WA),
+  issue73_wave(Plan, b, WB),
+  issue73_wave(Plan, top, WTop),
+  % The a->b requirement was provable (b scheduled first in derivation
+  % order); the b->a back-edge is the genuine bootstrap boundary and is
+  % reported as a negative unreachable assumption, not silently cut.
+  WB < WA, WA < WTop,
+  ordering_engine_unreachables(ProofOut, [unreachable(b, a)]),
+  assumption:assumption_type(unreachable(b, a), unreachable).
 
-% Domain assumptions are planned like ordinary heads: the assumed literal
-% is a wave-1 leaf and its consumer lands strictly later.
+% The same cycle on a system where the world already provides `a`: the
+% world clause bridges the loop with a citation instead of an assumption
+% (the LFS argument), and no unreachable is recorded.
+test(cycle_bridged_by_world) :-
+  issue73_rules([top-[a, x], a-[b], b-[a], x-[]]),
+  assertz(ordering:world_override(a)),
+  ordering_engine_plan([top], ProofOut, Plan),
+  retractall(ordering:world_override(_)),
+  ordering_engine_unreachables(ProofOut, []),
+  issue73_wave(Plan, b, WB),
+  issue73_wave(Plan, a, WA),
+  issue73_wave(Plan, top, WTop),
+  WB < WA, WA < WTop.
+
+% Runtime dependency groups (grouped :run heads) are preferences: the
+% provider chain is placed first when nothing hard conflicts.
+test(runtime_preference_orders_provider_first) :-
+  G = grouped_package_dependency(no, cat, lib, []):run,
+  issue73_rules([prog-[G], G-[lib], lib-[]]),
+  ordering_engine_plan([prog], ProofOut, Plan),
+  ordering_engine_unreachables(ProofOut, []),
+  issue73_wave(Plan, lib, WLib),
+  issue73_wave(Plan, G, WG),
+  issue73_wave(Plan, prog, WProg),
+  WLib < WG, WG < WProg.
+
+% A preference that closes a cycle against the hard structure is simply
+% not honored — no unreachable assumption, no arbitrary cut: the hard
+% chain wins and the runtime edge is dropped (Portage's :run relaxation
+% as a projection property).
+test(cyclic_preference_dropped_silently) :-
+  G = grouped_package_dependency(no, cat, liba, []):run,
+  issue73_rules([prog-[G], G-[lib], lib-[prog]]),
+  ordering_engine_plan([prog], ProofOut, Plan),
+  ordering_engine_unreachables(ProofOut, []),
+  issue73_wave(Plan, prog, WProg),
+  issue73_wave(Plan, lib, WLib),
+  issue73_wave(Plan, G, WG),
+  WProg < WLib, WLib < WG.
+
+% order_after pseudo-constraints (the PDEPEND ordering channel) are
+% preferences on their anchor: the carrier lands after the anchor.
+test(order_after_anchor_honored) :-
+  issue73_rules([p-[constraint(order_after(q):{[]})], q-[]]),
+  ordering_engine_plan([p, q], _ProofOut, Plan),
+  issue73_wave(Plan, q, WQ),
+  issue73_wave(Plan, p, WP),
+  WQ < WP.
+
+% Domain assumptions from pass 1 are steps like any other: wave-1 leaves.
 test(domain_assumption_planned_before_consumer) :-
   issue73_rules([p-[assumed(q)], assumed(_)-[]]),
-  issue73_plan([p], Plan, Remainder),
-  Remainder == [],
+  ordering_engine_plan([p], _ProofOut, Plan),
   issue73_wave(Plan, assumed(q), W1),
   issue73_wave(Plan, p, W2),
   W1 < W2.
 
-% Constraint body literals are not ordering edges: a head whose body is
-% only constraints is immediately ready (wave 1).
+% Constraint body literals are not ordering edges.
 test(constraint_deps_do_not_block_readiness) :-
   issue73_rules([p-[constraint(k:{v})]]),
-  issue73_plan([p], Plan, Remainder),
-  Remainder == [],
+  ordering_engine_plan([p], _ProofOut, Plan),
   issue73_wave(Plan, p, 1).
 
-:- end_tests(planner_waves_synthetic).
+% PDEPEND completion (portage-ng#18): a consumer of provider p waits for
+% p's post-install group t (the step carrying order_after(p)) — p alone
+% is not functionally complete.
+test(pdepend_completion_delays_consumer_after_target) :-
+  issue73_rules([c-[p], p-[], t-[constraint(order_after(p):{[]})]]),
+  ordering_engine_plan([c, t], ProofOut, Plan),
+  ordering_engine_unreachables(ProofOut, []),
+  issue73_wave(Plan, p, WP),
+  issue73_wave(Plan, t, WT),
+  issue73_wave(Plan, c, WC),
+  WP < WT, WT < WC.
+
+% PDEPEND completion cycle guard (portage-ng#19): when the target itself
+% hard-requires the consumer (clang-runtime RDEPENDs compiler-rt), the
+% completion preference would close a cycle and is skipped — the hard
+% edge wins, silently.
+test(pdepend_completion_cyclic_consumer_not_bumped) :-
+  issue73_rules([c-[p], p-[], t-[constraint(order_after(p):{[]}), c]]),
+  ordering_engine_plan([c, t], ProofOut, Plan),
+  ordering_engine_unreachables(ProofOut, []),
+  issue73_wave(Plan, c, WC),
+  issue73_wave(Plan, t, WT),
+  WC < WT.
+
+% Configure closure (portage-ng#21): the :install action of a package
+% prefers the runtime providers of its :run sibling earlier — sg's
+% configure phase already exercises the bifunctors library, so
+% sg:install must not co-wave with (or precede) the provider chain.
+test(configure_closure_delays_install_after_run_providers, [nondet]) :-
+  G = grouped_package_dependency(no, 'dev-x', bif, []):run,
+  issue73_rules([ (portage://'fake/sg-1':install)-[],
+                  (portage://'fake/sg-1':run)-[portage://'fake/sg-1':install, G],
+                  G-[portage://'fake/bif-1':run],
+                  (portage://'fake/bif-1':run)-[portage://'fake/bif-1':install],
+                  (portage://'fake/bif-1':install)-[] ]),
+  ordering_engine_plan([portage://'fake/sg-1':run], ProofOut, Plan),
+  ordering_engine_unreachables(ProofOut, []),
+  issue73_wave(Plan, G, WG),
+  issue73_wave(Plan, portage://'fake/sg-1':install, WSgI),
+  issue73_wave(Plan, portage://'fake/sg-1':run, WSgR),
+  WG < WSgI, WSgI < WSgR.
+
+:- end_tests(ordering_engine_synthetic).
 
 
 % -----------------------------------------------------------------------------
@@ -4199,7 +3814,7 @@ test(constraint_deps_do_not_block_readiness) :-
 % flags, and a marker literal in the body records which tier produced the
 % accepted model.
 
-:- begin_tests(pipeline_fallback_tiers, [cleanup(rules:disable_test_rules)]).
+:- begin_tests(pipeline_fallback_tiers, [cleanup(resolving:disable_test_rules)]).
 
 test(strict_tier_succeeds_without_flags) :-
   issue73_rules([s-[]]),
@@ -4210,9 +3825,9 @@ test(strict_tier_succeeds_without_flags) :-
 % provable under either resolves under keyword_acceptance.
 test(keyword_acceptance_preferred_over_blockers) :-
   issue73_rules([marker(_)-[]]),
-  assertz((rules:test_rule(k1, [marker(keyword)]) :-
+  assertz((resolving:test_rule(k1, [marker(keyword)]) :-
              prover:assuming(keyword_acceptance))),
-  assertz((rules:test_rule(k1, [marker(blockers)]) :-
+  assertz((resolving:test_rule(k1, [marker(blockers)]) :-
              prover:assuming(blockers))),
   pipeline:prove_with_fallback([k1], _Proof, Model, _Triggers),
   get_assoc(marker(keyword), Model, _),
@@ -4220,7 +3835,7 @@ test(keyword_acceptance_preferred_over_blockers) :-
 
 test(blockers_tier_reached_when_keyword_insufficient) :-
   issue73_rules([marker(_)-[]]),
-  assertz((rules:test_rule(k2, [marker(blockers)]) :-
+  assertz((resolving:test_rule(k2, [marker(blockers)]) :-
              prover:assuming(blockers))),
   pipeline:prove_with_fallback([k2], _Proof, Model, _Triggers),
   get_assoc(marker(blockers), Model, _).
@@ -4229,7 +3844,7 @@ test(blockers_tier_reached_when_keyword_insufficient) :-
 % rejects the final keyword_unmask tier, so success proves tier 4 ran.
 test(unmask_tier_sets_only_unmask) :-
   issue73_rules([marker(_)-[]]),
-  assertz((rules:test_rule(k3, [marker(unmask)]) :-
+  assertz((resolving:test_rule(k3, [marker(unmask)]) :-
              prover:assuming(unmask),
              \+ prover:assuming(keyword_acceptance))),
   pipeline:prove_with_fallback([k3], _Proof, Model, _Triggers),
@@ -4238,7 +3853,7 @@ test(unmask_tier_sets_only_unmask) :-
 % The final tier sets keyword_acceptance AND unmask together.
 test(keyword_unmask_tier_sets_both_flags) :-
   issue73_rules([marker(_)-[]]),
-  assertz((rules:test_rule(k4, [marker(both)]) :-
+  assertz((resolving:test_rule(k4, [marker(both)]) :-
              prover:assuming(keyword_acceptance),
              prover:assuming(unmask))),
   pipeline:prove_with_fallback([k4], _Proof, Model, _Triggers),
@@ -4253,7 +3868,7 @@ test(all_tiers_exhausted_fails, [fail]) :-
 % produces a wave-ordered plan (marker leaf before its consumer).
 test(prove_plan_with_fallback_reports_tier, [true(Used == keyword_acceptance)]) :-
   issue73_rules([marker(_)-[]]),
-  assertz((rules:test_rule(k5, [marker(keyword)]) :-
+  assertz((resolving:test_rule(k5, [marker(keyword)]) :-
              prover:assuming(keyword_acceptance))),
   pipeline:prove_plan_with_fallback([k5], _Proof, _Model, Plan, _Triggers, Used),
   issue73_wave(Plan, marker(keyword), W1),
@@ -4267,7 +3882,7 @@ test(prove_plan_with_fallback_strict_reports_false, [true(Used == false)]) :-
 % The assuming/1 flags are scoped to the fallback attempt: none survive.
 test(assuming_flags_restored_after_fallback) :-
   issue73_rules([marker(_)-[]]),
-  assertz((rules:test_rule(k6, [marker(both)]) :-
+  assertz((resolving:test_rule(k6, [marker(both)]) :-
              prover:assuming(keyword_acceptance),
              prover:assuming(unmask))),
   pipeline:prove_with_fallback([k6], _Proof, _Model, _Triggers),

@@ -141,7 +141,7 @@ goal_expansion(search(Q, Repo://Id), Expanded) :-
 % candidate's goal-expansion hooks with the stripped eligible/installed/
 % resolve term when compiling `candidate:...` goals. The hooks live HERE
 % (not in candidate.pl/target.pl) because query.pl is loaded before
-% rules.pl — the main consumer — while candidate.pl and target.pl load
+% resolving.pl — the main consumer — while candidate.pl and target.pl load
 % after it (see Source/loader.pl).
 %
 % To prevent drift (portage-ng#59), the expanded bodies are derived from
@@ -149,9 +149,9 @@ goal_expansion(search(Q, Repo://Id), Expanded) :-
 % themselves compile through:
 %   candidate:installed/1 -> query:search(installed(true), ...)
 %   candidate:eligible/1  -> query:search(ebuild(...)/masked(true), ...)
-%                            (Source/Domain/Gentoo/Rules/candidate.pl)
+%                            (Source/Domain/Gentoo/Rules/Resolving/candidate.pl)
 %   candidate:resolve/2   -> :download clause in
-%                            Source/Domain/Gentoo/Rules/target.pl
+%                            Source/Domain/Gentoo/Rules/Resolving/target.pl
 %
 % Guards: head unification may bind variables of the call site, but a
 % clause only keeps those bindings when it succeeds. Each clause therefore
@@ -223,7 +223,7 @@ compile_query_list([S|Ss], Repo://Id, (One, Rest)) :-
 % The EAPI grammar parses PDEPEND with the same dependency-sequence grammar as
 % RDEPEND, producing package_dependency(run, ...) leaves. In order to model
 % Portage-like "runtime_post" semantics, we re-tag PDEPEND leaves as their own
-% phase so they can be handled as cycle-breakable edges by rules/scheduler.
+% phase so they can be handled as cycle-breakable edges by rules/orderer.
 
 query:pdepend_dep_as_pdepend(package_dependency(run,Strength,C,N,O,V,S,U),
                              package_dependency(pdepend,Strength,C,N,O,V,S,U)) :-
