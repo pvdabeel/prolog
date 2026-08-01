@@ -648,7 +648,7 @@ following checklist helps catch regressions quickly:
 - [Chapter 8: The Prover](08-doc-prover.md) — the proof search algorithm
 - [Chapter 10: Version Domains](10-doc-version-domains.md) — domain operations
   used by constraint learning
-- [Chapter 11: Rules and Domain Logic](11-doc-rules.md) — entry rules, fallback
-  chains, and REQUIRED_USE handling
-- [Chapter 22: Resolver Comparison](22-doc-resolver-comparison.md) — Zeller,
+- [Chapter 12: Resolution — Configuration as Proofs](12-doc-resolution.md) —
+  entry rules, fallback chains, and REQUIRED_USE handling
+- [Chapter 23: Resolver Comparison](23-doc-resolver-comparison.md) — Zeller,
   Vermeir, and CDCL foundations

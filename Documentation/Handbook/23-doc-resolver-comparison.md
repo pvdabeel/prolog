@@ -2,7 +2,7 @@
 
 ## Architecture Overview
 
-All three resolvers solve the same problem: given a set of requested
+All four resolvers solve the same problem: given a set of requested
 packages, figure out which concrete versions to install and in what
 order.  Where they differ is in how they handle **conflicts** —
 situations where the first choice turns out to be wrong.
@@ -28,9 +28,38 @@ starts clean every time.  Portage allows up to 20 retries by default
 ![Portage conflict-resolution loop](Diagrams/21-portage-loop.svg){width=40%}
 
 Because each retry rebuilds everything, this approach is the slowest
-of the three.  Complex dependency tangles — like the OCaml Jane Street
+of the four.  Complex dependency tangles — like the OCaml Jane Street
 ecosystem — can require more than a dozen retries before Portage finds
 a consistent graph.
+
+
+### pkgcore (Python)
+
+pkgcore’s `pmerge` resolver is also Python, but it does **not** copy
+Portage’s rebuild-with-masks loop.  Resolution is a depth-first walk
+over an explicit **frame stack** (`resolver_stack` /
+`resolver_frame` in `pkgcore.resolver.plan`): each atom pushes a
+frame, tries a choice, and walks that choice’s dependency set.
+
+When a choice fails — inserting it into the plan state fails, or a
+dependency under it cannot be satisfied — pkgcore **backtracks to the
+frame’s checkpoint** (`state.backtrack(start_point)`), advances to the
+next remaining package for that atom (`force_next_pkg`), and continues
+inside the same `merge_plan`.  Failed alternatives can also be pruned
+from the choice set (`reduce_solutions`).  There is no global mask
+list carried into a fresh graph, and no Paludis-style preload that
+names the winning candidate for the next full restart.
+
+![pkgcore conflict-resolution loop](Diagrams/21-pkgcore-loop.svg){width=40%}
+
+Relative to Portage, this is a real improvement: work already done
+above the failing frame is kept, and only the open choice point is
+revisited.  Relative to Paludis and portage-ng, the guidance is still
+mostly **negative and local** — “try the next candidate” — rather than
+a positively learned domain or a computed “use this package next
+time.”  Deep, blocked search spaces can still explore a large fraction
+of the choice tree (and historically could blow the Python recursion
+limit before the frame rewrite moved the stack out of the call stack).
 
 
 ### Paludis (C++)
@@ -77,21 +106,21 @@ For the vast majority of packages (over 99%), no conflict arises at
 all and the proof completes in a single pass.  When conflicts do
 occur, the combination of learned domains (positive guidance) and
 rejects (negative filtering) resolves them without rebuilding the
-entire proof tree.  This makes portage-ng the fastest of the three
+entire proof tree.  This makes portage-ng the fastest of the four
 resolvers.
 
 
 ## Comparison Table
 
-| **Aspect** | **Portage** | **Paludis** | **portage-ng** |
-| :--- | :--- | :--- | :--- |
-| Language | Python | C++ | SWI-Prolog |
-| Conflict detection | Post-hoc (after graph built) | Incremental (on constraint add) | Incremental (constraint guard) |
-| What carries across retries | Masks (negative) | Preloads (positive) | Learned domains (positive) + Rejects (negative) |
-| Fresh state each retry? | Yes (new depgraph) | Yes (new Resolver) | Partial (reject set accumulates, learned store accumulates) |
-| Finding the right candidate | Brute force (mask+retry) | `_try_to_find_decision_for` with ALL constraints | Domain narrowing (Zeller) + priority resolution (Vermeir) |
-| Performance | Slowest (full rebuild) | Fast (targeted restarts) | Fastest (single-pass for most targets) |
-| Package-specific code | None | None | None |
+| **Aspect** | **Portage** | **pkgcore** | **Paludis** | **portage-ng** |
+| :--- | :--- | :--- | :--- | :--- |
+| Language | Python | Python | C++ | SWI-Prolog |
+| Conflict detection | Post-hoc (after graph built) | Incremental (during frame / choice walk) | Incremental (on constraint add) | Incremental (constraint guard) |
+| What carries across retries | Masks (negative) | Remaining choices in the frame (negative pruning) | Preloads (positive) | Learned domains (positive) + Rejects (negative) |
+| Fresh state each retry? | Yes (new depgraph) | No — backtrack to frame checkpoint | Yes (new Resolver) | Partial (reject set accumulates, learned store accumulates) |
+| Finding the right candidate | Brute force (mask+retry) | `force_next_pkg` after backtrack | `_try_to_find_decision_for` with ALL constraints | Domain narrowing (Zeller) + priority resolution (Vermeir) |
+| Performance | Slowest (full rebuild) | Faster than Portage (keeps parent frames) | Fast (targeted restarts) | Fastest (single-pass for most targets) |
+| Package-specific code | None | None | None | None |
 
 ## Academic Foundations
 
@@ -128,6 +157,6 @@ clauses, but expressed as version domains rather than boolean clauses.
 
 Portage’s `dep_zapdeps` `choice_bins` and portage-ng’s
 `ranking:prioritize_deps_keep_all/3` multi-key sort are compared in
-detail in [Chapter 11, Any-of (`||`) arm selection](11-doc-rules.md#any-of-arm-selection)
+detail in [Chapter 12, Any-of (`||`) arm selection](12-doc-resolution.md#any-of-arm-selection)
 (including why overlapping-`||` DNF, virtual expand, and circular
 demotion inside `||` are not mirrored as ranking keys).

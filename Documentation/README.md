@@ -12,7 +12,7 @@ This directory contains documentation for portage-ng.
   - `doc-context-terms.md` — how context terms evolve across dependencies (self, build_with_use, constraints, feature logic)
   - `doc-contextual-logic-programming.md` — object-oriented paradigm for Prolog with contexts, classes, and inheritance
   - `doc-dependency-ordering.md` — dependency ordering and planning documentation
-  - `Handbook/16-doc-llm.md` — semantic search, LLM explain, metacircular self-repair
+  - `Handbook/17-doc-llm.md` — semantic search, LLM explain, metacircular self-repair
   - `doc-gentoo.md` — Gentoo portage configuration and profile loading
   - `doc-resolver-comparison.md` — comparison of Portage, Paludis, and portage-ng resolvers with academic foundations
   - `doc-tls-certificates.md` — TLS certificate setup for client/server mode

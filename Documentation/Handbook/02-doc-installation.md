@@ -261,13 +261,13 @@ make test            # PLUnit tests
 make test-overlay    # Overlay regression tests (80 scenarios)
 ```
 
-See [Chapter 24: Testing and Regression](24-doc-testing.md) for details.
+See [Chapter 25: Testing and Regression](25-doc-testing.md) for details.
 
 
 ## Further reading
 
 - [Chapter 3: Configuration](03-doc-configuration.md) — setting up Portage tree
   paths, `/etc/portage`, and profiles
-- [Chapter 14: Command-Line Interface](14-doc-cli.md) — full CLI reference
+- [Chapter 15: Command-Line Interface](15-doc-cli.md) — full CLI reference
 - [`portage-ng(1)` manpage](../Manpage/portage-ng.1.md) — exhaustive option
   reference

@@ -5,7 +5,7 @@ These cards answer *what must hold*, not *how the search engine walks
 candidates*. Procedural detail stays in
 [`Source/Domain/Gentoo/Rules/Resolving/`](../../../Source/Domain/Gentoo/Rules/Resolving/)
 and the narrative walkthrough in
-[Chapter 11](../11-doc-rules.md).
+[Chapter 12](../12-doc-resolution.md).
 
 Each card uses the same skeleton:
 
@@ -47,6 +47,6 @@ feel stale.
 - [Example index (curriculum)](examples.md) — learn policy by specimen
 - [One-page map](map.md) — `rule/2` head → schema → test → card
 - [Full overlay matrix](../../Tests/README.md) — all 80 scenarios
-- [Chapter 11: Rules](../11-doc-rules.md) — end-to-end resolution story
+- [Chapter 12: Resolution](../12-doc-resolution.md) — end-to-end resolution story
 - [Chapter 9: Assumptions](../09-doc-prover-assumptions.md) — fallback / learning
-- [Chapter 24: Testing](../24-doc-testing.md) — how to run the suite
+- [Chapter 25: Testing](../25-doc-testing.md) — how to run the suite

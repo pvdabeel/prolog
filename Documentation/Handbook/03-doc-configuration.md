@@ -88,7 +88,7 @@ The machine config file is where repositories are created and registered — cov
 | `config:subslot_rebuild/1` | `true` | Plan same-version rebuilds of installed reverse dependencies when a sub-slot (`:=`) provider’s ABI changes inside a transaction. Complementary to the `@preserved-rebuild` *set* (FEATURES=preserve-libs consumers); this pass is automatic during prove/plan. |
 | `config:toolchain_reactivation/1` | `true` | Re-activate the toolchain right after a toolchain package merges, before dependent builds continue. |
 
-See [Chapter 15: Building and Execution](15-doc-building.md) for how the
+See [Chapter 16: Building and Execution](16-doc-building.md) for how the
 retry chain and the domain exception fixups work.
 
 ### Output
@@ -253,7 +253,7 @@ The result is two serialised cache files:
 - **`Knowledge/kb.qlf`** — all repository and cache facts (ebuilds, metadata, manifests).
 - **`Knowledge/profile.qlf`** — all profile-derived data (USE terms, masks, per-package USE, license groups).
 - **`Knowledge/glsa.qlf`** — Gentoo Linux Security Advisories parsed from
-  `metadata/glsa/` (see [Chapter 19](19-doc-glsa.md)).
+  `metadata/glsa/` (see [Chapter 20](20-doc-glsa.md)).
 - **`Knowledge/preference.qlf`** — materialized preference state (built on first startup; see [Preference cache](#preference-cache)).
 
 See [Profile loading strategy](#profile-loading-strategy) for details on live vs. cached profile loading.
@@ -268,7 +268,7 @@ When `--sync` runs, the knowledge base syncs the `pkg` repository by walking the
 
 This uniform representation means that during resolution, an already-installed package can satisfy a dependency directly without planning a fresh merge.  In the plan output, these appear as `[nomerge]` — the prover verified the dependency is met by what is already on disk.
 
-In client-server mode the server holds its *own* `pkg` repository, which may differ from the client's installed set.  A client can upload its local VDB with `--import-vdb`; the server registers it as a per-client repository (`pkg@<clienthost>`) and uses it for that client's plans.  With `config:client_auto_import_vdb(true)` (the default) this happens automatically before each client command whenever the local VDB changed.  See [Chapter 17](17-doc-distributed.md) for details.
+In client-server mode the server holds its *own* `pkg` repository, which may differ from the client's installed set.  A client can upload its local VDB with `--import-vdb`; the server registers it as a per-client repository (`pkg@<clienthost>`) and uses it for that client's plans.  With `config:client_auto_import_vdb(true)` (the default) this happens automatically before each client command whenever the local VDB changed.  See [Chapter 18](18-doc-distributed.md) for details.
 
 ## Gentoo configuration
 
@@ -391,7 +391,7 @@ Profile data (USE flags, masks, per-package USE, license groups) can be loaded i
 - **Live** — the Gentoo profile tree is parsed from disk on every startup.  This is the most accurate option because it always reflects the latest state of the profile, but it takes a moment longer to start.
 - **Cached** — profile data is loaded from a pre-serialized cache file (`Knowledge/profile.qlf`).  This makes startup near-instantaneous, but the cache must be regenerated (via `--sync`) whenever the profile changes.
 
-The strategy is set per operating mode in `config.pl`.  portage-ng supports several modes of operation (standalone, daemon, worker, client, server — see [Chapter 14: Command-Line Interface](14-doc-cli.md) for details).  Each mode can use a different loading strategy:
+The strategy is set per operating mode in `config.pl`.  portage-ng supports several modes of operation (standalone, daemon, worker, client, server — see [Chapter 15: Command-Line Interface](15-doc-cli.md) for details).  Each mode can use a different loading strategy:
 
 ```prolog
 config:profile_loading(standalone, cached).
@@ -482,7 +482,7 @@ After you change world membership or sync new tree data, rely on the same **sync
   and first run
 - [Chapter 6: Knowledge Base and Cache](06-doc-knowledgebase.md) — how the Portage
   tree is loaded into Prolog facts
-- [Chapter 14: Command-Line Interface](14-doc-cli.md) — CLI options that interact
+- [Chapter 15: Command-Line Interface](15-doc-cli.md) — CLI options that interact
   with configuration
-- [Chapter 19: Gentoo Linux Security Advisories (GLSA)](19-doc-glsa.md) —
+- [Chapter 20: Gentoo Linux Security Advisories (GLSA)](20-doc-glsa.md) —
   `Knowledge/glsa.qlf` built during `--sync`

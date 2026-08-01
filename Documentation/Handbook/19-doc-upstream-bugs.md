@@ -100,7 +100,7 @@ because of an *undeclared* build dependency — a command, header,
 library, or pkg-config module the ebuild needed but never listed in
 `BDEPEND` — the builder records the discovery and re-derives a plan that
 supplies it (see
-[Chapter 15: Missing-provider feedback](15-doc-building.md#missing-provider-feedback-diagnose-learn-re-derive)).
+[Chapter 16: Missing provider feedback](16-doc-building.md#missing-provider-feedback)).
 
 Because every discovery carries structured evidence — the missing
 symbol, the phase it surfaced in, the exit code, and the offending log
@@ -132,11 +132,11 @@ Both kinds of draft are gated by `config:bugreport_drafts_enabled/1`.
 
 ## Further reading
 
-- [Chapter 14: Command-Line Interface](14-doc-cli.md) — `--upstream` and
+- [Chapter 15: Command-Line Interface](15-doc-cli.md) — `--upstream` and
   `--bugs` flags
 - [Chapter 9: Assumptions and Constraint Learning](09-doc-prover-assumptions.md) —
   how unsatisfiable dependencies are detected
-- [Chapter 15: Building and Execution](15-doc-building.md) — the
+- [Chapter 16: Building and Execution](16-doc-building.md) — the
   missing-provider feedback loop that produces build-time bug drafts
-- [Chapter 19: Gentoo Linux Security Advisories (GLSA)](19-doc-glsa.md) —
+- [Chapter 20: Gentoo Linux Security Advisories (GLSA)](20-doc-glsa.md) —
   security advisories and `@security` remediation sets

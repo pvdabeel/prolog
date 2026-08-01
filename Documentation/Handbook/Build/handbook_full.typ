@@ -547,12 +547,13 @@ rather than library code:
 
 Imperative package managers must re-implement all of these. Portage's
 `depgraph.py` implements its own retry loop with mask accumulation.
-Paludis's `decider.cc` implements its own constraint accumulator with
-exception-driven restart. Both re-invent mechanisms that Prolog provides
-as proven primitives. By relying on these primitives, the codebase
-becomes easier to read and understand --- developers can focus fully on
-declaring domain knowledge rather than maintaining search and
-backtracking machinery.
+pkgcore's `merge_plan` implements its own frame stack and state
+checkpoints for backtracking. Paludis's `decider.cc` implements its own
+constraint accumulator with exception-driven restart. All three
+re-invent mechanisms that Prolog provides as proven primitives. By
+relying on these primitives, the codebase becomes easier to read and
+understand --- developers can focus fully on declaring domain knowledge
+rather than maintaining search and backtracking machinery.
 
 === Meta-level reasoning
 <meta-level-reasoning>
@@ -953,16 +954,17 @@ different approach to the same problem:
   align(center)[#table(
     columns: (20%, 20%, 20%, 20%, 20%),
     align: (left,left,left,left,left,),
-    table.header([], [#strong[Portage]], [#strong[Paludis]], [#strong[pkgcore]], [#strong[portage-ng]],),
+    table.header([], [#strong[Portage]], [#strong[pkgcore]], [#strong[Paludis]], [#strong[portage-ng]],),
     table.hline(),
-    [#strong[Language]], [Python], [C++], [Python], [SWI-Prolog],
-    [#strong[Model]], [Greedy graph + retry], [Constraint accumulator +
-    restart], [Same as Portage], [Inductive proof search],
-    [#strong[Conflicts]], [Retries with mask accumulation], [Restarts
-    with fresh state], [Same as Portage], [Iterative refinement with
-    learned domains],
-    [#strong[Completeness]], [Sometimes fails], [May exhaust
-    restarts], [Sometimes fails], [Always produces a plan],
+    [#strong[Language]], [Python], [Python], [C++], [SWI-Prolog],
+    [#strong[Model]], [Greedy graph + retry], [Frame-stack DFS +
+    backtrack], [Constraint accumulator + restart], [Inductive proof
+    search],
+    [#strong[Conflicts]], [Retries with mask accumulation], [Backtrack
+    to frame checkpoint; next choice], [Restarts with
+    preloads], [Iterative refinement with learned domains],
+    [#strong[Completeness]], [Sometimes fails], [Sometimes fails], [May
+    exhaust restarts], [Always produces a plan],
     [#strong[Guarantees]], [None], [None], [None], [Every plan is a
     proof],
   )]
@@ -970,7 +972,7 @@ different approach to the same problem:
   )
 
 For a detailed comparison of the reasoning models, see
-#link("22-doc-resolver-comparison.md")[Chapter 22: Resolver Comparison].
+#link("23-doc-resolver-comparison.md")[Chapter 23: Resolver Comparison].
 
 == A brief history
 <a-brief-history>
@@ -1014,7 +1016,7 @@ Gentoo tree.
   how the six pipeline stages fit together
 - #link("08-doc-prover.md")[Chapter 8: The Prover] --- the inductive
   proof engine in detail
-- #link("22-doc-resolver-comparison.md")[Chapter 22: Resolver Comparison]
+- #link("23-doc-resolver-comparison.md")[Chapter 23: Resolver Comparison]
   --- deep dive into how portage-ng compares with Portage, Paludis, and
   pkgcore
 
@@ -1316,14 +1318,14 @@ make test            # PLUnit tests
 make test-overlay    # Overlay regression tests (80 scenarios)
 ```
 
-See #link("24-doc-testing.md")[Chapter 24: Testing and Regression] for
+See #link("25-doc-testing.md")[Chapter 25: Testing and Regression] for
 details.
 
 == Further reading
 <further-reading-1>
 - #link("03-doc-configuration.md")[Chapter 3: Configuration] --- setting
   up Portage tree paths, `/etc/portage`, and profiles
-- #link("14-doc-cli.md")[Chapter 14: Command-Line Interface] --- full
+- #link("15-doc-cli.md")[Chapter 15: Command-Line Interface] --- full
   CLI reference
 - #link("../Manpage/portage-ng.1.md")[`portage-ng(1)` manpage] ---
   exhaustive option reference
@@ -1554,7 +1556,7 @@ The machine config file is where repositories are created and registered
   , kind: table
   )
 
-See #link("15-doc-building.md")[Chapter 15: Building and Execution] for
+See #link("16-doc-building.md")[Chapter 16: Building and Execution] for
 how the retry chain and the domain exception fixups work.
 
 === Output
@@ -1839,7 +1841,7 @@ The result is two serialised cache files:
   terms, masks, per-package USE, license groups).
 - #strong[`Knowledge/glsa.qlf`] --- Gentoo Linux Security Advisories
   parsed from `metadata/glsa/` (see
-  #link("19-doc-glsa.md")[Chapter 19]).
+  #link("20-doc-glsa.md")[Chapter 20]).
 - #strong[`Knowledge/preference.qlf`] --- materialized preference state
   (built on first startup; see
   #link(<preference-cache>)[Preference cache]).
@@ -1883,7 +1885,7 @@ its local VDB with `--import-vdb`\; the server registers it as a
 per-client repository (`pkg@<clienthost>`) and uses it for that client's
 plans. With `config:client_auto_import_vdb(true)` (the default) this
 happens automatically before each client command whenever the local VDB
-changed. See #link("17-doc-distributed.md")[Chapter 17] for details.
+changed. See #link("18-doc-distributed.md")[Chapter 18] for details.
 
 == Gentoo configuration
 <gentoo-configuration>
@@ -2061,7 +2063,7 @@ loaded in two ways each time portage-ng starts:
 The strategy is set per operating mode in `config.pl`. portage-ng
 supports several modes of operation (standalone, daemon, worker, client,
 server --- see
-#link("14-doc-cli.md")[Chapter 14: Command-Line Interface] for details).
+#link("15-doc-cli.md")[Chapter 15: Command-Line Interface] for details).
 Each mode can use a different loading strategy:
 
 ```prolog
@@ -2180,9 +2182,9 @@ union of tree, VDB, and world-related facts.
   --- prerequisites and first run
 - #link("06-doc-knowledgebase.md")[Chapter 6: Knowledge Base and Cache]
   --- how the Portage tree is loaded into Prolog facts
-- #link("14-doc-cli.md")[Chapter 14: Command-Line Interface] --- CLI
+- #link("15-doc-cli.md")[Chapter 15: Command-Line Interface] --- CLI
   options that interact with configuration
-- #link("19-doc-glsa.md")[Chapter 19: Gentoo Linux Security Advisories (GLSA)]
+- #link("20-doc-glsa.md")[Chapter 20: Gentoo Linux Security Advisories (GLSA)]
   --- `Knowledge/glsa.qlf` built during `--sync`
 
 = Architecture Overview
@@ -2368,9 +2370,9 @@ results. Each worker runs the full pipeline locally (resolver, orderer),
 so proving scales horizontally --- adding more worker machines reduces
 wall-clock time for large proof sets.
 
-See #link("14-doc-cli.md")[Chapter 14: Command-Line Interface] for the
+See #link("15-doc-cli.md")[Chapter 15: Command-Line Interface] for the
 full mode reference and
-#link("17-doc-distributed.md")[Chapter 17: Distributed Proving] for TLS
+#link("18-doc-distributed.md")[Chapter 18: Distributed Proving] for TLS
 certificate setup and cluster configuration.
 
 == Module load order
@@ -2543,7 +2545,11 @@ knowledge base, prover, orderer, and output pipeline.
   `Repo://Entry:Action?{Context}` term format
 - #link("08-doc-prover.md")[Chapter 8: The Prover] --- inductive proof
   search in detail
-- #link("12-doc-planning.md")[Chapter 12: Ordering --- Plans as Proofs]
+- #link("11-doc-rules.md")[Chapter 11: Rules and Domain Logic] --- how
+  rule modules plug into the prover
+- #link("12-doc-resolution.md")[Chapter 12: Resolution --- Configuration as Proofs]
+  --- pass 1: justified configuration
+- #link("13-doc-planning.md")[Chapter 13: Ordering --- Plans as Proofs]
   --- the second proving pass and wave projection
 
 = Proof Literals
@@ -2905,7 +2911,7 @@ the installation of `sys-apps/portage` (`after`)."
 The context list is #strong[not] an unstructured bag of annotations. It
 is the proof-side counterpart of #strong[feature terms] in the sense
 used by Zeller-style feature logic (see
-#link("21-doc-context-terms.md")[Chapter 21: Context Terms]): a
+#link("22-doc-context-terms.md")[Chapter 22: Context Terms]): a
 structured collection of features that can be #strong[merged] when two
 dependency paths describe the same package under different conditions.
 When two paths reach the same literal with different USE requirements or
@@ -3037,7 +3043,7 @@ after_only(portage://'app-editors/neovim-0.12.0':run)
 The ordering bindings (`Source/Domain/Gentoo/Rules/ordering.pl`) read
 both `after` and `after_only` from every literal's context to derive the
 hard requirements and soft preferences that drive the second proving
-pass (Chapter 12).
+pass (Chapter 13).
 
 === Summary of context tags
 <summary-of-context-tags>
@@ -3072,7 +3078,7 @@ pass (Chapter 12).
 
 Contexts are merged at join points via feature term unification, which
 uses Zeller-inspired feature unification. See
-#link("21-doc-context-terms.md")[Chapter 21: Context Terms] for full
+#link("22-doc-context-terms.md")[Chapter 22: Context Terms] for full
 details.
 
 == Canonical decomposition
@@ -3193,7 +3199,7 @@ adds a `world(...):register` condition):
   uses these literals
 - #link("11-doc-rules.md")[Chapter 11: Rules and Domain Logic] --- how
   rules produce literals
-- #link("21-doc-context-terms.md")[Chapter 21: Context Terms] --- deep
+- #link("22-doc-context-terms.md")[Chapter 22: Context Terms] --- deep
   dive into context semantics and feature unification
 
 = Knowledge Base and Cache
@@ -3341,7 +3347,7 @@ matches Gentoo's standard policy, while still falling back to older
 versions when constraints demand it.
 
 See
-#link("22-doc-resolver-comparison.md")[Chapter 22: Resolver Comparison]
+#link("23-doc-resolver-comparison.md")[Chapter 23: Resolver Comparison]
 for more on Vermeir's ordered logic and its role alongside Zeller's
 feature logic and CDCL-style conflict learning.
 
@@ -3598,7 +3604,7 @@ Each of these is expanded at compile time into a sequence of:
 
 The result `Merged` is a list of grouped dependency terms ready for
 resolution by the rules layer (see
-#link("11-doc-rules.md")[Chapter 11]).
+#link("12-doc-resolution.md")[Chapter 12]).
 
 #strong[How is this cached?] Model construction depends on mutable proof
 state beyond the explicit context argument: `build_with_use` varies per
@@ -3620,7 +3626,7 @@ gated by `config:dep_model_cache/1`. See the comment at the top of
   repository path setup
 - #link("08-doc-prover.md")[Chapter 8: The Prover] --- how the prover
   queries the knowledge base
-- #link("19-doc-glsa.md")[Chapter 19: Gentoo Linux Security Advisories (GLSA)]
+- #link("20-doc-glsa.md")[Chapter 20: Gentoo Linux Security Advisories (GLSA)]
   --- sibling `Knowledge/glsa.qlf` store (not a package repository)
 
 = The EAPI Grammar
@@ -3949,9 +3955,9 @@ The EAPI grammar handles all PMS 9 / EAPI 9 constructs:
 <further-reading-6>
 - #link("06-doc-knowledgebase.md")[Chapter 6: Knowledge Base and Cache]
   --- how parsed data is stored
-- #link("11-doc-rules.md")[Chapter 11: Rules and Domain Logic] --- how
-  dependency terms are consumed during proof construction
-- #link("23-doc-dependency-ordering.md")[Chapter 23: Dependency Ordering]
+- #link("12-doc-resolution.md")[Chapter 12: Resolution --- Configuration as Proofs]
+  --- how dependency terms are consumed during proof construction
+- #link("24-doc-dependency-ordering.md")[Chapter 24: Dependency Ordering]
   --- PMS dependency type semantics
 
 = The Prover
@@ -4335,7 +4341,7 @@ pipeline:prove_plan_basic(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, SCCs)
 + `resolver:resolve/9` --- hands the `resolving` rule set to
   `prover:prove/10`\; constructs Proof, Model, Constraints, and Triggers
 + `orderer:order/5` --- hands the `ordering` rule set to the same prover
-  for a second proving pass; projects the wave-list plan (Chapter 12)
+  for a second proving pass; projects the wave-list plan (Chapter 13)
 
 The prover is wrapped in `with_reprove_state` which saves and restores
 the learned constraint store across reprove retries. Inside that,
@@ -4410,7 +4416,9 @@ and `choicelog:dump/0` reprints it. See also
 - #link("05-doc-proof-literals.md")[Chapter 5: Proof Literals] --- the
   literal format
 - #link("11-doc-rules.md")[Chapter 11: Rules and Domain Logic] --- how
-  `rule/2` works
+  `rule/2` and rule modules plug in
+- #link("12-doc-resolution.md")[Chapter 12: Resolution --- Configuration as Proofs]
+  --- the `resolving` rule set
 - #link("04-doc-architecture.md")[Chapter 4: Architecture Overview] ---
   the full pipeline
 
@@ -5191,9 +5199,9 @@ following checklist helps catch regressions quickly:
   algorithm
 - #link("10-doc-version-domains.md")[Chapter 10: Version Domains] ---
   domain operations used by constraint learning
-- #link("11-doc-rules.md")[Chapter 11: Rules and Domain Logic] --- entry
-  rules, fallback chains, and REQUIRED\_USE handling
-- #link("22-doc-resolver-comparison.md")[Chapter 22: Resolver Comparison]
+- #link("12-doc-resolution.md")[Chapter 12: Resolution --- Configuration as Proofs]
+  --- entry rules, fallback chains, and REQUIRED\_USE handling
+- #link("23-doc-resolver-comparison.md")[Chapter 23: Resolver Comparison]
   --- Zeller, Vermeir, and CDCL foundations
 
 = Version Domains
@@ -5467,7 +5475,8 @@ directly to assumption or failure handling instead of selecting
 candidates from an empty domain.
 
 Chapter 9 walks through the reprove and learning mechanics in full;
-Chapter 11 ties domains into rule evaluation and candidate generation.
+Chapter 12 ties domains into resolve-time rule evaluation and candidate
+generation.
 
 === Wildcard domain learning
 <wildcard-domain-learning>
@@ -5523,39 +5532,209 @@ producing a different domain constraint:
 <further-reading-9>
 - #link("09-doc-prover-assumptions.md")[Chapter 9: Assumptions and Constraint Learning]
   --- how domains interact with the reprove mechanism
-- #link("11-doc-rules.md")[Chapter 11: Rules and Domain Logic] --- how
-  version domains feed into candidate selection
-- #link("22-doc-resolver-comparison.md")[Chapter 22: Resolver Comparison]
+- #link("12-doc-resolution.md")[Chapter 12: Resolution --- Configuration as Proofs]
+  --- how version domains feed into candidate selection
+- #link("23-doc-resolver-comparison.md")[Chapter 23: Resolver Comparison]
   --- Zeller's feature logic and CDCL connections
 
 = Rules and Domain Logic
 <rules-and-domain-logic>
-== How we resolve dependencies
-<how-we-resolve-dependencies>
-The prover works with abstract literals and rules. It does not know what
-"install" means for Gentoo --- it only knows how to find a matching rule
-and prove its body. The #strong[rules layer] is the bridge between that
-abstract proof search and the concrete world of ebuilds, USE flags, and
-version constraints.
+== Prover and domain
+<prover-and-domain>
+The prover (#link("08-doc-prover.md")[Chapter 8]) works with abstract
+literals and rules. It does not know what `:install` means for Gentoo
+--- it only knows how to find a matching `rule/2` clause and prove its
+body. The #strong[rules layer] is the bridge between that abstract proof
+search and a concrete domain: ebuilds, USE flags, version constraints,
+planning laws, or uninstall claims.
 
-When the prover encounters a literal like
-`portage://'sys-apps/portage-3.0.77-r3':install`, it is the rules layer
-that answers questions such as:
+When the prover encounters a literal, it calls into whichever rule
+module it was given:
 
-- What are this ebuild's dependency lists (DEPEND, BDEPEND, RDEPEND)?
-- Which USE flags are active for this particular path through the
-  dependency graph?
-- Which repository entries are valid candidates, given version, slot,
-  and keyword constraints?
-- Should a USE-conditional dependency like `ssl? ( dev-libs/openssl )`
-  be included or skipped?
-- Are there blockers, REQUIRED\_USE constraints, or ordering
-  requirements?
+```prolog
+prover:prove(Rules, ...)
+prover:prove_once(Rules, ...)
+```
 
-All of these decisions are encoded as rule bodies and proof-term context
-annotations (`?{...}` lists). The sections below follow one resolution
-from user target to installed graph, then cover cycles, USE semantics,
-and what happens when the rules layer must record an assumption.
+`Rules` is a module atom --- typically `resolving`, `ordering`, or
+`unmerging`. The prover expands `Rules:rule(Head, Body)` and treats
+`Body` as the next obligations. It never interprets what the literals
+mean; all domain knowledge lives inside the rule clauses and the hooks
+they register.
+
+That separation is deliberate. The same proof engine answers three
+different questions by loading a different rule module:
+
+#figure(
+  align(center)[#table(
+    columns: (33.33%, 33.33%, 33.33%),
+    align: (left,left,left,),
+    table.header([#strong[Question]], [#strong[Rule
+      module]], [#strong[Stage wrapper]],),
+    table.hline(),
+    [What configuration satisfies the
+    request?], [`resolving`], [`resolver:resolve/9`],
+    [When can each action run?], [`ordering`], [`orderer:order/5`],
+    [In what order may packages be removed?], [`unmerging`], [depclean /
+    unmerge pass],
+  )]
+  , kind: table
+  )
+
+Callers outside a proving pass (for example query-side model
+construction) fall back to `config:default_rules/1`, which is
+`resolving`.
+
+== The `rule/2` contract
+<the-rule2-contract>
+Every rule module exports the same interface:
+
+```prolog
+Module:rule(+Head, -Body)
+```
+
+The prover passes a literal as `Head`. The module returns a list of
+sub-literals `Body` that must be proved to justify it. Failure means
+"this expansion does not apply"\; success commits those obligations to
+the proof search. Domain assumptions appear as `rule(assumed(X), [])`
+--- an empty body that records a justified gap rather than aborting the
+proof.
+
+Because the contract is uniform, Gentoo-specific vocabulary never enters
+the prover core. A new concern is almost always a new clause (or a new
+rule module), not engine surgery in `prover.pl`.
+
+== Rule modules in the pipeline
+<rule-modules-in-the-pipeline>
+The pipeline chains two proving passes over one goal set
+(#link("04-doc-architecture.md")[Chapter 4],
+#link("08-doc-prover.md")[Chapter 8]):
+
++ #strong[Pass 1 --- configuration.] `resolver:resolve/9` hands
+  `resolving` to `prover:prove/10`. Choice lives here: versions, slots,
+  USE flags, OR-group arms. The output is a Proof / Model / Constraints
+  \/ Triggers quadruple --- a justified configuration.
++ #strong[Pass 2 --- plan.] `orderer:order/5` hands `ordering` to
+  `prover:prove_once/…` over generic planning laws plus Gentoo bindings.
+  The output is a second proof object; wave projection reads it into a
+  parallel plan.
+
+Depclean's uninstall order reuses the same planning laws with
+`unmerging` bindings: steps are `:unmerge` actions, requirements are
+claim releases, and the installed world provides no escape hatch.
+
+So "rules and domain logic" is not a synonym for dependency resolution.
+Resolution is one rule set. Ordering and unmerging are others. The
+chapters that follow treat the two constructive passes as peers:
+
+- #link("12-doc-resolution.md")[Chapter 12: Resolution --- Configuration as Proofs]
+  --- pass 1: the `resolving` rule set and Gentoo policy
+- #link("13-doc-planning.md")[Chapter 13: Ordering --- Plans as Proofs]
+  --- pass 2: planning laws, Gentoo bindings, wave projection
+
+== What a rule body carries
+<what-a-rule-body-carries>
+Rule bodies are more than flat dependency lists. They thread
+#strong[proof-term context] (`?{…}` lists on literals --- see
+#link("05-doc-proof-literals.md")[Chapter 5] and
+#link("22-doc-context-terms.md")[Chapter 22]): `build_with_use/1`,
+`constraint/1`, `after/1`, slot information, and suggestion tags for
+assumptions. Context is how parent requirements and local policy meet
+without the prover understanding Gentoo.
+
+Heads themselves encode domain speech acts. For `resolving`, typical
+patterns include user `target/2` literals, action literals
+(`Repo://Ebuild:install`, `:run`, `:download`), grouped dependency
+atoms, REQUIRED\_USE validation literals, and the `assumed/1` catch-all.
+For `ordering`, the language shrinks to `scheduled/1`, `available/2`,
+and `assumed(unreachable/2)`. The full head tables live in the
+pass-specific chapters.
+
+== Domain hooks at the prover boundary
+<domain-hooks-at-the-prover-boundary>
+Besides `rule/2`, the domain may answer prover callbacks through
+`heuristic:*` hooks (implemented for Gentoo under
+`Rules/Resolving/heuristic.pl` and consulted during prove):
+
+- #strong[`proof_obligation/4`] --- inject derived obligations after a
+  literal succeeds (PDEPEND is handled this way in a single resolve
+  pass).
+- #strong[`cycle_benign/2`] --- classify a proof-search cycle as benign
+  before the prover records a cycle-break assumption.
+- #strong[Constraint guards / reprove helpers] --- learn domains or
+  request a reprove when selected versions conflict (see
+  #link("09-doc-prover-assumptions.md")[Chapter 9]).
+
+Hooks keep cross-cutting behaviour out of the generic search loop while
+still letting the domain steer search. Resolution and ordering each rely
+on them differently; the mechanism is shared.
+
+== Where the Gentoo resolve rules live
+<where-the-gentoo-resolve-rules-live>
+The `resolving` module is the public entry point
+(`Source/Domain/Gentoo/Rules/resolving.pl`). Its implementation is split
+across focused submodules under `Source/Domain/Gentoo/Rules/Resolving/`
+--- candidate selection, USE evaluation, ranking, CN selection, target
+resolution, and so on. The inventory and the end-to-end resolve
+narrative belong in #link("12-doc-resolution.md")[Chapter 12].
+
+The `ordering` and `unmerging` modules sit beside them under
+`Source/Domain/Gentoo/Rules/`. They bind the generic planning laws to
+Gentoo dependency classes and to VDB facts; see
+#link("13-doc-planning.md")[Chapter 13].
+
+== Twin framing: configuration proofs and plan proofs
+<twin-framing-configuration-proofs-and-plan-proofs>
+A successful run produces two proofs, not one algorithm output with a
+post-pass:
+
+- #strong[Configuration as proof] --- every chosen version, USE set, and
+  dependency edge is justified by a `resolving` rule expansion (or an
+  explicit domain assumption / cycle break).
+- #strong[Plan as proof] --- every wave placement is justified by an
+  `ordering` (or `unmerging`) expansion: a step is scheduled because its
+  requirements are available from earlier steps or from the installed
+  world.
+
+Reading the handbook in that order --- rules contract, then resolution,
+then ordering --- matches how the pipeline itself thinks.
+
+== Further reading
+<further-reading-10>
+- #link("08-doc-prover.md")[Chapter 8: The Prover] --- proof search,
+  models, triggers, pipeline entry points
+- #link("09-doc-prover-assumptions.md")[Chapter 9: Assumptions and Constraint Learning]
+  --- domain assumptions, cycle breaks, progressive relaxation
+- #link("10-doc-version-domains.md")[Chapter 10: Version Domains] ---
+  version constraint representation used by resolve
+- #link("12-doc-resolution.md")[Chapter 12: Resolution --- Configuration as Proofs]
+  --- the `resolving` rule set in depth
+- #link("13-doc-planning.md")[Chapter 13: Ordering --- Plans as Proofs]
+  --- planning laws and wave projection
+
+= Resolution: Configuration as Proofs
+<resolution-configuration-as-proofs>
+== Configuration as a first proving pass
+<configuration-as-a-first-proving-pass>
+The prover (#link("08-doc-prover.md")[Chapter 8]) answers a question
+about the #strong[final world]: which packages, which versions, which
+USE flags? Pass 1 gives that #emph[what] the same status that pass 2
+gives the #emph[when] (#link("13-doc-planning.md")[Chapter 13]):
+#strong[the configuration is a proof].
+
+`resolver:resolve/9` hands the `resolving` rule set to
+`prover:prove/10`. Every chosen candidate, every USE-conditional branch
+taken or skipped, every OR-group arm, and every domain assumption is
+justified by a `resolving:rule/2` expansion (or by an explicit prover
+cycle break). There is no separate "resolver algorithm" whose output
+must later be trusted --- the Proof / Model / Constraints / Triggers
+quadruples #emph[are] the justified configuration.
+
+The rules contract and the multi-module picture are in
+#link("11-doc-rules.md")[Chapter 11]. This chapter is the Gentoo resolve
+pass in depth: how a user target becomes an installed graph, how
+candidates and USE are chosen, and what happens when the rules layer
+must propose a configuration change.
 
 == How dependency resolution works (end-to-end)
 <how-dependency-resolution-works-end-to-end>
@@ -5594,25 +5773,21 @@ expansion adds literals to the proof and updates the model. When a rule
 fails, Prolog backtracks to try an alternative candidate or, ultimately,
 records an assumption.
 
-== The `rule/2` interface
-<the-rule2-interface>
-The single entry point between the prover and the domain logic is:
+== The `resolving:rule/2` head patterns
+<the-resolvingrule2-head-patterns>
+The resolve pass uses the shared `rule/2` contract
+(#link("11-doc-rules.md")[Chapter 11]) with Gentoo heads:
 
 ```prolog
 resolving:rule(+Head, -Body)
 ```
 
-The prover passes a literal as `Head`, and the rules layer returns a
-list of sub-literals `Body` that must be proved in order to justify it.
-The prover never interprets what the literals mean --- all
-Gentoo-specific knowledge is encapsulated inside the rule clauses.
-
-The table below lists the main head patterns. Target rules translate a
-user query into a concrete ebuild. Action rules (`:install`, `:run`,
-`:download`) expand an ebuild into its dependency obligations.
-Dependency rules resolve individual atoms to candidates. Validation
-rules enforce REQUIRED\_USE constraints. The catch-all `assumed(X)`
-clause handles domain assumptions when no real rule applies.
+Target rules translate a user query into a concrete ebuild. Action rules
+(`:install`, `:run`, `:download`) expand an ebuild into its dependency
+obligations. Dependency rules resolve individual atoms to candidates.
+Validation rules enforce REQUIRED\_USE constraints. The catch-all
+`assumed(X)` clause handles domain assumptions when no real rule
+applies.
 
 #figure(
   align(center)[#table(
@@ -5763,11 +5938,11 @@ example, cycles that pass through `:run` (RDEPEND paths) are often
 treated as ordering-style cycles rather than hard failures --- mirroring
 how traditional resolvers tolerate certain cyclic patterns.
 
-After the proof is complete, the ordering pass (Chapter 12) resolves
-cyclic portions of the graph by citing the installed world (VDB) where
-possible, so that the merge ordering respects the cycle structure. For
-more on proof search and assumptions, see
-#link("08-doc-prover.md")[Chapter 8] and
+After the proof is complete, the ordering pass
+(#link("13-doc-planning.md")[Chapter 13]) resolves cyclic portions of
+the graph by citing the installed world (VDB) where possible, so that
+the merge ordering respects the cycle structure. For more on proof
+search and assumptions, see #link("08-doc-prover.md")[Chapter 8] and
 #link("09-doc-prover-assumptions.md")[Chapter 9].
 
 == USE flags in depth
@@ -5975,7 +6150,7 @@ checks). Scores are computed once per arm per
 `prioritize_deps_keep_all/3` call, with a short-lived per-call cache for
 installed / reference-version lookups. Ranking must not walk the
 ProofAVL; it only sees the proof-context list and memo snapshots (see
-also #link("25-doc-performance.md")[Chapter 25]).
+also #link("26-doc-performance.md")[Chapter 26]).
 
 === What we deliberately do not implement
 <what-we-deliberately-do-not-implement>
@@ -6010,7 +6185,7 @@ close a known cycle with the parent (or `--onlydeps` parent CP) into
 (cycle-break assumptions, world citations, `unreachable` assumptions)
 --- see #link("08-doc-prover.md")[Chapter 8],
 #link("09-doc-prover-assumptions.md")[Chapter 9], and
-#link("12-doc-planning.md")[Chapter 12]. Demoting at ranking time would
+#link("13-doc-planning.md")[Chapter 13]. Demoting at ranking time would
 second-guess cycle-break polarity and needs a parent circular map that
 the proof-context list does not carry.
 
@@ -6119,10 +6294,9 @@ For the full story on assumptions and constraint learning, see
 
 == Rules submodules
 <rules-submodules>
-The rules layer is not a single monolithic file. It is split across
-several focused submodules under
-`Source/Domain/Gentoo/Rules/Resolving/`, each handling a distinct
-concern:
+The `resolving` entry point is not a single monolithic file. It is split
+across focused submodules under `Source/Domain/Gentoo/Rules/Resolving/`,
+each handling a distinct concern:
 
 #figure(
   align(center)[#table(
@@ -6158,9 +6332,9 @@ concern:
 
 == Policy cards (declarative view)
 <policy-cards-declarative-view>
-Chapter 11 walks #strong[how] resolution proceeds. For a newbie-oriented
-view of #strong[what] Gentoo policy requires --- PMS meaning, literals,
-owning modules, and short invariants --- start here:
+This chapter walks #strong[how] resolution proceeds. For a
+newbie-oriented view of #strong[what] Gentoo policy requires --- PMS
+meaning, literals, owning modules, and short invariants --- start here:
 
 - #link("Policy/README.md")[Policy cards hub]
 - #link("Policy/examples.md")[Policy by example] --- curated overlay
@@ -6172,13 +6346,17 @@ Prefer those cards when onboarding or reviewing a rules change; keep
 this chapter for the end-to-end narrative and `||` ranking detail.
 
 == Further reading
-<further-reading-10>
+<further-reading-11>
+- #link("11-doc-rules.md")[Chapter 11: Rules and Domain Logic] --- the
+  `rule/2` contract and how rule modules plug into the prover
 - #link("08-doc-prover.md")[Chapter 8: The Prover] --- how the prover
   calls `rule/2` and builds the proof
 - #link("09-doc-prover-assumptions.md")[Chapter 9: Assumptions] --- the
   fallback chain, reprove mechanism, and progressive relaxation
 - #link("10-doc-version-domains.md")[Chapter 10: Version Domains] ---
   how version constraints feed into candidate selection
+- #link("13-doc-planning.md")[Chapter 13: Ordering --- Plans as Proofs]
+  --- pass 2
 - #link("Policy/README.md")[Policy cards] --- declarative Gentoo policy
   surface
 
@@ -6356,7 +6534,7 @@ requirement or a soft preference:
   context machinery as DEPEND.
 
 For the exact mapping from PMS ordering semantics to internal edges, see
-#link("23-doc-dependency-ordering.md")[Chapter 23: Dependency Ordering].
+#link("24-doc-dependency-ordering.md")[Chapter 24: Dependency Ordering].
 
 == Cycles: citing the installed world
 <cycles-citing-the-installed-world>
@@ -6453,8 +6631,8 @@ wave numbers by reading availability proofs:
 The output contract is unchanged from earlier releases: a list of waves,
 each containing full-format pass-1 rule terms. All actions within a wave
 are independent and can run concurrently. The printer renders the waves
-as numbered steps (Chapter 13); the builder executes them with real
-parallelism (Chapter 15). Neither consumer knows or cares that the waves
+as numbered steps (Chapter 14); the builder executes them with real
+parallelism (Chapter 16). Neither consumer knows or cares that the waves
 are now backed by proofs.
 
 The plan is annotated per entry with:
@@ -6488,16 +6666,20 @@ is therefore prepared eagerly, before the unmerge prove scopes the rule
 module to `unmerging` (see `unmerging:with_unmerge_pass/2`).
 
 == Further reading
-<further-reading-11>
+<further-reading-12>
 - #link("08-doc-prover.md")[Chapter 8: The Prover] --- how the Proof AVL
   is constructed
 - #link("09-doc-prover-assumptions.md")[Chapter 9: Prover Assumptions]
   --- pass-1 cycle breaking
-- #link("13-doc-output.md")[Chapter 13: Output and Visualization] ---
+- #link("11-doc-rules.md")[Chapter 11: Rules and Domain Logic] --- how
+  rule modules plug into the prover
+- #link("12-doc-resolution.md")[Chapter 12: Resolution --- Configuration as Proofs]
+  --- pass 1: the configuration being ordered
+- #link("14-doc-output.md")[Chapter 14: Output and Visualization] ---
   how the plan is rendered
-- #link("15-doc-building.md")[Chapter 15: Building and Execution] ---
+- #link("16-doc-building.md")[Chapter 16: Building and Execution] ---
   how the plan is executed
-- #link("23-doc-dependency-ordering.md")[Chapter 23: Dependency Ordering]
+- #link("24-doc-dependency-ordering.md")[Chapter 24: Dependency Ordering]
   --- PMS ordering semantics
 
 = Output and Visualization
@@ -6636,7 +6818,7 @@ in `Source/Config/<host>.pl`.
 - #strong[Regression testing] --- by comparing `.merge` files against
   `.emerge` files (the corresponding `emerge -vp` output for the same
   target), the compare tooling can detect regressions in dependency
-  resolution accuracy. See #link("24-doc-testing.md")[Chapter 24] for
+  resolution accuracy. See #link("25-doc-testing.md")[Chapter 25] for
   the comparison workflow.
 - #strong[Offline review] --- the files provide a persistent record of
   what portage-ng would do for each target, without needing to rerun the
@@ -6779,14 +6961,14 @@ The printer pipeline is split across focused submodules:
   )
 
 == Further reading
-<further-reading-12>
-- #link("12-doc-planning.md")[Chapter 12: Ordering --- Plans as Proofs]
+<further-reading-13>
+- #link("13-doc-planning.md")[Chapter 13: Ordering --- Plans as Proofs]
   --- how waves and parallelism are computed
-- #link("14-doc-cli.md")[Chapter 14: Command-Line Interface] ---
+- #link("15-doc-cli.md")[Chapter 15: Command-Line Interface] ---
   `--graph`, `--verbose`, `--quiet`, and other output flags
-- #link("15-doc-building.md")[Chapter 15: Building and Execution] ---
+- #link("16-doc-building.md")[Chapter 16: Building and Execution] ---
   how the plan is executed
-- #link("24-doc-testing.md")[Chapter 24: Testing and Regression] --- how
+- #link("25-doc-testing.md")[Chapter 25: Testing and Regression] --- how
   `.merge` files are used for regression testing
 
 = Command-Line Interface
@@ -6872,7 +7054,7 @@ then adds an HTTPS Pengine server, TLS, and Bonjour service
 advertisement. The server exposes job and result message queues so that
 workers can poll for proving tasks. Use `--background` to fork the
 server process. See
-#link("17-doc-distributed.md")[Chapter 17: Distributed Proving].
+#link("18-doc-distributed.md")[Chapter 18: Distributed Proving].
 
 === Worker
 <worker>
@@ -6882,7 +7064,7 @@ worker discovers the server via Bonjour or explicit `--host`/`--port`,
 syncs its local portage tree to the server's snapshot, registers its CPU
 count, and spawns one thread per core. Each thread polls the server for
 jobs, proves them locally, and posts results back. See
-#link("17-doc-distributed.md")[Chapter 17: Distributed Proving].
+#link("18-doc-distributed.md")[Chapter 18: Distributed Proving].
 
 == Actions
 <actions>
@@ -6939,7 +7121,7 @@ search, and everyday workflows.
     [`--regen`], [Regenerate md5-cache incrementally],
     [`--import-vdb`], [Client mode: ship the local VDB to the server so
     remote plans reflect the client's installed packages (see
-    #link("17-doc-distributed.md")[Chapter 17])],
+    #link("18-doc-distributed.md")[Chapter 18])],
   )]
   , kind: table
   )
@@ -7103,7 +7285,7 @@ semantics). The `--changed-deps` flag applies the same test while
 resolving other targets.
 
 GLSA details for `@security` and siblings:
-#link("19-doc-glsa.md")[Chapter 19]. Full option text:
+#link("20-doc-glsa.md")[Chapter 20]. Full option text:
 #link("../Manpage/portage-ng.1.md")[`portage-ng(1)`].
 
 == CI mode
@@ -7166,7 +7348,7 @@ Short recipes that match how people actually use the tool:
 - #strong[Why is this package in my plan?] \
   `portage-ng --pretend --explain cat/pkg` --- ask the explainer/LLM
   path to narrate the plan (see
-  #link("16-doc-llm.md")[Chapter 16: Semantic Search and LLM Integration]).
+  #link("17-doc-llm.md")[Chapter 17: Semantic Search and LLM Integration]).
 
 - #strong[Diagnose a failed build with metacircular LLM repair] \
   `portage-ng --diagnose cat/pkg` (optional `--log path`) --- propose
@@ -7233,7 +7415,7 @@ portage-ng --search "text editor with syntax highlighting"  # semantic search
 ```
 
 Semantic search requires Ollama with a loaded embedding model. See
-#link("16-doc-llm.md")[Chapter 16: Semantic Search and LLM Integration].
+#link("17-doc-llm.md")[Chapter 17: Semantic Search and LLM Integration].
 
 === Fuzzy and wildcard search
 <fuzzy-and-wildcard-search>
@@ -7275,14 +7457,14 @@ Quote the atom if the shell would expand `*`
 result set, e.g. `category=dev-libs name:=*ssl*`.
 
 == Further reading
-<further-reading-13>
+<further-reading-14>
 - #link("../Manpage/portage-ng.1.md")[`portage-ng(1)` manpage] ---
   exhaustive option reference
 - #link("02-doc-installation.md")[Chapter 2: Installation and Quick Start]
   --- first run examples
-- #link("13-doc-output.md")[Chapter 13: Output and Visualization] ---
+- #link("14-doc-output.md")[Chapter 14: Output and Visualization] ---
   what the output looks like
-- #link("19-doc-glsa.md")[Chapter 19: Gentoo Linux Security Advisories (GLSA)]
+- #link("20-doc-glsa.md")[Chapter 20: Gentoo Linux Security Advisories (GLSA)]
   --- `@security` and related GLSA computed sets
 - #link("03-doc-configuration.md")[Chapter 3: Configuration] ---
   `config:preserved_libs_registry/1` and related paths
@@ -7412,11 +7594,10 @@ are #strong[in-place repairs]: they rebuild something mid-flight and
 re-run the failed phase. The missing-provider mechanism is different ---
 it #strong[diagnoses but never repairs in place]: it records what it
 learned and lets the pipeline re-derive a fresh plan (see
-#link(<missing-provider-feedback-diagnose-learn-re-derive>)[Missing-provider feedback]
-below).
+#link(<missing-provider-feedback>)[Missing provider feedback] below).
 
-=== Collision deconfliction (`collision.pl`)
-<collision-deconfliction-collision.pl>
+=== File collision deconfliction
+<file-collision-deconfliction>
 Traditional emerge refuses, at the plan stage, to install a package
 whose files are owned by a different installed provider --- it is told
 so by an explicit blocker atom in metadata (e.g.~installed
@@ -7431,8 +7612,8 @@ behaviour next to the soft-blocker list, and the build summary lists
 every package that needed it. The same recovery is applied to
 binary-package `qmerge` merges.
 
-=== GHC ABI repair (`ghcabi.pl`) --- the native haskell-updater
-<ghc-abi-repair-ghcabi.pl-the-native-haskell-updater>
+=== Haskell ABI repair
+<haskell-abi-repair>
 Gentoo encodes a Haskell package's identity in `ghc-pkg`'s ABI hash (the
 suffix in e.g.~`bifunctors-5.6.3-9AmA3NO9963FDwV9BBcxcZ`), not in the
 ebuild sub-slot. When a `dev-haskell` library is rebuilt, its installed
@@ -7464,8 +7645,8 @@ parallel build workers, and every repair leaves markers in both the
 consumer's and the rebuilt package's build logs plus an entry in the
 build summary.
 
-=== OCaml ABI repair (`ocamlabi.pl`)
-<ocaml-abi-repair-ocamlabi.pl>
+=== OCaml ABI repair
+<ocaml-abi-repair>
 OCaml has the same problem: package identity lives in the compiled
 interface digests (`.cmi` CRCs) checked by the compiler and in findlib's
 registry, not in the ebuild sub-slot. Unlike Haskell there is no single
@@ -7491,8 +7672,8 @@ retry rounds, repairs serialized across workers, and markers in every
 involved build log plus the build summary. The package being built and
 `dev-lang/ocaml` itself are never rebuild candidates.
 
-=== Missing-provider feedback: diagnose, learn, re-derive
-<missing-provider-feedback-diagnose-learn-re-derive>
+=== Missing provider feedback
+<missing-provider-feedback>
 The three mechanisms above all repair reality in place: they rebuild a
 package mid-transaction and re-run the failed phase. That pattern is
 wrong for a whole class of failures --- a build that dies because a
@@ -7578,10 +7759,10 @@ Because the discovery carries structured evidence (the symbol, phase,
 exit code, and log excerpt), the printer proposes a Gentoo Bugzilla bug
 report draft at the end of the build for every dependency worked around
 this session --- the record doubles as an upstream ebuild/eclass bug
-report (see #link("18-doc-upstream-bugs.md")[Chapter 18]).
+report (see #link("19-doc-upstream-bugs.md")[Chapter 19]).
 
-=== USE-enable feedback (diagnose → learn → re-derive)
-<use-enable-feedback-diagnose-learn-re-derive>
+=== USE-enable feedback
+<use-enable-feedback>
 A closely related gap is when the provider #emph[is] declared and even
 installed, but was built with the wrong USE set --- e.g.
 `KX11Extras: No such file or directory` because
@@ -7896,12 +8077,12 @@ is no delete flag; to reclaim disk space, call `snapshot:delete(Id)`
 from `--shell` (or remove the snapshot directory by hand).
 
 == Further reading
-<further-reading-14>
-- #link("12-doc-planning.md")[Chapter 12: Ordering --- Plans as Proofs]
+<further-reading-15>
+- #link("13-doc-planning.md")[Chapter 13: Ordering --- Plans as Proofs]
   --- how the plan is constructed
-- #link("13-doc-output.md")[Chapter 13: Output and Visualization] ---
+- #link("14-doc-output.md")[Chapter 14: Output and Visualization] ---
   plan display and `.merge` file generation
-- #link("14-doc-cli.md")[Chapter 14: Command-Line Interface] ---
+- #link("15-doc-cli.md")[Chapter 15: Command-Line Interface] ---
   `--merge`, `--jobs`, `--estimate` flags
 
 = Semantic Search and LLM Integration
@@ -8314,9 +8495,9 @@ failed pass with no new deterministic discoveries (same confirm gate).
 The explainer is split into two modules with clearly separated
 responsibilities.
 
-=== `explainer.pl` --- domain-agnostic introspection
-<explainer.pl-domain-agnostic-introspection>
-This module answers "why" questions by inspecting the proof artifacts
+=== Domain-agnostic introspection
+<domain-agnostic-introspection>
+`explainer.pl` answers "why" questions by inspecting the proof artifacts
 (ProofAVL, ModelAVL, Plan, TriggersAVL) without knowing anything about
 Gentoo or Portage. It provides three families of queries:
 
@@ -8338,9 +8519,9 @@ context list from any literal-shaped term. This is how the explainer
 accesses the structured tags (USE state, slot info, suggestions,
 assumption reasons) attached to each literal during the proof.
 
-=== `explanation.pl` --- domain-specific hooks
-<explanation.pl-domain-specific-hooks>
-This module provides #strong[enrichment hooks] that inject
+=== Domain-specific hooks
+<domain-specific-hooks>
+`explanation.pl` provides #strong[enrichment hooks] that inject
 Gentoo-specific context into the generic Why terms produced by
 `explainer.pl`. The hooks are multifile predicates, so the domain layer
 plugs into the generic layer without modifying it:
@@ -8469,8 +8650,8 @@ Available LLM services: claude, grok, chatgpt, gemini, ollama. The
 default is set via `config:llm_default/1`. See `config.pl` for API keys,
 models, and endpoints.
 
-== Assumption diagnosis (explanation.pl)
-<assumption-diagnosis-explanation.pl>
+== Assumption diagnosis
+<assumption-diagnosis>
 `explanation:assumption_reason_for_grouped_dep/6` is called on the
 fallback path when no candidate satisfies all constraints. It
 progressively filters candidates through:
@@ -8507,12 +8688,12 @@ appends them as `domain_reasons(Reasons)`.
 The hooks are called automatically --- no direct invocation needed.
 
 == Further reading
-<further-reading-15>
+<further-reading-16>
 - #link("09-doc-prover-assumptions.md")[Chapter 9: Assumptions and Constraint Learning]
   --- assumption taxonomy that the explainer queries
 - #link("08-doc-prover.md")[Chapter 8: The Prover] --- proof artifacts
   consumed by the explainer
-- #link("14-doc-cli.md")[Chapter 14: Command-Line Interface] ---
+- #link("15-doc-cli.md")[Chapter 15: Command-Line Interface] ---
   `--search`, `--similar`, `--explain` flags
 
 = Distributed Proving
@@ -8641,7 +8822,7 @@ dependency resolution internally.
 An important design question for distributed proving is: how does each
 mode access the Portage tree? The answer is portage-ng's object-oriented
 context system (see
-#link("20-doc-contextual-logic-programming.md")[Chapter 20]). Each
+#link("21-doc-contextual-logic-programming.md")[Chapter 21]). Each
 repository is an instance created through that system, and methods like
 `portage:read` populate the cache facts.
 
@@ -9026,10 +9207,10 @@ can add more workers at any time --- they connect to the pinned server
 and start picking up jobs immediately.
 
 == Further reading
-<further-reading-16>
+<further-reading-17>
 - #link("02-doc-installation.md")[Chapter 2: Installation and Quick Start]
   --- dns-sd and openssl prerequisites
-- #link("14-doc-cli.md")[Chapter 14: Command-Line Interface] ---
+- #link("15-doc-cli.md")[Chapter 15: Command-Line Interface] ---
   `--mode` flags
 - #link("04-doc-architecture.md")[Chapter 4: Architecture Overview] ---
   module load order for different modes
@@ -9133,7 +9314,7 @@ fails because of an #emph[undeclared] build dependency --- a command,
 header, library, or pkg-config module the ebuild needed but never listed
 in `BDEPEND` --- the builder records the discovery and re-derives a plan
 that supplies it (see
-#link("15-doc-building.md#missing-provider-feedback-diagnose-learn-re-derive")[Chapter 15: Missing-provider feedback]).
+#link("16-doc-building.md#missing-provider-feedback")[Chapter 16: Missing provider feedback]).
 
 Because every discovery carries structured evidence --- the missing
 symbol, the phase it surfaced in, the exit code, and the offending log
@@ -9164,14 +9345,14 @@ eclass. Both kinds of draft are gated by
 `config:bugreport_drafts_enabled/1`.
 
 == Further reading
-<further-reading-17>
-- #link("14-doc-cli.md")[Chapter 14: Command-Line Interface] ---
+<further-reading-18>
+- #link("15-doc-cli.md")[Chapter 15: Command-Line Interface] ---
   `--upstream` and `--bugs` flags
 - #link("09-doc-prover-assumptions.md")[Chapter 9: Assumptions and Constraint Learning]
   --- how unsatisfiable dependencies are detected
-- #link("15-doc-building.md")[Chapter 15: Building and Execution] ---
+- #link("16-doc-building.md")[Chapter 16: Building and Execution] ---
   the missing-provider feedback loop that produces build-time bug drafts
-- #link("19-doc-glsa.md")[Chapter 19: Gentoo Linux Security Advisories (GLSA)]
+- #link("20-doc-glsa.md")[Chapter 20: Gentoo Linux Security Advisories (GLSA)]
   --- security advisories and `@security` remediation sets
 
 = Gentoo Linux Security Advisories (GLSA)
@@ -9342,7 +9523,7 @@ portage-ng registers four computed set names in
 
 Related non-GLSA computed sets live in the same registry
 (`Preference/sets.pl`); see
-#link("14-doc-cli.md#package-sets")[Chapter 14: CLI --- Package sets]
+#link("15-doc-cli.md#package-sets")[Chapter 15: CLI --- Package sets]
 for the full table (`@preserved-rebuild`, `@changed-deps`, `@installed`,
 …).
 
@@ -9463,13 +9644,13 @@ preference and before `sets.pl`.
   the user runs `--sync`.
 
 == Further reading
-<further-reading-18>
+<further-reading-19>
 - #link("06-doc-knowledgebase.md")[Chapter 6: Knowledge Base and Cache]
   --- package `kb.qlf` vs sibling caches such as `profile.qlf` /
   `glsa.qlf`
 - #link("03-doc-configuration.md")[Chapter 3: Configuration] --- sync,
   profile cache, and host-local paths
-- #link("14-doc-cli.md")[Chapter 14: Command-Line Interface] ---
+- #link("15-doc-cli.md")[Chapter 15: Command-Line Interface] ---
   `--pretend`, `--list-sets`, target `@set` syntax
 - #link("10-doc-version-domains.md")[Chapter 10: Version Domains] ---
   `version/7` comparison used by GLSA range matching
@@ -9760,7 +9941,7 @@ the prover. Every literal in the proof tree carries a context list
 context terms are merged via feature unification --- the same algebraic
 operation that the context system uses for its data members. This
 connection is explored in detail in
-#link("21-doc-context-terms.md")[Chapter 21: Context Terms and Feature Unification].
+#link("22-doc-context-terms.md")[Chapter 22: Context Terms and Feature Unification].
 
 == Serialization
 <serialization>
@@ -9774,11 +9955,11 @@ portage-ng's startup fast --- the full knowledge base (30,000+ ebuilds
 with all metadata) loads from the QLF file in under a second.
 
 == Further reading
-<further-reading-19>
+<further-reading-20>
 - A. Zeller, #emph[Unified Versioning through Feature Logic], 1997
 - #link("../Source/Logic/context.pl")[`Source/Logic/context.pl`] ---
   full implementation
-- #link("21-doc-context-terms.md")[`Documentation/Handbook/21-doc-context-terms.md`]
+- #link("22-doc-context-terms.md")[`Documentation/Handbook/22-doc-context-terms.md`]
   --- how context terms flow through the prover
 
 = Context Terms in portage-ng
@@ -10299,7 +10480,7 @@ This separation allows:
 <dependency-resolver-comparison>
 == Architecture Overview
 <architecture-overview-1>
-All three resolvers solve the same problem: given a set of requested
+All four resolvers solve the same problem: given a set of requested
 packages, figure out which concrete versions to install and in what
 order. Where they differ is in how they handle #strong[conflicts] ---
 situations where the first choice turns out to be wrong.
@@ -10328,9 +10509,41 @@ clean every time. Portage allows up to 20 retries by default
 )
 
 Because each retry rebuilds everything, this approach is the slowest of
-the three. Complex dependency tangles --- like the OCaml Jane Street
+the four. Complex dependency tangles --- like the OCaml Jane Street
 ecosystem --- can require more than a dozen retries before Portage finds
 a consistent graph.
+
+=== pkgcore (Python)
+<pkgcore-python>
+pkgcore's `pmerge` resolver is also Python, but it does #strong[not]
+copy Portage's rebuild-with-masks loop. Resolution is a depth-first walk
+over an explicit #strong[frame stack] (`resolver_stack` /
+`resolver_frame` in `pkgcore.resolver.plan`): each atom pushes a frame,
+tries a choice, and walks that choice's dependency set.
+
+When a choice fails --- inserting it into the plan state fails, or a
+dependency under it cannot be satisfied --- pkgcore #strong[backtracks
+to the frame's checkpoint] (`state.backtrack(start_point)`), advances to
+the next remaining package for that atom (`force_next_pkg`), and
+continues inside the same `merge_plan`. Failed alternatives can also be
+pruned from the choice set (`reduce_solutions`). There is no global mask
+list carried into a fresh graph, and no Paludis-style preload that names
+the winning candidate for the next full restart.
+
+#figure(image("Diagrams/21-pkgcore-loop.svg", width: 40.0%, alt: "pkgcore conflict-resolution loop"),
+  caption: [
+    pkgcore conflict-resolution loop
+  ]
+)
+
+Relative to Portage, this is a real improvement: work already done above
+the failing frame is kept, and only the open choice point is revisited.
+Relative to Paludis and portage-ng, the guidance is still mostly
+#strong[negative and local] --- "try the next candidate" --- rather than
+a positively learned domain or a computed "use this package next time."
+Deep, blocked search spaces can still explore a large fraction of the
+choice tree (and historically could blow the Python recursion limit
+before the frame rewrite moved the stack out of the call stack).
 
 === Paludis (C++)
 <paludis-c>
@@ -10382,31 +10595,35 @@ For the vast majority of packages (over 99%), no conflict arises at all
 and the proof completes in a single pass. When conflicts do occur, the
 combination of learned domains (positive guidance) and rejects (negative
 filtering) resolves them without rebuilding the entire proof tree. This
-makes portage-ng the fastest of the three resolvers.
+makes portage-ng the fastest of the four resolvers.
 
 == Comparison Table
 <comparison-table>
 #figure(
   align(center)[#table(
-    columns: (25%, 25%, 25%, 25%),
-    align: (left,left,left,left,),
-    table.header([#strong[Aspect]], [#strong[Portage]], [#strong[Paludis]], [#strong[portage-ng]],),
+    columns: (20%, 20%, 20%, 20%, 20%),
+    align: (left,left,left,left,left,),
+    table.header([#strong[Aspect]], [#strong[Portage]], [#strong[pkgcore]], [#strong[Paludis]], [#strong[portage-ng]],),
     table.hline(),
-    [Language], [Python], [C++], [SWI-Prolog],
+    [Language], [Python], [Python], [C++], [SWI-Prolog],
     [Conflict detection], [Post-hoc (after graph built)], [Incremental
-    (on constraint add)], [Incremental (constraint guard)],
-    [What carries across retries], [Masks (negative)], [Preloads
+    (during frame / choice walk)], [Incremental (on constraint
+    add)], [Incremental (constraint guard)],
+    [What carries across retries], [Masks (negative)], [Remaining
+    choices in the frame (negative pruning)], [Preloads
     (positive)], [Learned domains (positive) + Rejects (negative)],
-    [Fresh state each retry?], [Yes (new depgraph)], [Yes (new
-    Resolver)], [Partial (reject set accumulates, learned store
-    accumulates)],
+    [Fresh state each retry?], [Yes (new depgraph)], [No --- backtrack
+    to frame checkpoint], [Yes (new Resolver)], [Partial (reject set
+    accumulates, learned store accumulates)],
     [Finding the right candidate], [Brute force
-    (mask+retry)], [`_try_to_find_decision_for` with ALL
+    (mask+retry)], [`force_next_pkg` after
+    backtrack], [`_try_to_find_decision_for` with ALL
     constraints], [Domain narrowing (Zeller) + priority resolution
     (Vermeir)],
-    [Performance], [Slowest (full rebuild)], [Fast (targeted
-    restarts)], [Fastest (single-pass for most targets)],
-    [Package-specific code], [None], [None], [None],
+    [Performance], [Slowest (full rebuild)], [Faster than Portage (keeps
+    parent frames)], [Fast (targeted restarts)], [Fastest (single-pass
+    for most targets)],
+    [Package-specific code], [None], [None], [None], [None],
   )]
   , kind: table
   )
@@ -10447,7 +10664,7 @@ clauses, but expressed as version domains rather than boolean clauses.
 Portage's `dep_zapdeps` `choice_bins` and portage-ng's
 `ranking:prioritize_deps_keep_all/3` multi-key sort are compared in
 detail in
-#link("11-doc-rules.md#any-of-arm-selection")[Chapter 11, Any-of (`||`) arm selection]
+#link("12-doc-resolution.md#any-of-arm-selection")[Chapter 12, Any-of (`||`) arm selection]
 (including why overlapping-`||` DNF, virtual expand, and circular
 demotion inside `||` are not mirrored as ranking keys).
 
@@ -10600,7 +10817,7 @@ locks early, preventing greedy conflicts where an unconstrained sibling
 picks a version that later clashes. The priority ladder (lower = proved
 first): tight upper bound (1) → tilde (4) → wildcard (8) → unconstrained
 (999). Within each tier, slot specificity further refines the order. See
-#link("11-doc-rules.md")[Chapter 11] for details.
+#link("12-doc-resolution.md")[Chapter 12] for details.
 
 #figure(image("Diagrams/22-portage-ng-model.svg", width: 55.0%, alt: "portage-ng two-phase dependency model"),
   caption: [
@@ -10618,7 +10835,7 @@ first): tight upper bound (1) → tilde (4) → wildcard (8) → unconstrained
   hook in a single pass during proof search, without creating explicit
   ordering edges in the proof.
 
-When cycles appear, the ordering pass (Chapter 12) resolves them at
+When cycles appear, the ordering pass (Chapter 13) resolves them at
 proof time: a requirement whose provider is still being scheduled falls
 through to a citation of the installed world (VDB), or --- when nothing
 bridges the loop --- to an honest `unreachable` assumption. Runtime-only
@@ -11148,12 +11365,12 @@ Options: `repo(Atom)` (default `portage`), `limit(N)` (0 = all),
 `verbose(Bool)`, `out(Path)` (writes a Prolog-term report).
 
 == Further reading
-<further-reading-20>
+<further-reading-21>
 - #link("02-doc-installation.md")[Chapter 2: Installation and Quick Start]
   --- `make test` commands
-- #link("25-doc-performance.md")[Chapter 25: Performance and Profiling]
+- #link("26-doc-performance.md")[Chapter 26: Performance and Profiling]
   --- `resolver:test_stats` for bulk testing
-- #link("26-doc-contributing.md")[Chapter 26: Contributing] ---
+- #link("27-doc-contributing.md")[Chapter 27: Contributing] ---
   development workflow with regression testing
 
 = Performance and Profiling
@@ -11690,10 +11907,10 @@ Regression tooling is hosted in two places:
 Do not create ad-hoc compare scripts outside these two locations.
 
 == Further reading
-<further-reading-21>
-- #link("24-doc-testing.md")[Chapter 24: Testing and Regression] ---
+<further-reading-22>
+- #link("25-doc-testing.md")[Chapter 25: Testing and Regression] ---
   testing methodology
-- #link("25-doc-performance.md")[Chapter 25: Performance and Profiling]
+- #link("26-doc-performance.md")[Chapter 26: Performance and Profiling]
   --- performance testing
 - #link("02-doc-installation.md")[Chapter 2: Installation and Quick Start]
   --- build and run instructions
@@ -11738,8 +11955,9 @@ The book traced this idea from concept to implementation:
 - #strong[Part IV] explored the theoretical underpinnings: contextual
   logic programming, feature unification, and the comparison with other
   resolvers --- showing how portage-ng's approach relates to Portage's
-  progressive relaxation, Paludis's constraint accumulation, and
-  academic work on feature logic and ordered logic programs.
+  progressive relaxation, pkgcore's frame-stack backtracking, Paludis's
+  constraint accumulation, and academic work on feature logic and
+  ordered logic programs.
 
 - #strong[Part V] described the practical side of development: testing
   strategies, performance profiling, and contribution guidelines.

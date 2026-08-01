@@ -1,7 +1,7 @@
 # Building the handbook
 
 The portage-ng handbook is written as individual Markdown chapters
-(`01-doc-introduction.md` through `27-doc-closing.md`) and compiled into
+(`01-doc-introduction.md` through `28-doc-closing.md`) and compiled into
 a single PDF using **Pandoc** with the **Typst** PDF engine.
 
 ## Prerequisites
@@ -28,7 +28,7 @@ The build pipeline is:
 Markdown chapters ──> Pandoc ──> Typst ──> PDF
 ```
 
-1. **Pandoc** reads all 26 chapter Markdown files in order, resolves
+1. **Pandoc** reads all 28 chapter Markdown files in order, resolves
    image references from the `Diagrams/` directory, and applies the
    metadata from `metadata.yaml` (title, subtitle, author).
 

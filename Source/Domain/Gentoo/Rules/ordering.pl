@@ -31,7 +31,7 @@ the pass-1 proof and the VDB (installed packages):
 
 No graph algorithms live here: requires/prefers are a reading of the
 pass-1 proof bodies (dependency provenance), world is a reading of the
-VDB. See Documentation/Handbook/12-doc-planning.md (the planning laws
+VDB. See Documentation/Handbook/13-doc-planning.md (the planning laws
 and the Gentoo bindings).
 */
 

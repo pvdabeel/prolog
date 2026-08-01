@@ -272,7 +272,7 @@ installation of `sys-apps/portage` (`after`)."
 
 The context list is **not** an unstructured bag of annotations. It is the
 proof-side counterpart of **feature terms** in the sense used by Zeller-style
-feature logic (see [Chapter 21: Context Terms](21-doc-context-terms.md)): a
+feature logic (see [Chapter 22: Context Terms](22-doc-context-terms.md)): a
 structured collection of features that can be **merged** when two dependency
 paths describe the same package under different conditions. When two paths
 reach the same literal with different USE requirements or other features, the
@@ -398,7 +398,7 @@ after_only(portage://'app-editors/neovim-0.12.0':run)
 
 The ordering bindings (`Source/Domain/Gentoo/Rules/ordering.pl`) read both `after`
 and `after_only` from every literal’s context to derive the hard requirements
-and soft preferences that drive the second proving pass (Chapter 12).
+and soft preferences that drive the second proving pass (Chapter 13).
 
 ### Summary of context tags
 
@@ -418,7 +418,7 @@ and soft preferences that drive the second proving pass (Chapter 12).
 
 Contexts are merged at join points via feature term unification, which uses
 Zeller-inspired feature unification. See
-[Chapter 21: Context Terms](21-doc-context-terms.md) for full details.
+[Chapter 22: Context Terms](22-doc-context-terms.md) for full details.
 
 
 ## Canonical decomposition
@@ -534,5 +534,5 @@ also adds a `world(...):register` condition):
   literals
 - [Chapter 11: Rules and Domain Logic](11-doc-rules.md) — how rules produce
   literals
-- [Chapter 21: Context Terms](21-doc-context-terms.md) — deep dive into context
+- [Chapter 22: Context Terms](22-doc-context-terms.md) — deep dive into context
   semantics and feature unification

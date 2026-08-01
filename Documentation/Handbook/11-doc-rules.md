@@ -1,555 +1,170 @@
 # Rules and Domain Logic
 
-## How we resolve dependencies
+## Prover and domain
 
-The prover works with abstract literals and rules.  It does not know
-what "install" means for Gentoo — it only knows how to find a matching
-rule and prove its body.  The **rules layer** is the bridge between
-that abstract proof search and the concrete world of ebuilds, USE
-flags, and version constraints.
+The prover ([Chapter 8](08-doc-prover.md)) works with abstract literals
+and rules.  It does not know what `:install` means for Gentoo — it only
+knows how to find a matching `rule/2` clause and prove its body.  The
+**rules layer** is the bridge between that abstract proof search and a
+concrete domain: ebuilds, USE flags, version constraints, planning laws,
+or uninstall claims.
 
-When the prover encounters a literal like
-`portage://'sys-apps/portage-3.0.77-r3':install`, it is the rules
-layer that answers questions such as:
-
-- What are this ebuild's dependency lists (DEPEND, BDEPEND, RDEPEND)?
-- Which USE flags are active for this particular path through the
-  dependency graph?
-- Which repository entries are valid candidates, given version, slot,
-  and keyword constraints?
-- Should a USE-conditional dependency like `ssl? ( dev-libs/openssl )`
-  be included or skipped?
-- Are there blockers, REQUIRED_USE constraints, or ordering
-  requirements?
-
-All of these decisions are encoded as rule bodies and proof-term
-context annotations (`?{...}` lists).  The sections below follow one
-resolution from user target to installed graph, then cover cycles, USE
-semantics, and what happens when the rules layer must record an
-assumption.
-
-
-## How dependency resolution works (end-to-end)
-
-A typical run starts with a user query like `sys-apps/portage`.  The
-rules layer turns this into a `target/2` literal and resolves it to
-the best eligible candidate — the newest version that is not masked,
-has an accepted keyword, and satisfies any slot constraints.  This
-resolution produces sub-literals that drive the rest of the proof.
-
-The resolution then branches depending on the action:
-
-- **`:run`** resolves runtime dependencies (RDEPEND).  PDEPEND is
-  handled in the same pass through the prover's proof-obligation hook
-  (see [Hooks](#hooks)).
-- **`:install`** resolves build-time dependencies (DEPEND and BDEPEND)
-  and attaches ordering constraints (`after/1`) that express which
-  packages must be installed before others.
-
-Each dependency atom from the metadata becomes a
-`grouped_package_dependency` literal.  The candidate selection
-machinery then applies version ranges, slot operators, keyword and
-mask policy, and any learned constraints from prior reprove attempts
-(see [Chapter 9](09-doc-prover-assumptions.md) and
-[Chapter 10](10-doc-version-domains.md)).
-
-USE-conditional dependencies are included only when the condition
-holds in the effective USE set for that ebuild and path.  For example,
-`ssl? ( dev-libs/openssl )` adds `dev-libs/openssl` to the body only
-if `ssl` is enabled; otherwise the branch is skipped entirely.  When a
-parent requires particular flags on a child, those requirements
-propagate via `build_with_use` in the proof-term context (see
-[USE flags in depth](#use-flags-in-depth)).
-
-The prover walks this structure depth-first: each successful rule
-expansion adds literals to the proof and updates the model.  When a
-rule fails, Prolog backtracks to try an alternative candidate or,
-ultimately, records an assumption.
-
-
-## The `rule/2` interface
-
-The single entry point between the prover and the domain logic is:
+When the prover encounters a literal, it calls into whichever rule
+module it was given:
 
 ```prolog
-resolving:rule(+Head, -Body)
+prover:prove(Rules, ...)
+prover:prove_once(Rules, ...)
 ```
 
-The prover passes a literal as `Head`, and the rules layer returns a
-list of sub-literals `Body` that must be proved in order to justify
-it.  The prover never interprets what the literals mean — all
-Gentoo-specific knowledge is encapsulated inside the rule clauses.
+`Rules` is a module atom — typically `resolving`, `ordering`, or
+`unmerging`.  The prover expands `Rules:rule(Head, Body)` and treats
+`Body` as the next obligations.  It never interprets what the literals
+mean; all domain knowledge lives inside the rule clauses and the hooks
+they register.
 
-The table below lists the main head patterns.  Target rules translate
-a user query into a concrete ebuild.  Action rules (`:install`,
-`:run`, `:download`) expand an ebuild into its dependency obligations.
-Dependency rules resolve individual atoms to candidates.  Validation
-rules enforce REQUIRED_USE constraints.  The catch-all `assumed(X)`
-clause handles domain assumptions when no real rule applies.
+That separation is deliberate.  The same proof engine answers three
+different questions by loading a different rule module:
 
-| **Head pattern** | **Purpose** |
-| :--- | :--- |
-| `target(Q, Arg):run` | Resolve a user target to a candidate ebuild |
-| `target(Q, Arg):fetchonly` | Fetch-only target resolution |
-| `target(Q, Arg):uninstall` | Uninstall target resolution |
-| `Repo://Ebuild:install` | Build and install an ebuild (DEPEND + BDEPEND) |
-| `Repo://Ebuild:run` | Runtime availability (RDEPEND) |
-| `Repo://Ebuild:download` | Fetch source archives |
-| `Repo://Ebuild:fetchonly` | Fetch only |
-| `Repo://Ebuild:depclean` | Remove unneeded package |
-| `grouped_package_dependency(...):Action` | Resolve a grouped dependency |
-| `package_dependency(...):config` | Configure a single dependency |
-| `exactly_one_of_group(...):validate` | Validate REQUIRED_USE `^^` |
-| `any_of_group(...):validate` | Validate REQUIRED_USE any-of |
-| `at_most_one_of_group(...):validate` | Validate REQUIRED_USE `??` |
-| `assumed(X)` | Catch-all for domain assumptions |
-
-
-## Candidate resolution
-
-When the rules layer encounters a dependency, it must choose a
-concrete version of the target package.  This process has three
-stages: eligibility filtering, version-ordered selection, and a
-fallback chain for when no candidate works.
-
-### Eligibility filtering
-
-Before a candidate version is considered, `candidate:eligible/1`
-checks two things:
-
-- **Masking** — is the ebuild masked by the profile or user
-  configuration?
-- **Keyword acceptance** — does the ebuild have an accepted keyword
-  for the current architecture?
-
-(Installed status is a separate check, `candidate:installed/1`, used
-by the entry rules' already-installed short-circuit.)
-
-If a candidate fails these checks and no relaxation tier is active
-(see [Chapter 9, Progressive Relaxation](09-doc-prover-assumptions.md#progressive-relaxation)),
-the entry rule fails and Prolog backtracks to try the next candidate.
-
-### Version-ordered selection
-
-`target:resolve_candidate/2` resolves a query to a specific
-`Repository://Ebuild` pair.  Candidates are tried newest-first via
-`cache:ordered_entry/5`, so the prover naturally prefers the latest
-eligible version.
-
-### Dependency ordering within a group
-
-Before proving the dependencies of a package, `ranking:dep_priority/2`
-sorts them so that tightly constrained siblings are proved first.  This
-reduces greedy conflicts where an unconstrained sibling selects a version
-that later clashes with a tighter constraint:
-
-| **BaseK** | **Constraint type** | **Example** |
+| **Question** | **Rule module** | **Stage wrapper** |
 | :--- | :--- | :--- |
-| 1 | Tight upper bound (range) | `>=1.0 <2.0` |
-| 4 | Tilde constraint | `~dev-ruby/railties-8.1.1` |
-| 8 | Wildcard constraint | `=dev-python/gast-0.6*` |
-| 999 | Unconstrained | `dev-libs/openssl` |
-
-Lower keys are proved first.  Slot specificity is folded into the base
-key via `min` — a fully slot-qualified dependency (slot + subslot) gets
-key 0 and outranks every tier above.  The effect is that slotted, tilde
-and wildcard dependencies lock their `selected_cn` before unconstrained
-siblings pick a potentially conflicting version.
-
-### Self-dependencies and cross-slot handling
-
-When a package lists itself as a build dependency (e.g. `antlr-tool:4`
-needing `antlr-tool:3.5` to bootstrap), the rules layer distinguishes
-**same-slot self-deps** from **cross-slot self-deps**.
-
-Same-slot self-deps (same category, name, and slot as the parent) are
-treated as bootstrap dependencies: if the package is already installed,
-the dependency is satisfied; otherwise the rule fails so that
-backtracking can reach a bootstrap alternative.
-
-Cross-slot self-deps (same category and name but a *different* slot)
-are treated as **regular dependencies** and resolved normally.  This
-prevents model build failures when the cross-slot version is not yet
-installed.
-
-### Fallback chain
-
-When every candidate for a grouped dependency has been tried and none
-succeeded, the rules layer activates a fallback chain before giving
-up:
-
-- **Wildcard domain learning** — `maybe_learn_wildcard_domain` fires
-  when a wildcard dependency (e.g. `=dev-python/gast-0.6*`) fails
-  resolution and the parent has already been narrowed by a prior
-  parent-narrowing attempt, or the parent is a single-version package
-  (where parent narrowing would be futile).  It derives an upper-bound
-  `cn_domain` from the wildcard constraint (e.g. `< 0.7`) and learns
-  it via `prover:learn/3`, then throws `prover_reprove`.
-- **Parent narrowing** — `maybe_learn_parent_narrowing` records that
-  the current parent version led to a dead end and throws
-  `prover_reprove`, so the prover can retry with a different parent.
-- **Domain reprove** — `maybe_request_grouped_dep_reprove` checks
-  whether domain or constraint conflicts exist and, if so, triggers a
-  reprove with learned constraints.
-- **Domain assumption** — as a last resort, the rules layer emits
-  `assumed(grouped_package_dependency(...))`.  This records the
-  failure as a domain assumption so the proof can still complete.
-
-
-## Cycles and how portage-ng handles them
-
-Circular dependencies are a fact of life in the Portage tree.  A
-language runtime may be packaged with tooling that itself depends on
-that runtime, creating a loop.  The prover detects these cycles during
-its depth-first proof search: it keeps track of which literals are
-currently being proved, and if the same literal appears again while it
-is still on the stack, a cycle has been found.
-
-Before breaking a cycle with an assumption, the prover asks the domain
-whether the cycle is **benign**.  The hook `heuristic:cycle_benign/2`
-inspects the repeating literal and the cycle path.  If the hook
-succeeds, the literal is treated as already justified and added to the
-model without a cycle-break assumption.  If the hook fails, the prover
-records a cycle-break assumption (`assumed(rule(Lit))` in the proof,
-`assumed(Lit)` in the model).  This is separate from domain
-assumptions introduced by `rule(assumed(X), [])`.
-
-The benign classification is conservative and pattern-based.  For
-example, cycles that pass through `:run` (RDEPEND paths) are often
-treated as ordering-style cycles rather than hard failures — mirroring
-how traditional resolvers tolerate certain cyclic patterns.
-
-After the proof is complete, the ordering pass (Chapter 12) resolves
-cyclic portions of the graph by citing the installed world (VDB) where
-possible, so that the merge ordering respects the cycle structure.
-For more on proof search and assumptions, see
-[Chapter 8](08-doc-prover.md) and
-[Chapter 9](09-doc-prover-assumptions.md).
-
-
-## USE flags in depth
-
-USE flags play a central role in dependency resolution.  They determine
-which dependency branches exist, which packages are eligible, and
-whether REQUIRED_USE constraints are satisfied.
-
-### Effective USE and conditionals
-
-For each ebuild the rules layer computes an **effective USE set** — the
-final set of flags that are active for this particular proof path.
-USE-conditional dependencies like `ssl? ( dev-libs/openssl )` are
-evaluated against this set: if the flag is active, the dependency is
-included; otherwise it is skipped.
-
-The key predicate is `use:effective_use_for_entry/3` (with the context
-wrapper `use:effective_use_in_context/3`), which computes the full
-effective USE set for an ebuild.  Whether a USE-conditional group is
-active is decided by the `candidate:eligible(use_conditional(...))`
-clauses together with the `use_conditional_group` rules in
-`resolving.pl`.
-
-### `build_with_use`
-
-When a parent dependency requires specific USE flags on a child (e.g.
-`dev-libs/openssl[threads]`), those requirements travel through the
-proof as `build_with_use` context annotations.  They influence how the
-child's effective USE set is computed, ensuring that parent
-requirements are not silently ignored.
-
-### `REQUIRED_USE`
-
-Gentoo's REQUIRED_USE expressions (e.g. `^^ ( gtk qt5 )` meaning
-"exactly one of gtk or qt5") are enforced through dedicated validation
-literals.  If the active USE set violates a REQUIRED_USE expression,
-the rule fails and the prover backtracks to try another candidate or
-records an assumption (see
-[Chapter 9, section 9.8](09-doc-prover-assumptions.md#use-model-violation-flow)).
-
-### Priority order
-
-USE flags are resolved in priority order, highest priority first:
-
-1. **`build_with_use`** from the parent's dependency context
-2. **User configuration** (`/etc/portage/package.use`)
-3. **Profile defaults**
-4. **Ebuild IUSE defaults**
-
-The most important consequence is that context wins over profile
-defaults: a `build_with_use` requirement from the parent can force or
-forbid a flag regardless of what the profile would normally choose.
-This is why two proofs for the same package can produce different USE
-sets — they arrive through different dependency paths with different
-context annotations.
-
-### Conflicts and backtracking
-
-When USE-derived constraints conflict — for example, REQUIRED_USE
-fails, a conditional branch does not apply as expected, or an
-eligibility check fails — the relevant rule fails.  The prover then
-backtracks: it tries another candidate version, another slot, or
-another branch of the search tree.  If no alternative succeeds, the
-candidate layer records a domain assumption, often tagged with a
-suggestion for which `package.use` change would resolve the conflict
-(see [Assumptions as proposals](#assumptions-as-proposals)).
-
-## Choice groups
-
-Gentoo's PMS defines three choice-group operators that constrain how
-many members of a set may be active at the same time.  The rules layer
-maps each operator to a dedicated validation literal that the prover
-must satisfy as part of the proof:
-
-| **Operator** | **Rule clause** | **Semantics** |
-| :--- | :--- | :--- |
-| any-of ( a b c ) | `any_of_group(Deps):validate` | At least one must be satisfied |
-| `^^ ( a b c )` | `exactly_one_of_group(Deps):validate` | Exactly one must be satisfied |
-| `?? ( a b c )` | `at_most_one_of_group(Deps):validate` | At most one may be satisfied |
-
-If the validation literal fails (e.g. two members of an
-`exactly_one_of` group are both active), the prover backtracks to try
-a different USE configuration or candidate version.
-
-When a disjunctive dependency group (`||`, `^^`, `exactly_one_of`) must
-*select* an alternative, the candidate layer ranks the members with
-`ranking:prioritize_deps_keep_all/3` and commits to the first arm that
-passes config checks (see [Any-of (`||`) arm selection](#any-of-arm-selection)
-below).  Profile-forced and installed preferences still dominate via
-`is_preferred_dep/2` inside the `Rank` key; USE_EXPAND target digits
-(`ranking:use_expand_target_rank/2`) contribute to `Rank` /
-`UEScore` — `llvm_slot_20` → `20`, `python_single_target_python3_13` →
-`[3,13]`, and so on.
-
-
-## Any-of (`||`) arm selection {#any-of-arm-selection}
-
-Gentoo ebuilds often write `|| ( arm1 arm2 … )`.  The PMS only requires
-that *at least one* arm is satisfiable; it does not say which arm to
-pick.  Wrong order locks the prover onto a suboptimal (or incompatible)
-branch — for example cabal’s
-`|| ( ( >=text-1.2.3 <text-1.3 ) ( >=text-2 <text-2.2 ) )` must prefer
-the text-2.x arm when that is the newest tree candidate
-(portage-ng#112).
-
-### Portage vs portage-ng entry points
-
-| | **Portage** | **portage-ng** |
-| :--- | :--- | :--- |
-| Mechanism | `dep_zapdeps` ordered `choice_bins` + intra-bin upgrade promotion (`lib/portage/dep/dep_check.py`) | `candidate:resolve(choice_group…)` → `ranking:prioritize_deps_keep_all/3` then first `any_of_config_dep_ok` |
-| Structure | Nine preference bins (lists) | One multi-key `keysort` (negated ints + original index) |
-| Graph reuse | Digraph `all_in_graph` | `selected_cn` snapshot (`SnapAll`) |
-
-Ranking *is* the preference policy: after the cut commits, later arms
-are not tried unless the proof backtracks for another reason.
-
-### Preference keys (highest first)
-
-Implemented in `ranking:dep_choice_scores/3` and assembled in
-`prioritize_deps_keep_all/3`.  Higher scores win; the original ebuild
-index `I` breaks remaining ties (left-to-right).
-
-| **Key** | **Intent** | **Emerge analogue** |
-| :--- | :--- | :--- |
-| `LicOk` | Prefer license-acceptable arms | Availability / license gate |
-| `UseSat` | Prefer arms needing no USE flip on the arm’s best candidate | `preferred_*` vs `unsat_use_*` |
-| `UseUnmasked` | Among USE-unsat arms, prefer flips that do not fight use.mask / use.force | `all_use_unmasked` (masked → `other`) |
-| `Rank` | Installed / preferred / `--favour` / `--avoid` / self-CN | `preferred_installed` + favour |
-| `SnapAll` | Prefer arms whose non-`virtual/` CNs are already in the proof snapshot | `all_in_graph` |
-| `SlotScore` | Prefer higher explicit package slot (`pkg:N`) | `want_update` / higher-slot promotion |
-| `NoDowngrade` | Demote arms whose newest admitted version is below installed or snap-selected | `downgrade_probe` → `other` |
-| `InstScore` | Prefer arms that reuse more installed CNs | `other_installed` / `_some` / `_any_slot` |
-| `Overlap` | Prefer arms that appear in several sibling `\|\|` groups | Soft stand-in for minimize-slots pressure |
-| `VerScore` | Prefer the arm that admits the newest tree version — only active when *all* arms target the same (C,N) | Intra-bin `has_upgrade and not has_downgrade` |
-| `UEScore` | Prefer USE_EXPAND profile alignment | Profile target preference |
-| index `I` | Stable left-to-right when all else equal | Ebuild order fallback |
-
-Worked examples:
-
-- `|| ( foo[a] foo[b] )` with `a` already effective → `UseSat` picks `foo[a]`.
-- Cabal text ranges (above) → `VerScore` picks the text-2.x arm.
-- `|| ( sys-devel/llvm:18 sys-devel/llvm:20 )` → `SlotScore` prefers `:20`.
-- An arm whose packages are already in `selected_cn` beats a fresh CN → `SnapAll`.
-
-`VerScore` is gated to same-CN groups because comparing newest tree
-versions of *different* packages is meaningless and overrides ebuild
-order: `virtual/mta` would pick `notqmail` (a `-9999` live ebuild
-inflates its score) over the intended `nullmailer`, and `virtual/jdk`
-would pick source `dev-java/openjdk` over `openjdk-bin`
-(portage-ng#115, portage-ng#116).  Emerge never version-ranks across
-CPs inside a choice; it falls back to ebuild order there.
-
-`virtual/` atoms are skipped for `SnapAll`, `InstScore`, and
-`NoDowngrade` (Portage’s zero-cost treatment of virtuals in those
-checks).  Scores are computed once per arm per
-`prioritize_deps_keep_all/3` call, with a short-lived per-call cache for
-installed / reference-version lookups.  Ranking must not walk the
-ProofAVL; it only sees the proof-context list and memo snapshots
-(see also [Chapter 25](25-doc-performance.md)).
-
-### What we deliberately do not implement
-
-These Portage mechanisms are **design omissions**, not open bugs.  The
-inductive prover and ordering pass already provide the effects they target.
-
-**Overlapping-`||` DNF (`_overlap_dnf`) and `minimize_slots` /
-`new_slot_count`.**
-Portage merges overlapping `||` groups that share a CP into DNF, then
-sorts bins by ascending new-slot count.  portage-ng does not rewrite
-the dep tree into DNF: expansion is exponential in overlapping width and
-does not belong on the per-`choice_group` hot path.  The prover already
-commits `selected_cn` / learned `cn_domain` across the proof; later `||`
-sites reuse those choices via `SnapAll` and constraint guards — the same
-“prefer packages already chosen” effect without a cross-product.
-`Overlap`, `InstScore`, and `SnapAll` cover the common “don’t pull a
-second redundant package” pressure.  Remaining edge cases (two
-overlapping `||`s neither yet selected) are rare relative to cost; if
-tinderbox surfaces one, prefer a targeted heuristic over full DNF.
-
-**Virtual expand (`_expand_new_virtuals`).**
-Portage expands new-style virtuals into a newest-first `||` of providers
-before zapdeps.  portage-ng already resolves virtuals through the
-virtual-provider path and `candidates_prefer_proven_providers/5`, and
-skips `virtual/` in the scores above.  A second expand-into-`||` pass
-would duplicate that work and fight proven-provider reuse.
-
-**Circular-dep demotion inside `||`.**
-Portage demotes arms that close a known cycle with the parent (or
-`--onlydeps` parent CP) into `other`.  portage-ng handles cycles in the
-prover and the ordering pass (cycle-break assumptions, world citations,
-`unreachable` assumptions) — see [Chapter 8](08-doc-prover.md),
-[Chapter 9](09-doc-prover-assumptions.md), and
-[Chapter 12](12-doc-planning.md).  Demoting at ranking time would
-second-guess cycle-break polarity and needs a parent circular map that
-the proof-context list does not carry.
-
-**Intra-choice `cp_map` slot consistency (Portage bug 600346).**
-Portage keeps a per-choice CP→slot map so several atoms in one choice
-stay slot-consistent.  portage-ng arms are usually a single atom or a
-same-CN `all_of_group` of version bounds; cross-CP multi-atom arms that
-need `cp_map` are uncommon.  Slot consistency is enforced later by
-`selected_cn`, slot constraints, and constraint guards.
-
-### Validation
-
-- PLUnit: `ranking_any_of_version_branch`, `ranking_any_of_preference_keys`
-  in `Source/Test/unittest.pl`.
-- Overlay suite (`||` / USE / slot cases) and tinderbox-ng compare on
-  USE-dep `||` and llvm/gcc/python slot packages.
-
-
-## Slot operators
-
-Dependency atoms can carry a slot operator that tells the rules layer
-how to handle multi-slot packages.  A package like `dev-lang/python`
-may offer several slots (e.g. `3.11`, `3.12`), and the slot operator
-determines which slots are acceptable and whether a sub-slot change
-should trigger a rebuild of the dependent package.
-
-| **Operator** | **Meaning** | **Context effect** |
-| :--- | :--- | :--- |
-| `:SLOT` | Depend on a specific slot | Filters candidates to that slot |
-| `:*` | Any slot is acceptable | No slot constraint applied |
-| `:=` | Sub-slot rebuild trigger | Records the selected sub-slot; a change triggers rebuild |
-| `:SLOT=` | Specific slot + rebuild | Combines slot filter with rebuild tracking |
-
-
-## Blockers
-
-A blocker dependency says that two packages cannot coexist.  Gentoo
-distinguishes two strengths:
-
-| **Type** | **Syntax** | **Behaviour** |
-| :--- | :--- | :--- |
-| Weak blocker | `!cat/pkg` | The blocked package should not be present; resolved at plan time |
-| Strong blocker | `!!cat/pkg` | The blocked package must not be present; the constraint guard fires immediately |
-
-Internally, blockers produce `blocked_cn` constraint terms.  These are
-checked against `selected_cn` constraints by
-`selected_cn_not_blocked_or_reprove`: if the blocked package has
-already been selected elsewhere in the proof, the guard triggers a
-reprove so the prover can learn to avoid the conflicting combination
-(see [Chapter 9, section 9.10](09-doc-prover-assumptions.md#constraint-guards-and-reprove-integration)).
-
-
-## Hooks
-
-PDEPEND (post-dependencies) represent packages that should be present
-at runtime but are not required at build time.  Unlike DEPEND and
-RDEPEND, they do not block the build — they are installed afterwards.
-
-In portage-ng, PDEPEND is handled in a single pass inside the prover
-via the `heuristic:proof_obligation/4` hook.  Whenever a literal is
-successfully proved, the hook checks whether the corresponding ebuild
-has PDEPEND entries.  If it does, those entries are injected as
-additional proof obligations on the spot.  This avoids a separate
-PDEPEND resolution pass and ensures that post-dependencies are part of
-the same proof and plan.
-
-
-## Assumptions as proposals
-
-When strict resolution cannot satisfy every dependency, the rules
-layer records a **domain assumption** rather than giving up.  From a
-user perspective, an assumption is not a dead end — it is a
-**proposal** for a configuration change.
-
-The literal's proof-term context is annotated with **suggestion** tags
-that spell out exactly what to change.  Common suggestions include:
-
-- `suggestion(unmask, ...)` — unmask a package
-- `suggestion(accept_keyword, ...)` — accept an unstable keyword
-- `suggestion(use_change, ..., Changes)` — adjust USE flags
-
-The printer collects these tags and shows them next to the assumption,
-so you can see which `/etc/portage` file to edit and what to put in
-it.  The plan is still constructed as if the change had already been
-applied: the merge list is coherent under the stated proposal, and the
-output tells you which configuration changes would make it real.
-
-For the full story on assumptions and constraint learning, see
-[Chapter 9](09-doc-prover-assumptions.md).
-
-
-## Rules submodules
-
-The rules layer is not a single monolithic file.  It is split across
-several focused submodules under `Source/Domain/Gentoo/Rules/Resolving/`, each
-handling a distinct concern:
-
-| **Module** | **File** | **Purpose** |
-| :--- | :--- | :--- |
-| `acceptance` | `acceptance.pl` | Keyword, mask, and license acceptance; keyword-aware candidate enumeration |
-| `candidate` | `candidate.pl` | Grouped-dep resolution pipeline, blocker matching, eligibility protocol |
-| `cnselect` | `cnselect.pl` | CN-consistency: selected_cn reuse, CN-domain reject map, learned-domain narrowing |
-| `dependency` | `dependency.pl` | Self-entry injection, USE-requirement collection, slot/BWU proof-context propagation |
-| `featureterm` | `featureterm.pl` | Proof-context list helpers (`after/1`, strip `build_with_use`, etc.) |
-| `heuristic` | `heuristic.pl` | Prover hooks: constraint guard, cycle classification, PDEPEND obligations, reprove state |
-| `memo` | `memo.pl` | Thread-local caching declarations, `clear_caches/0` |
-| `ranking` | `ranking.pl` | Dependency ordering (`dep_priority/2`), choice-group ranking, BWU memo seeding |
-| `slotmeta` | `slotmeta.pl` | Slot canonicalization, restriction merging, constraint queries |
-| `target` | `target.pl` | Target resolution, update/downgrade transactions, depclean, `--exclude` helpers |
-| `use` | `use.pl` | USE evaluation, conditionals, `build_with_use`, newuse, REQUIRED_USE, BWU conflicts |
-
-
-## Policy cards (declarative view)
-
-Chapter 11 walks **how** resolution proceeds. For a newbie-oriented
-view of **what** Gentoo policy requires — PMS meaning, literals,
-owning modules, and short invariants — start here:
-
-- [Policy cards hub](Policy/README.md)
-- [Policy by example](Policy/examples.md) — curated overlay curriculum
-- [One-page map](Policy/map.md) — `rule/2` head → schema → test → card
-
-Prefer those cards when onboarding or reviewing a rules change; keep
-this chapter for the end-to-end narrative and `||` ranking detail.
+| What configuration satisfies the request? | `resolving` | `resolver:resolve/9` |
+| When can each action run? | `ordering` | `orderer:order/5` |
+| In what order may packages be removed? | `unmerging` | depclean / unmerge pass |
+
+Callers outside a proving pass (for example query-side model
+construction) fall back to `config:default_rules/1`, which is
+`resolving`.
+
+
+## The `rule/2` contract
+
+Every rule module exports the same interface:
+
+```prolog
+Module:rule(+Head, -Body)
+```
+
+The prover passes a literal as `Head`.  The module returns a list of
+sub-literals `Body` that must be proved to justify it.  Failure means
+"this expansion does not apply"; success commits those obligations to
+the proof search.  Domain assumptions appear as
+`rule(assumed(X), [])` — an empty body that records a justified gap
+rather than aborting the proof.
+
+Because the contract is uniform, Gentoo-specific vocabulary never
+enters the prover core.  A new concern is almost always a new clause
+(or a new rule module), not engine surgery in `prover.pl`.
+
+
+## Rule modules in the pipeline
+
+The pipeline chains two proving passes over one goal set
+([Chapter 4](04-doc-architecture.md), [Chapter 8](08-doc-prover.md)):
+
+1. **Pass 1 — configuration.** `resolver:resolve/9` hands `resolving`
+   to `prover:prove/10`.  Choice lives here: versions, slots, USE
+   flags, OR-group arms.  The output is a Proof / Model / Constraints /
+   Triggers quadruple — a justified configuration.
+2. **Pass 2 — plan.** `orderer:order/5` hands `ordering` to
+   `prover:prove_once/…` over generic planning laws plus Gentoo
+   bindings.  The output is a second proof object; wave projection
+   reads it into a parallel plan.
+
+Depclean's uninstall order reuses the same planning laws with
+`unmerging` bindings: steps are `:unmerge` actions, requirements are
+claim releases, and the installed world provides no escape hatch.
+
+So "rules and domain logic" is not a synonym for dependency resolution.
+Resolution is one rule set.  Ordering and unmerging are others.  The
+chapters that follow treat the two constructive passes as peers:
+
+- [Chapter 12: Resolution — Configuration as Proofs](12-doc-resolution.md)
+  — pass 1: the `resolving` rule set and Gentoo policy
+- [Chapter 13: Ordering — Plans as Proofs](13-doc-planning.md) — pass 2:
+  planning laws, Gentoo bindings, wave projection
+
+
+## What a rule body carries
+
+Rule bodies are more than flat dependency lists.  They thread
+**proof-term context** (`?{…}` lists on literals — see
+[Chapter 5](05-doc-proof-literals.md) and
+[Chapter 22](22-doc-context-terms.md)): `build_with_use/1`,
+`constraint/1`, `after/1`, slot information, and suggestion tags for
+assumptions.  Context is how parent requirements and local policy meet
+without the prover understanding Gentoo.
+
+Heads themselves encode domain speech acts.  For `resolving`, typical
+patterns include user `target/2` literals, action literals
+(`Repo://Ebuild:install`, `:run`, `:download`), grouped dependency
+atoms, REQUIRED_USE validation literals, and the `assumed/1`
+catch-all.  For `ordering`, the language shrinks to `scheduled/1`,
+`available/2`, and `assumed(unreachable/2)`.  The full head tables live
+in the pass-specific chapters.
+
+
+## Domain hooks at the prover boundary
+
+Besides `rule/2`, the domain may answer prover callbacks through
+`heuristic:*` hooks (implemented for Gentoo under
+`Rules/Resolving/heuristic.pl` and consulted during prove):
+
+- **`proof_obligation/4`** — inject derived obligations after a literal
+  succeeds (PDEPEND is handled this way in a single resolve pass).
+- **`cycle_benign/2`** — classify a proof-search cycle as benign before
+  the prover records a cycle-break assumption.
+- **Constraint guards / reprove helpers** — learn domains or request a
+  reprove when selected versions conflict (see
+  [Chapter 9](09-doc-prover-assumptions.md)).
+
+Hooks keep cross-cutting behaviour out of the generic search loop while
+still letting the domain steer search.  Resolution and ordering each
+rely on them differently; the mechanism is shared.
+
+
+## Where the Gentoo resolve rules live
+
+The `resolving` module is the public entry point
+(`Source/Domain/Gentoo/Rules/resolving.pl`).  Its implementation is
+split across focused submodules under
+`Source/Domain/Gentoo/Rules/Resolving/` — candidate selection, USE
+evaluation, ranking, CN selection, target resolution, and so on.  The
+inventory and the end-to-end resolve narrative belong in
+[Chapter 12](12-doc-resolution.md).
+
+The `ordering` and `unmerging` modules sit beside them under
+`Source/Domain/Gentoo/Rules/`.  They bind the generic planning laws to
+Gentoo dependency classes and to VDB facts; see
+[Chapter 13](13-doc-planning.md).
+
+
+## Twin framing: configuration proofs and plan proofs
+
+A successful run produces two proofs, not one algorithm output with a
+post-pass:
+
+- **Configuration as proof** — every chosen version, USE set, and
+  dependency edge is justified by a `resolving` rule expansion (or an
+  explicit domain assumption / cycle break).
+- **Plan as proof** — every wave placement is justified by an
+  `ordering` (or `unmerging`) expansion: a step is scheduled because
+  its requirements are available from earlier steps or from the
+  installed world.
+
+Reading the handbook in that order — rules contract, then resolution,
+then ordering — matches how the pipeline itself thinks.
 
 
 ## Further reading
 
-- [Chapter 8: The Prover](08-doc-prover.md) — how the prover calls
-  `rule/2` and builds the proof
-- [Chapter 9: Assumptions](09-doc-prover-assumptions.md) — the
-  fallback chain, reprove mechanism, and progressive relaxation
-- [Chapter 10: Version Domains](10-doc-version-domains.md) — how
-  version constraints feed into candidate selection
-- [Policy cards](Policy/README.md) — declarative Gentoo policy surface
+- [Chapter 8: The Prover](08-doc-prover.md) — proof search, models,
+  triggers, pipeline entry points
+- [Chapter 9: Assumptions and Constraint Learning](09-doc-prover-assumptions.md) —
+  domain assumptions, cycle breaks, progressive relaxation
+- [Chapter 10: Version Domains](10-doc-version-domains.md) — version
+  constraint representation used by resolve
+- [Chapter 12: Resolution — Configuration as Proofs](12-doc-resolution.md) —
+  the `resolving` rule set in depth
+- [Chapter 13: Ordering — Plans as Proofs](13-doc-planning.md) —
+  planning laws and wave projection

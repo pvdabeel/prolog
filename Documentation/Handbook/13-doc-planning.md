@@ -154,7 +154,7 @@ preference:
   machinery as DEPEND.
 
 For the exact mapping from PMS ordering semantics to internal edges, see
-[Chapter 23: Dependency Ordering](23-doc-dependency-ordering.md).
+[Chapter 24: Dependency Ordering](24-doc-dependency-ordering.md).
 
 
 ## Cycles: citing the installed world
@@ -242,8 +242,8 @@ numbers by reading availability proofs:
 The output contract is unchanged from earlier releases: a list of waves,
 each containing full-format pass-1 rule terms.  All actions within a wave
 are independent and can run concurrently.  The printer renders the waves
-as numbered steps (Chapter 13); the builder executes them with real
-parallelism (Chapter 15).  Neither consumer knows or cares that the waves
+as numbered steps (Chapter 14); the builder executes them with real
+parallelism (Chapter 16).  Neither consumer knows or cares that the waves
 are now backed by proofs.
 
 The plan is annotated per entry with:
@@ -283,9 +283,13 @@ module to `unmerging` (see `unmerging:with_unmerge_pass/2`).
 - [Chapter 8: The Prover](08-doc-prover.md) — how the Proof AVL is constructed
 - [Chapter 9: Prover Assumptions](09-doc-prover-assumptions.md) — pass-1
   cycle breaking
-- [Chapter 13: Output and Visualization](13-doc-output.md) — how the plan is
+- [Chapter 11: Rules and Domain Logic](11-doc-rules.md) — how rule modules
+  plug into the prover
+- [Chapter 12: Resolution — Configuration as Proofs](12-doc-resolution.md) —
+  pass 1: the configuration being ordered
+- [Chapter 14: Output and Visualization](14-doc-output.md) — how the plan is
   rendered
-- [Chapter 15: Building and Execution](15-doc-building.md) — how the plan is
+- [Chapter 16: Building and Execution](16-doc-building.md) — how the plan is
   executed
-- [Chapter 23: Dependency Ordering](23-doc-dependency-ordering.md) — PMS
+- [Chapter 24: Dependency Ordering](24-doc-dependency-ordering.md) — PMS
   ordering semantics

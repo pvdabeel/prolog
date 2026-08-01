@@ -111,7 +111,7 @@ is that the prover naturally gravitates toward the newest compatible
 version, which matches Gentoo's standard policy, while still falling
 back to older versions when constraints demand it.
 
-See [Chapter 22: Resolver Comparison](22-doc-resolver-comparison.md)
+See [Chapter 23: Resolver Comparison](23-doc-resolver-comparison.md)
 for more on Vermeir's ordered logic and its role alongside Zeller's
 feature logic and CDCL-style conflict learning.
 
@@ -350,7 +350,7 @@ Each of these is expanded at compile time into a sequence of:
    terms that the rules layer consumes.
 
 The result `Merged` is a list of grouped dependency terms ready for
-resolution by the rules layer (see [Chapter 11](11-doc-rules.md)).
+resolution by the rules layer (see [Chapter 12](12-doc-resolution.md)).
 
 **How is this cached?**  Model construction depends on mutable proof
 state beyond the explicit context argument: `build_with_use` varies per
@@ -372,5 +372,5 @@ gated by `config:dep_model_cache/1`.  See the comment at the top of
 - [Chapter 3: Configuration](03-doc-configuration.md) — repository path setup
 - [Chapter 8: The Prover](08-doc-prover.md) — how the prover queries the
   knowledge base
-- [Chapter 19: Gentoo Linux Security Advisories (GLSA)](19-doc-glsa.md) —
+- [Chapter 20: Gentoo Linux Security Advisories (GLSA)](20-doc-glsa.md) —
   sibling `Knowledge/glsa.qlf` store (not a package repository)

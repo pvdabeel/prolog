@@ -293,7 +293,7 @@ grammar handles all PMS 9 / EAPI 9 constructs:
 
 - [Chapter 6: Knowledge Base and Cache](06-doc-knowledgebase.md) — how parsed
   data is stored
-- [Chapter 11: Rules and Domain Logic](11-doc-rules.md) — how dependency terms
-  are consumed during proof construction
-- [Chapter 23: Dependency Ordering](23-doc-dependency-ordering.md) — PMS
+- [Chapter 12: Resolution — Configuration as Proofs](12-doc-resolution.md) —
+  how dependency terms are consumed during proof construction
+- [Chapter 24: Dependency Ordering](24-doc-dependency-ordering.md) — PMS
   dependency type semantics

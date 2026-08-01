@@ -52,7 +52,7 @@ relaxation, merge-sets, repair passes) were retired after tree-wide A/B
 comparison showed identical action multisets and identical runtime.
 Kahn's last stand — depclean's uninstall order — was likewise replaced
 by the same planning laws with unmerge bindings (`Rules/unmerging.pl`);
-`kahn.pl` is deleted. See `Documentation/Handbook/12-doc-planning.md`.
+`kahn.pl` is deleted. See `Documentation/Handbook/13-doc-planning.md`.
 
 Key files:
 - `Source/Pipeline/prover.pl`: generic proof engine, parameterized by rule module; cycles become prover cycle-break assumptions (`assumed(rule(Lit))` in proof, `assumed(Lit)` in model).

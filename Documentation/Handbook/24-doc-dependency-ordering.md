@@ -139,7 +139,7 @@ unconstrained sibling picks a version that later clashes.  The
 priority ladder (lower = proved first): tight upper bound (1) →
 tilde (4) → wildcard (8) → unconstrained (999).  Within each tier,
 slot specificity further refines the order.  See
-[Chapter 11](11-doc-rules.md) for details.
+[Chapter 12](12-doc-resolution.md) for details.
 
 ![portage-ng two-phase dependency model](Diagrams/22-portage-ng-model.svg){width=55%}
 
@@ -153,7 +153,7 @@ slot specificity further refines the order.  See
   single pass during proof search, without creating explicit ordering
   edges in the proof.
 
-When cycles appear, the ordering pass (Chapter 12) resolves them at
+When cycles appear, the ordering pass (Chapter 13) resolves them at
 proof time: a requirement whose provider is still being scheduled falls
 through to a citation of the installed world (VDB), or — when nothing
 bridges the loop — to an honest `unreachable` assumption.  Runtime-only

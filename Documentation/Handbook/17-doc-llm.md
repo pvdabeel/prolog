@@ -371,9 +371,9 @@ failed pass with no new deterministic discoveries (same confirm gate).
 The explainer is split into two modules with clearly separated
 responsibilities.
 
-### `explainer.pl` — domain-agnostic introspection
+### Domain-agnostic introspection
 
-This module answers "why" questions by inspecting the proof artifacts
+`explainer.pl` answers "why" questions by inspecting the proof artifacts
 (ProofAVL, ModelAVL, Plan, TriggersAVL) without knowing anything
 about Gentoo or Portage.  It provides three families of queries:
 
@@ -395,9 +395,9 @@ list from any literal-shaped term.  This is how the explainer accesses
 the structured tags (USE state, slot info, suggestions, assumption
 reasons) attached to each literal during the proof.
 
-### `explanation.pl` — domain-specific hooks
+### Domain-specific hooks
 
-This module provides **enrichment hooks** that inject Gentoo-specific
+`explanation.pl` provides **enrichment hooks** that inject Gentoo-specific
 context into the generic Why terms produced by `explainer.pl`.  The
 hooks are multifile predicates, so the domain layer plugs into the
 generic layer without modifying it:
@@ -530,7 +530,7 @@ The default is set via `config:llm_default/1`. See `config.pl` for API keys,
 models, and endpoints.
 
 
-## Assumption diagnosis (explanation.pl)
+## Assumption diagnosis
 
 `explanation:assumption_reason_for_grouped_dep/6` is called on the fallback
 path when no candidate satisfies all constraints. It progressively filters
@@ -574,5 +574,5 @@ The hooks are called automatically — no direct invocation needed.
   assumption taxonomy that the explainer queries
 - [Chapter 8: The Prover](08-doc-prover.md) — proof artifacts consumed by
   the explainer
-- [Chapter 14: Command-Line Interface](14-doc-cli.md) — `--search`, `--similar`,
+- [Chapter 15: Command-Line Interface](15-doc-cli.md) — `--search`, `--similar`,
   `--explain` flags

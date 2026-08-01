@@ -518,11 +518,13 @@ library code:
 
 Imperative package managers must re-implement all of these.  Portage's
 `depgraph.py` implements its own retry loop with mask accumulation.
-Paludis's `decider.cc` implements its own constraint accumulator with
-exception-driven restart.  Both re-invent mechanisms that Prolog provides
-as proven primitives.  By relying on these primitives, the codebase becomes
-easier to read and understand — developers can focus fully on declaring
-domain knowledge rather than maintaining search and backtracking machinery.
+pkgcore's `merge_plan` implements its own frame stack and state
+checkpoints for backtracking.  Paludis's `decider.cc` implements its
+own constraint accumulator with exception-driven restart.  All three
+re-invent mechanisms that Prolog provides as proven primitives.  By
+relying on these primitives, the codebase becomes easier to read and
+understand — developers can focus fully on declaring domain knowledge
+rather than maintaining search and backtracking machinery.
 
 ### Meta-level reasoning
 
@@ -903,16 +905,16 @@ This gives three properties that traditional resolvers lack:
 portage-ng is not a rewrite of Portage in Prolog.  It is a fundamentally
 different approach to the same problem:
 
-| | **Portage** | **Paludis** | **pkgcore** | **portage-ng** |
+| | **Portage** | **pkgcore** | **Paludis** | **portage-ng** |
 |:---|:---|:---|:---|:---|
-| **Language** | Python | C++ | Python | SWI-Prolog |
-| **Model** | Greedy graph + retry | Constraint accumulator + restart | Same as Portage | Inductive proof search |
-| **Conflicts** | Retries with mask accumulation | Restarts with fresh state | Same as Portage | Iterative refinement with learned domains |
-| **Completeness** | Sometimes fails | May exhaust restarts | Sometimes fails | Always produces a plan |
+| **Language** | Python | Python | C++ | SWI-Prolog |
+| **Model** | Greedy graph + retry | Frame-stack DFS + backtrack | Constraint accumulator + restart | Inductive proof search |
+| **Conflicts** | Retries with mask accumulation | Backtrack to frame checkpoint; next choice | Restarts with preloads | Iterative refinement with learned domains |
+| **Completeness** | Sometimes fails | Sometimes fails | May exhaust restarts | Always produces a plan |
 | **Guarantees** | None | None | None | Every plan is a proof |
 
 For a detailed comparison of the reasoning models, see
-[Chapter 22: Resolver Comparison](22-doc-resolver-comparison.md).
+[Chapter 23: Resolver Comparison](23-doc-resolver-comparison.md).
 
 
 ## A brief history
@@ -958,5 +960,5 @@ Gentoo tree.
   pipeline stages fit together
 - [Chapter 8: The Prover](08-doc-prover.md) — the inductive proof engine in
   detail
-- [Chapter 22: Resolver Comparison](22-doc-resolver-comparison.md) — deep dive
+- [Chapter 23: Resolver Comparison](23-doc-resolver-comparison.md) — deep dive
   into how portage-ng compares with Portage, Paludis, and pkgcore

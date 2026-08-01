@@ -142,7 +142,7 @@ portage-ng registers four computed set names in
 | `@new-glsa` | `NewGlsaSet` | Unapplied GLSAs (atoms still only appear when an upgrade exists) |
 
 Related non-GLSA computed sets live in the same registry
-(`Preference/sets.pl`); see [Chapter 14: CLI — Package sets](14-doc-cli.md#package-sets)
+(`Preference/sets.pl`); see [Chapter 15: CLI — Package sets](15-doc-cli.md#package-sets)
 for the full table (`@preserved-rebuild`, `@changed-deps`, `@installed`, …).
 
 Expansion is **VDB-driven**: walk installed packages, look up matching
@@ -242,7 +242,7 @@ preference and before `sets.pl`.
   `kb.qlf` vs sibling caches such as `profile.qlf` / `glsa.qlf`
 - [Chapter 3: Configuration](03-doc-configuration.md) — sync, profile
   cache, and host-local paths
-- [Chapter 14: Command-Line Interface](14-doc-cli.md) — `--pretend`,
+- [Chapter 15: Command-Line Interface](15-doc-cli.md) — `--pretend`,
   `--list-sets`, target `@set` syntax
 - [Chapter 10: Version Domains](10-doc-version-domains.md) — `version/7`
   comparison used by GLSA range matching

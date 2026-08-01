@@ -19,34 +19,35 @@ software configuration, applied to Gentoo Linux.
 9. [Assumptions and Constraint Learning](09-doc-prover-assumptions.md)
 10. [Version Domains](10-doc-version-domains.md)
 11. [Rules and Domain Logic](11-doc-rules.md)
+12. [Resolution: Configuration as Proofs](12-doc-resolution.md)
     - [Policy cards](Policy/README.md) — what Gentoo policy requires
     - [Policy by example](Policy/examples.md) — overlay curriculum
     - [One-page map](Policy/map.md) — `rule/2` → schema → test → card
-12. [Ordering: Plans as Proofs](12-doc-planning.md)
-13. [Output and Visualization](13-doc-output.md)
+13. [Ordering: Plans as Proofs](13-doc-planning.md)
+14. [Output and Visualization](14-doc-output.md)
 
 ## Part III — Features
 
-14. [Command-Line Interface](14-doc-cli.md)
-15. [Building and Execution](15-doc-building.md)
-16. [Semantic Search and LLM Integration](16-doc-llm.md)
-17. [Distributed Proving](17-doc-distributed.md)
-18. [Upstream and Bug Tracking](18-doc-upstream-bugs.md)
-19. [Gentoo Linux Security Advisories (GLSA)](19-doc-glsa.md)
+15. [Command-Line Interface](15-doc-cli.md)
+16. [Building and Execution](16-doc-building.md)
+17. [Semantic Search and LLM Integration](17-doc-llm.md)
+18. [Distributed Proving](18-doc-distributed.md)
+19. [Upstream and Bug Tracking](19-doc-upstream-bugs.md)
+20. [Gentoo Linux Security Advisories (GLSA)](20-doc-glsa.md)
 
 ## Part IV — Foundations
 
-20. [Contextual Logic Programming](20-doc-contextual-logic-programming.md)
-21. [Context Terms and Feature Unification](21-doc-context-terms.md)
-22. [Resolver Comparison](22-doc-resolver-comparison.md)
-23. [Dependency Ordering](23-doc-dependency-ordering.md)
+21. [Contextual Logic Programming](21-doc-contextual-logic-programming.md)
+22. [Context Terms and Feature Unification](22-doc-context-terms.md)
+23. [Resolver Comparison](23-doc-resolver-comparison.md)
+24. [Dependency Ordering](24-doc-dependency-ordering.md)
 
 ## Part V — Development
 
-24. [Testing and Regression](24-doc-testing.md)
-25. [Performance and Profiling](25-doc-performance.md)
-26. [Contributing](26-doc-contributing.md)
+25. [Testing and Regression](25-doc-testing.md)
+26. [Performance and Profiling](26-doc-performance.md)
+27. [Contributing](27-doc-contributing.md)
 
 ## Closing
 
-27. [Closing Thoughts](27-doc-closing.md)
+28. [Closing Thoughts](28-doc-closing.md)

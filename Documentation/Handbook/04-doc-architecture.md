@@ -93,7 +93,7 @@ Each worker machine maintains its own local copy of the Portage tree (typically 
 
 Once a worker discovers the server, it polls the job queue for proving tasks: the server breaks a large proof (e.g. `@world`) into independent sub-goals, distributes them to available workers, and collects the results.  Each worker runs the full pipeline locally (resolver, orderer), so proving scales horizontally — adding more worker machines reduces wall-clock time for large proof sets.
 
-See [Chapter 14: Command-Line Interface](14-doc-cli.md) for the full mode reference and [Chapter 17: Distributed Proving](17-doc-distributed.md) for TLS certificate setup and cluster configuration.
+See [Chapter 15: Command-Line Interface](15-doc-cli.md) for the full mode reference and [Chapter 18: Distributed Proving](18-doc-distributed.md) for TLS certificate setup and cluster configuration.
 
 
 ## Module load order
@@ -203,5 +203,9 @@ The following page shows the full system architecture in landscape orientation, 
 - [Chapter 5: Proof Literals](05-doc-proof-literals.md) — the
   `Repo://Entry:Action?{Context}` term format
 - [Chapter 8: The Prover](08-doc-prover.md) — inductive proof search in detail
-- [Chapter 12: Ordering — Plans as Proofs](12-doc-planning.md) — the
+- [Chapter 11: Rules and Domain Logic](11-doc-rules.md) — how rule modules
+  plug into the prover
+- [Chapter 12: Resolution — Configuration as Proofs](12-doc-resolution.md) —
+  pass 1: justified configuration
+- [Chapter 13: Ordering — Plans as Proofs](13-doc-planning.md) — the
   second proving pass and wave projection

@@ -73,5 +73,5 @@ and `passwordfile` are excluded via `.gitignore`.
 
 Certificate paths are resolved at runtime by `config:certificate/2` and
 `config:digest_passwordfile/1` in `Source/config.pl`. See
-[Documentation/Handbook/17-doc-distributed.md](../Documentation/Handbook/17-doc-distributed.md)
+[Documentation/Handbook/18-doc-distributed.md](../Documentation/Handbook/18-doc-distributed.md)
 for the full TLS / digest setup guide.

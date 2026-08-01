@@ -35,21 +35,22 @@ pandoc \
   09-doc-prover-assumptions.md \
   10-doc-version-domains.md \
   11-doc-rules.md \
-  12-doc-planning.md \
-  13-doc-output.md \
-  14-doc-cli.md \
-  15-doc-building.md \
-  16-doc-llm.md \
-  17-doc-distributed.md \
-  18-doc-upstream-bugs.md \
-  19-doc-glsa.md \
-  20-doc-contextual-logic-programming.md \
-  21-doc-context-terms.md \
-  22-doc-resolver-comparison.md \
-  23-doc-dependency-ordering.md \
-  24-doc-testing.md \
-  25-doc-performance.md \
-  26-doc-contributing.md \
-  27-doc-closing.md
+  12-doc-resolution.md \
+  13-doc-planning.md \
+  14-doc-output.md \
+  15-doc-cli.md \
+  16-doc-building.md \
+  17-doc-llm.md \
+  18-doc-distributed.md \
+  19-doc-upstream-bugs.md \
+  20-doc-glsa.md \
+  21-doc-contextual-logic-programming.md \
+  22-doc-context-terms.md \
+  23-doc-resolver-comparison.md \
+  24-doc-dependency-ordering.md \
+  25-doc-testing.md \
+  26-doc-performance.md \
+  27-doc-contributing.md \
+  28-doc-closing.md
 
 echo "Built $OUTFILE ($(wc -c < "$OUTFILE" | tr -d ' ') bytes)"

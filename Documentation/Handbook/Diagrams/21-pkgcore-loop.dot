@@ -1,0 +1,29 @@
+// Chapter 23 — pkgcore conflict-resolution loop
+// Render: dot -Tsvg 21-pkgcore-loop.dot -o 21-pkgcore-loop.svg
+
+digraph pkgcore_loop {
+    rankdir=TB;
+    fontname="Helvetica Neue"; fontsize=9;
+    node [fontname="Helvetica Neue", fontsize=7, style=filled, shape=box,
+          margin="0.06,0.04", fillcolor="#cce5ff"];
+    edge [fontname="Helvetica Neue", fontsize=6, arrowsize=0.4];
+    nodesep=0.18; ranksep=0.22;
+
+    start [label="Start\n(empty merge_plan)", shape=ellipse, fillcolor="#e2e3e5"];
+    push [label="Push resolver_frame\ntry a choice\nprocess dependencies"];
+    conflict [label="Choice insert\nor dep walk\nfails?", shape=diamond, fillcolor="#fff3cd"];
+    backtrack [label="Backtrack state\nto frame checkpoint", fillcolor="#f8d7da"];
+    next [label="force_next_pkg\n(try next remaining\nchoice)", fillcolor="#fff3cd"];
+    more [label="Choices\nleft?", shape=diamond, fillcolor="#fff3cd"];
+    done [label="Done\n(plan complete)", shape=ellipse, fillcolor="#d4edda"];
+    fail [label="Give up\n(unresolvable)", shape=ellipse, fillcolor="#f8d7da"];
+
+    start -> push;
+    push -> conflict;
+    conflict -> done [label="no"];
+    conflict -> backtrack [label="yes"];
+    backtrack -> next;
+    next -> more;
+    more -> push [label="yes"];
+    more -> fail [label="no"];
+}

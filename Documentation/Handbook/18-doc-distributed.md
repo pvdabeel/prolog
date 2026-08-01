@@ -118,7 +118,7 @@ happens to do dependency resolution internally.
 An important design question for distributed proving is: how does
 each mode access the Portage tree?  The answer is portage-ng's
 object-oriented context system (see
-[Chapter 20](20-doc-contextual-logic-programming.md)).  Each
+[Chapter 21](21-doc-contextual-logic-programming.md)).  Each
 repository is an instance created through that system, and methods
 like `portage:read` populate the cache facts.
 
@@ -490,6 +490,6 @@ pinned server and start picking up jobs immediately.
 
 - [Chapter 2: Installation and Quick Start](02-doc-installation.md) — dns-sd
   and openssl prerequisites
-- [Chapter 14: Command-Line Interface](14-doc-cli.md) — `--mode` flags
+- [Chapter 15: Command-Line Interface](15-doc-cli.md) — `--mode` flags
 - [Chapter 4: Architecture Overview](04-doc-architecture.md) — module load
   order for different modes

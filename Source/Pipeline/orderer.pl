@@ -16,7 +16,7 @@ laws + Gentoo bindings) to construct a provably correct ordering of the
 pass-1 solution, then projects the availability proofs onto the
 wave-list Plan.  The counterpart stage is the resolver
 (Source/Pipeline/resolver.pl), which hands the same prover the
-`resolving` rule set.  See Documentation/Handbook/12-doc-planning.md for
+`resolving` rule set.  See Documentation/Handbook/13-doc-planning.md for
 the design.
 
 Pass-2 literal language (all ground, built over pass-1 proof keys):

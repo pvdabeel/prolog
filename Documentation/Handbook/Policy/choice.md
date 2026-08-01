@@ -43,4 +43,4 @@ use.
 [test23](examples.md#test23), [test59](examples.md#test59),
 [test60](examples.md#test60).  
 **See also:** [Dependency](dependency.md), [Blockers](blocker.md),
-[Chapter 11 § Any-of](../11-doc-rules.md).
+[Chapter 12 § Any-of](../12-doc-resolution.md).

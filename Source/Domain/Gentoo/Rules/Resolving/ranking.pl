@@ -371,7 +371,7 @@ ranking:prioritize_deps(Deps, Context, SortedDeps) :-
 %   LicOk, UseSat, UseUnmasked, Rank, SnapAll, SlotScore,
 %   NoDowngrade, InstScore, Overlap, VerScore, UEScore, I
 %
-% See Documentation/Handbook/11-doc-rules.md ("Any-of (||) arm selection").
+% See Documentation/Handbook/12-doc-resolution.md ("Any-of (||) arm selection").
 % VerScore covers Haskell-style same-CN ranges (portage-ng#112). It is
 % only active when every arm targets the same (C,N): comparing newest
 % tree versions of *different* packages is meaningless and flips choices

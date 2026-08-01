@@ -334,7 +334,7 @@ pipeline:prove_plan_basic(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, SCCs)
 1. `resolver:resolve/9` — hands the `resolving` rule set to
    `prover:prove/10`; constructs Proof, Model, Constraints, and Triggers
 2. `orderer:order/5` — hands the `ordering` rule set to the same prover
-   for a second proving pass; projects the wave-list plan (Chapter 12)
+   for a second proving pass; projects the wave-list plan (Chapter 13)
 
 The prover is wrapped in `with_reprove_state` which saves and restores the
 learned constraint store across reprove retries.  Inside that,
@@ -405,5 +405,6 @@ and `choicelog:dump/0` reprints it.  See also
 - [Chapter 9: Assumptions and Constraint Learning](09-doc-prover-assumptions.md) —
   the reprove mechanism and constraint learning
 - [Chapter 5: Proof Literals](05-doc-proof-literals.md) — the literal format
-- [Chapter 11: Rules and Domain Logic](11-doc-rules.md) — how `rule/2` works
+- [Chapter 11: Rules and Domain Logic](11-doc-rules.md) — how `rule/2` and rule modules plug in
+- [Chapter 12: Resolution — Configuration as Proofs](12-doc-resolution.md) — the `resolving` rule set
 - [Chapter 4: Architecture Overview](04-doc-architecture.md) — the full pipeline

@@ -72,8 +72,8 @@ Runs the full standalone pipeline first (local KB, resolver,
 orderer), then adds an HTTPS Pengine server, TLS, and Bonjour
 service advertisement.  The server exposes job and result message
 queues so that workers can poll for proving tasks.  Use
-`--background` to fork the server process.  See [Chapter 17:
-Distributed Proving](17-doc-distributed.md).
+`--background` to fork the server process.  See [Chapter 18:
+Distributed Proving](18-doc-distributed.md).
 
 ### Worker
 
@@ -83,8 +83,8 @@ startup, the worker discovers the server via Bonjour or explicit
 `--host`/`--port`, syncs its local portage tree to the server's
 snapshot, registers its CPU count, and spawns one thread per core.
 Each thread polls the server for jobs, proves them locally, and
-posts results back.  See [Chapter 17: Distributed
-Proving](17-doc-distributed.md).
+posts results back.  See [Chapter 18: Distributed
+Proving](18-doc-distributed.md).
 
 
 ## Actions
@@ -118,7 +118,7 @@ everyday workflows.
 | :--- | :--- |
 | `--sync` | Sync the Portage tree and regenerate caches |
 | `--regen` | Regenerate md5-cache incrementally |
-| `--import-vdb` | Client mode: ship the local VDB to the server so remote plans reflect the client's installed packages (see [Chapter 17](17-doc-distributed.md)) |
+| `--import-vdb` | Client mode: ship the local VDB to the server so remote plans reflect the client's installed packages (see [Chapter 18](18-doc-distributed.md)) |
 
 ### Visualization
 
@@ -224,7 +224,7 @@ with libc injects removed (emerge `--changed-deps` semantics). The
 targets.
 
 GLSA details for `@security` and siblings:
-[Chapter 19](19-doc-glsa.md). Full option text:
+[Chapter 20](20-doc-glsa.md). Full option text:
 [`portage-ng(1)`](../Manpage/portage-ng.1.md).
 
 
@@ -282,7 +282,7 @@ Short recipes that match how people actually use the tool:
 
 - **Why is this package in my plan?**  
   `portage-ng --pretend --explain cat/pkg` — ask the explainer/LLM path to
-  narrate the plan (see [Chapter 16: Semantic Search and LLM Integration](16-doc-llm.md)).
+  narrate the plan (see [Chapter 17: Semantic Search and LLM Integration](17-doc-llm.md)).
 
 - **Diagnose a failed build with metacircular LLM repair**  
   `portage-ng --diagnose cat/pkg` (optional `--log path`) — propose
@@ -350,7 +350,7 @@ portage-ng --search "text editor with syntax highlighting"  # semantic search
 ```
 
 Semantic search requires Ollama with a loaded embedding model.  See
-[Chapter 16: Semantic Search and LLM Integration](16-doc-llm.md).
+[Chapter 17: Semantic Search and LLM Integration](17-doc-llm.md).
 
 ### Fuzzy and wildcard search
 
@@ -388,9 +388,9 @@ shell would expand `*` (e.g. `--search 'name:=*vim*'`).
   reference
 - [Chapter 2: Installation and Quick Start](02-doc-installation.md) — first run
   examples
-- [Chapter 13: Output and Visualization](13-doc-output.md) — what the output
+- [Chapter 14: Output and Visualization](14-doc-output.md) — what the output
   looks like
-- [Chapter 19: Gentoo Linux Security Advisories (GLSA)](19-doc-glsa.md) —
+- [Chapter 20: Gentoo Linux Security Advisories (GLSA)](20-doc-glsa.md) —
   `@security` and related GLSA computed sets
 - [Chapter 3: Configuration](03-doc-configuration.md) —
   `config:preserved_libs_registry/1` and related paths

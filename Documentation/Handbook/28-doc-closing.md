@@ -39,8 +39,9 @@ The book traced this idea from concept to implementation:
 - **Part IV** explored the theoretical underpinnings: contextual logic
   programming, feature unification, and the comparison with other
   resolvers — showing how portage-ng's approach relates to Portage's
-  progressive relaxation, Paludis's constraint accumulation, and
-  academic work on feature logic and ordered logic programs.
+  progressive relaxation, pkgcore's frame-stack backtracking,
+  Paludis's constraint accumulation, and academic work on feature
+  logic and ordered logic programs.
 
 - **Part V** described the practical side of development: testing
   strategies, performance profiling, and contribution guidelines.

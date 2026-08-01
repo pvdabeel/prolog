@@ -218,7 +218,8 @@ assumption or failure handling instead of selecting candidates from an
 empty domain.
 
 Chapter 9 walks through the reprove and learning mechanics in full;
-Chapter 11 ties domains into rule evaluation and candidate generation.
+Chapter 12 ties domains into resolve-time rule evaluation and candidate
+generation.
 
 ### Wildcard domain learning
 
@@ -267,7 +268,7 @@ a different domain constraint:
 
 - [Chapter 9: Assumptions and Constraint Learning](09-doc-prover-assumptions.md) —
   how domains interact with the reprove mechanism
-- [Chapter 11: Rules and Domain Logic](11-doc-rules.md) — how version domains
-  feed into candidate selection
-- [Chapter 22: Resolver Comparison](22-doc-resolver-comparison.md) — Zeller's
+- [Chapter 12: Resolution — Configuration as Proofs](12-doc-resolution.md) —
+  how version domains feed into candidate selection
+- [Chapter 23: Resolver Comparison](23-doc-resolver-comparison.md) — Zeller's
   feature logic and CDCL connections

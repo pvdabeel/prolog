@@ -108,10 +108,10 @@ are **in-place repairs**: they rebuild something mid-flight and re-run
 the failed phase.  The missing-provider mechanism is different — it
 **diagnoses but never repairs in place**: it records what it learned
 and lets the pipeline re-derive a fresh plan (see
-[Missing-provider feedback](#missing-provider-feedback-diagnose-learn-re-derive)
+[Missing provider feedback](#missing-provider-feedback)
 below).
 
-### Collision deconfliction (`collision.pl`)
+### File collision deconfliction
 
 Traditional emerge refuses, at the plan stage, to install a package
 whose files are owned by a different installed provider — it is told
@@ -127,7 +127,7 @@ announces this behaviour next to the soft-blocker list, and the build
 summary lists every package that needed it.  The same recovery is
 applied to binary-package `qmerge` merges.
 
-### GHC ABI repair (`ghcabi.pl`) — the native haskell-updater
+### Haskell ABI repair
 
 Gentoo encodes a Haskell package's identity in `ghc-pkg`'s ABI hash
 (the suffix in e.g. `bifunctors-5.6.3-9AmA3NO9963FDwV9BBcxcZ`), not in
@@ -160,7 +160,7 @@ across parallel build workers, and every repair leaves markers in
 both the consumer's and the rebuilt package's build logs plus an
 entry in the build summary.
 
-### OCaml ABI repair (`ocamlabi.pl`)
+### OCaml ABI repair
 
 OCaml has the same problem: package identity lives in the compiled
 interface digests (`.cmi` CRCs) checked by the compiler and in
@@ -188,7 +188,7 @@ and markers in every involved build log plus the build summary.  The
 package being built and `dev-lang/ocaml` itself are never rebuild
 candidates.
 
-### Missing-provider feedback: diagnose, learn, re-derive
+### Missing provider feedback
 
 The three mechanisms above all repair reality in place: they rebuild a
 package mid-transaction and re-run the failed phase.  That pattern is
@@ -275,9 +275,9 @@ Because the discovery carries structured evidence (the symbol, phase,
 exit code, and log excerpt), the printer proposes a Gentoo Bugzilla bug
 report draft at the end of the build for every dependency worked around
 this session — the record doubles as an upstream ebuild/eclass bug
-report (see [Chapter 18](18-doc-upstream-bugs.md)).
+report (see [Chapter 19](19-doc-upstream-bugs.md)).
 
-### USE-enable feedback (diagnose → learn → re-derive)
+### USE-enable feedback
 
 A closely related gap is when the provider *is* declared and even
 installed, but was built with the wrong USE set — e.g.
@@ -595,9 +595,9 @@ directory by hand).
 
 ## Further reading
 
-- [Chapter 12: Ordering — Plans as Proofs](12-doc-planning.md) — how the
+- [Chapter 13: Ordering — Plans as Proofs](13-doc-planning.md) — how the
   plan is constructed
-- [Chapter 13: Output and Visualization](13-doc-output.md) — plan
+- [Chapter 14: Output and Visualization](14-doc-output.md) — plan
   display and `.merge` file generation
-- [Chapter 14: Command-Line Interface](14-doc-cli.md) — `--merge`,
+- [Chapter 15: Command-Line Interface](15-doc-cli.md) — `--merge`,
   `--jobs`, `--estimate` flags
