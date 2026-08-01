@@ -353,7 +353,7 @@ index `I` breaks remaining ties (left-to-right).
 | `NoDowngrade` | Demote arms whose newest admitted version is below installed or snap-selected | `downgrade_probe` → `other` |
 | `InstScore` | Prefer arms that reuse more installed CNs | `other_installed` / `_some` / `_any_slot` |
 | `Overlap` | Prefer arms that appear in several sibling `\|\|` groups | Soft stand-in for minimize-slots pressure |
-| `VerScore` | Prefer the arm that admits the newest tree version (same-CN ranges) | Intra-bin `has_upgrade and not has_downgrade` |
+| `VerScore` | Prefer the arm that admits the newest tree version — only active when *all* arms target the same (C,N) | Intra-bin `has_upgrade and not has_downgrade` |
 | `UEScore` | Prefer USE_EXPAND profile alignment | Profile target preference |
 | index `I` | Stable left-to-right when all else equal | Ebuild order fallback |
 
@@ -363,6 +363,14 @@ Worked examples:
 - Cabal text ranges (above) → `VerScore` picks the text-2.x arm.
 - `|| ( sys-devel/llvm:18 sys-devel/llvm:20 )` → `SlotScore` prefers `:20`.
 - An arm whose packages are already in `selected_cn` beats a fresh CN → `SnapAll`.
+
+`VerScore` is gated to same-CN groups because comparing newest tree
+versions of *different* packages is meaningless and overrides ebuild
+order: `virtual/mta` would pick `notqmail` (a `-9999` live ebuild
+inflates its score) over the intended `nullmailer`, and `virtual/jdk`
+would pick source `dev-java/openjdk` over `openjdk-bin`
+(portage-ng#115, portage-ng#116).  Emerge never version-ranks across
+CPs inside a choice; it falls back to ebuild order there.
 
 `virtual/` atoms are skipped for `SnapAll`, `InstScore`, and
 `NoDowngrade` (Portage’s zero-cost treatment of virtuals in those

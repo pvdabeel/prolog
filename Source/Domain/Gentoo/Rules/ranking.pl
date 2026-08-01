@@ -372,7 +372,12 @@ ranking:prioritize_deps(Deps, Context, SortedDeps) :-
 %   NoDowngrade, InstScore, Overlap, VerScore, UEScore, I
 %
 % See Documentation/Handbook/11-doc-rules.md ("Any-of (||) arm selection").
-% VerScore covers Haskell-style same-CN ranges (portage-ng#112).
+% VerScore covers Haskell-style same-CN ranges (portage-ng#112). It is
+% only active when every arm targets the same (C,N): comparing newest
+% tree versions of *different* packages is meaningless and flips choices
+% away from ebuild order (portage-ng#115 openjdk vs openjdk-bin,
+% portage-ng#116 notqmail-9999 vs nullmailer). Emerge never version-ranks
+% across CPs inside a choice; it falls back to ebuild order there.
 
 ranking:prioritize_deps_keep_all(Deps, Context, SortedDeps) :-
   setup_call_cleanup(
@@ -385,6 +390,7 @@ ranking:prioritize_deps_keep_all(Deps, Context, SortedDeps) :-
 
 
 ranking:prioritize_deps_keep_all_body(Deps, Context, SortedDeps) :-
+  ( ranking:deps_share_single_cn(Deps) -> VerActive = true ; VerActive = false ),
   findall(NegLicOk-NegUseSat-NegUseUnmasked-NegRank-NegSnapAll-NegSlotScore-NegNoDowngrade-NegInstScore-NegOverlap-NegVerScore-NegUEScore-I-Dep,
           ( nth1(I, Deps, Dep),
             dep_rank(Context, Dep, Rank),
@@ -394,7 +400,8 @@ ranking:prioritize_deps_keep_all_body(Deps, Context, SortedDeps) :-
             dep_use_expand_profile_score(Dep, UEScore),
             ranking:dep_choice_scores(Context, Dep,
               scores(UseSat, UseUnmasked, SnapAll, SlotScore,
-                     NoDowngrade, InstScore, VerScore)),
+                     NoDowngrade, InstScore, VerScore0)),
+            ( VerActive == true -> VerScore = VerScore0 ; VerScore = 0 ),
             NegLicOk is -LicOk,
             NegUseSat is -UseSat,
             NegUseUnmasked is -UseUnmasked,
@@ -449,6 +456,24 @@ ranking:dep_choice_scores(Context, Dep,
   ranking:dep_no_downgrade_score(Dep, BestVer, NoDowngrade),
   ranking:dep_inst_score(Atoms, InstScore),
   !.
+
+
+%! ranking:deps_share_single_cn(+Deps) is semidet.
+%
+% True when every package atom across all arms of a choice group targets
+% one single (C,N) — e.g. cabal's text 1.x-range vs 2.x-range arms
+% (portage-ng#112). Gates the VerScore sort key: version-ranking arms of
+% *different* packages diverges from emerge's ebuild-order fallback
+% (portage-ng#115/#116).
+
+ranking:deps_share_single_cn(Deps) :-
+  findall(C-N,
+          ( member(Dep, Deps),
+            ranking:dep_arm_package_atoms(Dep, Atoms),
+            member(package_dependency(_, _, C, N, _, _, _, _), Atoms)
+          ),
+          CNs),
+  sort(CNs, [_]).
 
 
 %! ranking:dep_arm_package_atoms(+Dep, -Atoms) is det.

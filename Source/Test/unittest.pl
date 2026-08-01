@@ -2054,6 +2054,34 @@ test(no_downgrade_demotes_older_arm,
   ND1 =:= 0,
   ND2 =:= 1.
 
+% VerScore must stay inactive across different CNs: a 9999 live ebuild of a
+% later arm must not beat the first arm's ebuild order (portage-ng#115/#116,
+% virtual/mta notqmail-9999 vs nullmailer, virtual/jdk openjdk vs -bin).
+rap_mixed_setup :-
+  retractall(cache:ordered_entry(qtest, _, 'qtest-mta', _, _)),
+  assertz(cache:ordered_entry(qtest, 'qtest-mta/lightmta-2.2', 'qtest-mta',
+                              lightmta, version([2,2],'',4,0,[],0,'2.2'))),
+  assertz(cache:ordered_entry(qtest, 'qtest-mta/livemta-9999', 'qtest-mta',
+                              livemta, version([9999],'',4,0,[],0,'9999'))).
+
+rap_mixed_cleanup :-
+  retractall(cache:ordered_entry(qtest, _, 'qtest-mta', _, _)).
+
+test(mixed_cn_group_keeps_ebuild_order,
+     [setup(rap_mixed_setup), cleanup(rap_mixed_cleanup)]) :-
+  rap_pkg2('qtest-mta', lightmta, A),
+  rap_pkg2('qtest-mta', livemta, B),
+  ranking:prioritize_deps_keep_all([A, B], [], [First|_]),
+  First == A.
+
+test(same_cn_group_still_version_ranked,
+     [setup(rap_text_setup), cleanup(rap_text_cleanup)]) :-
+  rap_text12(B1), rap_text2(B2),
+  ranking:prioritize_deps_keep_all([B1, B2], [], [First|_]),
+  First == B2.
+
+rap_pkg2(C, N, package_dependency(run, no, C, N, none, version_none, [], [])).
+
 :- end_tests(ranking_any_of_preference_keys).
 
 
