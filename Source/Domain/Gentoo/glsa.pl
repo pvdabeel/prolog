@@ -114,6 +114,7 @@ glsa:cache_available :-
 
 glsa:cache_save :-
   ( glsa:directory(Dir) ->
+      nl,
       message:header(['Syncing security advisories']), nl,
       glsa:parse_directory(Dir, Advisories, Packages, Ranges),
       glsa:write_cache(Advisories, Packages, Ranges),
