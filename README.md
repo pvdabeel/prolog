@@ -28,16 +28,6 @@ See the full [feature list](Documentation/FEATURES.md) and the
 [handbook](Documentation/Handbook/portage-ng-handbook.pdf) for architecture,
 internals, and reference documentation.
 
-## Why `::-`?
-
-The wordmark is executable syntax.  Prolog writes a logical rule as
-`Head :- Body`; portage-ng's contextual object system writes
-`Head ::- Body` for a rule that holds within a context (an object) — the
-same `::` that scopes names in object-oriented languages and qualifies
-repositories in Gentoo atoms (`dev-lang/python::gentoo`).  Logic (`:-`)
-overlapped with context and Gentoo (`::`): the whole project in three
-characters.
-
 ## Quick start
 
 **Prerequisites:** SWI-Prolog >= 10.0.0, a Gentoo Portage tree.
