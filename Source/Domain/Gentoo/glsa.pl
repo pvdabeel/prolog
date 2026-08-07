@@ -114,11 +114,12 @@ glsa:cache_available :-
 
 glsa:cache_save :-
   ( glsa:directory(Dir) ->
-      message:header(['Caching GLSAs from ', Dir]), nl,
+      nl,
+      message:header(['Syncing security advisories']), nl,
       glsa:parse_directory(Dir, Advisories, Packages, Ranges),
       glsa:write_cache(Advisories, Packages, Ranges),
       length(Advisories, N),
-      format('% GLSA cache saved (~w advisories) to Knowledge/glsa.qlf~n', [N])
+      format('% Updated ~w security advisories~n', [N])
   ; format(user_error, '% glsa:cache_save — no metadata/glsa directory, skipping.~n', [])
   ).
 
