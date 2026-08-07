@@ -161,9 +161,10 @@ problem at a level that imperative package managers cannot reach.
 The previous section closed with a claim: Gentoo captures the hardest
 sub-problems in software configuration management, so anything that works
 for Gentoo generalises to simpler domains.  This section substantiates that
-claim — first by looking at what the knowledge Gentoo distributes actually
-contains, then at how that model has been stressed across architectures and
-platforms, and finally at where it is deployed at industrial scale.
+claim — looking at what the knowledge Gentoo distributes actually contains,
+how that model has been stressed across architectures and platforms, and
+where it is deployed at industrial scale — before returning to what all of
+this means for a reasoning engine.
 
 ### The metadistribution in practice
 
@@ -863,7 +864,17 @@ This approach brings encapsulation, polymorphism, and modularity to Prolog
 while preserving its declarative core.  The rules inside a context are
 ordinary Prolog clauses; the context system simply controls visibility and
 dispatches calls to the right instance.  The full design is covered in
-chapters 19 and 20.
+chapters 21 and 22.
+
+The `::-` operator is also portage-ng's logo — the banner printed at
+startup reads `::- portage-ng`.  The symbolism is deliberate.  Prolog
+writes the implication arrow of a logical rule as `:-`.  The double colon
+`::` is the scope operator of the object-oriented tradition — and, by a
+happy coincidence, the repository qualifier every Gentoo user knows from
+atoms like `dev-lang/python::gentoo`.  Superimpose the two, sharing the
+middle colon, and you get `::-`: a logical rule that holds within a
+context.  Contextual logic programming, applied to Gentoo — the whole
+project in three characters.
 
 
 ### Feature logic meets contextual logic
@@ -905,6 +916,14 @@ Prolog environment and exposes it over the network.  The access control
 that contexts provide locally (public, protected, private) is mirrored by
 the Pengine sandbox, which restricts which predicates the remote client
 may call.
+
+![Pengines: remote contexts over HTTPS](Diagrams/01-pengines.svg)
+
+Each client interaction gets its own Pengine: an isolated goal, its own
+clause store, and a sandbox whitelist as its public interface.  Both
+Pengines read the same shared knowledge base, but neither can modify the
+server nor observe the other — exactly the encapsulation a local context
+provides, transported over HTTPS.
 
 portage-ng uses Pengines in its server mode.  The server hosts the
 knowledge base and exposes it through a Pengine application: clients and

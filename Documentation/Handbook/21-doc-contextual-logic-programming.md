@@ -150,12 +150,21 @@ structure:
 
 | **Operator** | **Meaning** |
 | :---------- | :--------- |
+| `Head ::- Body` | Declare a method clause (the contextual `:-`) |
 | `:Pred` | Call `Pred` in the current context (self-call) |
 | `::Pred` | Read a cached data member |
 | `<=Pred` | Set a data member (evaluate, retract old, assert new) |
 | `<+Pred` | Add a data member (evaluate, assert if not exists) |
 | `<-Pred` | Remove a data member |
 | `Ctx://Pred` | Call `Pred` in a specific context |
+
+The `::-` operator is declared at priority 1200 `xfx` — exactly the
+priority of Prolog's `:-`.  A clause `Head ::- Body` is an ordinary
+logical rule, but one whose visibility and state are governed by the
+instance it lives in: at instantiation it is copied into the instance
+and wrapped in an access guard (see *Instances* above).  The operator
+doubles as the portage-ng logo;
+[Chapter 1, section 1.4.6](01-doc-introduction.md) tells that story.
 
 ### Data members
 
@@ -191,7 +200,7 @@ This operator appears throughout portage-ng in forms like
 A complete worked example of a context class — including a
 constructor, destructor, public/protected/private members, and
 instance creation — is presented in
-[Chapter 1, section 1.7](01-doc-introduction.md).  The example
+[Chapter 1, section 1.4.6](01-doc-introduction.md).  The example
 defines a `person` class with name and age accessors, title
 management, and demonstrates how instances carry their own state
 independently.

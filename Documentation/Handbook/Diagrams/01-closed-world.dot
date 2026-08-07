@@ -1,0 +1,109 @@
+digraph closed_world {
+  rankdir=TB;
+  fontname="Helvetica Neue";
+  node [fontname="Helvetica Neue", fontsize=10, style=filled];
+  edge [fontname="Helvetica Neue", fontsize=9];
+  compound=true;
+  newrank=true;
+  ranksep=0.7;
+
+  // The open world: everything on disk, unbounded
+  subgraph cluster_open {
+    label="The open world";
+    labeljust=l;
+    style="dashed,rounded";
+    color="#888888";
+    fontsize=10;
+
+    open_world [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="2">
+      <TR><TD ALIGN="LEFT">Portage tree</TD><TD ALIGN="LEFT">32,000+ ebuilds on disk</TD></TR>
+      <TR><TD ALIGN="LEFT">overlays</TD><TD ALIGN="LEFT">additional ebuilds on disk</TD></TR>
+      <TR><TD ALIGN="LEFT">installed system</TD><TD ALIGN="LEFT">VDB at /var/db/pkg</TD></TR>
+      <TR><TD ALIGN="LEFT">profiles</TD><TD ALIGN="LEFT">masks, defaults, inheritance chains</TD></TR>
+      <TR><TD ALIGN="LEFT">user configuration</TD><TD ALIGN="LEFT">/etc/portage/*</TD></TR>
+      <TR><TD COLSPAN="2" ALIGN="LEFT"><FONT COLOR="#999999">... times versions, USE flags, keywords, slots</FONT></TD></TR>
+      <TR><TD COLSPAN="2" ALIGN="LEFT"><FONT COLOR="#CC0000">"cannot be derived" would mean: search everything</FONT></TD></TR>
+    </TABLE>>, shape=box, fillcolor="#F2F2F2"];
+  }
+
+  // Closed context: portage
+  subgraph cluster_portage {
+    label="Context: portage";
+    labeljust=l;
+    style="rounded";
+    color="#4A90D9";
+    fontsize=10;
+
+    portage_ctx [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="2">
+      <TR><TD ALIGN="LEFT"><FONT COLOR="#228B22">entry</FONT></TD><TD ALIGN="LEFT">'sys-apps/portage-2.3.99'</TD></TR>
+      <TR><TD ALIGN="LEFT"><FONT COLOR="#228B22">entry</FONT></TD><TD ALIGN="LEFT">'app-editors/neovim-0.12.0'</TD></TR>
+      <TR><TD ALIGN="LEFT"><FONT COLOR="#999999">  </FONT></TD><TD ALIGN="LEFT"><FONT COLOR="#999999">... 32,000+ entries</FONT></TD></TR>
+      <TR><TD COLSPAN="2" ALIGN="LEFT"><FONT COLOR="#666666">──────────────────</FONT></TD></TR>
+      <TR><TD COLSPAN="2" ALIGN="LEFT"><FONT COLOR="#228B22"><B>closed</B></FONT> — complete by construction</TD></TR>
+    </TABLE>>, shape=box, fillcolor="#D4EDDA"];
+  }
+
+  // Closed context: myoverlay
+  subgraph cluster_overlay {
+    label="Context: myoverlay";
+    labeljust=l;
+    style="rounded";
+    color="#4A90D9";
+    fontsize=10;
+
+    overlay_ctx [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="2">
+      <TR><TD ALIGN="LEFT"><FONT COLOR="#228B22">entry</FONT></TD><TD ALIGN="LEFT">'dev-libs/custom-lib-1.0'</TD></TR>
+      <TR><TD ALIGN="LEFT"><FONT COLOR="#228B22">entry</FONT></TD><TD ALIGN="LEFT">'app-misc/my-tool-0.5'</TD></TR>
+      <TR><TD COLSPAN="2" ALIGN="LEFT"><FONT COLOR="#666666">──────────────────</FONT></TD></TR>
+      <TR><TD COLSPAN="2" ALIGN="LEFT"><FONT COLOR="#228B22"><B>closed</B></FONT> — complete by construction</TD></TR>
+    </TABLE>>, shape=box, fillcolor="#D4EDDA"];
+  }
+
+  // Closed context: pkg (VDB)
+  subgraph cluster_pkg {
+    label="Context: pkg (VDB)";
+    labeljust=l;
+    style="rounded";
+    color="#4A90D9";
+    fontsize=10;
+
+    pkg_ctx [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="2">
+      <TR><TD ALIGN="LEFT"><FONT COLOR="#228B22">installed</FONT></TD><TD ALIGN="LEFT">'dev-lang/python-3.12.9'</TD></TR>
+      <TR><TD ALIGN="LEFT"><FONT COLOR="#228B22">installed</FONT></TD><TD ALIGN="LEFT">'sys-devel/gcc-14.2.1'</TD></TR>
+      <TR><TD COLSPAN="2" ALIGN="LEFT"><FONT COLOR="#666666">──────────────────</FONT></TD></TR>
+      <TR><TD COLSPAN="2" ALIGN="LEFT"><FONT COLOR="#228B22"><B>closed</B></FONT> — complete by construction</TD></TR>
+    </TABLE>>, shape=box, fillcolor="#D4EDDA"];
+  }
+
+  // Closed context: config (profile + /etc/portage)
+  subgraph cluster_config {
+    label="Context: config";
+    labeljust=l;
+    style="rounded";
+    color="#4A90D9";
+    fontsize=10;
+
+    config_ctx [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="2">
+      <TR><TD ALIGN="LEFT"><FONT COLOR="#228B22">mask</FONT></TD><TD ALIGN="LEFT">'&gt;=sys-devel/gcc-15'</TD></TR>
+      <TR><TD ALIGN="LEFT"><FONT COLOR="#228B22">use</FONT></TD><TD ALIGN="LEFT">'neovim: nvimpager'</TD></TR>
+      <TR><TD COLSPAN="2" ALIGN="LEFT"><FONT COLOR="#666666">──────────────────</FONT></TD></TR>
+      <TR><TD COLSPAN="2" ALIGN="LEFT"><FONT COLOR="#228B22"><B>closed</B></FONT> — complete by construction</TD></TR>
+    </TABLE>>, shape=box, fillcolor="#D4EDDA"];
+  }
+
+  // Prover
+  prover [label="Prover", shape=box, fillcolor="#FFD6D6"];
+
+  // Closure computation edges
+  open_world -> portage_ctx [label="compute closure\n(sync: parse + assert)", style=dashed];
+  open_world -> overlay_ctx [style=dashed];
+  open_world -> pkg_ctx [style=dashed];
+  open_world -> config_ctx [style=dashed];
+
+  // Prover queries (dir=back keeps the prover below the contexts)
+  portage_ctx -> prover [dir=back, label="\\+ portage::entry(X)\nnegation ranges over\nthis context only"];
+  pkg_ctx -> prover [dir=back, label="pkg::entry(E)"];
+
+  // Same rank for contexts
+  {rank=same; portage_ctx; overlay_ctx; pkg_ctx; config_ctx;}
+}

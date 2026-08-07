@@ -1,0 +1,70 @@
+digraph pengines {
+  rankdir=TB;
+  fontname="Helvetica Neue";
+  node [fontname="Helvetica Neue", fontsize=10, style=filled];
+  edge [fontname="Helvetica Neue", fontsize=9];
+  compound=true;
+  newrank=true;
+  ranksep=0.8;
+
+  // Clients (thin, no knowledge base)
+  client_a [label="Client A\nportage-ng --mode client", shape=box, fillcolor="#FFD6D6"];
+  client_b [label="Client B\nany HTTPS + JSON speaker", shape=box, fillcolor="#FFD6D6"];
+
+  // Server hosting Pengines and the shared knowledge base
+  subgraph cluster_server {
+    label="Server (portage-ng --mode server)";
+    labeljust=l;
+    style="dashed,rounded";
+    color="#888888";
+    fontsize=10;
+
+    subgraph cluster_pengine_a {
+      label="Pengine 1 — remote context";
+      labeljust=l;
+      style="rounded";
+      color="#4A90D9";
+      fontsize=10;
+
+      pengine_a [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="2">
+        <TR><TD ALIGN="LEFT"><FONT COLOR="#228B22">goal</FONT></TD><TD ALIGN="LEFT">prove 'app-editors/neovim'</TD></TR>
+        <TR><TD ALIGN="LEFT"><FONT COLOR="#228B22">state</FONT></TD><TD ALIGN="LEFT">isolated clause store</TD></TR>
+        <TR><TD COLSPAN="2" ALIGN="LEFT"><FONT COLOR="#666666">─────────────────────</FONT></TD></TR>
+        <TR><TD ALIGN="LEFT"><FONT COLOR="#228B22">public</FONT></TD><TD ALIGN="LEFT">sandbox whitelist</TD></TR>
+        <TR><TD ALIGN="LEFT"><FONT COLOR="#CC0000">private</FONT></TD><TD ALIGN="LEFT">everything else — blocked</TD></TR>
+      </TABLE>>, shape=box, fillcolor="#D4EDDA"];
+    }
+
+    subgraph cluster_pengine_b {
+      label="Pengine 2 — remote context";
+      labeljust=l;
+      style="rounded";
+      color="#4A90D9";
+      fontsize=10;
+
+      pengine_b [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="2">
+        <TR><TD ALIGN="LEFT"><FONT COLOR="#228B22">goal</FONT></TD><TD ALIGN="LEFT">prove 'www-client/firefox'</TD></TR>
+        <TR><TD ALIGN="LEFT"><FONT COLOR="#228B22">state</FONT></TD><TD ALIGN="LEFT">isolated clause store</TD></TR>
+        <TR><TD COLSPAN="2" ALIGN="LEFT"><FONT COLOR="#666666">─────────────────────</FONT></TD></TR>
+        <TR><TD ALIGN="LEFT"><FONT COLOR="#228B22">public</FONT></TD><TD ALIGN="LEFT">sandbox whitelist</TD></TR>
+        <TR><TD ALIGN="LEFT"><FONT COLOR="#CC0000">private</FONT></TD><TD ALIGN="LEFT">everything else — blocked</TD></TR>
+      </TABLE>>, shape=box, fillcolor="#D4EDDA"];
+    }
+
+    kb [label="knowledge base\n32,000+ ebuilds (shared)", shape=box, fillcolor="#E8E8E8"];
+  }
+
+  // Client interaction over HTTPS
+  client_a -> pengine_a [label="create + ask\n(HTTPS)"];
+  pengine_a -> client_a [label="answers\n(JSON)", style=dashed, constraint=false];
+  client_b -> pengine_b [label="create + ask\n(HTTPS)"];
+  pengine_b -> client_b [label="answers\n(JSON)", style=dashed, constraint=false];
+
+  // Pengines read the shared knowledge base
+  pengine_a -> kb [label="read-only"];
+  pengine_b -> kb [label="read-only"];
+
+  // Same rank for pengines and clients
+  {rank=same; pengine_a; pengine_b;}
+  {rank=same; client_a; client_b;}
+}

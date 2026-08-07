@@ -7,13 +7,4 @@ Feature exploration
 
 - Create portage-ng website
 
-Handbook:
-
-- explain ::- origin
-- 1.2 repeats things that are in 1.1.3 - improve this
-- 1.4.3 specifies EAPI 9, if 10,11,12 are out, EAPI 9 will make the text feel outdated- fix
-- 1.4.5 explain atom, variable, compound - use https://book.simply-logical.space/src/simply-logical.html like explanation
-- contextual object oriented programming - explain 'close world assumption' in the context or extremely large spaces -> compute a closure to make world closed and efficient (add illustration)
-- pengines: add illustration
-
 
