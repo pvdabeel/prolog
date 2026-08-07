@@ -904,7 +904,7 @@ profile:cache_save_profile(ProfileRel, RawFile) :-
   ),
   catch(qcompile(RawFile), E,
         format(user_error, '% profile:cache_save — qcompile failed: ~w~n', [E])),
-  format('% Profile cache saved to Knowledge/profile.qlf~n', []).
+  format('% Updated profile~n~n', []).
 
 
 % =============================================================================
