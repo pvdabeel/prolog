@@ -118,8 +118,11 @@ reasoning -- no separate graph walk.
 ## Execution and building
 
 **Portage-compatible execution.**
-Actual package building delegates to Portage's own `ebuild` infrastructure.
-The full ecosystem of ebuilds, eclasses, and phase functions works unchanged.
+Actual package building delegates to Portage's own `ebuild` infrastructure
+through a documented invocation contract (phases, `USE`, exit codes, merge
+serialization — see Handbook Chapter 16).  The full ecosystem of ebuilds,
+eclasses, and phase functions works unchanged; a future in-house ebuild
+layer can replace the backend by satisfying the same interface.
 
 **Live build display.**
 During builds, a live terminal display shows slot states, phase progress,

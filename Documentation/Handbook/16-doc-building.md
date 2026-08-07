@@ -14,44 +14,278 @@ must actually be compiled:
   module (see [Download management](#download-management) below).
 
 The only point where Portage is needed is the **execution of ebuild
-build phases** (unpack, compile, install, qmerge, etc.).  These phases
-rely on Portage's `ebuild` command and its ecosystem of eclasses and
-phase functions.  portage-ng delegates to that infrastructure so that
-the full ebuild ecosystem works unchanged, but everything before and
-after the build steps — dependency calculation, plan ordering,
-downloading, and output — is handled independently.
+build phases** (unpack, compile, install, merge, etc.).  That hand-off
+is deliberate.  Everything before and after those phases — dependency
+calculation, plan ordering, downloading, display, and recovery — is
+owned by portage-ng; the phase bodies themselves remain Portage's.
 
 
-## Build delegation
+## Why not our own `ebuild`?
+
+It is natural to ask why a project that already replaced Portage's
+resolver, planner, cache generation, and download path still shells out
+to Portage's `ebuild` for the last mile.  The short answer is that
+**portage-ng is a reasoning engine that happens to build packages**, not
+a reimplementation of Gentoo's build runtime — and those are different
+problems with different costs.
+
+The hard problem this project set out to solve is *configuration as
+proof*: which versions, which USE flags, which order, which assumptions,
+and why.  That is where traditional emerge is weakest, and where a
+Prolog prover earns its keep.  Phase execution is a different kind of
+difficulty.  Making `src_compile` and `pkg_postinst` work for thirty
+thousand ebuilds is less about elegant search and more about decades of
+accumulated bash helpers, eclasses, sandbox policy, FEATURES knobs,
+Prefix layout, binary-package merge, and VDB writes.  Portage already
+ships that stack — on the order of many thousands of lines of
+`ebuild.sh` helpers plus the Python merge path — and every real package
+in the tree depends on it behaving exactly as maintainers expect.
+
+Replacing it would not make plans better.  It would make portage-ng
+responsible for a moving compatibility surface: every EAPI edge case,
+every eclass quirk, every sandbox interaction that today "just works"
+because the same `ebuild` that emerge uses is the one that runs.  An
+in-house layer that is *almost* Portage becomes a permanent tax — a
+second implementation forever chasing the first — without improving the
+resolver metrics that actually distinguish this project.
+
+So the design chooses a clean cut instead of a rewrite.  portage-ng
+owns *which* phases run, *across which packages*, with *which USE*,
+under *which concurrency rules*, and how failures are interpreted or
+repaired.  Portage's `ebuild` owns *what happens inside a phase*.  That
+cut is not an informal shell-out; it is the [ebuild contract](#the-ebuild-contract)
+below — a fixed invocation shape, environment, vocabulary, and exit-code
+semantics.  The builder and the execution modules speak only that
+interface.  `config:ebuild_command/1` already names the backend, so a
+future in-house layer can satisfy the same contract without touching the
+planner, jobserver, display, or fixup registry.
+
+In other words: **defer the runtime, own the reasoning.**  Shipping our
+own `ebuild` remains a possible later step — for Prefix hygiene, for
+dropping the sys-apps/portage dependency, or for tighter isolation —
+but it is optional precisely because the contract keeps it optional.
+Until then, the Gentoo tree builds with the ecosystem it was written
+for, and portage-ng spends its depth where depth changes the outcome of
+a prove.
+
+
+## The ebuild contract
+
+### Division of responsibility
+
+| **Concern** | **Owner** | **Where** |
+| :--- | :--- | :--- |
+| md5-cache, VDB facts, preferences | portage-ng | reader / knowledge base |
+| Dependency proof and ordered plan | portage-ng | resolver / orderer |
+| Distfile fetch + Manifest verify | portage-ng | `Builder/download.pl` |
+| Wave scheduling and `--jobs` tokens | portage-ng | `Builder/jobserver.pl` |
+| Live display, logs, phase stats | portage-ng | `Builder/display.pl`, `ebuild_exec` |
+| Per-package `USE=` string | portage-ng | `ebuild_exec:collect_use_string/4` |
+| Phase sequence for a plan action | portage-ng | `ebuild_exec:action_phases/3` |
+| Eclass stack, sandbox, `econf`/`emake`/`doins` | Portage `ebuild` | `ebuild.sh` + helpers |
+| Image → live FS + VDB write | Portage `ebuild` | `merge` / `qmerge` |
+| `FEATURES`, `ROOT`, `EPREFIX`, `PORTAGE_TMPDIR`, make.conf | Portage config stack | read by `ebuild`, not rewritten by portage-ng |
+| Post-merge toolchain / `ghc-pkg` reactivation | portage-ng | hooks after a successful merge (see below) |
+| Domain exception fixups and replans | portage-ng | `Exceptions/`, `builder:build_loop/2` |
+
+portage-ng never reimplements ebuild phase bodies.  It chooses *which*
+phases to run, *in what order across packages*, with *which USE*, and
+interprets the exit code.  Portage's `ebuild` remains responsible for
+*what happens inside a phase*.
+
+
+### Invocation shape
+
+Every source-build phase is started as:
+
+```text
+<ebuild_command> --skip-manifest <ebuild-path> <phase>
+```
+
+- **`<ebuild_command>`** — `config:ebuild_command/1` (default `ebuild`;
+  override in the per-host config for Gentoo Prefix or a custom path).
+- **`--skip-manifest`** — always passed.  Distfile integrity is already
+  enforced by portage-ng's download stage; re-checking Manifest inside
+  each phase would duplicate work and fight resume / mirror layouts.
+- **`<ebuild-path>`** — absolute path of the `.ebuild` file for
+  `Repo://Entry`, resolved via `Repo:get_ebuild_file/2`.
+- **`<phase>`** — one atom from the allowlist in `sanitize:safe_phase/1`
+  (`clean`, `setup`, `unpack`, `prepare`, `configure`, `compile`,
+  `test`, `install`, `package`, `merge`, `unmerge`, …).  Unknown phase
+  names are rejected before any process is spawned.
+
+Logged / async runs wrap that argv in a **fixed** `sh -c` script whose
+data travels only as positional parameters (`$1`…`$4`), never by
+string interpolation — the same argv contract documented in
+`Source/Application/Security/sanitize.pl`.  Bulk (no-progress) runs
+call `process_create` on the ebuild binary directly with the phase list
+as argv elements.
+
+
+### Action → phase sequence
+
+Plan actions map to a phase list in `ebuild_exec:action_phases/3`.
+Build-shaped actions share one sequence from
+`ebuild_exec:build_phases/1`:
+
+| **Plan action** | **Phases** |
+| :--- | :--- |
+| `install` / `reinstall` / `update` / `downgrade` | see build sequence below |
+| `uninstall` | `[unmerge]` |
+| `run` | `[]` (no ebuild invocation) |
+
+Default build sequence (source path):
+
+```text
+[clean?, setup, unpack, prepare, configure, compile, test?, install, package?, merge?]
+```
+
+Optional segments:
+
+| **Segment** | **When included** |
+| :--- | :--- |
+| `clean` | omitted under `--resume` (`ebuild_exec:resuming`) so workdirs are reused |
+| `test` | only when `FEATURES` contains positive `test` (`config:features_test_enabled`) |
+| `package` | when `--buildpkg` or `--buildpkgonly` is set |
+| `merge` | omitted under `--buildpkgonly` (binary package only) |
+
+`merge` is the composite Portage phase: `pkg_preinst`, copy into the
+live filesystem, unmerge of the old version on update/downgrade/
+reinstall, VDB write, and `pkg_postinst`.  portage-ng therefore uses the
+**same** phase list for install and for replacement actions — it does
+not unmerge the old version before building (that would break
+compile-time use of the installed predecessor).
+
+Which of those phases actually run is further gated by
+`config:build_live_phases/1`: a leading *live prefix* executes; the
+trailing *stub tail* is displayed but not run.  An empty list stubs the
+whole build (display-only).  The live prefix cannot skip a middle phase
+and continue — `compute_live_prefix/4` stops at the first phase absent
+from the config.
+
+
+### Environment contract
+
+portage-ng injects a small, explicit environment; everything else is
+whatever Portage's `ebuild` would read on that host.
+
+| **Variable** | **Set by** | **Meaning** |
+| :--- | :--- | :--- |
+| `USE` | portage-ng | Space-separated tokens (`flag` or `-flag`) matching the resolver's effective USE for this entry, including proof-context overrides (`build_with_use`, REQUIRED_USE assumptions, `suggestion(use_change, …)`). |
+| `MAKEOPTS` | portage-ng (retry only) | Forced to `-j1` on the serial-make retry path; otherwise left to Portage / make.conf. |
+| `FEATURES`, `ROOT`, `EPREFIX`, `PORTAGE_TMPDIR`, `PKGDIR`, … | Portage config stack | Not rewritten by the builder.  Prefix, temporary dirs, and feature flags come from the same `make.conf` / profile / `/etc/portage` that a bare `ebuild` would see. |
+
+Agreement between planner and builder on `USE` is part of the contract:
+`collect_use_string/4` resolves each IUSE flag through
+`use:effective_use_for_entry/3` — the same predicate the prover uses —
+then overlays proof-context forcing.  A mismatch here is a contract bug
+(the plan says one thing; the ebuild runs another).
+
+
+### Outcomes
+
+Each action ends as one of:
+
+| **Outcome** | **Meaning** |
+| :--- | :--- |
+| `done` | every live phase exited 0 |
+| `failed(ExitCode)` | a phase exited non-zero (or setup could not locate the ebuild: `failed(no_ebuild)`) |
+| `failed(qmerge_exit(N))` | binary path: `ebuild … qmerge` failed |
+
+Per-phase progress callbacks (live display) use the states
+`active`, `progress(Pct)`, `done`, `failed(ExitCode, LogPath)`,
+`stub` (beyond live config), and `skipped` (after a failure).  Exit
+status is the sole success signal; log size is used only for progress
+estimates, never to infer whether a phase completed.
+
+
+### Concurrency
+
+Within a wave, independent packages may run phases in parallel under
+the jobserver.  Two rules preserve Portage invariants:
+
+1. **Compile-side parallelism is allowed.**  `clean` through `install`
+   (and `package`) may overlap across workers.
+2. **`merge` / `qmerge` are exclusive.**  Both take the
+   `portage_pkg_merge` mutex.  Merge is not a pure file copy:
+   `pkg_preinst` collision-protect reads the live tree, and
+   `pkg_postinst` runs process-global updaters (`ldconfig`,
+   `env-update`, preserved-libs, mime/icon/schema caches).  Traditional
+   `emerge --jobs N` parallelizes compilation and serializes the merge
+   into `${ROOT}`; portage-ng restores that invariant for the bare
+   `ebuild` CLI.
+
+
+### Post-merge hooks (outside the ebuild binary)
+
+The bare `ebuild` CLI does not perform everything `emerge` does between
+packages.  After a successful install-family action, portage-ng runs
+domain hooks that keep the live root coherent for later phases in the
+same plan:
+
+- **Toolchain reactivation** (`maybe_reactivate_toolchain/4`, gated by
+  `config:toolchain_reactivation/1`) — after merging `sys-devel/gcc`
+  (and related toolchain CNs), re-select the gcc-config profile and/or
+  run `env-update` so a later package's `pkg_setup` sees the new
+  compiler (portage-ng#86, especially under `FEATURES=ccache`).
+- **`ghc-pkg recache`** (`maybe_register_ghc_pkg/4`, gated by
+  `config:ghc_pkg_register/1`) — after merging `dev-lang/ghc`, refresh
+  the package DB so boot libraries are visible to subsequent
+  `dev-haskell/*` configures (portage-ng#108).
+
+These hooks are part of the *builder-side* half of the contract: a
+replacement ebuild backend that already performed equivalent work could
+no-op them, but today's Portage `ebuild` path relies on them.
+
+
+### Binary packages (same contract, different entry)
+
+When `config:use_binpkg/1` is enabled and
+`binpkg_exec:available_for/4` finds a USE-/slot-/keyword-compatible
+gpkg, the builder short-circuits the source phase list and drives:
+
+```text
+ebuild --skip-manifest <source-ebuild-path> qmerge
+```
+
+with environment including the resolver's `USE`, plus
+`MERGE_TYPE=binary`, `PORTAGE_BINPKG_FILE=<gpkg>`, and
+`PORTAGE_BUILDDIR=<builddir>`.  Extraction is owned by
+`binpkg_extract`; VDB write and `pkg_*inst` remain inside Portage's
+`qmerge`.  Failure outcomes and the merge mutex are shared with the
+source path.  Producing binpkgs (`package` phase under `--buildpkg`)
+stays on the source path in `ebuild_exec`.
+
+
+### What a replacement backend must provide
+
+To swap Portage's `ebuild` for an in-house layer without touching the
+planner, a backend must:
+
+1. Accept `--skip-manifest <ebuild-path> <phase>` (or be wrapped so the
+   builder's argv stays unchanged via `config:ebuild_command/1`).
+2. Honour the phase vocabulary and ordering above, including composite
+   `merge` / `qmerge` semantics for live FS + VDB.
+3. Treat process exit status as the sole success signal.
+4. Read host Portage configuration for `FEATURES` / `ROOT` / `EPREFIX`
+   / temporary directories until those knobs are lifted into portage-ng.
+5. Tolerate `USE` (and optional `MAKEOPTS`) injected by the parent
+   environment.
+6. Remain safe under parallel compile-side workers with exclusive
+   merge/qmerge.
+
+Until that backend exists, `config:ebuild_command/1` points at
+sys-apps/portage's `ebuild` (or a Prefix wrapper of it).
+
+
+## Build orchestration
 
 When executing a plan (via `--merge` rather than `--pretend`), the
-builder module invokes the `ebuild` command for each action in the
-plan.  The command is configurable via `config:ebuild_command/1`
-(default: `ebuild`).
-
-The builder processes the plan wave by wave, respecting the
-parallelism computed by the ordering pass.  Within each wave, independent
-actions can run concurrently.
-
-
-## Ebuild phase execution
-
-The `ebuild_exec.pl` module handles the actual invocation of ebuild
-phases:
-
-| **Phase** | **ebuild command** | **When** |
-| :--- | :--- | :--- |
-| `setup` | `ebuild <path> setup` | Before building |
-| `unpack` | `ebuild <path> unpack` | Extract source archives |
-| `prepare` | `ebuild <path> prepare` | Apply patches |
-| `configure` | `ebuild <path> configure` | Run configure scripts |
-| `compile` | `ebuild <path> compile` | Build from source |
-| `install` | `ebuild <path> install` | Install to staging area |
-| `qmerge` | `ebuild <path> qmerge` | Merge to live filesystem |
-
-Phases are executed via `process_create` with output captured for logging.
-The builder uses `sh` to wrap `ebuild` calls with redirection for
-asynchronous, logged execution.
+builder walks the plan wave by wave, respecting the parallelism from
+the ordering pass.  Within each wave, independent actions run
+concurrently under the jobserver.  Each build-shaped action is handed
+to `ebuild_exec:execute/5` or `execute_with_progress/6`, which speak
+only the contract above.
 
 
 ## Build resilience: the per-phase retry chain
@@ -421,8 +655,9 @@ slot line changes colour and icon as the build progresses:
 ### Per-ebuild phase tracking
 
 Below each slot line, the display shows the individual ebuild phases
-(setup, unpack, prepare, configure, compile, install, qmerge) with
-their current status.  Each phase word is coloured independently:
+(setup, unpack, prepare, configure, compile, install, merge — or
+`qmerge` on the binary path) with their current status.  Each phase
+word is coloured independently:
 
 - **Dark grey** — pending (not yet started)
 - **Cyan** — active or in progress
@@ -595,9 +830,18 @@ directory by hand).
 
 ## Further reading
 
+- [Why not our own `ebuild`?](#why-not-our-own-ebuild) (this chapter) —
+  design rationale for delegating phase execution
+- [The ebuild contract](#the-ebuild-contract) (this chapter) — invocation,
+  environment, outcomes, and what a replacement backend must provide
 - [Chapter 13: Ordering — Plans as Proofs](13-doc-planning.md) — how the
   plan is constructed
 - [Chapter 14: Output and Visualization](14-doc-output.md) — plan
   display and `.merge` file generation
 - [Chapter 15: Command-Line Interface](15-doc-cli.md) — `--merge`,
   `--jobs`, `--estimate` flags
+- `Source/Domain/Gentoo/Ebuild/ebuild_exec.pl` and
+  `Source/Domain/Gentoo/Binpkg/binpkg_exec.pl` — implementation of the
+  contract
+- `Source/Application/Security/sanitize.pl` — argv / phase allowlist
+  rules shared with download and other spawn sites

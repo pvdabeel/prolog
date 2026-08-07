@@ -1,0 +1,19 @@
+BDEPEND=>=dev-vcs/git-1.8.2.1[curl]
+DEFINED_PHASES=compile install postinst unpack
+DEPEND=>=dev-lang/swi-prolog-10.0.0[cli,gmp,pcre,ssl] >=app-shells/bash-5 dev-libs/openssl dev-vcs/git net-misc/curl sys-apps/coreutils graph? ( media-gfx/graphviz )
+DESCRIPTION=Declarative reasoning engine for Gentoo package configuration
+EAPI=8
+HOMEPAGE=https://github.com/pvdabeel/portage-ng http://www.portage-ng.org/
+INHERIT=git-r3
+IUSE=graph
+LICENSE=BSD-2
+PDEPEND=sys-apps/portage
+PROPERTIES=live
+RDEPEND=>=dev-lang/swi-prolog-10.0.0[cli,gmp,pcre,ssl] >=app-shells/bash-5 dev-libs/openssl dev-vcs/git net-misc/curl sys-apps/coreutils graph? ( media-gfx/graphviz )
+SLOT=0
+SRC_URI=
+KEYWORDS=
+RESTRICT=
+REQUIRED_USE=
+INHERITED=git-r3
+IDEPEND=

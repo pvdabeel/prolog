@@ -1,6 +1,6 @@
 # Test Overlay
 
-A synthetic Portage repository containing 80 test categories (`test01`–`test80`), each with a small set of ebuilds designed to exercise a specific aspect of the portage-ng dependency resolver.
+A synthetic Portage repository containing 80 test categories (`test01`–`test80`), each with a small set of ebuilds designed to exercise a specific aspect of the portage-ng dependency resolver, plus a live packaging ebuild for portage-ng itself (`sys-apps/portage-ng`).
 
 ## Structure
 
@@ -11,12 +11,17 @@ test01/             ← category directory
   db/
     db-1.0.ebuild
   ...
+sys-apps/
+  portage-ng/
+    portage-ng-9999.ebuild   ← live packaging ebuild
 metadata/
   md5-cache/        ← pre-generated metadata cache
     test01/
       app-1.0
       db-1.0
       ...
+    sys-apps/
+      portage-ng-9999
   layout.conf       ← masters = gentoo, thin-manifests = true
 profiles/
   repo_name         ← "overlay"

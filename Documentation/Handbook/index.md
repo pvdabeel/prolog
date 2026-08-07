@@ -30,6 +30,8 @@ software configuration, applied to Gentoo Linux.
 
 15. [Command-Line Interface](15-doc-cli.md)
 16. [Building and Execution](16-doc-building.md)
+    - [Why not our own `ebuild`?](16-doc-building.md#why-not-our-own-ebuild) — why phase execution stays delegated
+    - [The ebuild contract](16-doc-building.md#the-ebuild-contract) — builder ↔ Portage `ebuild` boundary
 17. [Semantic Search and LLM Integration](17-doc-llm.md)
 18. [Distributed Proving](18-doc-distributed.md)
 19. [Upstream and Bug Tracking](19-doc-upstream-bugs.md)

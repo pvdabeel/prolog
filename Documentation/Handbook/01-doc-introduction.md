@@ -158,25 +158,21 @@ problem at a level that imperative package managers cannot reach.
 
 ## Why Gentoo?
 
-### The metadistribution concept
+The previous section closed with a claim: Gentoo captures the hardest
+sub-problems in software configuration management, so anything that works
+for Gentoo generalises to simpler domains.  This section substantiates that
+claim — first by looking at what the knowledge Gentoo distributes actually
+contains, then at how that model has been stressed across architectures and
+platforms, and finally at where it is deployed at industrial scale.
 
-Most Linux distributions distribute **binaries** — fixed packages with fixed
-configurations, tested together in a release cycle.  Gentoo distributes
-**knowledge**: recipes (ebuilds) that describe how to build every component
-of a complete system, and configuration parameters (USE flags, keywords,
-profiles) that let the user tailor the result to their hardware and
-requirements.
+### The metadistribution in practice
 
-This is the **metadistribution** concept.  We no longer distribute the
-output of a build process; we distribute the declarative specification of
-the build process itself.  The word "package manager" does not do justice to
-what this entails.  Putting pre-built packages together is logistics.
-Ensuring that a complex, multi-dimensional configuration space is internally
-consistent, constructing build plans to realise a chosen configuration, and
-executing those plans with the right ordering and parallelism — that is
-**configuration management**.
-
-A single Portage tree contains roughly 32,000 ebuilds.  Each ebuild declares:
+The metadistribution concept was introduced in
+[From packages to knowledge](#from-packages-to-knowledge): Gentoo
+distributes the declarative specification of a build process — ebuilds plus
+configuration parameters — rather than the output of one.  What does that
+specification look like up close?  A single Portage tree contains roughly
+32,000 ebuilds, and each ebuild declares:
 
 - **Dependencies** — what it needs at build time, run time, and post-install
 - **Use flags** — optional features the user can enable or disable
@@ -184,10 +180,13 @@ A single Portage tree contains roughly 32,000 ebuilds.  Each ebuild declares:
 - **Keywords** — which architectures the package is tested on
 - **Use constraints** — restricting valid Use flag combinations
 
-The number of valid configurations is combinatorially enormous.  This is not
-a bug — it is the point.  Gentoo's power comes from this configurability.
-But it also means that reasoning about Gentoo packages is reasoning about
-a large, richly structured constraint space.
+None of these declarations stands alone.  Enabling a USE flag on one package
+activates extra dependencies; those dependencies carry their own flags,
+slots, and keyword restrictions; a slot chosen deep in the graph can
+invalidate a version chosen near the top.  This is not a bug — it is the
+point.  Gentoo's power comes from this configurability.  But it also means
+that reasoning about Gentoo packages is reasoning about a large, richly
+structured constraint space — not merely walking a dependency graph.
 
 ### Architectures and keywords
 
@@ -577,10 +576,10 @@ In portage-ng, the entire EAPI specification — hundreds of pages of the
 PMS (Package Manager Specification, the formal document that defines how
 Gentoo ebuilds, dependencies, USE flags, slots, and all related metadata
 must be interpreted) — is captured in a set of DCG grammar rules and
-Prolog clauses.  When EAPI 9
-added new features, the implementation required adding new grammar rules
-and clauses.  The reasoning engine — the prover and the ordering laws — did
-not change at all, because it is domain-agnostic.
+Prolog clauses.  Each time a new EAPI revision introduces features,
+supporting them is a matter of adding grammar rules and clauses.  The
+reasoning engine — the prover and the ordering laws — does not change at
+all, because it is domain-agnostic.
 
 ### Beyond pure Prolog
 
@@ -594,11 +593,25 @@ into encapsulated, independently stateful components.
 
 ### Feature logic and feature terms
 
-In classical logic programming, a term is either an atom, a variable, or a
-compound.  That is enough for simple reasoning, but when the prover needs to
-carry *configuration alongside identity* — "this package, with these USE
-flags, in this slot, at this proof depth" — a flat compound quickly becomes
-unwieldy.  Feature logic, originally developed by Hassan Aït-Kaci and others
+In classical logic programming, everything is built from **terms**, and a
+term is one of three things.  An **atom** names a specific individual
+directly: `openssl`, `amd64`, `stable`.  A **variable** — written with an
+initial capital, like `Version` or `X` — stands for an individual that is
+not yet known; unification may later bind it to a concrete term.  A
+**compound term** names an individual *by description*: a functor applied to
+arguments, as in `version(2, 4, 1)` — "the version with components 2, 4
+and 1".  Just as the phrase "the mother of John" identifies a person without
+stating her name, the compound term `mother_of(john)` denotes an individual
+through its relationship to another one.  And because arguments may
+themselves be compound, descriptions nest to arbitrary depth —
+`mother_of(mother_of(john))` is the mother of the mother of John.  With
+only these three kinds of terms, a finite program can describe and reason
+about arbitrarily large — even infinite — domains.
+
+Three kinds of terms are enough for simple reasoning, but when the prover
+needs to carry *configuration alongside identity* — "this package, with
+these USE flags, in this slot, at this proof depth" — a flat compound
+quickly becomes unwieldy.  Feature logic, originally developed by Hassan Aït-Kaci and others
 for computational linguistics, offers a cleaner model: a **feature term** is
 a structured record of named attributes (features) whose values may
 themselves be feature terms.  Two feature terms can be **unified** (merged)
@@ -660,19 +673,45 @@ after the fact.
 ### Contextual object-oriented programming
 
 Prolog operates under the **closed-world assumption**: what cannot be
-derived from the program is considered false.  In practice, this means that
-reasoning about a predicate requires visibility of *all* its clauses —
-the program is treated as a complete description of the world.  For a
-small program this is manageable, but in a system with tens of thousands
-of packages, dozens of repositories, and overlapping configurations, the
-"world" becomes very large.  Not all of it is relevant to every question.
+derived from the program is considered false.  The classic illustration is
+an airline database: a flight that is not listed does not exist.  Nobody
+enumerates all the flights that do *not* operate — absence itself is the
+negative information.  This convention is what makes negation practical,
+but it carries an obligation: the program must be a *complete* description
+of its world.  An answer like "no version of this package satisfies the
+constraint" is only trustworthy if every version the question ranges over
+is actually in the program.
 
-Context-based reasoning addresses this directly: it partitions the closed
-world into **scoped contexts**, each carrying only the facts and rules that
-are relevant to a particular component.  When reasoning about a repository,
-only that repository's entries, configuration, and constraints are in scope.
-The closed-world assumption still holds — but within a well-defined boundary,
-making reasoning both tractable and modular.
+Now consider the world portage-ng reasons about: multiple repositories,
+each with tens of thousands of ebuilds, every ebuild in several versions,
+each version with its own dependencies, USE flags, and keywords — plus
+profiles, user configuration, and the installed system.  Treating all of
+that as one flat closed world is semantically correct but practically
+untenable.  Facts would have to be discovered lazily from disk in the
+middle of proofs, so completeness — the very thing the closed-world
+assumption rests on — could never be guaranteed at any given moment; and
+every negative answer would implicitly quantify over one enormous,
+undifferentiated fact base in which most facts are irrelevant to the
+question being asked.
+
+portage-ng therefore **computes a closure** before reasoning begins: for
+each component, the complete set of facts describing it is materialised up
+front.  Syncing a repository parses every ebuild's metadata and asserts the
+result into that repository's own context; the profile and the user
+configuration are expanded into theirs; the installed system (VDB) gets its
+own.  Each context is now a small world that is genuinely closed *by
+construction* — it contains everything there is to know about its
+component.  Within such a boundary, negation and enumeration are both sound
+and fast: "no version of X in this repository satisfies C" ranges over
+exactly one context's in-memory, indexed facts rather than over an
+open-ended outside world.
+
+![Computing closures over an open world](Diagrams/01-closed-world.svg)
+
+The closed-world assumption still holds — but per context, within a
+well-defined boundary, which makes reasoning both tractable and modular.
+What remains is an engineering question: how do we organise these scoped
+contexts as first-class objects in Prolog?
 
 Standard Prolog module systems offer some namespacing, but they were
 designed for library organisation, not for modelling independent entities
@@ -947,7 +986,7 @@ as code.
 
 Over two decades of development, portage-ng has evolved
 from a proof-of-concept into a full-featured configuration management
-front-end with PMS 9 / EAPI 9 compliance, distributed proving, LLM-assisted
+front-end with full PMS / EAPI compliance, distributed proving, LLM-assisted
 plan explanation, and measured correctness against Portage across the entire
 Gentoo tree.
 

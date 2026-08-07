@@ -48,7 +48,7 @@ used by layered tests and `--bugs`.
 | **Resolver** | `resolver.pl` → `prover.pl` + `resolving.pl` | Goal literals (from user) | Proof, Model, Constraints, Triggers |
 | **Orderer** | `orderer.pl` → `prover.pl` + `ordering.pl` | Proof, Triggers | Ordering proof + wave-list Plan |
 | **Printer** | `printer.pl`, `Printer/` | Proof, Model, Plan | Terminal output, `.merge` files |
-| **Builder** | `builder.pl`, `Builder/` | Plan | Ebuild phase execution |
+| **Builder** | `builder.pl`, `Builder/` | Plan | Ebuild phase execution (via the [ebuild contract](16-doc-building.md#the-ebuild-contract)) |
 
 
 ## Operating modes

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE pkgmetadata SYSTEM "https://www.gentoo.org/dtd/metadata.dtd">
+<pkgmetadata>
+	<maintainer type="person">
+		<email>pvdabeel@mac.com</email>
+		<name>Pieter Van den Abeele</name>
+	</maintainer>
+	<use>
+		<flag name="graph">
+			Install Graphviz for <c>--graph</c> dependency graph output.
+		</flag>
+	</use>
+	<upstream>
+		<bugs-to>https://github.com/pvdabeel/portage-ng/issues</bugs-to>
+		<remote-id type="github">pvdabeel/portage-ng</remote-id>
+	</upstream>
+</pkgmetadata>

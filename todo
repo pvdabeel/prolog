@@ -1,28 +1,11 @@
 Feature exploration
 ===================
 
-- standalone loading performance
+- Source file QLF - investigate speedup
 
-- Smart QLF split
-
-- Themeing: Dark & Light mode colors
-
-- test output on default linux and default macos (TERM handling)
-
-- Extend transaction system to use overlayfs or similar (essentially the "session concept" from tinderbox-ng) 
-
-- different transaction strategies (zfs snapshot, unionfs, overlayfs, fuse, snaps, other)
-
-- Create portage-ng ebuild file (overlay?)
+- prefix
 
 - Create portage-ng website
-
-- Building: Clearly define ebuild contract
-
-- Building: Reimplement prefix the proper way
-
-- Building: Ship with own ebuild layer
-
 
 Handbook:
 
