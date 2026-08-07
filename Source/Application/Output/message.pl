@@ -31,6 +31,75 @@ is disabled, calls expand to `true` (no overhead).
 % =============================================================================
 
 % -----------------------------------------------------------------------------
+%  Line-position preserving ANSI emit
+% -----------------------------------------------------------------------------
+%
+% Older SWI-Prolog builds count ANSI escapes as output columns, so escape
+% writes must save/restore line_position or column stops (~t / ~|) drift.
+% swipl-devel 3575a02c makes the stream layer ignore escapes and drops
+% library(ansi_term)'s private keep_line_pos/2. Version numbers cannot tell
+% the two apart (both report 10.1.12), so detect the behaviour at load time:
+% wrap_ansi/2 embeds the save/restore wrapper only on old builds; on modern
+% builds goal expansion inlines the bare emit goal.
+
+%! message:ansi_escapes_affect_line_pos is semidet.
+%
+% Succeeds when writing an ANSI escape advances the stream column.
+
+message:ansi_escapes_affect_line_pos :-
+  with_output_to(string(_),
+      ( format('\e[0m', []),
+        line_position(current_output, N),
+        N > 0 )).
+
+
+:- if(message:ansi_escapes_affect_line_pos).
+
+:- meta_predicate message:keep_line_pos(+, 0).
+
+%! message:keep_line_pos(+Stream, :Goal) is det.
+%
+% Run Goal without changing Stream's line_position (reimplements the
+% helper dropped from library(ansi_term)).
+
+message:keep_line_pos(S, G) :-
+  stream_property(S, position(Pos)),
+  !,
+  setup_call_cleanup(
+      stream_position_data(line_position, Pos, LPos),
+      G,
+      set_stream(S, line_position(LPos))).
+message:keep_line_pos(_, G) :-
+  call(G).
+
+
+%! message:wrap_ansi(+Goal, -Wrapped) is det.
+%
+% Embed Goal (a term, not meta-called) in a keep_line_pos/2 wrapper.
+
+message:wrap_ansi(G, message:keep_line_pos(current_output, G)).
+
+:- else.
+
+%! message:wrap_ansi(+Goal, -Wrapped) is det.
+%
+% Identity: this stream layer ignores ANSI escapes for column tracking.
+
+message:wrap_ansi(G, G).
+
+:- endif.
+
+
+%! message:emit_ansi(+Code) is det.
+%
+% Write an ANSI escape Code chosen at runtime (bubble renderer).
+
+message:emit_ansi(Code) :-
+  message:wrap_ansi(format(Code, []), Goal),
+  call(Goal).
+
+
+% -----------------------------------------------------------------------------
 %  Goal expansion declarations
 % -----------------------------------------------------------------------------
 %
@@ -121,59 +190,63 @@ message:scroll_log(_).
 
 
 % -----------------------------------------------------------------------------
-%  Goal expansion: Foreground color
+%  Goal expansion: Color, background color and style
 % -----------------------------------------------------------------------------
+%
+% One escape table drives the color/1, bgcolor/1 and style/1 expansions and
+% the runtime bubble renderer below. A single rule expands any stub found in
+% the table, guarded by the runtime colour switch.
 
-user:goal_expansion(color(red),            (config:color_output -> ansi_term:keep_line_pos(current_output,format("\e[31m",[])) ; true)).
-user:goal_expansion(color(green),          (config:color_output -> ansi_term:keep_line_pos(current_output,format("\e[32m",[])) ; true)).
-user:goal_expansion(color(orange),         (config:color_output -> ansi_term:keep_line_pos(current_output,format("\e[33m",[])) ; true)).
-user:goal_expansion(color(blue),           (config:color_output -> ansi_term:keep_line_pos(current_output,format("\e[34m",[])) ; true)).
-user:goal_expansion(color(magenta),        (config:color_output -> ansi_term:keep_line_pos(current_output,format("\e[35m",[])) ; true)).
-user:goal_expansion(color(cyan),           (config:color_output -> ansi_term:keep_line_pos(current_output,format("\e[36m",[])) ; true)).
-user:goal_expansion(color(lightgray),      (config:color_output -> ansi_term:keep_line_pos(current_output,format("\e[37m",[])) ; true)).
-user:goal_expansion(color(darkgray),       (config:color_output -> ansi_term:keep_line_pos(current_output,format("\e[90m",[])) ; true)).
-user:goal_expansion(color(lightred),       (config:color_output -> ansi_term:keep_line_pos(current_output,format("\e[91m",[])) ; true)).
-user:goal_expansion(color(lightgreen),     (config:color_output -> ansi_term:keep_line_pos(current_output,format("\e[92m",[])) ; true)).
-user:goal_expansion(color(yellow),         (config:color_output -> ansi_term:keep_line_pos(current_output,format("\e[93m",[])) ; true)).
-user:goal_expansion(color(lightorange),    (config:color_output -> ansi_term:keep_line_pos(current_output,format("\e[93m",[])) ; true)).
-user:goal_expansion(color(lightblue),      (config:color_output -> ansi_term:keep_line_pos(current_output,format("\e[94m",[])) ; true)).
-user:goal_expansion(color(lightmagenta),   (config:color_output -> ansi_term:keep_line_pos(current_output,format("\e[95m",[])) ; true)).
-user:goal_expansion(color(lightcyan),      (config:color_output -> ansi_term:keep_line_pos(current_output,format("\e[96m",[])) ; true)).
-user:goal_expansion(color(normal),         (config:color_output -> ansi_term:keep_line_pos(current_output,format("\e[00m",[])) ; true)).
+%! message:ansi_code(?Stub, ?Code) is nondet.
+%
+% ANSI escape Code emitted for a color/1, bgcolor/1 or style/1 stub.
+
+message:ansi_code(color(red),            "\e[31m").
+message:ansi_code(color(green),          "\e[32m").
+message:ansi_code(color(orange),         "\e[33m").
+message:ansi_code(color(blue),           "\e[34m").
+message:ansi_code(color(magenta),        "\e[35m").
+message:ansi_code(color(cyan),           "\e[36m").
+message:ansi_code(color(lightgray),      "\e[37m").
+message:ansi_code(color(darkgray),       "\e[90m").
+message:ansi_code(color(lightred),       "\e[91m").
+message:ansi_code(color(lightgreen),     "\e[92m").
+message:ansi_code(color(yellow),         "\e[93m").
+message:ansi_code(color(lightorange),    "\e[93m").
+message:ansi_code(color(lightblue),      "\e[94m").
+message:ansi_code(color(lightmagenta),   "\e[95m").
+message:ansi_code(color(lightcyan),      "\e[96m").
+message:ansi_code(color(normal),         "\e[00m").
+message:ansi_code(bgcolor(red),          "\e[41m").
+message:ansi_code(bgcolor(green),        "\e[42m").
+message:ansi_code(bgcolor(orange),       "\e[43m").
+message:ansi_code(bgcolor(blue),         "\e[44m").
+message:ansi_code(bgcolor(magenta),      "\e[45m").
+message:ansi_code(bgcolor(cyan),         "\e[46m").
+message:ansi_code(bgcolor(lightgray),    "\e[47m").
+message:ansi_code(bgcolor(darkgray),     "\e[100m").
+message:ansi_code(bgcolor(lightred),     "\e[101m").
+message:ansi_code(bgcolor(lightgreen),   "\e[102m").
+message:ansi_code(bgcolor(yellow),       "\e[103m").
+message:ansi_code(bgcolor(lightorange),  "\e[103m").
+message:ansi_code(bgcolor(lightblue),    "\e[104m").
+message:ansi_code(bgcolor(lightmagenta), "\e[105m").
+message:ansi_code(bgcolor(lightcyan),    "\e[106m").
+message:ansi_code(bgcolor(normal),       "\e[00m").
+message:ansi_code(style(normal),         "\e[00m").
+message:ansi_code(style(bold),           "\e[01m").
+message:ansi_code(style(dim),            "\e[02m").
+message:ansi_code(style(italic),         "\e[03m").
+message:ansi_code(style(underline),      "\e[04m").
+message:ansi_code(style(blink),          "\e[05m").
 
 
-% -----------------------------------------------------------------------------
-%  Goal expansion: Background color
-% -----------------------------------------------------------------------------
-
-user:goal_expansion(bgcolor(red),          (config:color_output -> ansi_term:keep_line_pos(current_output,format("\e[41m",[])) ; true)).
-user:goal_expansion(bgcolor(green),        (config:color_output -> ansi_term:keep_line_pos(current_output,format("\e[42m",[])) ; true)).
-user:goal_expansion(bgcolor(orange),       (config:color_output -> ansi_term:keep_line_pos(current_output,format("\e[43m",[])) ; true)).
-user:goal_expansion(bgcolor(blue),         (config:color_output -> ansi_term:keep_line_pos(current_output,format("\e[44m",[])) ; true)).
-user:goal_expansion(bgcolor(magenta),      (config:color_output -> ansi_term:keep_line_pos(current_output,format("\e[45m",[])) ; true)).
-user:goal_expansion(bgcolor(cyan),         (config:color_output -> ansi_term:keep_line_pos(current_output,format("\e[46m",[])) ; true)).
-user:goal_expansion(bgcolor(lightgray),    (config:color_output -> ansi_term:keep_line_pos(current_output,format("\e[47m",[])) ; true)).
-user:goal_expansion(bgcolor(darkgray),     (config:color_output -> ansi_term:keep_line_pos(current_output,format("\e[100m",[])) ; true)).
-user:goal_expansion(bgcolor(lightred),     (config:color_output -> ansi_term:keep_line_pos(current_output,format("\e[101m",[])) ; true)).
-user:goal_expansion(bgcolor(lightgreen),   (config:color_output -> ansi_term:keep_line_pos(current_output,format("\e[102m",[])) ; true)).
-user:goal_expansion(bgcolor(yellow),       (config:color_output -> ansi_term:keep_line_pos(current_output,format("\e[103m",[])) ; true)).
-user:goal_expansion(bgcolor(lightorange),  (config:color_output -> ansi_term:keep_line_pos(current_output,format("\e[103m",[])) ; true)).
-user:goal_expansion(bgcolor(lightblue),    (config:color_output -> ansi_term:keep_line_pos(current_output,format("\e[104m",[])) ; true)).
-user:goal_expansion(bgcolor(lightmagenta), (config:color_output -> ansi_term:keep_line_pos(current_output,format("\e[105m",[])) ; true)).
-user:goal_expansion(bgcolor(lightcyan),    (config:color_output -> ansi_term:keep_line_pos(current_output,format("\e[106m",[])) ; true)).
-user:goal_expansion(bgcolor(normal),       (config:color_output -> ansi_term:keep_line_pos(current_output,format("\e[00m",[])) ; true)).
-
-
-% -----------------------------------------------------------------------------
-%  Goal expansion: Style
-% -----------------------------------------------------------------------------
-
-user:goal_expansion(style(normal),         (config:color_output -> ansi_term:keep_line_pos(current_output,format("\e[00m",[])) ; true)).
-user:goal_expansion(style(bold),           (config:color_output -> ansi_term:keep_line_pos(current_output,format("\e[01m",[])) ; true)).
-user:goal_expansion(style(dim),            (config:color_output -> ansi_term:keep_line_pos(current_output,format("\e[02m",[])) ; true)).
-user:goal_expansion(style(italic),         (config:color_output -> ansi_term:keep_line_pos(current_output,format("\e[03m",[])) ; true)).
-user:goal_expansion(style(underline),      (config:color_output -> ansi_term:keep_line_pos(current_output,format("\e[04m",[])) ; true)).
-user:goal_expansion(style(blink),          (config:color_output -> ansi_term:keep_line_pos(current_output,format("\e[05m",[])) ; true)).
+user:goal_expansion(Goal, (config:color_output -> Emit ; true)) :-
+  compound(Goal),
+  arg(1, Goal, Arg),
+  atom(Arg),
+  message:ansi_code(Goal, Code),
+  message:wrap_ansi(format(Code, []), Emit).
 
 
 % -----------------------------------------------------------------------------
@@ -182,8 +255,10 @@ user:goal_expansion(style(blink),          (config:color_output -> ansi_term:kee
 
 user:goal_expansion(bell,                  (format("\a",[]),flush_output)).
 user:goal_expansion(el,                    (config:output_tty -> format("\e[K",[]) ; true)).
-user:goal_expansion(hc,                    (config:output_tty -> ansi_term:keep_line_pos(current_output,format("\e[?25l",[])) ; true)).
-user:goal_expansion(sc,                    (config:output_tty -> ansi_term:keep_line_pos(current_output,format("\e[?25h",[])) ; true)).
+user:goal_expansion(hc,                    (config:output_tty -> Emit ; true)) :-
+  message:wrap_ansi(format("\e[?25l",[]), Emit).
+user:goal_expansion(sc,                    (config:output_tty -> Emit ; true)) :-
+  message:wrap_ansi(format("\e[?25h",[]), Emit).
 user:goal_expansion(bl,                    (config:output_tty -> format("\e[1G",[]) ; true)).
 user:goal_expansion(cl,                    (config:output_tty -> format("\e[2J\e[H",[]) ; true)).
 user:goal_expansion(clean,                 (config:output_tty -> format("\e[K",[]) ; true)).
@@ -338,68 +413,32 @@ message:bubble_write(Text) :-
 
 message:bubble_emit_fg(Color) :-
   ( config:color_output,
-    message:bubble_fg_code(Color, Code)
-  -> ansi_term:keep_line_pos(current_output, format(Code, []))
+    message:ansi_code(color(Color), Code)
+  -> message:emit_ansi(Code)
   ;  true
   ).
 
 
 message:bubble_emit_bg(Color) :-
   ( config:color_output,
-    message:bubble_bg_code(Color, Code)
-  -> ansi_term:keep_line_pos(current_output, format(Code, []))
+    message:ansi_code(bgcolor(Color), Code)
+  -> message:emit_ansi(Code)
   ;  true
   ).
 
 
 message:bubble_emit_bold :-
   ( config:color_output
-  -> ansi_term:keep_line_pos(current_output, format("\e[01m", []))
+  -> message:emit_ansi("\e[01m")
   ;  true
   ).
 
 
 message:bubble_emit_bold_off :-
   ( config:color_output
-  -> ansi_term:keep_line_pos(current_output, format("\e[22m", []))
+  -> message:emit_ansi("\e[22m")
   ;  true
   ).
-
-
-message:bubble_fg_code(red,         "\e[31m").
-message:bubble_fg_code(green,       "\e[32m").
-message:bubble_fg_code(orange,      "\e[33m").
-message:bubble_fg_code(blue,        "\e[34m").
-message:bubble_fg_code(magenta,     "\e[35m").
-message:bubble_fg_code(cyan,        "\e[36m").
-message:bubble_fg_code(lightgray,   "\e[37m").
-message:bubble_fg_code(darkgray,    "\e[90m").
-message:bubble_fg_code(lightred,    "\e[91m").
-message:bubble_fg_code(lightgreen,  "\e[92m").
-message:bubble_fg_code(yellow,      "\e[93m").
-message:bubble_fg_code(lightorange, "\e[93m").
-message:bubble_fg_code(lightblue,   "\e[94m").
-message:bubble_fg_code(lightmagenta,"\e[95m").
-message:bubble_fg_code(lightcyan,   "\e[96m").
-message:bubble_fg_code(normal,      "\e[00m").
-
-
-message:bubble_bg_code(red,         "\e[41m").
-message:bubble_bg_code(green,       "\e[42m").
-message:bubble_bg_code(orange,      "\e[43m").
-message:bubble_bg_code(blue,        "\e[44m").
-message:bubble_bg_code(magenta,     "\e[45m").
-message:bubble_bg_code(cyan,        "\e[46m").
-message:bubble_bg_code(lightgray,   "\e[47m").
-message:bubble_bg_code(darkgray,    "\e[100m").
-message:bubble_bg_code(lightred,    "\e[101m").
-message:bubble_bg_code(lightgreen,  "\e[102m").
-message:bubble_bg_code(yellow,      "\e[103m").
-message:bubble_bg_code(lightorange, "\e[103m").
-message:bubble_bg_code(lightblue,   "\e[104m").
-message:bubble_bg_code(lightmagenta,"\e[105m").
-message:bubble_bg_code(lightcyan,   "\e[106m").
-message:bubble_bg_code(normal,      "\e[00m").
 
 
 % -----------------------------------------------------------------------------
@@ -465,18 +504,15 @@ user:goal_expansion(scroll_log(T),         Expanded) :-
 
 user:goal_expansion(title_reset,           Expanded) :-
   config:name(String),
-  Expanded = (ansi_term:keep_line_pos(current_output,
-                                     format('\e]0;~s\a',[String]))).
+  message:wrap_ansi(format('\e]0;~s\a',[String]), Expanded).
 
 user:goal_expansion(title(List),           Expanded) :-
   is_list(List),!,
-  Expanded = (atomic_list_concat(List,String),
-              ansi_term:keep_line_pos(current_output,
-                                      format('\e]0;~s\a',[String]))).
+  message:wrap_ansi(format('\e]0;~s\a',[String]), Emit),
+  Expanded = (atomic_list_concat(List,String), Emit).
 
 user:goal_expansion(title(String),         Expanded) :-
-  Expanded = (ansi_term:keep_line_pos(current_output,
-                                      format('\e]0;~s\a',[String]))).
+  message:wrap_ansi(format('\e]0;~s\a',[String]), Expanded).
 
 
 % -----------------------------------------------------------------------------
