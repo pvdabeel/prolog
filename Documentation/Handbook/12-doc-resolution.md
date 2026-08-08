@@ -343,7 +343,7 @@ index `I` breaks remaining ties (left-to-right).
 | `UseUnmasked` | Among USE-unsat arms, prefer flips that do not fight use.mask / use.force | `all_use_unmasked` (masked → `other`) |
 | `Rank` | Installed / preferred / `--favour` / `--avoid` / self-CN | `preferred_installed` + favour |
 | `SnapAll` | Prefer arms whose non-`virtual/` CNs are already in the proof snapshot | `all_in_graph` |
-| `SlotScore` | Prefer higher explicit package slot (`pkg:N`) | `want_update` / higher-slot promotion |
+| `SlotScore` | Prefer higher explicit package slot (`pkg:N`) — only active when *all* arms target the same (C,N) | `want_update` / higher-slot promotion |
 | `NoDowngrade` | Demote arms whose newest admitted version is below installed or snap-selected | `downgrade_probe` → `other` |
 | `InstScore` | Prefer arms that reuse more installed CNs | `other_installed` / `_some` / `_any_slot` |
 | `Overlap` | Prefer arms that appear in several sibling `\|\|` groups | Soft stand-in for minimize-slots pressure |
@@ -358,13 +358,19 @@ Worked examples:
 - `|| ( sys-devel/llvm:18 sys-devel/llvm:20 )` → `SlotScore` prefers `:20`.
 - An arm whose packages are already in `selected_cn` beats a fresh CN → `SnapAll`.
 
-`VerScore` is gated to same-CN groups because comparing newest tree
-versions of *different* packages is meaningless and overrides ebuild
-order: `virtual/mta` would pick `notqmail` (a `-9999` live ebuild
-inflates its score) over the intended `nullmailer`, and `virtual/jdk`
-would pick source `dev-java/openjdk` over `openjdk-bin`
-(portage-ng#115, portage-ng#116).  Emerge never version-ranks across
-CPs inside a choice; it falls back to ebuild order there.
+`VerScore` and `SlotScore` are gated to same-CN groups because
+comparing newest tree versions — or highest slots — of *different*
+packages is meaningless and overrides ebuild order: `virtual/mta`
+would pick `notqmail` (a `-9999` live ebuild inflates its score) over
+the intended `nullmailer`, and `virtual/jdk` would pick source
+`dev-java/openjdk` over `openjdk-bin` (portage-ng#115,
+portage-ng#116).  Ungated slot-ranking likewise flipped ruby-single
+choices: `( ruby:3.3 rubygems[ruby33] )` — the profile default, listed
+first — lost to `( ruby:4.0 rubygems[ruby40] )` because 4.0 > 3.3,
+scheduling the `~arch` ruby:4.0 slot plus a `ruby_targets_ruby40` USE
+toggle that emerge never takes (webkit-gtk build cluster, Aug-2026
+tinderbox run).  Emerge never version- or slot-ranks across CPs inside
+a choice; it falls back to ebuild order there.
 
 `virtual/` atoms are skipped for `SnapAll`, `InstScore`, and
 `NoDowngrade` (Portage’s zero-cost treatment of virtuals in those

@@ -2035,6 +2035,24 @@ test(same_cn_group_still_version_ranked,
   ranking:prioritize_deps_keep_all([B1, B2], [], [First|_]),
   First == B2.
 
+% SlotScore must likewise stay inactive across different CNs: a later arm
+% carrying a higher-slotted package must not beat the first arm's ebuild
+% order. ruby-single || arms list the profile-default target first, and
+% emerge keeps that order: ( ruby:3.3 rubygems[ruby33] ) wins over
+% ( ruby:4.0 rubygems[ruby40] ) even though slot 4.0 > 3.3 (webkit-gtk
+% cluster, Aug-2026 tinderbox regression).
+rap_ruby_arm(Slot, Flag, all_of_group([
+  package_dependency(run, no, 'qtest-lang', ruby, none, version_none,
+                     [slot(Slot)], []),
+  package_dependency(run, no, 'qtest-virtual', rubygems, none, version_none,
+                     [], [use(enable(Flag), none)])])).
+
+test(mixed_cn_group_not_slot_ranked) :-
+  rap_ruby_arm('3.3', ruby_targets_ruby33, Arm33),
+  rap_ruby_arm('4.0', ruby_targets_ruby40, Arm40),
+  ranking:prioritize_deps_keep_all([Arm33, Arm40], [], [First|_]),
+  First == Arm33.
+
 rap_pkg2(C, N, package_dependency(run, no, C, N, none, version_none, [], [])).
 
 :- end_tests(ranking_any_of_preference_keys).

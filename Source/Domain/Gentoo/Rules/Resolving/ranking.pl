@@ -378,6 +378,15 @@ ranking:prioritize_deps(Deps, Context, SortedDeps) :-
 % away from ebuild order (portage-ng#115 openjdk vs openjdk-bin,
 % portage-ng#116 notqmail-9999 vs nullmailer). Emerge never version-ranks
 % across CPs inside a choice; it falls back to ebuild order there.
+%
+% SlotScore is gated by the same single-CN condition. Ranking the max
+% explicit slot across multi-CN arms flipped ruby-single choices --
+% `( ruby:3.3 rubygems[ruby33] )` listed first lost to
+% `( ruby:4.0 rubygems[ruby40] )` because 4.0 > 3.3 -- scheduling the
+% ~arch ruby:4.0 slot plus a ruby_targets_ruby40 USE toggle that emerge
+% never takes (webkit-gtk cluster, Aug-2026 tinderbox regression).
+% Same-CN groups (`|| ( llvm:20 llvm:19 )`) keep the newest-slot
+% preference.
 
 ranking:prioritize_deps_keep_all(Deps, Context, SortedDeps) :-
   setup_call_cleanup(
@@ -390,7 +399,7 @@ ranking:prioritize_deps_keep_all(Deps, Context, SortedDeps) :-
 
 
 ranking:prioritize_deps_keep_all_body(Deps, Context, SortedDeps) :-
-  ( ranking:deps_share_single_cn(Deps) -> VerActive = true ; VerActive = false ),
+  ( ranking:deps_share_single_cn(Deps) -> SameCN = true ; SameCN = false ),
   findall(NegLicOk-NegUseSat-NegUseUnmasked-NegRank-NegSnapAll-NegSlotScore-NegNoDowngrade-NegInstScore-NegOverlap-NegVerScore-NegUEScore-I-Dep,
           ( nth1(I, Deps, Dep),
             dep_rank(Context, Dep, Rank),
@@ -399,9 +408,10 @@ ranking:prioritize_deps_keep_all_body(Deps, Context, SortedDeps) :-
             ( acceptance:dep_license_ok(Dep) -> LicOk = 1 ; LicOk = 0 ),
             dep_use_expand_profile_score(Dep, UEScore),
             ranking:dep_choice_scores(Context, Dep,
-              scores(UseSat, UseUnmasked, SnapAll, SlotScore,
+              scores(UseSat, UseUnmasked, SnapAll, SlotScore0,
                      NoDowngrade, InstScore, VerScore0)),
-            ( VerActive == true -> VerScore = VerScore0 ; VerScore = 0 ),
+            ( SameCN == true -> VerScore = VerScore0 ; VerScore = 0 ),
+            ( SameCN == true -> SlotScore = SlotScore0 ; SlotScore = 0 ),
             NegLicOk is -LicOk,
             NegUseSat is -UseSat,
             NegUseUnmasked is -UseUnmasked,
@@ -462,9 +472,10 @@ ranking:dep_choice_scores(Context, Dep,
 %
 % True when every package atom across all arms of a choice group targets
 % one single (C,N) — e.g. cabal's text 1.x-range vs 2.x-range arms
-% (portage-ng#112). Gates the VerScore sort key: version-ranking arms of
-% *different* packages diverges from emerge's ebuild-order fallback
-% (portage-ng#115/#116).
+% (portage-ng#112). Gates the VerScore and SlotScore sort keys:
+% version- or slot-ranking arms of *different* packages diverges from
+% emerge's ebuild-order fallback (portage-ng#115/#116, ruby-single
+% webkit-gtk regression).
 
 ranking:deps_share_single_cn(Deps) :-
   findall(C-N,
@@ -566,6 +577,9 @@ ranking:dep_snap_all_ok(Atoms) :-
 %! ranking:dep_slot_score(+Atoms, -SlotScore) is det.
 %
 % Max numeric explicit slot among arm atoms (llvm-style || slot prefer).
+% Only honoured for same-CN groups: prioritize_deps_keep_all_body/3
+% zeroes this score when arms span multiple (C,N)s (see
+% deps_share_single_cn/1).
 
 ranking:dep_slot_score(Atoms, SlotScore) :-
   findall(S,
