@@ -1,5 +1,13 @@
 # Contributing to portage-ng
 
+## Reporting issues
+
+Please report bugs, feature requests, and other issues through GitHub:
+
+https://github.com/pvdabeel/portage-ng/issues
+
+Do not use email or other informal channels for issue tracking.
+
 ## Getting started
 
 1. **Clone the repository:**

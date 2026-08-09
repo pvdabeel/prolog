@@ -4,6 +4,15 @@ This chapter covers the development workflow, coding conventions, and
 testing practices for contributing to portage-ng.
 
 
+## Reporting issues
+
+Please report bugs, feature requests, and other issues through GitHub:
+
+https://github.com/pvdabeel/portage-ng/issues
+
+Do not use email or other informal channels for issue tracking.
+
+
 ## Development workflow
 
 1. **Start from clean committed state.**  Always begin development with
