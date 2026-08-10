@@ -45,13 +45,17 @@ their rule set — `resolving` and `ordering` respectively):
 Each stage is timed via sampler:phase_walltime and recorded via
 sampler:phase_record for performance analysis.
 
-PDEPEND handling:
-Post-dependencies are normally resolved single-pass inside the prover
-(see heuristic:proof_obligation/4).  The prove_plan_with_pdepend/5 variant
-provides an alternative multi-pass approach that delegates PDEPEND goal
-extraction to dependency:pdepend_goals_from_plan/2 and re-runs the
-pipeline with the extended goal set.  It is retained for experimentation
-but not currently used in the default path.
+Domain obligations (PDEPEND, sub-slot ABI rebuilds):
+The pipeline is domain-agnostic; anything Gentoo-specific that must
+extend a proof does so inside pass 1 through the prover's proof
+obligation channel (heuristic:proof_obligation/4).  Post-dependencies
+and sub-slot `:=` ABI rebuilds (abirebuild, portage-ng#89/#118) are both
+resolved single-pass that way — proven and ordered like any other goal,
+never patched into the plan afterwards.  The prove_plan_with_pdepend/5
+variant provides an alternative multi-pass approach that delegates
+PDEPEND goal extraction to dependency:pdepend_goals_from_plan/2 and
+re-runs the pipeline with the extended goal set.  It is retained for
+experimentation but not currently used in the default path.
 */
 
 :- module(pipeline, []).
@@ -187,26 +191,10 @@ pipeline:prove_plan_with_fallback(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, 
 % retained for the printer's signature.
 
 pipeline:prove_plan_with_fallback(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, SCCs, FallbackUsed) :-
-  % Clear once for the whole ladder + sub-slot fixpoint. Dep-model cache
-  % keys already encode prover:assuming bits (query.pl), so sharing across
-  % tiers is sound and avoids the cold ~10s re-resolve per tier that
-  % dominated the perl 5.42→5.44 sub-slot avalanche (portage-ng#118).
+  % Clear once for the whole ladder. Dep-model cache keys already encode
+  % prover:assuming bits (query.pl), so sharing across tiers is sound and
+  % avoids a cold re-resolve per tier (portage-ng#118).
   memo:clear_caches,
-  pipeline:prove_plan_with_fallback_base(Goals, Proof0, Model0, Plan0, Triggers0, SCCs0, Fallback0),
-  pipeline:subslot_rebuild_loop(Goals,
-                                Proof0, Model0, Plan0, Triggers0, SCCs0, Fallback0,
-                                ProofAVL, ModelAVL, Plan, TriggersAVL, SCCs, FallbackUsed).
-
-
-%! pipeline:prove_plan_with_fallback_base(+Goals, -Proof, -Model, -Plan, -Triggers, -SCCs, -FallbackUsed)
-%
-% The bare 5-tier fallback pipeline, without the sub-slot ABI rebuild
-% augmentation. Used internally by prove_plan_with_fallback/7 (both for the
-% initial proof and for each re-proof of an augmented goal set).
-% Does not clear memo caches — the top-level entry point clears once so
-% tiers share warm caches (same model as prove_with_fallback/4).
-
-pipeline:prove_plan_with_fallback_base(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, SCCs, FallbackUsed) :-
   pipeline:with_fallback(
     pipeline:prove_plan_basic(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, SCCs),
     FallbackUsed).
@@ -232,297 +220,6 @@ pipeline:prove_plan_basic(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, SCCs) :-
   orderer:order(ProofAVL0, TriggersAVL, ProofAVL, Plan, SCCs),
   sampler:phase_walltime(T2),
   sampler:phase_record(T0, T1, T2).
-
-
-% -----------------------------------------------------------------------------
-%  Sub-slot (:=) ABI rebuild propagation (portage-ng#89)
-% -----------------------------------------------------------------------------
-%
-% Native equivalent of Gentoo's @preserved-rebuild / haskell-updater pass.
-% When a transaction changes a provider's sub-slot (e.g. a dev-haskell/*
-% library rebuilt with a new GHC ABI hash, or dev-lang/ocaml with a new ABI),
-% the already-installed reverse-deps that bound to it through `:=` / `:slot=`
-% break ghc-pkg check / findlib's registry and must be rebuilt before the next
-% consumer configures. This is transaction-driven: it inspects the freshly
-% computed plan, finds providers whose sub-slot differs from the installed
-% copy, and appends same-version `:update` rebuild steps (carrying
-% `rebuild_reason(subslot_change/3)`) in a final wave after the provider.
-%
-% Eligible rebuilds are injected into the existing plan/proof/model — they
-% are NOT re-proven as an N-goal conjunction. Re-proving ~90 perl `:=`
-% consumers after a 5.42→5.44 bump cost minutes per target (portage-ng#118);
-% injection is O(consumers) and keeps a real perl upgrade inside a sane
-% wall-time budget. Masked / keyword-filtered consumers are skipped and
-% recorded as domain assumptions instead of escalating the whole plan to
-% the unmask tier. The loop still iterates to a fixpoint (a rebuilt
-% consumer keeps its version/sub-slot, so the closure terminates quickly).
-
-%! pipeline:subslot_rebuild_suspended is semidet.
-%
-% Dynamic flag. When asserted, the sub-slot rebuild augmentation is skipped.
-% Set by the bulk per-entry test harnesses (test_stats) so they keep their
-% single-entry semantics and performance; real plan paths (merge / build /
-% pretend / writer) leave it unset and get the augmentation.
-
-:- dynamic pipeline:subslot_rebuild_suspended/0.
-
-
-%! pipeline:subslot_rebuild_enabled is semidet.
-%
-% True when the augmentation should run: config:subslot_rebuild/1 is not
-% false (defaults to enabled when unset) and it is not suspended.
-
-pipeline:subslot_rebuild_enabled :-
-  \+ pipeline:subslot_rebuild_suspended,
-  ( catch(config:subslot_rebuild(Bool), _, fail) -> Bool == true ; true ).
-
-
-%! pipeline:subslot_rebuild_loop(+Goals, +P0,+M0,+Pl0,+T0,+SCCs0,+FB0, -P,-M,-Pl,-T,-SCCs,-FB)
-%
-% Augmentation fixpoint. If the plan changed a `:=` provider's sub-slot and
-% there are installed consumers not yet targeted, inject same-version
-% rebuild steps into the plan (final wave) and record them in proof/model;
-% masked/keyword-filtered consumers become domain assumptions. Does not
-% re-prove the augmented goal set (portage-ng#118). Any error in detection
-% degrades gracefully to passthrough so planning is never broken by this
-% pass. FallbackUsed is unchanged from the base prove.
-
-pipeline:subslot_rebuild_loop(Goals, P0, M0, Pl0, T0, SCCs0, FB0, P, M, Pl, T, SCCs, FB) :-
-  ( pipeline:subslot_rebuild_enabled,
-    catch(pipeline:subslot_extra_goals(Pl0, Goals, Extra, Skipped), _, fail),
-    ( Extra \== [] ; Skipped \== [] )
-  -> % Mark both injected and skipped consumers as handled in Goals1 so the
-     % next fixpoint iteration does not re-detect them (skipped Clone alone
-     % previously caused an infinite loop — portage-ng#118).
-     findall(SG, member(skipped(_, SG), Skipped), SkippedGoals),
-     append(Extra, SkippedGoals, Handled),
-     append(Goals, Handled, Goals1),
-     pipeline:subslot_inject_rebuilds(Extra, P0, M0, Pl0, P1, M1, Pl1),
-     pipeline:subslot_inject_skipped(Skipped, P1, M1, P2, M2),
-     pipeline:subslot_rebuild_loop(Goals1, P2, M2, Pl1, T0, SCCs0, FB0, P, M, Pl, T, SCCs, FB)
-  ;  P = P0, M = M0, Pl = Pl0, T = T0, SCCs = SCCs0, FB = FB0
-  ).
-
-
-%! pipeline:subslot_inject_rebuilds(+Extra, +Proof0, +Model0, +Plan0, -Proof, -Model, -Plan) is det.
-%
-% Appends a final plan wave of `rule(Goal, [])` for each eligible consumer
-% rebuild and records the same rules in Proof/Model so the printer shows
-% `(abi-rebuild: ...)` notes. Consumers already present as merge actions
-% in Plan0 are skipped. Empty Extra is a no-op.
-
-pipeline:subslot_inject_rebuilds([], Proof, Model, Plan, Proof, Model, Plan) :- !.
-pipeline:subslot_inject_rebuilds(Extra, Proof0, Model0, Plan0, Proof, Model, Plan) :-
-  findall(rule(Goal, []),
-          ( member(Goal, Extra),
-            Goal = Repo://Entry:_Action?{_Ctx},
-            \+ pipeline:plan_merge_target(Plan0, Repo, Entry)
-          ),
-          Wave0),
-  ( Wave0 == []
-  -> Proof = Proof0, Model = Model0, Plan = Plan0
-  ;  sort(Wave0, Wave),
-     append(Plan0, [Wave], Plan),
-     pipeline:subslot_record_rebuild_rules(Wave, Proof0, Model0, Proof, Model)
-  ).
-
-
-%! pipeline:subslot_record_rebuild_rules(+Rules, +Proof0, +Model0, -Proof, -Model) is det.
-%
-% Puts each injected rebuild rule into the proof AVL (body []) and its
-% head into the model AVL so assumption/plan printers see the action.
-
-pipeline:subslot_record_rebuild_rules([], Proof, Model, Proof, Model) :- !.
-pipeline:subslot_record_rebuild_rules([rule(Head, Body)|Rest], Proof0, Model0, Proof, Model) :-
-  put_assoc(rule(Head), Proof0, Body, Proof1),
-  put_assoc(Head, Model0, true, Model1),
-  pipeline:subslot_record_rebuild_rules(Rest, Proof1, Model1, Proof, Model).
-
-
-%! pipeline:subslot_extra_goals(+Plan, +ExistingGoals, -ExtraGoals, -Skipped) is semidet.
-%
-% Fails when the plan changes no `:=` provider's sub-slot (the cheap common
-% case). Otherwise binds ExtraGoals to the eligible installed `:=`-consumer
-% rebuilds not already present in ExistingGoals, and Skipped to
-% skipped(Reason, Goal) terms for consumers that are masked or
-% keyword-filtered (portage-ng#118). Those must not be appended as prove
-% goals — one masked consumer (e.g. a perl-core module after a perl major
-% bump) would escalate the whole augmented set through the unmask tier.
-
-pipeline:subslot_extra_goals(Plan, ExistingGoals, ExtraGoals, Skipped) :-
-  pipeline:subslot_changed_providers(Plan, Changed),
-  Changed \== [],
-  pipeline:goals_target_cns(ExistingGoals, TargetedCNs),
-  pipeline:subslot_affected_consumers(Changed, TargetedCNs, ExtraGoals, Skipped).
-
-
-%! pipeline:subslot_changed_providers(+Plan, -Changed) is det.
-%
-% Collects prov(C, N, Slot, OldSub, NewSub) for every merge action in the
-% plan whose new sub-slot differs from the installed copy in the same slot.
-
-pipeline:subslot_changed_providers(Plan, Changed) :-
-  findall(prov(C, N, Slot, OldSub, NewSub),
-          ( pipeline:plan_merge_target(Plan, Repo, Entry),
-            cache:ordered_entry(Repo, Entry, C, N, _),
-            slotmeta:entry_slot_default(Repo, Entry, Slot),
-            sets:entry_subslot(Repo://Entry, NewSub),
-            cache:ordered_entry(pkg, OldEntry, C, N, _),
-            slotmeta:entry_slot_default(pkg, OldEntry, Slot),
-            sets:entry_subslot(pkg://OldEntry, OldSub),
-            OldSub \== NewSub
-          ),
-          Changed0),
-  sort(Changed0, Changed).
-
-
-%! pipeline:plan_merge_target(+Plan, -Repo, -Entry) is nondet.
-%
-% Enumerates the merge-shaped rules (install / update / upgrade / downgrade)
-% in a scheduled plan (a list of steps, each a list of rule/2 terms).
-
-pipeline:plan_merge_target(Plan, Repo, Entry) :-
-  member(Step, Plan),
-  member(rule(Repo://Entry:Action?{_Ctx}, _Body), Step),
-  memberchk(Action, [install, update, upgrade, downgrade]).
-
-
-%! pipeline:subslot_affected_consumers(+Changed, +TargetedCNs, -ExtraGoals, -Skipped) is det.
-%
-% Finds the installed reverse-deps that bound to a changed provider through
-% a sub-slot operator and turns each (once, deduplicated by VDB entry) into a
-% same-version `:update` rebuild goal carrying rebuild_reason(subslot_change/3).
-% Masked / keyword-filtered consumers go into Skipped instead of ExtraGoals
-% so they cannot poison the augmented prove (portage-ng#118).
-
-pipeline:subslot_affected_consumers(Changed, TargetedCNs, ExtraGoals, Skipped) :-
-  findall(c(Entry, TreeRepo, C/N, OldSub, NewSub),
-          ( member(prov(C, N, Slot, OldSub, NewSub), Changed),
-            pipeline:subslot_consumer_of(C, N, Slot, TargetedCNs, Entry, TreeRepo)
-          ),
-          Raw),
-  sort(1, @<, Raw, Unique),
-  findall(Goal,
-          ( member(Cm, Unique),
-            pipeline:subslot_consumer_goal(Cm, Goal),
-            \+ pipeline:subslot_consumer_skip_reason(Goal, _)
-          ),
-          ExtraGoals),
-  findall(skipped(Reason, Goal),
-          ( member(Cm, Unique),
-            pipeline:subslot_consumer_goal(Cm, Goal),
-            pipeline:subslot_consumer_skip_reason(Goal, Reason)
-          ),
-          Skipped).
-
-
-%! pipeline:subslot_consumer_skip_reason(+Goal, -Reason) is semidet.
-%
-% True when a same-version consumer rebuild cannot be planned without a
-% visibility assumption. Reason is `masked` or `keyword_filtered`.
-
-pipeline:subslot_consumer_skip_reason(Repo://Entry:_Action?{_Ctx}, masked) :-
-  preference:masked(Repo://Entry),
-  !.
-pipeline:subslot_consumer_skip_reason(Repo://Entry:_Action?{_Ctx}, keyword_filtered) :-
-  \+ acceptance:entry_has_accepted_keyword(Repo://Entry),
-  !.
-
-
-%! pipeline:subslot_inject_skipped(+Skipped, +Proof0, +Model0, -Proof, -Model) is det.
-%
-% Records each skipped consumer as a domain assumption
-% (`rule(assumed(...))` / `assumed(...)`) so the printer still surfaces
-% the masked/keyword-filtered rebuild without forcing the unmask tier.
-
-pipeline:subslot_inject_skipped([], Proof, Model, Proof, Model) :- !.
-pipeline:subslot_inject_skipped([skipped(Reason, Goal)|Rest], Proof0, Model0, Proof, Model) :-
-  pipeline:subslot_skipped_assumption(Reason, Goal, Assumed),
-  put_assoc(rule(Assumed), Proof0, [], Proof1),
-  put_assoc(Assumed, Model0, true, Model1),
-  pipeline:subslot_inject_skipped(Rest, Proof1, Model1, Proof, Model).
-
-
-%! pipeline:subslot_skipped_assumption(+Reason, +Goal, -Assumed) is det.
-%
-% Wraps a skipped rebuild goal as `assumed(Goal)` with
-% `assumption_reason(Reason)` in the proof context list.
-
-pipeline:subslot_skipped_assumption(Reason, Repo://Entry:Action?{Ctx0},
-                                    assumed(Repo://Entry:Action?{Ctx})) :-
-  ( is_list(Ctx0) -> Ctx1 = Ctx0 ; Ctx1 = [] ),
-  ( memberchk(assumption_reason(Reason), Ctx1)
-  -> Ctx = Ctx1
-  ;  Ctx = [assumption_reason(Reason)|Ctx1]
-  ).
-
-
-%! pipeline:subslot_consumer_of(+C, +N, +Slot, +TargetedCNs, -ICEntry, -TreeRepo) is nondet.
-%
-% True for an installed package ICEntry (with a matching tree ebuild in
-% TreeRepo) that is not C/N itself, not already targeted, and whose tree
-% *DEPEND declares a sub-slot-bound (`:=` / `:slot=`) dependency on C/N in
-% slot Slot.
-
-pipeline:subslot_consumer_of(C, N, Slot, TargetedCNs, ICEntry, TreeRepo) :-
-  vdb:installed_entry(ICEntry),
-  cache:ordered_entry(pkg, ICEntry, ICC, ICN, _),
-  \+ ( ICC == C, ICN == N ),
-  \+ memberchk(ICC-ICN, TargetedCNs),
-  cache:ordered_entry(TreeRepo, ICEntry, ICC, ICN, _),
-  TreeRepo \== pkg,
-  once(( member(Key, [rdepend, depend, bdepend, pdepend]),
-         cache:entry_metadata(TreeRepo, ICEntry, Key, Dep),
-         candidate:dep_contains_pkg_dep_on(Dep, C, N, _Op, _V, SlotReq),
-         pipeline:subslot_bound_slotspec(SlotReq, Slot)
-       )).
-
-
-%! pipeline:subslot_bound_slotspec(+SlotReq, +Slot) is semidet.
-%
-% True when a parsed dependency slot restriction binds the consumer to the
-% provider's sub-slot (a rebuild trigger) and is compatible with Slot:
-%   `:=`       -> [any_same_slot]            (binds, any slot)
-%   `:slot=`   -> [slot(S),equal]            (binds, requires S == Slot)
-%   `:s/ss=`   -> [slot(S),subslot(_),equal] (binds, requires S == Slot)
-
-pipeline:subslot_bound_slotspec([any_same_slot], _Slot) :- !.
-pipeline:subslot_bound_slotspec(SlotReq, Slot) :-
-  memberchk(equal, SlotReq),
-  ( member(slot(S), SlotReq)
-  -> slotmeta:canon_slot(S, Sc), Sc == Slot
-  ;  true
-  ).
-
-
-%! pipeline:subslot_consumer_goal(+Consumer, -Goal) is det.
-%
-% Builds the rebuild goal: a same-version `:update` of the installed consumer
-% that re-resolves its dependencies (so the changed provider edge orders the
-% rebuild after the provider) and carries the subslot_change reason.
-
-pipeline:subslot_consumer_goal(c(Entry, TreeRepo, Provider, OldSub, NewSub),
-                               TreeRepo://Entry:update?{[replaces(pkg://Entry),
-                                                        rebuild_reason(subslot_change(Provider, OldSub, NewSub))]}).
-
-
-%! pipeline:goals_target_cns(+Goals, -CNs) is det.
-%
-% Collects the Category-Name pairs that the goal list already targets, so the
-% augmentation never re-adds a consumer that is already being built.
-
-pipeline:goals_target_cns(Goals, CNs) :-
-  findall(C-N,
-          ( member(Goal, Goals), pipeline:goal_target_cn(Goal, C-N) ),
-          CNs0),
-  sort(CNs0, CNs).
-
-
-%! pipeline:goal_target_cn(+Goal, -CN) is semidet.
-
-pipeline:goal_target_cn(Repo://Entry:_Action?{_Ctx}, C-N) :-
-  cache:ordered_entry(Repo, Entry, C, N, _),
-  !.
 
 
 % =============================================================================
@@ -553,14 +250,15 @@ pipeline:test_stats(Repository) :-
 % Uses prove_plan_with_fallback for full-pipeline proving with the
 % canonical 5-tier fallback chain, then prints via printer:print/5.
 %
-% The sub-slot ABI rebuild augmentation (portage-ng#89) is suspended for the
-% duration so per-entry proving keeps its single-target semantics and speed.
+% The sub-slot ABI rebuild obligations (portage-ng#89, abirebuild) are
+% suspended for the duration so per-entry proving keeps its single-target
+% semantics and speed.
 
 pipeline:test_stats(Repository, Style) :-
   setup_call_cleanup(
-    assertz(pipeline:subslot_rebuild_suspended),
+    assertz(abirebuild:suspended),
     pipeline:test_stats_run(Repository, Style),
-    retractall(pipeline:subslot_rebuild_suspended)).
+    retractall(abirebuild:suspended)).
 
 
 %! pipeline:test_stats_run(+Repository, +Style) is det

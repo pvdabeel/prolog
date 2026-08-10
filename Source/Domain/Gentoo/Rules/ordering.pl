@@ -171,6 +171,11 @@ requires(H, D) :-
 %   - `constraint(order_after(Anchor))` pseudo-constraints (the PDEPEND
 %     ordering channel, Handbook chapter 12) — post-merge by nature,
 %     best-effort by Portage semantics;
+%   - `constraint(schedule_after(Anchor))` pseudo-constraints (plain
+%     anchoring, portage-ng#89): the carrier alone goes after Anchor —
+%     unlike order_after, NOT indexed as a PDEPEND completion group, so
+%     the anchor's other consumers do not wait for the carrier (sub-slot
+%     ABI rebuilds would otherwise serialize into one-per-wave chains);
 %   - PDEPEND completion (portage-ng#18/#19): a step depending on a
 %     provider P prefers P's PDEPEND targets placed earlier too — P is
 %     only functionally complete once its post-install group is merged
@@ -190,6 +195,8 @@ prefers(H, D) :-
   member(Literal, Body),
   prover:canon_literal(Literal, Core, _),
   ( Core = constraint(order_after(Anchor0):_) ->
+      prover:canon_literal(Anchor0, D, _)
+  ; Core = constraint(schedule_after(Anchor0):_) ->
       prover:canon_literal(Anchor0, D, _)
   ; \+ constraint:is_constraint(Core),
     ordering:runtime_dep(Core),

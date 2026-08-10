@@ -40,8 +40,9 @@ with a rule set:
   every pass-1 step must prove `scheduled/1`; availability proofs assign
   waves; cycles fall through a `currently_proving` guard into a VDB "world"
   citation or a negative `unreachable/2` domain assumption; soft preferences
-  (RDEPEND groups, `order_after` anchors, PDEPEND completion, assumed-dep
-  aliases) are honored by the projection exactly when they close no cycle
+  (RDEPEND groups, `order_after` anchors, `schedule_after` rebuild anchors,
+  PDEPEND completion, assumed-dep aliases) are honored by the projection
+  exactly when they close no cycle
 - printer renders plan + assumptions & warnings
 
 Callers outside any pass (query-side model construction) fall back to
@@ -59,7 +60,7 @@ Key files:
 - `Source/Pipeline/resolver.pl`: resolve stage — `resolver:resolve/9` plus the resolve-stage test harnesses (`resolver:test/1`, `resolver:test_latest/1`, `resolver:test_stats/1`, `resolver:test_stats_pkgs/2`).
 - `Source/Domain/Gentoo/Rules/resolving.pl` (+ `Rules/Resolving/` submodules): resolve rule set; domain assumptions appear as `rule(assumed(X), [])` and show as “Domain assumptions”.
 - `Source/Pipeline/orderer.pl`: order stage — pass-2 driver `orderer:order/5`, wave projection, preference honoring, merge-order bias (within-wave refcount ordering), `orderer:test/1` harnesses.
-- `Source/Domain/Gentoo/Rules/ordering.pl`: order rule set — planning laws (`rule/2`: scheduled/available/unreachable) + Gentoo bindings `step/1`, `requires/2`, `prefers/2` (runtime groups, order_after, PDEPEND completion #18/#19, configure closure #21, assumed-dep alias #95), `world/2` (VDB citations).
+- `Source/Domain/Gentoo/Rules/ordering.pl`: order rule set — planning laws (`rule/2`: scheduled/available/unreachable) + Gentoo bindings `step/1`, `requires/2`, `prefers/2` (runtime groups, order_after, schedule_after rebuild anchors #89, PDEPEND completion #18/#19, configure closure #21, assumed-dep alias #95), `world/2` (VDB citations).
 - `Source/Domain/Gentoo/Rules/unmerging.pl`: unmerge rule set (depclean uninstall order) — the same planning laws with removal bindings: a step is a removable `:unmerge`, `requires/2` is the release of each claim (removable consumers unmerge first), `world/2` provides nothing on real systems. Cycles surface as retained-claim assumptions. The claim index is built EAGERLY in `with_unmerge_pass/2` (before the prove scopes the rule module) because it reads VDB dependency models via the query layer's `prover:rule_call/2` dispatch.
 - `Source/Pipeline/pipeline.pl`: orchestrates resolver+orderer. Two canonical entry points with 5-tier committed-choice progressive relaxation (strict, keyword_acceptance, blockers, unmask, keyword_unmask): `prove_plan_with_fallback/5` (full pipeline) and `prove_with_fallback/4` (resolve only, for layered tests and --bugs).
 - `Source/Pipeline/printer.pl`: output + warnings; distinguishes domain assumptions vs prover cycle-breaks.
@@ -74,6 +75,22 @@ PDEPEND handling:
 - PDEPEND is always enabled; there is no preference flag for it.
 - PDEPEND deps are resolved single-pass inside the prover via the
   `heuristic:proof_obligation/4` hook.
+
+Sub-slot (`:=`) ABI rebuilds (portage-ng#89/#118):
+- Same proof-obligation channel as PDEPEND: when pass 1 proves a merge
+  whose sub-slot differs from the installed copy,
+  `Source/Domain/Gentoo/Rules/Resolving/abirebuild.pl` contributes
+  same-version `:update` rebuild goals for the installed `:=` consumers.
+  Each rebuild is *proven* in the same pass; a `rebuild_after(Anchor)`
+  context marker becomes a `constraint(schedule_after(Anchor))` body
+  literal so pass 2 places it after the provider (plain anchoring — NOT
+  order_after, which doubles as the PDEPEND completion group and would
+  serialize the plan). Masked / keyword-filtered consumers degrade to
+  `assumed(...)` domain assumptions instead of escalating the proof to
+  the unmask tier. Gate: `config:subslot_rebuild/1`; the bulk harness
+  `pipeline:test_stats` suspends via `abirebuild:suspended`.
+  `pipeline.pl` contains no domain logic for this — prove, don't patch
+  the plan.
 
 Assumption taxonomy (do not mix these up):
 

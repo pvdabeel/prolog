@@ -55,10 +55,11 @@ and obligation filtering.
     Classifies dependency cycles as benign or structural.
 
   * heuristic:proof_obligation_key/3,4
-    Computes hook keys for PDEPEND expansion.
+    Computes hook keys for PDEPEND / ABI rebuild expansion.
 
   * heuristic:proof_obligation/4
-    Produces extra PDEPEND goals after proving a literal.
+    Produces extra PDEPEND goals and sub-slot ABI rebuild
+    obligations (abirebuild:obligations/3) after proving a literal.
 
 == Partial restart hooks (non-chronological backtracking) ==
 
@@ -582,7 +583,7 @@ heuristic:cycle_benign(_Lit, CyclePath) :-
 
 
 % -----------------------------------------------------------------------------
-%  Proof obligations: PDEPEND expansion (domain hook called by prover)
+%  Proof obligations: PDEPEND + ABI rebuild expansion (domain hook for prover)
 % -----------------------------------------------------------------------------
 
 %! heuristic:proof_obligation_key(+Literal, +Model, -HookKey) is semidet.
@@ -607,7 +608,8 @@ heuristic:proof_obligation_key(Literal, Model, HookKey) :-
 %! heuristic:proof_obligation_key(+Literal, +Model, -HookKey, -NeedsFullHook) is semidet.
 %
 % Extended fast path: also reports whether the full hook can produce
-% any extra literals at all. Literal is normalized via strip_ctx/2.
+% any extra literals at all (PDEPEND expansion and/or sub-slot ABI
+% rebuilds). Literal is normalized via strip_ctx/2.
 
 heuristic:proof_obligation_key(Literal, Model, HookKey, NeedsFullHook) :-
   heuristic:strip_ctx(Literal, Repo://Entry:Action),
@@ -620,8 +622,12 @@ heuristic:proof_obligation_key(Literal, Model, HookKey, NeedsFullHook) :-
           ( get_assoc(AnchorCore, Model, AnchorCtx) -> true ; AnchorCtx = [] ),
           use:context_build_with_use_state(AnchorCtx, B),
           HookKey = pdepend(AnchorCore, B)
-      ; NeedsFullHook = false,
-        HookKey = pdepend_none(AnchorCore)
+      ; HookKey = pdepend_none(AnchorCore),
+        ( abirebuild:enabled,
+          abirebuild:provider_change(Repo, Entry, _C, _N, _Slot, _Old, _New)
+        -> NeedsFullHook = true
+        ;  NeedsFullHook = false
+        )
       )
   ; NeedsFullHook = false,
     HookKey = pdepend_none(AnchorCore)
@@ -647,9 +653,10 @@ heuristic:proof_obligation_applicable(Repo://Entry:install) :-
 
 %! heuristic:proof_obligation(+Literal, +Model, -HookKey, -ExtraLits)
 %
-% Produces extra PDEPEND goals after proving a literal. Literal is
-% normalized via strip_ctx/2 so bare and `?{Context}`-carrying action
-% literals share a single clause.
+% Produces extra goals after proving a literal: PDEPEND expansion plus
+% sub-slot ABI rebuild obligations (abirebuild:obligations/3, the
+% prove-side of portage-ng#89). Literal is normalized via strip_ctx/2 so
+% bare and `?{Context}`-carrying action literals share a single clause.
 
 heuristic:proof_obligation(Literal, Model, HookKey, ExtraLits) :-
   heuristic:strip_ctx(Literal, Repo://Entry:Action),
@@ -666,10 +673,15 @@ heuristic:proof_obligation(Literal, Model, HookKey, ExtraLits) :-
           query:search(model(dependency(Pdeps0, pdepend)):config?{ModelKey}, Repo://Entry),
           dependency:add_self_to_dep_contexts(Repo://Entry, Pdeps0, Pdeps1),
           featureterm:drop_build_with_use_from_dep_contexts(Pdeps1, Pdeps2),
-          featureterm:add_after_only_to_dep_contexts(AnchorCore, Pdeps2, ExtraLits)
+          featureterm:add_after_only_to_dep_contexts(AnchorCore, Pdeps2, PdependLits)
       ; flag(po_no_extra, NP0, NP0+1),
         HookKey = pdepend_none(AnchorCore),
-        ExtraLits = []
+        PdependLits = []
+      ),
+      abirebuild:obligations(AnchorCore, Model, RebuildLits),
+      ( RebuildLits == []
+      -> ExtraLits = PdependLits
+      ;  append(PdependLits, RebuildLits, ExtraLits)
       )
     )
   ).

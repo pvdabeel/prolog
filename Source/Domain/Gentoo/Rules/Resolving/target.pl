@@ -585,8 +585,14 @@ candidate:resolve(Repository://Ebuild:update?{Context}, []) :-
   \+ memberchk(replaces(_), Context),
   !.
 
-candidate:resolve(Repository://Ebuild:update?{Context}, Conditions) :-
-  memberchk(replaces(_), Context),
+candidate:resolve(Repository://Ebuild:update?{Context0}, Conditions) :-
+  memberchk(replaces(_), Context0),
+  % Extract ordering markers. after/after_only work as in the install/run
+  % rules; rebuild_after becomes a constraint(schedule_after(...)) body
+  % condition — the plain anchoring preference sub-slot ABI rebuilds
+  % (abirebuild) use to schedule after their changed provider.
+  featureterm:get_rebuild_after(Context0, RebuildAnchor, Context1),
+  featureterm:get_after_with_mode(Context1, After, AfterForDeps, Context),
   use:context_build_with_use_state(Context, B),
   (memberchk(required_use:R,Context) -> true ; true),
   query:search(model(Model,required_use(R),build_with_use(B)),Repository://Ebuild),
@@ -608,13 +614,15 @@ candidate:resolve(Repository://Ebuild:update?{Context}, Conditions) :-
     -> Base0 = [ constraint(use(Repository://Ebuild):{R}),
                  constraint(slot(CNew,NNew,SAll):{Ebuild})
                  |DeepUpdates],
-       append(Base0, MergedDeps, Conditions)
+       append(Base0, MergedDeps, Conditions0)
     ;  Base0 = [ constraint(use(Repository://Ebuild):{R}),
                  constraint(slot(CNew,NNew,SAll):{Ebuild}),
                  Repository://Ebuild:download?{[required_use:R,build_with_use:B]}
                  |DeepUpdates],
-       append(Base0, MergedDeps, Conditions)
-  ).
+       append(Base0, MergedDeps, Conditions0)
+  ),
+  featureterm:add_after_condition(After, AfterForDeps, Conditions0, Conditions1),
+  featureterm:add_rebuild_after_condition(RebuildAnchor, Conditions1, Conditions).
 
 
 % -----------------------------------------------------------------------------

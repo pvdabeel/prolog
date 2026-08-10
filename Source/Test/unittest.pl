@@ -2077,39 +2077,39 @@ test(nomatch_other_series, [fail]) :-
 :- end_tests(ghcabi_cabal_core).
 
 
-% Sub-slot (:=) ABI rebuild propagation helpers (portage-ng#89).
-:- begin_tests(pipeline_subslot_rebuild).
+% Sub-slot (:=) ABI rebuild obligations (portage-ng#89, abirebuild module).
+:- begin_tests(abirebuild).
 
 % A := dependency (any_same_slot) binds to the provider's sub-slot in any slot.
 test(any_same_slot_binds_any_slot, [true]) :-
-  pipeline:subslot_bound_slotspec([any_same_slot], '0').
+  abirebuild:bound_slotspec([any_same_slot], '0').
 
 test(any_same_slot_binds_other_slot, [true]) :-
-  pipeline:subslot_bound_slotspec([any_same_slot], '2').
+  abirebuild:bound_slotspec([any_same_slot], '2').
 
 % A :slot= dependency binds only when the slot matches the changed provider.
 test(slot_equal_binds_matching_slot, [true]) :-
-  pipeline:subslot_bound_slotspec([slot('0'), equal], '0').
+  abirebuild:bound_slotspec([slot('0'), equal], '0').
 
 test(slot_equal_rejects_other_slot, [fail]) :-
-  pipeline:subslot_bound_slotspec([slot('1'), equal], '0').
+  abirebuild:bound_slotspec([slot('1'), equal], '0').
 
 % A :slot/subslot= dependency binds on slot match (sub-slot is the trigger).
 test(slot_subslot_equal_binds_matching_slot, [true]) :-
-  pipeline:subslot_bound_slotspec([slot('0'), subslot('1.2'), equal], '0').
+  abirebuild:bound_slotspec([slot('0'), subslot('1.2'), equal], '0').
 
 % A plain slot / sub-slot dependency without `=` is NOT a rebuild trigger.
 test(plain_slot_not_bound, [fail]) :-
-  pipeline:subslot_bound_slotspec([slot('0')], '0').
+  abirebuild:bound_slotspec([slot('0')], '0').
 
 test(plain_slot_subslot_not_bound, [fail]) :-
-  pipeline:subslot_bound_slotspec([slot('0'), subslot('1.2')], '0').
+  abirebuild:bound_slotspec([slot('0'), subslot('1.2')], '0').
 
 test(any_different_slot_not_bound, [fail]) :-
-  pipeline:subslot_bound_slotspec([any_different_slot], '0').
+  abirebuild:bound_slotspec([any_different_slot], '0').
 
 test(empty_slot_not_bound, [fail]) :-
-  pipeline:subslot_bound_slotspec([], '0').
+  abirebuild:bound_slotspec([], '0').
 
 % The consumer rebuild goal is a same-version :update that replaces the VDB
 % entry and carries the subslot_change reason so the printer renders the note
@@ -2117,38 +2117,51 @@ test(empty_slot_not_bound, [fail]) :-
 test(consumer_goal_shape,
      [true(Goal == portage://'dev-x/c-1':update?{[replaces(pkg://'dev-x/c-1'),
               rebuild_reason(subslot_change('dev-x'/p, '0', '1'))]})]) :-
-  pipeline:subslot_consumer_goal(
+  abirebuild:consumer_goal(
       c('dev-x/c-1', portage, 'dev-x'/p, '0', '1'), Goal).
 
-% A goal list with no `pkg`/tree entries (synthetic) targets no real CN, and
-% an empty plan changes no provider, so the augmentation finds nothing.
-test(no_changed_providers_on_empty_plan, [true(Changed == [])]) :-
-  pipeline:subslot_changed_providers([], Changed).
+% Eligible rebuild goals gain a rebuild_after(Anchor) ordering marker, which
+% rule expansion turns into a constraint(schedule_after(Anchor)) body literal
+% so pass 2 places the rebuild after the provider (plain anchoring — not the
+% order_after/PDEPEND-completion channel, which would serialize the plan).
+test(ordered_goal_adds_rebuild_after_marker,
+     [true(Goal == portage://'dev-x/c-1':update?{[rebuild_after(portage://'dev-x/p-2':update),
+              replaces(pkg://'dev-x/c-1')]})]) :-
+  abirebuild:ordered_goal(portage://'dev-x/p-2':update,
+      portage://'dev-x/c-1':update?{[replaces(pkg://'dev-x/c-1')]}, Goal).
 
-test(extra_goals_fails_without_changes, [fail]) :-
-  pipeline:subslot_extra_goals([], [], _, _).
-
+% Masked / keyword-filtered consumers become assumed(...) literals carrying
+% the assumption reason, proven via the standard domain-assumption rule.
 test(skipped_assumption_adds_reason,
      [true(Assumed == assumed(portage://'dev-x/c-1':update?{[assumption_reason(masked),
               replaces(pkg://'dev-x/c-1'),
               rebuild_reason(subslot_change('dev-x'/p, '0', '1'))]}))]) :-
   Goal = portage://'dev-x/c-1':update?{[replaces(pkg://'dev-x/c-1'),
               rebuild_reason(subslot_change('dev-x'/p, '0', '1'))]},
-  pipeline:subslot_skipped_assumption(masked, Goal, Assumed).
+  abirebuild:skipped_assumption(masked, Goal, Assumed).
 
-% Cheap injection appends a final wave and leaves an empty Extra as a no-op.
-test(inject_rebuilds_empty_noop,
-     [true((P == t, M == t, Pl == []))]) :-
-  pipeline:subslot_inject_rebuilds([], t, t, [], P, M, Pl).
+% A consumer whose entry is already merged in the model needs no rebuild.
+test(model_merge_covers_rebuild, [true]) :-
+  list_to_assoc([(portage://'dev-x/c-1':update)-[]], Model),
+  abirebuild:model_merges_entry(Model,
+      portage://'dev-x/c-1':update?{[replaces(pkg://'dev-x/c-1')]}).
 
-test(inject_rebuilds_appends_final_wave,
-     [true(Pl == [[rule(portage://'dev-x/c-1':update?{[replaces(pkg://'dev-x/c-1'),
-              rebuild_reason(subslot_change('dev-x'/p, '0', '1'))]}, [])]])]) :-
-  Goal = portage://'dev-x/c-1':update?{[replaces(pkg://'dev-x/c-1'),
-              rebuild_reason(subslot_change('dev-x'/p, '0', '1'))]},
-  pipeline:subslot_inject_rebuilds([Goal], t, t, [], _P, _M, Pl).
+test(empty_model_covers_nothing, [fail]) :-
+  abirebuild:model_merges_entry(t,
+      portage://'dev-x/c-1':update?{[replaces(pkg://'dev-x/c-1')]}).
 
-:- end_tests(pipeline_subslot_rebuild).
+% Obligations short-circuit to [] when suspended (test_stats harness mode)
+% and when the anchor changes no provider sub-slot.
+test(obligations_empty_when_suspended,
+     [setup(assertz(abirebuild:suspended)),
+      cleanup(retractall(abirebuild:suspended)),
+      true(Lits == [])]) :-
+  abirebuild:obligations(portage://'dev-x/p-1':install, t, Lits).
+
+test(obligations_empty_without_provider_change, [true(Lits == [])]) :-
+  abirebuild:obligations(portage://'dev-x/does-not-exist-1':install, t, Lits).
+
+:- end_tests(abirebuild).
 
 
 :- begin_tests(use_candidate_bwu_memo).
@@ -3737,6 +3750,32 @@ test(order_after_anchor_honored) :-
   issue73_wave(Plan, q, WQ),
   issue73_wave(Plan, p, WP),
   WQ < WP.
+
+% schedule_after pseudo-constraints (plain anchoring, portage-ng#89 ABI
+% rebuilds) are the same carrier-after-anchor preference...
+test(schedule_after_anchor_honored) :-
+  issue73_rules([p-[constraint(schedule_after(q):{[]})], q-[]]),
+  ordering_engine_plan([p, q], _ProofOut, Plan),
+  issue73_wave(Plan, q, WQ),
+  issue73_wave(Plan, p, WP),
+  WQ < WP.
+
+% ...but unlike order_after they are NOT a PDEPEND completion group: two
+% rebuilds anchored on the same provider share a wave (no one-per-wave
+% serialization), and an unrelated consumer of the provider does not wait
+% for them.
+test(schedule_after_carriers_not_serialized) :-
+  issue73_rules([c-[p], p-[],
+                 r1-[constraint(schedule_after(p):{[]})],
+                 r2-[constraint(schedule_after(p):{[]})]]),
+  ordering_engine_plan([c, r1, r2], ProofOut, Plan),
+  ordering_engine_unreachables(ProofOut, []),
+  issue73_wave(Plan, p, WP),
+  issue73_wave(Plan, r1, WR1),
+  issue73_wave(Plan, r2, WR2),
+  issue73_wave(Plan, c, WC),
+  WP < WR1, WR1 == WR2,
+  WC =< WR1.
 
 % Domain assumptions from pass 1 are steps like any other: wave-1 leaves.
 test(domain_assumption_planned_before_consumer) :-

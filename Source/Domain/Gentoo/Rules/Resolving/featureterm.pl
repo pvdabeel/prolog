@@ -84,6 +84,38 @@ featureterm:add_after_condition(After, _AfterForDeps, Conditions0, [After|Condit
   !.
 
 
+%! featureterm:get_rebuild_after(+Context0, -Anchor, -Context)
+%
+% Extracts a `rebuild_after/1` marker (plain anchoring: the carrier is
+% scheduled after Anchor, without joining Anchor's PDEPEND completion
+% group the way `after_only/1` / order_after does). Anchor is `none`
+% when the marker is absent.
+
+featureterm:get_rebuild_after(Context0, Anchor, Context) :-
+  ( is_list(Context0),
+    select(rebuild_after(Anchor1), Context0, Context1) ->
+      Anchor = Anchor1,
+      Context = Context1
+  ; Anchor = none,
+    Context = Context0
+  ),
+  !.
+
+
+%! featureterm:add_rebuild_after_condition(+Anchor, +Conds0, -Conds)
+%
+% Prepends a `constraint(schedule_after(...))` pseudo-constraint for an
+% extracted rebuild_after marker: a soft ordering preference the orderer
+% honors when it closes no cycle. Unlike order_after, schedule_after is
+% NOT indexed as a PDEPEND completion group — consumers of the anchor do
+% not wait for the carrier (portage-ng#89 ABI rebuilds).
+
+featureterm:add_rebuild_after_condition(none, Conditions, Conditions) :- !.
+featureterm:add_rebuild_after_condition(Anchor, Conditions0,
+                                        [constraint(schedule_after(Anchor):{[]})|Conditions0]) :-
+  !.
+
+
 %! featureterm:get(+Feature, +Context, -Conditions)
 %
 % Extracts a feature from Context and converts it to a condition list.

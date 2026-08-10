@@ -1700,20 +1700,24 @@ config:toolchain_reactivation(true).
 %
 % When true, the resolver propagates sub-slot (`:=`) ABI changes to
 % already-installed reverse-dependencies -- the native equivalent of
-% Gentoo's `@preserved-rebuild` / `haskell-updater` pass. After a plan is
-% computed, any provider whose sub-slot changes versus the installed copy
-% (e.g. a `dev-haskell/*` library rebuilt with a new GHC ABI hash, or
-% `dev-lang/ocaml` with a new ABI) triggers same-version rebuilds of the
-% installed packages that bound to it through a `:=` / `:slot=` dependency.
-% Those consumers are re-emitted as `:update` rebuilds (carrying
-% `rebuild_reason(subslot_change(...))`) and injected into a final plan
-% wave after the provider (not re-proven as an N-goal conjunction —
-% portage-ng#118), keeping `ghc-pkg check` / OCaml's findlib registry
+% Gentoo's `@preserved-rebuild` / `haskell-updater` pass. When pass 1
+% proves a merge whose sub-slot changes versus the installed copy (e.g. a
+% `dev-haskell/*` library rebuilt with a new GHC ABI hash, `dev-lang/ocaml`
+% with a new ABI, or a `dev-lang/perl` major bump), the proof-obligation
+% channel (heuristic:proof_obligation/4 -> abirebuild:obligations/3)
+% contributes same-version `:update` rebuild goals (carrying
+% `rebuild_reason(subslot_change(...))`) for the installed packages that
+% bound to it through a `:=` / `:slot=` dependency. Each rebuild is proven
+% in the same pass and ordered after the provider through its own
+% dependency edges, keeping `ghc-pkg check` / OCaml's findlib registry
 % consistent before the next consumer configures (portage-ng#89).
+% Masked / keyword-filtered consumers degrade to domain assumptions
+% instead of escalating the proof to the unmask tier (portage-ng#118).
 %
-% The pass is transaction-driven: it only fires when the plan itself changes
-% a `:=` provider's sub-slot, so for the common non-Haskell/non-OCaml case it
-% is a cheap plan scan that adds nothing. Set to `false` to disable.
+% The obligation is transaction-driven: it only fires when a proven merge
+% itself changes a `:=` provider's sub-slot, so for the common case it is
+% a cheap per-merge-literal check that adds nothing. Set to `false` to
+% disable.
 
 config:subslot_rebuild(true).
 

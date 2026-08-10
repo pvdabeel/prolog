@@ -204,17 +204,22 @@ cycle against the hard edges and the previously accepted preferences.  A
 preference that would deadlock the plan is dropped silently — matching how
 Portage treats runtime cycles as freely orderable.
 
-The bindings currently derive preferences from five sources:
+The bindings currently derive preferences from six sources:
 
 1. **RDEPEND groups** — a package prefers its runtime providers earlier.
 2. **`order_after` hints** — ordering-only constraints recorded in proof
    context by the rules layer (see Chapter 5).
-3. **PDEPEND completion** (portage-ng#18/#19) — consumers of a PDEPEND
+3. **`schedule_after` hints** (portage-ng#89) — plain anchoring for
+   sub-slot ABI rebuilds: the rebuild alone goes after its changed
+   provider.  Unlike `order_after`, these are *not* indexed as a PDEPEND
+   completion group, so the provider's other consumers do not wait for
+   the rebuilds (which would serialize the plan).
+4. **PDEPEND completion** (portage-ng#18/#19) — consumers of a PDEPEND
    provider prefer the provider's post-install group first.
-4. **Configure closure** (portage-ng#21) — an `:install` action prefers
+5. **Configure closure** (portage-ng#21) — an `:install` action prefers
    the runtime providers of its `:run` sibling, so packages whose
    configure phase probes runtime tools are ordered correctly.
-5. **Assumed-dep aliases** (portage-ng#95) — when a grouped dependency
+6. **Assumed-dep aliases** (portage-ng#95) — when a grouped dependency
    degraded to a domain assumption in pass 1 but a concrete action for
    the same package *is* planned, the consumer prefers that action.
 
