@@ -2126,7 +2126,27 @@ test(no_changed_providers_on_empty_plan, [true(Changed == [])]) :-
   pipeline:subslot_changed_providers([], Changed).
 
 test(extra_goals_fails_without_changes, [fail]) :-
-  pipeline:subslot_extra_goals([], [], _).
+  pipeline:subslot_extra_goals([], [], _, _).
+
+test(skipped_assumption_adds_reason,
+     [true(Assumed == assumed(portage://'dev-x/c-1':update?{[assumption_reason(masked),
+              replaces(pkg://'dev-x/c-1'),
+              rebuild_reason(subslot_change('dev-x'/p, '0', '1'))]}))]) :-
+  Goal = portage://'dev-x/c-1':update?{[replaces(pkg://'dev-x/c-1'),
+              rebuild_reason(subslot_change('dev-x'/p, '0', '1'))]},
+  pipeline:subslot_skipped_assumption(masked, Goal, Assumed).
+
+% Cheap injection appends a final wave and leaves an empty Extra as a no-op.
+test(inject_rebuilds_empty_noop,
+     [true((P == t, M == t, Pl == []))]) :-
+  pipeline:subslot_inject_rebuilds([], t, t, [], P, M, Pl).
+
+test(inject_rebuilds_appends_final_wave,
+     [true(Pl == [[rule(portage://'dev-x/c-1':update?{[replaces(pkg://'dev-x/c-1'),
+              rebuild_reason(subslot_change('dev-x'/p, '0', '1'))]}, [])]])]) :-
+  Goal = portage://'dev-x/c-1':update?{[replaces(pkg://'dev-x/c-1'),
+              rebuild_reason(subslot_change('dev-x'/p, '0', '1'))]},
+  pipeline:subslot_inject_rebuilds([Goal], t, t, [], _P, _M, Pl).
 
 :- end_tests(pipeline_subslot_rebuild).
 

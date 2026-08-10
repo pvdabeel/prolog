@@ -1706,8 +1706,9 @@ config:toolchain_reactivation(true).
 % `dev-lang/ocaml` with a new ABI) triggers same-version rebuilds of the
 % installed packages that bound to it through a `:=` / `:slot=` dependency.
 % Those consumers are re-emitted as `:update` rebuilds (carrying
-% `rebuild_reason(subslot_change(...))`) and re-proven so they are scheduled
-% after the provider, keeping `ghc-pkg check` / OCaml's findlib registry
+% `rebuild_reason(subslot_change(...))`) and injected into a final plan
+% wave after the provider (not re-proven as an N-goal conjunction —
+% portage-ng#118), keeping `ghc-pkg check` / OCaml's findlib registry
 % consistent before the next consumer configures (portage-ng#89).
 %
 % The pass is transaction-driven: it only fires when the plan itself changes
