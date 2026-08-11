@@ -271,4 +271,5 @@ a different domain constraint:
 - [Chapter 12: Resolution — Configuration as Proofs](12-doc-resolution.md) —
   how version domains feed into candidate selection
 - [Chapter 23: Resolver Comparison](23-doc-resolver-comparison.md) — Zeller's
-  feature logic and CDCL connections
+  feature logic, CDCL connections, and pigeonhole-style slot allocation
+  compared across resolvers

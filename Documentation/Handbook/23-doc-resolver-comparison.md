@@ -122,6 +122,132 @@ resolvers.
 | Performance | Slowest (full rebuild) | Faster than Portage (keeps parent frames) | Fast (targeted restarts) | Fastest (single-pass for most targets) |
 | Package-specific code | None | None | None | None |
 
+## Slot Allocation: Pigeonhole Reasoning
+
+Gentoo slots turn part of dependency resolution into an allocation
+problem: every selected version occupies exactly one hole — its
+(package, slot) pair — no hole may host two occupants, and different
+holes of the same package may legitimately coexist (`gcc:12` next to
+`gcc:13`).  pkgcore names this structure literally: its slot tracker
+is a class called
+[`PigeonHoledSlots`](https://github.com/pkgcore/pkgcore/blob/master/src/pkgcore/resolver/pigeonholes.py).
+Constraint-programming solvers such as the Glasgow Constraint Solver
+use the pigeonhole *principle* as a first-class reasoning device.
+All three systems compared below enforce the same invariant, but at
+three different strengths: pkgcore **detects** a collision when it
+happens, CP propagators **preclude** whole families of collisions
+before search branches, and portage-ng **detects and learns from**
+each collision.  (Portage sits before all three: as described above,
+it notices two packages claiming the same slot only after the graph
+is fully built, then masks and rebuilds.)
+
+### pkgcore: the hole as an occupancy table
+
+`PigeonHoledSlots` is a mutable registry consulted by `merge_plan`
+during its frame-stack walk.  A dictionary keyed by package maps to
+the current occupants; `fill_slotting(obj)` scans for an existing
+occupant with the same slot and, on a hit, returns the conflicting
+objects instead of inserting.  Blockers reuse the same structure as
+*limiters* — anti-pigeons registered per key via `add_limiter`, which
+poison the hole against any matching occupant.  On a returned
+conflict the resolver backtracks to the frame checkpoint and advances
+to the next candidate.
+
+The name is the metaphor, not the mathematical principle.  Detection
+is eager but **pairwise**: a conflict is noticed only when the second
+pigeon arrives at the hole.  The knowledge gained is **negative and
+local**: the colliding objects are reported, the choice list is
+pruned, and nothing narrows future candidate selection.
+
+### Constraint programming: the hole as a counting argument
+
+In CP solvers the pigeonhole principle appears as the propagation
+semantics of global constraints such as `allDifferent`: "these five
+jobs have only four time slots between them, so by a pigeonhole
+argument the problem is infeasible."  Régin's matching-based
+propagator (AAAI 1994) and Puget's Hall-interval bounds consistency
+detect that k variables collectively reach fewer than k values in
+polynomial time, *before* the search tree branches.  This counting
+argument is exactly where resolution-based SAT solvers struggle —
+pigeonhole formulas require exponential resolution proofs (Haken
+1985) — which is why the CP community treats `allDifferent`
+propagation, and the Glasgow Constraint Solver's proof-logging work
+certifying it, as a genuinely different reasoning class rather than
+an implementation detail.
+
+### portage-ng: the hole as a feature dimension
+
+portage-ng has neither an occupancy table nor a cardinality
+propagator.  Slot allocation emerges from three mechanisms of the
+proof search:
+
+**Slots are a dimension of the version domain.**  Every
+`version_domain(Slots, Bounds)` carries a slot set next to its
+version bounds, and `domain_meet` intersects both dimensions at once
+(Chapter 10).  Two requirements on the same package whose slot sets
+are disjoint meet to `slots([])`, which is structurally inconsistent
+— the proof fails *before any candidate is enumerated*:
+
+```prolog
+version_domain:meet_slot_domains(slots(S1), slots(S2), slots(S)) :-
+  ord_intersection(S1, S2, S).
+
+version_domain:domain_inconsistent(version_domain(slots([]), _Bounds)).
+```
+
+This is a small pigeonhole-style cut in the CP spirit — infeasibility
+derived by set algebra rather than by attempting an insertion —
+though unary (per package), not a cross-package counting argument.
+
+**Occupancy is a constraint guard, not a table.**  The counterpart of
+`fill_slotting` is the `selected_cn(C,N)` ordset accumulated in the
+constraint store; `cnselect:selected_cn_unique_or_reprove/4` enforces
+at most one concrete entry per (C,N) — or per (C,N,slot) hole where
+multislot coexistence applies — each time feature unification merges
+a new selection into the store.
+
+**A collision is converted into knowledge.**  Where pkgcore returns
+the colliding objects, the portage-ng guard *learns*: it stores a
+narrowed `cn_domain(C,N,Slot)` via `prover:learn/3`, rejects the
+conflicting candidate, and re-proves only the affected subtree with
+the narrowed domain already applied to candidate selection.  If the
+conflict survives all retries it is memoized (`memo:slot_conflict_/3`)
+and surfaces as a `slot_conflict` domain assumption — a negative,
+blocking outcome — rather than a silent failure.  Blockers get the
+same treatment as pkgcore's limiters conceptually, but are tracked as
+constraints with source snapshots and degrade to actionable blocker
+assumptions.
+
+### Why portage-ng skips cardinality propagation
+
+portage-ng does not perform Glasgow-style cross-package counting: a
+hypothetical "five packages competing for four holes" is discovered
+through the collide–learn–retry loop, not refuted up front by a
+matching argument.  The Gentoo domain almost never presents that
+structure.  Slots are scoped per package — `gcc:12` and `gcc:13` are
+holes belonging to `sys-devel/gcc` alone, never a pool that unrelated
+packages compete for — so the `allDifferent` pattern (many variables
+drawing from one shared value set) essentially does not arise.  The
+hole structure is also *ragged*: which slot a candidate occupies is
+metadata of the chosen version, so the pigeon determines its own
+hole; and sub-slot (`:=`) rebuilds make occupancy dynamic, beyond
+static allocation entirely.  What the domain actually needs is
+per-package unary domains with slot as a feature dimension, pairwise
+consistency for slot operators, and good conflict recovery — which is
+precisely the narrowing-plus-learning design described above.
+
+| **Aspect** | **pkgcore** | **CP (Glasgow-style)** | **portage-ng** |
+| :--- | :--- | :--- | :--- |
+| Pigeonhole meaning | Occupancy table (metaphor) | Counting principle (Hall sets, matching) | Guard invariant + slot-set algebra |
+| Detection moment | Insertion of second occupant | Before branching (propagation) | Constraint merge / guard evaluation |
+| Knowledge from a conflict | List of colliding objects | Pruned domains, certified cuts | Learned `cn_domain` + reject set |
+| Recovery | Backtrack, next candidate | Pruned before search (else backjump) | Re-prove subtree with narrowed domain |
+| Cross-package counting | No | Yes | No (domain rarely needs it) |
+
+See [Chapter 10](10-doc-version-domains.md) for the domain algebra and
+[Chapter 9](09-doc-prover-assumptions.md) for the learning and reprove
+mechanics used above.
+
 ## Academic Foundations
 
 ### Zeller & Snelting: Feature Logic (ESEC 1995, TOSEM 1997)
