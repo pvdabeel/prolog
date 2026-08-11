@@ -10,7 +10,9 @@
 #   ./Source/Application/Wrapper/pm-bench -o /tmp/pm.tsv acct-group/gatling app-editors/neovim
 #
 # Options:
-#   -o FILE          Write TSV to FILE (also prints a summary table)
+#   -o FILE          Write TSV to FILE (appended live; also prints a summary)
+#   -f FILE          Read packages from FILE (one category/package per line;
+#                    # comments and blank lines ignored). Combined with argv pkgs.
 #   -r N             Repeats per (pkg, tool) [default: 1]
 #   --warmup         Discard one run before timed repeats
 #   --tools LIST     Comma-separated tools [default: emerge,pmerge,cave,ng-standalone,ng-ipc]
@@ -43,6 +45,7 @@ ROOT_DIR="$(CDPATH= cd -- "$SCRIPT_DIR/../../.." && pwd)"
 DEFAULT_NG="$SCRIPT_DIR/portage-ng-dev"
 
 OUT=""
+PKG_FILE=""
 REPEATS=1
 WARMUP=0
 TIMEOUT=600
@@ -52,7 +55,7 @@ TOOLS_CSV="emerge,pmerge,cave,ng-standalone,ng-ipc"
 PKGS=()
 
 usage() {
-  sed -n '3,42p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '3,45p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 log() { printf '%s\n' "$*" >&2; }
@@ -60,6 +63,18 @@ log() { printf '%s\n' "$*" >&2; }
 die() { log "error: $*"; exit 1; }
 
 have_cmd() { command -v "$1" >/dev/null 2>&1; }
+
+load_pkgs_file() {
+  local f="$1" line
+  [[ -f "$f" ]] || die "packages file not found: $f"
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%%#*}"
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line%"${line##*[![:space:]]}"}"
+    [[ -n "$line" ]] || continue
+    PKGS+=("$line")
+  done <"$f"
+}
 
 # -----------------------------------------------------------------------------
 # Args
@@ -69,6 +84,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     -h|--help) usage; exit 0 ;;
     -o) OUT="${2:?}"; shift 2 ;;
+    -f|--packages-file) PKG_FILE="${2:?}"; shift 2 ;;
     -r) REPEATS="${2:?}"; shift 2 ;;
     --warmup) WARMUP=1; shift ;;
     --tools) TOOLS_CSV="${2:?}"; shift 2 ;;
@@ -82,6 +98,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+[[ -n "$PKG_FILE" ]] && load_pkgs_file "$PKG_FILE"
 [[ ${#PKGS[@]} -gt 0 ]] || die "no packages given (see --help)"
 [[ "$REPEATS" =~ ^[1-9][0-9]*$ ]] || die "repeats must be a positive integer"
 [[ "$TIMEOUT" =~ ^[1-9][0-9]*$ ]] || die "timeout must be a positive integer"
@@ -277,8 +294,15 @@ ensure_ng_ipc_daemon() {
 TMPDIR_BENCH="$(mktemp -d "${TMPDIR:-/tmp}/pm-bench.XXXXXX")"
 trap 'rm -rf "$TMPDIR_BENCH"' EXIT
 
-TSV_TMP="$TMPDIR_BENCH/results.tsv"
+# Write the TSV live when -o is set so a long run survives interrupt/crash.
+if [[ -n "$OUT" ]]; then
+  mkdir -p "$(dirname -- "$OUT")"
+  TSV_TMP="$OUT"
+else
+  TSV_TMP="$TMPDIR_BENCH/results.tsv"
+fi
 printf 'stamp\thost\tpkg\ttool\trepeat\twall_ms\tresolve_ms\trc\tcmd\n' >"$TSV_TMP"
+[[ -n "$OUT" ]] && log "writing live TSV to $OUT"
 
 log "pm-bench host=$HOST tools=${SELECTED[*]} pkgs=${#PKGS[@]} repeats=$REPEATS warmup=$WARMUP"
 ensure_ng_ipc_daemon
@@ -287,15 +311,19 @@ ensure_ng_ipc_daemon
 # Main loop
 # -----------------------------------------------------------------------------
 
+pkg_i=0
+pkg_n=${#PKGS[@]}
 for pkg in "${PKGS[@]}"; do
+  pkg_i=$((pkg_i + 1))
   for tool in "${SELECTED[@]}"; do
     if [[ $WARMUP -eq 1 ]]; then
       log "warmup  $tool  $pkg"
       run_one "$tool" "$pkg" "$TMPDIR_BENCH/warmup.log" >/dev/null || true
     fi
     for ((i = 1; i <= REPEATS; i++)); do
-      log "run     $tool  $pkg  ($i/$REPEATS)"
-      logf="$TMPDIR_BENCH/${tool//\//_}.${pkg//\//_}.$i.log"
+      log "run     $tool  $pkg  ($i/$REPEATS)  [$pkg_i/$pkg_n]"
+      # Reuse one log file per tool — full-tree runs must not create ~N*tools files.
+      logf="$TMPDIR_BENCH/${tool//\//_}.log"
       read -r wall_ms rc < <(run_one "$tool" "$pkg" "$logf")
       resolve_ms="$(parse_resolve_ms "$tool" "$logf" || true)"
       cmd="$(tool_cmd "$tool")"
@@ -307,10 +335,7 @@ for pkg in "${PKGS[@]}"; do
   done
 done
 
-if [[ -n "$OUT" ]]; then
-  cp "$TSV_TMP" "$OUT"
-  log "wrote $OUT"
-fi
+[[ -n "$OUT" ]] && log "wrote $OUT"
 
 # -----------------------------------------------------------------------------
 # Summary (median wall per pkg/tool when repeats>1, else the single sample)
