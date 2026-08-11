@@ -1,0 +1,374 @@
+#!/usr/bin/env bash
+#
+# Cold --pretend timing across Gentoo package managers.
+#
+# Compares process wall-clock and each tool's own reported resolve time
+# (when available). Does not compare plan contents.
+#
+# Usage:
+#   ./Source/Application/Wrapper/pm-bench [options] <pkg> [<pkg>...]
+#   ./Source/Application/Wrapper/pm-bench -o /tmp/pm.tsv acct-group/gatling app-editors/neovim
+#
+# Options:
+#   -o FILE          Write TSV to FILE (also prints a summary table)
+#   -r N             Repeats per (pkg, tool) [default: 1]
+#   --warmup         Discard one run before timed repeats
+#   --tools LIST     Comma-separated tools [default: emerge,pmerge,cave,ng-standalone,ng-ipc]
+#   --timeout SEC    Per-run wall timeout [default: 600]
+#   --ng-path PATH   portage-ng-dev wrapper (default: sibling of this script)
+#   --skip-missing   Skip tools whose binary is absent (default)
+#   --require-all    Fail if any selected tool is missing
+#   -h, --help       Help
+#
+# Tools:
+#   emerge         emerge -vp
+#   pmerge         pmerge -vp
+#   cave           cave -E paludis resolve --lazy  (pretend; no -x)
+#   ng-standalone  portage-ng-dev --mode standalone --pretend
+#   ng-ipc         portage-ng-dev --mode ipc --pretend
+#                  (daemon is checked via --status; started with
+#                   --mode daemon --background if missing, before timed runs)
+#
+# Environment overrides (full command prefix; pkg is appended):
+#   PM_BENCH_EMERGE='emerge -vp'
+#   PM_BENCH_PMERGE='pmerge -vp'
+#   PM_BENCH_CAVE='cave -E paludis resolve --lazy --permit-old-version */*'
+#   PM_BENCH_NG_STANDALONE='…/portage-ng-dev --mode standalone --timeout 600 --pretend'
+#   PM_BENCH_NG_IPC='…/portage-ng-dev --mode ipc --pretend'
+#
+set -euo pipefail
+
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+ROOT_DIR="$(CDPATH= cd -- "$SCRIPT_DIR/../../.." && pwd)"
+DEFAULT_NG="$SCRIPT_DIR/portage-ng-dev"
+
+OUT=""
+REPEATS=1
+WARMUP=0
+TIMEOUT=600
+NG_PATH="$DEFAULT_NG"
+REQUIRE_ALL=0
+TOOLS_CSV="emerge,pmerge,cave,ng-standalone,ng-ipc"
+PKGS=()
+
+usage() {
+  sed -n '3,42p' "$0" | sed 's/^# \{0,1\}//'
+}
+
+log() { printf '%s\n' "$*" >&2; }
+
+die() { log "error: $*"; exit 1; }
+
+have_cmd() { command -v "$1" >/dev/null 2>&1; }
+
+# -----------------------------------------------------------------------------
+# Args
+# -----------------------------------------------------------------------------
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help) usage; exit 0 ;;
+    -o) OUT="${2:?}"; shift 2 ;;
+    -r) REPEATS="${2:?}"; shift 2 ;;
+    --warmup) WARMUP=1; shift ;;
+    --tools) TOOLS_CSV="${2:?}"; shift 2 ;;
+    --timeout) TIMEOUT="${2:?}"; shift 2 ;;
+    --ng-path) NG_PATH="${2:?}"; shift 2 ;;
+    --skip-missing) REQUIRE_ALL=0; shift ;;
+    --require-all) REQUIRE_ALL=1; shift ;;
+    --) shift; PKGS+=("$@"); break ;;
+    -*) die "unknown option: $1" ;;
+    *) PKGS+=("$1"); shift ;;
+  esac
+done
+
+[[ ${#PKGS[@]} -gt 0 ]] || die "no packages given (see --help)"
+[[ "$REPEATS" =~ ^[1-9][0-9]*$ ]] || die "repeats must be a positive integer"
+[[ "$TIMEOUT" =~ ^[1-9][0-9]*$ ]] || die "timeout must be a positive integer"
+
+IFS=',' read -r -a TOOLS <<< "$TOOLS_CSV"
+
+HOST="$(hostname -f 2>/dev/null || hostname)"
+STAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+# -----------------------------------------------------------------------------
+# Tool command lines
+# -----------------------------------------------------------------------------
+
+tool_cmd() {
+  local tool="$1"
+  case "$tool" in
+    emerge)
+      printf '%s' "${PM_BENCH_EMERGE:-emerge -vp}"
+      ;;
+    pmerge)
+      printf '%s' "${PM_BENCH_PMERGE:-pmerge -vp}"
+      ;;
+    cave)
+      # -c is --complete, not pretend. Pretend is the default; -x executes.
+      printf '%s' "${PM_BENCH_CAVE:-cave -E paludis resolve --lazy}"
+      ;;
+    ng-standalone)
+      if [[ -n "${PM_BENCH_NG_STANDALONE:-}" ]]; then
+        printf '%s' "$PM_BENCH_NG_STANDALONE"
+      else
+        printf '%s' "$NG_PATH --mode standalone --timeout $TIMEOUT --pretend"
+      fi
+      ;;
+    ng-ipc)
+      if [[ -n "${PM_BENCH_NG_IPC:-}" ]]; then
+        printf '%s' "$PM_BENCH_NG_IPC"
+      else
+        printf '%s' "$NG_PATH --mode ipc --pretend"
+      fi
+      ;;
+    *) die "unknown tool: $tool" ;;
+  esac
+}
+
+tool_available() {
+  local tool="$1" cmd bin
+  cmd="$(tool_cmd "$tool")"
+  # first token
+  bin="${cmd%% *}"
+  case "$tool" in
+    ng-standalone|ng-ipc)
+      [[ -x "$NG_PATH" || -x "$bin" ]] || return 1
+      ;;
+    cave)
+      have_cmd cave || have_cmd "$bin" || return 1
+      ;;
+    *)
+      have_cmd "$bin" || return 1
+      ;;
+  esac
+}
+
+# -----------------------------------------------------------------------------
+# Parse each tool's reported resolve time → milliseconds (empty if absent)
+# -----------------------------------------------------------------------------
+
+parse_resolve_ms() {
+  local tool="$1" logf="$2" s
+  case "$tool" in
+    emerge)
+      s="$(grep -oE 'Dependency resolution took [0-9.]+' "$logf" 2>/dev/null | head -1 | awk '{print $4}')"
+      [[ -n "$s" ]] && awk -v s="$s" 'BEGIN { printf "%.0f", s * 1000 }'
+      ;;
+    pmerge)
+      # "* resolver plan required 119 ops (0.10 seconds)"
+      s="$(grep -oE 'resolver plan required .* \([0-9.]+ seconds\)' "$logf" 2>/dev/null | head -1 | grep -oE '[0-9.]+ seconds' | awk '{print $1}')"
+      [[ -n "$s" ]] && awk -v s="$s" 'BEGIN { printf "%.0f", s * 1000 }'
+      ;;
+    cave)
+      # cave has no standard resolve-ms line; leave empty
+      ;;
+    ng-standalone|ng-ipc)
+      # optional: "% merge wall_time_ms: N" if present in output
+      s="$(grep -oE 'wall_time_ms:[[:space:]]*[0-9.]+' "$logf" 2>/dev/null | head -1 | grep -oE '[0-9.]+$')"
+      [[ -n "$s" ]] && awk -v s="$s" 'BEGIN { printf "%.0f", s }'
+      ;;
+  esac
+}
+
+# -----------------------------------------------------------------------------
+# Timed run
+# -----------------------------------------------------------------------------
+
+run_one() {
+  local tool="$1" pkg="$2" out_log="$3"
+  local cmd start end wall_ms rc
+  cmd="$(tool_cmd "$tool")"
+
+  # shellcheck disable=SC2086
+  set +e
+  start="$(date +%s%N)"
+  # timeout(1) if available; else bare run
+  if have_cmd timeout; then
+    # Word-split cmd intentionally; pkg is a single atom.
+    # shellcheck disable=SC2086
+    timeout --signal=KILL "$TIMEOUT" $cmd "$pkg" >"$out_log" 2>&1
+    rc=$?
+  else
+    # shellcheck disable=SC2086
+    $cmd "$pkg" >"$out_log" 2>&1
+    rc=$?
+  fi
+  end="$(date +%s%N)"
+  set -e
+
+  wall_ms=$(( (end - start) / 1000000 ))
+  if [[ $rc -eq 124 || $rc -eq 137 ]]; then
+    printf '%s\t%s\n' "$wall_ms" "timeout:$rc"
+  else
+    printf '%s\t%s\n' "$wall_ms" "$rc"
+  fi
+}
+
+# -----------------------------------------------------------------------------
+# Select tools
+# -----------------------------------------------------------------------------
+
+SELECTED=()
+for t in "${TOOLS[@]}"; do
+  t="$(echo "$t" | tr -d '[:space:]')"
+  [[ -n "$t" ]] || continue
+  if tool_available "$t"; then
+    SELECTED+=("$t")
+  else
+    if [[ $REQUIRE_ALL -eq 1 ]]; then
+      die "tool not available: $t ($(tool_cmd "$t"))"
+    fi
+    log "skip missing tool: $t"
+  fi
+done
+[[ ${#SELECTED[@]} -gt 0 ]] || die "no tools available"
+
+# -----------------------------------------------------------------------------
+# Ensure ipc daemon is up before any timed ng-ipc run (so the first sample
+# is not the cold daemon boot). Uses the same flags as the product:
+#   --mode ipc --status
+#   --mode daemon --background
+# -----------------------------------------------------------------------------
+
+ipc_daemon_running() {
+  "$NG_PATH" --mode ipc --status >/dev/null 2>&1
+}
+
+ensure_ng_ipc_daemon() {
+  local want=0 t started=0
+  for t in "${SELECTED[@]}"; do
+    [[ "$t" == "ng-ipc" ]] && want=1 && break
+  done
+  [[ $want -eq 1 ]] || return 0
+
+  if ipc_daemon_running; then
+    log "ipc daemon: already running"
+  else
+    log "ipc daemon: not running — starting (--mode daemon --background)"
+    if ! "$NG_PATH" --mode daemon --background; then
+      die "failed to start ipc daemon via: $NG_PATH --mode daemon --background"
+    fi
+    # --background waits for the PID file; KB init may still be in progress.
+    local i
+    for i in $(seq 1 50); do
+      if ipc_daemon_running; then
+        started=1
+        break
+      fi
+      sleep 0.2
+    done
+    [[ $started -eq 1 ]] || die "ipc daemon started but --status still fails"
+    log "ipc daemon: socket ready"
+  fi
+
+  # First real ipc request finishes KB/module init inside the daemon.
+  # Do that once here so timed ng-ipc samples are not the cold load.
+  local probe_pkg="${PKGS[0]}" probe_cmd
+  probe_cmd="$(tool_cmd ng-ipc)"
+  log "ipc daemon: settle probe ($probe_pkg)"
+  # shellcheck disable=SC2086
+  if ! $probe_cmd "$probe_pkg" >/dev/null 2>&1; then
+    die "ipc settle probe failed for $probe_pkg (daemon up but request failed)"
+  fi
+  log "ipc daemon: ready"
+}
+
+TMPDIR_BENCH="$(mktemp -d "${TMPDIR:-/tmp}/pm-bench.XXXXXX")"
+trap 'rm -rf "$TMPDIR_BENCH"' EXIT
+
+TSV_TMP="$TMPDIR_BENCH/results.tsv"
+printf 'stamp\thost\tpkg\ttool\trepeat\twall_ms\tresolve_ms\trc\tcmd\n' >"$TSV_TMP"
+
+log "pm-bench host=$HOST tools=${SELECTED[*]} pkgs=${#PKGS[@]} repeats=$REPEATS warmup=$WARMUP"
+ensure_ng_ipc_daemon
+
+# -----------------------------------------------------------------------------
+# Main loop
+# -----------------------------------------------------------------------------
+
+for pkg in "${PKGS[@]}"; do
+  for tool in "${SELECTED[@]}"; do
+    if [[ $WARMUP -eq 1 ]]; then
+      log "warmup  $tool  $pkg"
+      run_one "$tool" "$pkg" "$TMPDIR_BENCH/warmup.log" >/dev/null || true
+    fi
+    for ((i = 1; i <= REPEATS; i++)); do
+      log "run     $tool  $pkg  ($i/$REPEATS)"
+      logf="$TMPDIR_BENCH/${tool//\//_}.${pkg//\//_}.$i.log"
+      read -r wall_ms rc < <(run_one "$tool" "$pkg" "$logf")
+      resolve_ms="$(parse_resolve_ms "$tool" "$logf" || true)"
+      cmd="$(tool_cmd "$tool")"
+      printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+        "$STAMP" "$HOST" "$pkg" "$tool" "$i" "$wall_ms" "${resolve_ms:-}" "$rc" "$cmd $pkg" \
+        >>"$TSV_TMP"
+      log "  wall_ms=$wall_ms resolve_ms=${resolve_ms:--} rc=$rc"
+    done
+  done
+done
+
+if [[ -n "$OUT" ]]; then
+  cp "$TSV_TMP" "$OUT"
+  log "wrote $OUT"
+fi
+
+# -----------------------------------------------------------------------------
+# Summary (median wall per pkg/tool when repeats>1, else the single sample)
+# -----------------------------------------------------------------------------
+
+python3 - "$TSV_TMP" <<'PY'
+import csv, statistics, sys
+from collections import defaultdict
+
+path = sys.argv[1]
+rows = list(csv.DictReader(open(path), delimiter="\t"))
+if not rows:
+    sys.exit(0)
+
+groups = defaultdict(list)
+for r in rows:
+    groups[(r["pkg"], r["tool"])].append(r)
+
+pkgs = []
+for p, _ in groups:
+    if p not in pkgs:
+        pkgs.append(p)
+tools = []
+for _, t in groups:
+    if t not in tools:
+        tools.append(t)
+
+def med(xs):
+    xs = sorted(xs)
+    return statistics.median(xs) if xs else float("nan")
+
+print()
+print(f"{'pkg':<14} " + " ".join(f"{t:>14}" for t in tools))
+print(f"{'':=<14} " + " ".join(f"{'':=>14}" for _ in tools))
+for pkg in pkgs:
+    cells = []
+    for tool in tools:
+        rs = groups.get((pkg, tool), [])
+        if not rs:
+            cells.append(f"{'—':>14}")
+            continue
+        walls = [float(r["wall_ms"]) for r in rs]
+        resol = [float(r["resolve_ms"]) for r in rs if r["resolve_ms"]]
+        w = med(walls)
+        if resol:
+            cells.append(f"{w:.0f}/{med(resol):.0f}ms")
+        else:
+            cells.append(f"{w:.0f}ms")
+    short = pkg if len(pkg) <= 14 else pkg[:11] + "..."
+    print(f"{short:<14} " + " ".join(f"{c:>14}" for c in cells))
+print()
+print("cells: wall_ms[/resolve_ms]  (median over repeats)")
+print("full TSV columns: stamp host pkg tool repeat wall_ms resolve_ms rc cmd")
+PY
+
+# Always emit TSV to stdout when -o was not set
+if [[ -z "$OUT" ]]; then
+  echo
+  echo "----- TSV -----"
+  cat "$TSV_TMP"
+fi
