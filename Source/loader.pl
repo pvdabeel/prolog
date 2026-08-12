@@ -72,7 +72,8 @@ loader:group(common_modules,
     portage('Source/Domain/Gentoo/set.pl')]).
 
 loader:group(ipc_modules,
-   [portage('Source/Application/Mode/ipc.pl')]).
+   [portage('Source/Application/Client/ipclient.pl'),
+    portage('Source/Application/Mode/ipc.pl')]).
 
 loader:group(daemon_modules,
    [portage('Source/Application/Mode/daemon.pl')]).
@@ -317,9 +318,10 @@ load_common_modules :-
 
 %! load_ipc_modules is det.
 %
-% Loads the ipc client/control module (connect, status, send_command,
-% fork_background, autostart). Needed by ipc mode and by the early-exit
-% --background launch path of daemon and server modes.
+% Loads the ultralight ipclient plus the ipc façade (fork_background for
+% daemon/server --background; connect/status/halt delegate to ipclient).
+% Needed by ipc mode and by the early-exit --background launch path of
+% daemon and server modes.
 
 load_ipc_modules :-
 

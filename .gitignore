@@ -28,6 +28,8 @@ Knowledge/vdbimport.pl
 Source/Knowledge/Sets/**/*.local
 Source/Knowledge/Sets/glsa_injected/**
 Source/Tests/
+Source/Application/Wrapper/ipcclient
+Source/Application/Client/ipclient.qlf
 __pycache__/
 *.pyc
 .DS_Store

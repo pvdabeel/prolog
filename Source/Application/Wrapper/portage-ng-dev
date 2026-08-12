@@ -10,7 +10,47 @@
 set -eu
 
 # This script lives under Source/Application/Wrapper/, so the project root is three levels up.
-ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)"
+WRAPPER_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+ROOT_DIR="$(CDPATH= cd -- "$WRAPPER_DIR/../../.." && pwd)"
+IPCLIENT_PL="$ROOT_DIR/Source/Application/Client/ipclient.pl"
+
+# -----------------------------------------------------------------------------
+# Ultra-early --mode ipc fast-path
+# -----------------------------------------------------------------------------
+#
+# Jump straight into ipclient.pl before the timeout/arg-rewrite loops when the
+# invocation is a plain ipc client request. Skip when legacy/profile/choice-log
+# or a hard timeout is requested (those need the slower path below).
+_early_ipc=1
+_early_mode=""
+_prev=""
+for a in "$@"; do
+  case "$a" in
+    -h|--help|-V|--version|help|--profile|--choice-log|--timeout|--hard-time-limit)
+      _early_ipc=0
+      ;;
+    --timeout=*|--hard-time-limit=*)
+      _early_ipc=0
+      ;;
+  esac
+  if [ "$_prev" = "--mode" ] && [ -z "$_early_mode" ]; then
+    _early_mode="$a"
+  fi
+  case "$a" in
+    --mode=*)
+      [ -z "$_early_mode" ] && _early_mode="${a#*=}"
+      ;;
+  esac
+  _prev="$a"
+done
+if [ "$_early_ipc" = "1" ] \
+   && [ "$_early_mode" = "ipc" ] \
+   && [ "${PORTAGE_NG_IPC_LEGACY:-0}" != "1" ] \
+   && [ -f "$IPCLIENT_PL" ]; then
+  export PORTAGE_NG_ROOT="$ROOT_DIR"
+  export PORTAGE_NG_DEV="$WRAPPER_DIR/portage-ng-dev"
+  exec swipl -q -f "$IPCLIENT_PL" -g ipclient:main -t halt -- "$@"
+fi
 
 
 # -----------------------------------------------------------------------------
@@ -178,18 +218,42 @@ if [ "$CHOICE_LOG" = "true" ]; then
   EXTRA_FLAGS="$EXTRA_FLAGS -Dchoice_log=true"
 fi
 
-if is_pos_int "$HARD_LIMIT"; then
-  # Use a Python watchdog so we can keep swipl in the foreground (preserves
-  # heredoc/pipe input for `--shell`) while still enforcing a hard wall-clock cap.
+# -----------------------------------------------------------------------------
+# Detect --mode (first occurrence)
+# -----------------------------------------------------------------------------
+MODE=""
+_prev=""
+for a in "$@"; do
+  if [ "$_prev" = "--mode" ]; then
+    MODE="$a"
+    break
+  fi
+  case "$a" in
+    --mode=*)
+      MODE="${a#*=}"
+      break
+      ;;
+  esac
+  _prev="$a"
+done
+
+# -----------------------------------------------------------------------------
+# Hard wall-clock timeout helper (Python watchdog)
+# -----------------------------------------------------------------------------
+run_with_timeout() {
+  # Usage: run_with_timeout LIMIT cmd args...
+  limit="$1"
+  shift
   PYTHON=""
   if command -v python3 >/dev/null 2>&1; then
     PYTHON="python3"
   elif command -v python >/dev/null 2>&1; then
     PYTHON="python"
   fi
-
-  if [ -n "$PYTHON" ]; then
-    exec "$PYTHON" -c '
+  if [ -z "$PYTHON" ]; then
+    exec "$@"
+  fi
+  exec "$PYTHON" -c '
 import os, signal, subprocess, sys, time
 
 def killpg(pid, sig):
@@ -209,7 +273,7 @@ p = subprocess.Popen(
     stdin=sys.stdin,
     stdout=sys.stdout,
     stderr=sys.stderr,
-    start_new_session=True,  # new process group/session
+    start_new_session=True,
 )
 
 deadline = time.time() + limit
@@ -226,17 +290,41 @@ time.sleep(2.0)
 killpg(p.pid, signal.SIGKILL)
 rc = p.wait()
 sys.exit(rc if rc is not None else 124)
-' "$HARD_LIMIT" \
-      swipl -O \
-        --stack-limit=256G --table-space=256G --shared-table-space=256G \
-        -f "$ROOT_DIR/portage-ng.pl" \
-        -p "portage=$ROOT_DIR" \
-        -Dverbose_autoload=false \
-        $EXTRA_FLAGS \
-        -g main -- "$@"
-  fi
+' "$limit" "$@"
+}
 
-  # No Python available: fall back to plain swipl (no hard kill).
+# -----------------------------------------------------------------------------
+# Fast-path: --mode ipc → ultralight ipclient.pl (no common modules / world)
+#
+# Escape hatch: PORTAGE_NG_IPC_LEGACY=1 keeps the old portage-ng.pl ipc path
+# for A/B comparison. Instrumentation/choice-log also force the legacy path.
+# -----------------------------------------------------------------------------
+if [ "$MODE" = "ipc" ] \
+   && [ "${PORTAGE_NG_IPC_LEGACY:-0}" != "1" ] \
+   && [ -z "$INSTRUMENTATION" ] \
+   && [ -z "$CHOICE_LOG" ] \
+   && [ -f "$IPCLIENT_PL" ]; then
+  export PORTAGE_NG_ROOT="$ROOT_DIR"
+  export PORTAGE_NG_DEV="$WRAPPER_DIR/portage-ng-dev"
+  # Quiet, no -O, no huge stacks: startup dominates for this tiny client.
+  if is_pos_int "$HARD_LIMIT"; then
+    run_with_timeout "$HARD_LIMIT" \
+      swipl -q -f "$IPCLIENT_PL" -g ipclient:main -t halt -- "$@"
+  fi
+  exec swipl -q -f "$IPCLIENT_PL" -g ipclient:main -t halt -- "$@"
+fi
+
+if is_pos_int "$HARD_LIMIT"; then
+  # Use a Python watchdog so we can keep swipl in the foreground (preserves
+  # heredoc/pipe input for `--shell`) while still enforcing a hard wall-clock cap.
+  run_with_timeout "$HARD_LIMIT" \
+    swipl -O \
+      --stack-limit=256G --table-space=256G --shared-table-space=256G \
+      -f "$ROOT_DIR/portage-ng.pl" \
+      -p "portage=$ROOT_DIR" \
+      -Dverbose_autoload=false \
+      $EXTRA_FLAGS \
+      -g main -- "$@"
 fi
 
 # No hard time limit -> behave like a normal launcher.

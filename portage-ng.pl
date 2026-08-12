@@ -135,9 +135,13 @@ main :-
   interface:get_mode(Mode),
   interface:init_tty,
   interface:verify_mode(Mode),
-  config:working_dir(Dir),
-  cd(Dir),
-  config:world_file(File),
-  world:newinstance(set(File)),
-  world:load,
-  main(Mode).
+  ( Mode == ipc
+  -> % IPC client does not need working_dir / world; connect and halt.
+     main(ipc)
+  ;  config:working_dir(Dir),
+     cd(Dir),
+     config:world_file(File),
+     world:newinstance(set(File)),
+     world:load,
+     main(Mode)
+  ).

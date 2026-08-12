@@ -20,6 +20,7 @@
 #   --tools LIST     Comma-separated tools [default: emerge,pmerge,cave,ng-standalone,ng-ipc]
 #   --timeout SEC    Per-run wall timeout [default: 600]
 #   --ng-path PATH   portage-ng-dev wrapper (default: sibling of this script)
+#   --ipcclient PATH native C++ ipc client (default: sibling ipcclient)
 #   --skip-missing   Skip tools whose binary is absent (default)
 #   --require-all    Fail if any selected tool is missing
 #   -h, --help       Help
@@ -30,8 +31,10 @@
 #   cave           cave -E paludis resolve --lazy  (pretend; no -x)
 #   ng-standalone  portage-ng-dev --mode standalone --pretend
 #   ng-ipc         portage-ng-dev --mode ipc --pretend
-#                  (daemon is checked via --status; started with
-#                   --mode daemon --background if missing, before timed runs)
+#                  (ultralight ipclient.pl fast-path; daemon settled before timed runs)
+#   ng-ipc-legacy  same as ng-ipc but PORTAGE_NG_IPC_LEGACY=1 (full portage-ng.pl boot)
+#   ng-ipc-cpp     Source/Application/Wrapper/ipcclient --mode ipc --pretend
+#                  (same daemon as ng-ipc; build with: make ipcclient)
 #
 # Environment overrides (full command prefix; pkg is appended):
 #   PM_BENCH_EMERGE='emerge -vp'
@@ -39,6 +42,8 @@
 #   PM_BENCH_CAVE='cave -E paludis resolve --lazy --permit-old-version */*'
 #   PM_BENCH_NG_STANDALONE='…/portage-ng-dev --mode standalone --timeout 600 --pretend'
 #   PM_BENCH_NG_IPC='…/portage-ng-dev --mode ipc --pretend'
+#   PM_BENCH_NG_IPC_LEGACY='PORTAGE_NG_IPC_LEGACY=1 …/portage-ng-dev --mode ipc --pretend'
+#   PM_BENCH_NG_IPC_CPP='…/ipcclient --mode ipc --pretend'
 #
 set -euo pipefail
 
@@ -53,12 +58,13 @@ WARMUP=0
 RESUME=0
 TIMEOUT=600
 NG_PATH="$DEFAULT_NG"
+IPCCLIENT_PATH="$SCRIPT_DIR/ipcclient"
 REQUIRE_ALL=0
 TOOLS_CSV="emerge,pmerge,cave,ng-standalone,ng-ipc"
 PKGS=()
 
 usage() {
-  sed -n '3,48p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '3,54p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 log() { printf '%s\n' "$*" >&2; }
@@ -94,6 +100,7 @@ while [[ $# -gt 0 ]]; do
     --tools) TOOLS_CSV="${2:?}"; shift 2 ;;
     --timeout) TIMEOUT="${2:?}"; shift 2 ;;
     --ng-path) NG_PATH="${2:?}"; shift 2 ;;
+    --ipcclient) IPCCLIENT_PATH="${2:?}"; shift 2 ;;
     --skip-missing) REQUIRE_ALL=0; shift ;;
     --require-all) REQUIRE_ALL=1; shift ;;
     --) shift; PKGS+=("$@"); break ;;
@@ -144,6 +151,21 @@ tool_cmd() {
         printf '%s' "$NG_PATH --mode ipc --pretend"
       fi
       ;;
+    ng-ipc-legacy)
+      if [[ -n "${PM_BENCH_NG_IPC_LEGACY:-}" ]]; then
+        printf '%s' "$PM_BENCH_NG_IPC_LEGACY"
+      else
+        # env prefix: run_one word-splits; export via env(1)
+        printf '%s' "env PORTAGE_NG_IPC_LEGACY=1 $NG_PATH --mode ipc --pretend"
+      fi
+      ;;
+    ng-ipc-cpp)
+      if [[ -n "${PM_BENCH_NG_IPC_CPP:-}" ]]; then
+        printf '%s' "$PM_BENCH_NG_IPC_CPP"
+      else
+        printf '%s' "$IPCCLIENT_PATH --mode ipc --pretend"
+      fi
+      ;;
     *) die "unknown tool: $tool" ;;
   esac
 }
@@ -154,8 +176,11 @@ tool_available() {
   # first token
   bin="${cmd%% *}"
   case "$tool" in
-    ng-standalone|ng-ipc)
+    ng-standalone|ng-ipc|ng-ipc-legacy)
       [[ -x "$NG_PATH" || -x "$bin" ]] || return 1
+      ;;
+    ng-ipc-cpp)
+      [[ -x "$IPCCLIENT_PATH" || -x "$bin" ]] || return 1
       ;;
     cave)
       have_cmd cave || have_cmd "$bin" || return 1
@@ -185,7 +210,7 @@ parse_resolve_ms() {
     cave)
       # cave has no standard resolve-ms line; leave empty
       ;;
-    ng-standalone|ng-ipc)
+    ng-standalone|ng-ipc|ng-ipc-legacy|ng-ipc-cpp)
       # optional: "% merge wall_time_ms: N" if present in output
       s="$(grep -oE 'wall_time_ms:[[:space:]]*[0-9.]+' "$logf" 2>/dev/null | head -1 | grep -oE '[0-9.]+$')"
       [[ -n "$s" ]] && awk -v s="$s" 'BEGIN { printf "%.0f", s }'
@@ -260,7 +285,9 @@ ipc_daemon_running() {
 ensure_ng_ipc_daemon() {
   local want=0 t started=0
   for t in "${SELECTED[@]}"; do
-    [[ "$t" == "ng-ipc" ]] && want=1 && break
+    case "$t" in
+      ng-ipc|ng-ipc-legacy|ng-ipc-cpp) want=1; break ;;
+    esac
   done
   [[ $want -eq 1 ]] || return 0
 
@@ -285,9 +312,15 @@ ensure_ng_ipc_daemon() {
   fi
 
   # First real ipc request finishes KB/module init inside the daemon.
-  # Do that once here so timed ng-ipc samples are not the cold load.
+  # Do that once here so timed ipc samples are not the cold load.
   local probe_pkg="${PKGS[0]}" probe_cmd
-  probe_cmd="$(tool_cmd ng-ipc)"
+  if tool_available ng-ipc; then
+    probe_cmd="$(tool_cmd ng-ipc)"
+  elif tool_available ng-ipc-legacy; then
+    probe_cmd="$(tool_cmd ng-ipc-legacy)"
+  else
+    probe_cmd="$(tool_cmd ng-ipc-cpp)"
+  fi
   log "ipc daemon: settle probe ($probe_pkg)"
   # shellcheck disable=SC2086
   if ! $probe_cmd "$probe_pkg" >/dev/null 2>&1; then

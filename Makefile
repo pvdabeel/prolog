@@ -11,6 +11,12 @@
 
 SUDO=sudo
 TARGET=portage-ng
+IPCCLIENT=Source/Application/Wrapper/ipcclient
+IPCCLIENT_SRC=Source/Application/Client/ipcclient.cpp
+CXX?=c++
+CXXFLAGS?=-O2 -Wall -Wextra
+# Always request C++17 even when the environment overrides CXXFLAGS.
+IPCCLIENT_CXXFLAGS=$(CXXFLAGS) -std=c++17
 
 BUILDDIR=$(shell pwd)
 
@@ -79,8 +85,11 @@ test-profile-mask-golden-update: ## Regenerate the profile package.mask golden s
 	    "halt." | \
 	    ./Source/Application/Wrapper/portage-ng-dev --mode standalone --shell
 
+ipcclient: ## Build the native Unix-socket IPC client (C++ prototype).
+	  $(CXX) $(IPCCLIENT_CXXFLAGS) -o $(IPCCLIENT) $(IPCCLIENT_SRC)
+
 clean:    ## Remove the built binary.
-	  rm -f $(TARGET)
+	  rm -f $(TARGET) $(IPCCLIENT)
 
 CERTDIR=Certificates
 HOST?=$(shell hostname)
@@ -101,4 +110,4 @@ certs-check: ## Check TLS certificate expiry status for all hosts.
 certs-renew: ## Renew expired/expiring TLS certificates for all hosts.
 	  sh $(CERTDIR)/Scripts/generate.sh --renew
 
-.PHONY: help check all build install test test-overlay test-profile-mask-golden test-profile-mask-golden-update clean certs passwordfile certs-check certs-renew
+.PHONY: help check all build install test test-overlay test-profile-mask-golden test-profile-mask-golden-update ipcclient clean certs passwordfile certs-check certs-renew
