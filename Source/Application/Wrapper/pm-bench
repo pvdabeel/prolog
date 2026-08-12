@@ -15,6 +15,8 @@
 #                    # comments and blank lines ignored). Combined with argv pkgs.
 #   -r N             Repeats per (pkg, tool) [default: 1]
 #   --warmup         Discard one run before timed repeats
+#   --resume         Skip (pkg,tool,repeat) rows already present in -o FILE
+#                    (requires -o; appends to the existing TSV)
 #   --tools LIST     Comma-separated tools [default: emerge,pmerge,cave,ng-standalone,ng-ipc]
 #   --timeout SEC    Per-run wall timeout [default: 600]
 #   --ng-path PATH   portage-ng-dev wrapper (default: sibling of this script)
@@ -48,6 +50,7 @@ OUT=""
 PKG_FILE=""
 REPEATS=1
 WARMUP=0
+RESUME=0
 TIMEOUT=600
 NG_PATH="$DEFAULT_NG"
 REQUIRE_ALL=0
@@ -55,7 +58,7 @@ TOOLS_CSV="emerge,pmerge,cave,ng-standalone,ng-ipc"
 PKGS=()
 
 usage() {
-  sed -n '3,45p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '3,48p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 log() { printf '%s\n' "$*" >&2; }
@@ -87,6 +90,7 @@ while [[ $# -gt 0 ]]; do
     -f|--packages-file) PKG_FILE="${2:?}"; shift 2 ;;
     -r) REPEATS="${2:?}"; shift 2 ;;
     --warmup) WARMUP=1; shift ;;
+    --resume) RESUME=1; shift ;;
     --tools) TOOLS_CSV="${2:?}"; shift 2 ;;
     --timeout) TIMEOUT="${2:?}"; shift 2 ;;
     --ng-path) NG_PATH="${2:?}"; shift 2 ;;
@@ -102,6 +106,7 @@ done
 [[ ${#PKGS[@]} -gt 0 ]] || die "no packages given (see --help)"
 [[ "$REPEATS" =~ ^[1-9][0-9]*$ ]] || die "repeats must be a positive integer"
 [[ "$TIMEOUT" =~ ^[1-9][0-9]*$ ]] || die "timeout must be a positive integer"
+[[ $RESUME -eq 0 || -n "$OUT" ]] || die "--resume requires -o FILE"
 
 IFS=',' read -r -a TOOLS <<< "$TOOLS_CSV"
 
@@ -295,16 +300,28 @@ TMPDIR_BENCH="$(mktemp -d "${TMPDIR:-/tmp}/pm-bench.XXXXXX")"
 trap 'rm -rf "$TMPDIR_BENCH"' EXIT
 
 # Write the TSV live when -o is set so a long run survives interrupt/crash.
+# With --resume, append to an existing TSV and skip completed rows.
+declare -A DONE=()
 if [[ -n "$OUT" ]]; then
   mkdir -p "$(dirname -- "$OUT")"
   TSV_TMP="$OUT"
+  if [[ $RESUME -eq 1 && -f "$OUT" && -s "$OUT" ]]; then
+    # Columns: stamp host pkg tool repeat wall_ms resolve_ms rc cmd
+    while IFS=$'\t' read -r _pkg _tool _rep; do
+      [[ -n "$_pkg" ]] || continue
+      DONE["${_pkg}|${_tool}|${_rep}"]=1
+    done < <(awk -F'\t' 'NR>1 && NF>=5 { print $3 "\t" $4 "\t" $5 }' "$OUT")
+    log "resume: ${#DONE[@]} completed (pkg,tool,repeat) keys in $OUT"
+  else
+    printf 'stamp\thost\tpkg\ttool\trepeat\twall_ms\tresolve_ms\trc\tcmd\n' >"$TSV_TMP"
+  fi
+  log "writing live TSV to $OUT"
 else
   TSV_TMP="$TMPDIR_BENCH/results.tsv"
+  printf 'stamp\thost\tpkg\ttool\trepeat\twall_ms\tresolve_ms\trc\tcmd\n' >"$TSV_TMP"
 fi
-printf 'stamp\thost\tpkg\ttool\trepeat\twall_ms\tresolve_ms\trc\tcmd\n' >"$TSV_TMP"
-[[ -n "$OUT" ]] && log "writing live TSV to $OUT"
 
-log "pm-bench host=$HOST tools=${SELECTED[*]} pkgs=${#PKGS[@]} repeats=$REPEATS warmup=$WARMUP"
+log "pm-bench host=$HOST tools=${SELECTED[*]} pkgs=${#PKGS[@]} repeats=$REPEATS warmup=$WARMUP resume=$RESUME timeout=${TIMEOUT}s"
 ensure_ng_ipc_daemon
 
 # -----------------------------------------------------------------------------
@@ -313,6 +330,8 @@ ensure_ng_ipc_daemon
 
 pkg_i=0
 pkg_n=${#PKGS[@]}
+skipped=0
+ran=0
 for pkg in "${PKGS[@]}"; do
   pkg_i=$((pkg_i + 1))
   for tool in "${SELECTED[@]}"; do
@@ -321,6 +340,11 @@ for pkg in "${PKGS[@]}"; do
       run_one "$tool" "$pkg" "$TMPDIR_BENCH/warmup.log" >/dev/null || true
     fi
     for ((i = 1; i <= REPEATS; i++)); do
+      key="${pkg}|${tool}|${i}"
+      if [[ $RESUME -eq 1 && -n "${DONE[$key]+x}" ]]; then
+        skipped=$((skipped + 1))
+        continue
+      fi
       log "run     $tool  $pkg  ($i/$REPEATS)  [$pkg_i/$pkg_n]"
       # Reuse one log file per tool — full-tree runs must not create ~N*tools files.
       logf="$TMPDIR_BENCH/${tool//\//_}.log"
@@ -330,11 +354,14 @@ for pkg in "${PKGS[@]}"; do
       printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
         "$STAMP" "$HOST" "$pkg" "$tool" "$i" "$wall_ms" "${resolve_ms:-}" "$rc" "$cmd $pkg" \
         >>"$TSV_TMP"
+      DONE["$key"]=1
+      ran=$((ran + 1))
       log "  wall_ms=$wall_ms resolve_ms=${resolve_ms:--} rc=$rc"
     done
   done
 done
 
+log "finished ran=$ran skipped=$skipped"
 [[ -n "$OUT" ]] && log "wrote $OUT"
 
 # -----------------------------------------------------------------------------
