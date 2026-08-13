@@ -292,7 +292,9 @@ Mistyped flags get "did you mean?" suggestions.
 
 **Output styles.**
 `--style fancy`, `--style column`, `--style short` -- choose the level of
-detail.
+detail. Fancy mode draws Powerline action bubbles; install
+[MesloLGS NF](https://www.nerdfonts.com/font-downloads) for Terminal.app
+— see [Handbook ch. 14](Handbook/14-doc-output.md#powerline-bubbles-meslolgs-nf).
 
 ## Performance and quality
 

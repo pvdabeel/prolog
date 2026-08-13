@@ -77,6 +77,21 @@ portage-ng supports three printing styles, selectable via
   and repository information in fixed columns for easy scanning.
 - **`short`** — a minimal one-line-per-action format.
 
+### Powerline bubbles (MesloLGS NF)
+
+In `fancy` mode, action labels are drawn as **Powerline bubbles**: a
+coloured pill with rounded caps (`U+E0B6` / `U+E0B4`). Those code
+points live in the Private Use Area, so a stock monospace font such as
+Menlo or SF Mono shows them as tofu boxes or blank glyphs. Install a
+Nerd Font that includes the Powerline set — recommended:
+[MesloLGS NF](https://www.nerdfonts.com/font-downloads) (Meslo LG S) —
+then select **MesloLGS NF** as the profile font in Terminal.app
+(**Settings → Profiles → Text → Font**). Open a new window afterwards.
+
+On the Linux console (`TERM=linux`), portage-ng falls back to
+angle-bracket labels (`<install>`) via `config:powerline_bubbles/0`;
+no special font is required there.
+
 ### Pre-action steps
 
 Before the merge list, the printer can show **pre-action steps** —

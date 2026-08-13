@@ -45,6 +45,7 @@ The following are convenient but not required for core operation.
 | **aha** / **perl** | Pretty-print HTML output generation. |
 | **pv** | Progress bars during batch graph generation. |
 | **Ollama** | Local LLM inference and vector embeddings for `--search` / `--explain`. |
+| **MesloLGS NF** (Nerd Font) | Rounded Powerline action bubbles in `--style fancy` terminal output.  Download from [Nerd Fonts](https://www.nerdfonts.com/font-downloads); see [Chapter 14](14-doc-output.md#powerline-bubbles-meslolgs-nf). |
 
 ### Prolog build requirements
 

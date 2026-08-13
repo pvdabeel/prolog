@@ -95,7 +95,7 @@ retry chain and the domain exception fixups work.
 
 | **Setting** | **Default** | **Purpose** |
 |:---|:---|:---|
-| `config:default_printing_style/1` | `'fancy'` | Plan output style: `short`, `column`, or `fancy` (tree-structured with Unicode box drawing). |
+| `config:default_printing_style/1` | `'fancy'` | Plan output style: `short`, `column`, or `fancy` (tree-structured with Unicode box drawing and Powerline bubbles; see [Chapter 14](14-doc-output.md#powerline-bubbles-meslolgs-nf) for the MesloLGS NF font on Terminal.app). |
 | `config:color_output/0` | asserted | ANSI colour in terminal output.  Retract to disable. |
 | `config:color_palette/1` | `full` | Use flag colouring: `easy` (classic Portage red/blue) or `full` (reason-based, showing where each flag came from). |
 
