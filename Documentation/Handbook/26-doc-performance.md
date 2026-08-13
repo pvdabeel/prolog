@@ -17,8 +17,8 @@ across all packages can finish in under a minute on a strong multi-core
 machine—while leaving room for profiling and targeted optimization.
 
 This chapter walks those pillars in order, then covers **instrumentation**
-(the sampler), **bulk testing**, and a **performance comparison** between
-portage-ng and Portage.
+(the sampler), **bulk testing**, and a **pm-bench performance comparison**
+across emerge, pkgcore, Paludis, and portage-ng IPC.
 
 
 ## Pillar 1: Compiled knowledge (qcompiled `.qlf` files)
@@ -191,85 +191,77 @@ PL
 ```
 
 
-## Performance comparison: portage-ng vs Portage
+## Performance comparison: package managers (pm-bench)
 
-The numbers below put the five pillars in perspective with measured
-data from a full Portage tree comparison.  Both resolvers start from
-the same input: an identical Portage tree snapshot (roughly 32,000
-ebuilds), the same VDB (installed package database), and the same
-`/etc/portage` configuration.  The measurement is **dependency
-resolution time only** — how long it takes to produce a merge plan,
-not how long the actual builds take.
+The numbers below are **process wall-clock** times for a cold
+`--pretend` / resolve-only invocation of each tool — how long it takes
+to produce a merge plan, not how long builds take.  They were measured
+on `vm-linux.local` with `Source/Application/Wrapper/pm-bench` against
+an identical Portage tree, VDB, and `/etc/portage` for every engine.
 
-- **Portage** uses `emerge -vp <target>`, which runs the Python
-  `depgraph.py` resolver with greedy selection and backtracking.
-- **portage-ng** uses `--mode standalone --pretend <target>`, which
-  runs the Prolog prover and ordering pass.
+| **Tool** | **Invocation** |
+| :--- | :--- |
+| emerge | `emerge -vp <pkg>` |
+| pmerge | `pmerge -vp <pkg>` (pkgcore) |
+| cave | `cave resolve --lazy <pkg>` (Paludis) |
+| ng-ipc | `portage-ng-dev --mode ipc --pretend <pkg>` (ultralight SWI `ipclient.pl`) |
+| ng-ipc-cpp | `ipcclient --mode ipc --pretend <pkg>` (native C++ client) |
 
-
-### Resolution speed (emerge_ok packages)
-
-The comparison covers **31,331 packages** resolved by both tools.
-For the **22,781** packages where Portage itself reports a clean result
-(`emerge_ok`), portage-ng is faster in **100%** of cases:
-
-| | **Portage** | **portage-ng** | **Speedup** |
-| :--- | ---: | ---: | ---: |
-| Average | 1,239 ms | 32 ms | **38x** |
-| Median | 1,159 ms | 6 ms | **193x** |
-| 95th percentile | 1,679 ms | 165 ms | **10x** |
-| Maximum | 11,165 ms | 920 ms | **12x** |
-| Cumulative (22,781 pkgs) | 7.84 hours | 12.3 minutes | **38x** |
-
-The median package resolves in **6 milliseconds** in portage-ng
-versus **1.16 seconds** in Portage — nearly a two-hundred-fold
-improvement.  Even at the 95th percentile (complex packages with deep
-dependency chains), portage-ng finishes in 165 ms while Portage needs
-nearly 1.7 seconds.  portage-ng is faster in every single
-`emerge_ok` pair — no exceptions.
+portage-ng IPC uses a **warm daemon** (knowledge base already loaded);
+the timed sample is client connect + prove + print.  Standalone
+portage-ng (full process boot + `kb.qlf` load each time) is much slower
+and is not included in this table.
 
 
-### Resolution speed (all packages)
+### Packages where emerge produced a plan
 
-Across all **31,331** packages (including those where Portage reports
-errors), portage-ng is faster in **99.7%** of cases:
+**16,313** packages where `emerge -vp` exited 0 (an actual plan).
+Median speedup is `emerge_median / tool_median`.  Total is the sum of
+per-package wall times (serial equivalent).
 
-| | **Portage** | **portage-ng** | **Speedup** |
-| :--- | ---: | ---: | ---: |
-| Average | 1,302 ms | 71 ms | **18x** |
-| Median | 1,161 ms | 11 ms | **106x** |
-| 95th percentile | 2,069 ms | 264 ms | **8x** |
-| Maximum | 11,165 ms | 9,107 ms | **1.2x** |
-| Cumulative (31,331 pkgs) | 11.33 hours | 37.2 minutes | **18x** |
+| **Tool** | **Median** | **Average** | **Total** | **Median speedup** | **Total speedup** |
+| :--- | ---: | ---: | ---: | ---: | ---: |
+| emerge | 1,234 ms | 1,345 ms | 6.09 hours | 1.0× | 1.0× |
+| cave | 520 ms | 1,372 ms | 6.22 hours | 2.4× | 1.0× |
+| pmerge | 245 ms | 282 ms | 1.28 hours | 5.0× | 4.8× |
+| ng-ipc | 82 ms | 119 ms | 32.4 minutes | **15.1×** | **11.3×** |
+| ng-ipc-cpp | 55 ms | 92 ms | 25.0 minutes | **22.4×** | **14.6×** |
 
-The 103 cases (0.3%) where Portage finishes faster are all packages
-where **Portage itself fails** (`emerge_notok`).  In those cases
-Portage exits early with an error while portage-ng still performs a
-full resolution attempt.  Among the `emerge_ok` population — the
-apples-to-apples comparison — portage-ng wins 100% of cases.
+The C++ IPC client is about **27 ms** faster than the SWI `ipclient` at
+the median (same daemon; the gap is client process boot).  Both IPC
+tools finished every package in this set with exit code 0.  Cave’s
+average/total are inflated by hard timeouts (120 s cap in this run).
 
 
-### Why portage-ng is faster
+### All packages in the manifest
 
-The performance gap is not about language speed (Prolog vs Python).
-It comes from architectural differences that compound across
-thousands of packages:
+Across all **19,430** packages in the pm-bench manifest (including
+those where emerge exited non-zero):
 
-| **Factor** | **Portage** | **portage-ng** |
+| **Tool** | **Median** | **Average** | **Total** | **Median speedup** |
+| :--- | ---: | ---: | ---: | ---: |
+| emerge | 1,240 ms | 1,437 ms | 7.76 hours | 1.0× |
+| cave | 544 ms | 1,891 ms | 10.21 hours | 2.3× |
+| pmerge | 247 ms | 286 ms | 1.55 hours | 5.0× |
+| ng-ipc | 85 ms | 161 ms | 52.0 minutes | **14.6×** |
+| ng-ipc-cpp | 58 ms | 133 ms | 43.2 minutes | **21.4×** |
+
+
+### Why portage-ng IPC is faster
+
+The gap is not primarily “Prolog vs Python.”  It comes from
+architectural differences that compound across thousands of packages:
+
+| **Factor** | **Traditional PMs** | **portage-ng (daemon + IPC)** |
 | :--- | :--- | :--- |
-| Startup cost | Python interpreter + module imports per invocation | Qcompiled cache loads once, shared across all queries |
+| Startup cost | Interpreter + imports + metadata load each invoke | KB loaded once in the daemon; thin client (~3–30 ms) |
 | Graph construction | Build full graph, then check for conflicts | Single-pass proof — no separate graph phase |
-| Conflict recovery | Discard entire graph, rebuild from scratch | Retry only the affected subtree with learned constraints |
-| Repeated queries | Each `emerge -vp` starts cold | In-memory facts persist; subsequent queries are instant |
-| Parallelism | Sequential graph walk | Ordering pass identifies parallel waves automatically |
+| Conflict recovery | Discard / restart large parts of the search | Retry the affected subtree with learned constraints |
+| Repeated queries | Each pretend starts cold | In-memory facts persist across IPC requests |
+| Parallelism | Sequential graph walk | Ordering pass identifies parallel waves |
 
-The largest single factor is the **qcompiled cache** (Pillar 1): once
-loaded, all 32,000 ebuilds are in memory as indexed Prolog facts, and
-queries hit first-argument indexing directly.  Portage re-reads and
-re-parses metadata structures on each invocation.
-
+The largest single factor for interactive use is the **resident
+daemon** plus **qcompiled cache** (Pillar 1): once loaded, ebuilds are
+indexed Prolog facts and queries hit first-argument indexing directly.
 The second factor is **single-pass proving** (Pillar 4): for over 99%
-of packages, portage-ng needs no backtracking at all.  Portage's
-greedy approach works well for simple cases but scales poorly when
-conflicts require multiple backtracks — each of which rebuilds the
-entire dependency graph.
+of packages, portage-ng needs no backtracking at all.
