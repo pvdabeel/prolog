@@ -144,10 +144,11 @@ step_body(H, Body) :-
 %
 % Hard requirement: D must be available before step H can be placed.
 % Enumerated from H's pass-1 proof body — every body literal that is
-% itself a step, except runtime dependency groups (grouped :run heads,
-% RDEPEND provenance): a runtime dep does not gate the build, so it is a
-% preference, never an obligation. Constraints and body literals without
-% a proof entry carry no ordering information.
+% itself a step, except preference-only deps (`runtime_dep/1`: grouped
+% :run heads, and :fetchonly heads). A runtime dep does not gate the
+% build; fetching another package's sources does not gate fetching
+% this one. Constraints and body literals without a proof entry carry
+% no ordering information.
 
 requires(H, D) :-
   ordering:step_body(H, Body),
@@ -165,9 +166,11 @@ requires(H, D) :-
 % Preference: H would like D placed earlier, without insisting. Five
 % sources, all read from the pass-1 proof:
 %
-%   - runtime dependency groups (grouped :run heads) in H's body —
-%     RDEPEND wants its providers early but cannot force them (Portage
-%     relaxes exactly these edges inside cycles);
+%   - preference-only deps (`runtime_dep/1`: grouped :run heads, and
+%     :fetchonly heads) in H's body — RDEPEND wants its providers early
+%     but cannot force them; fetching another package's sources likewise
+%     cannot gate this fetch (Portage relaxes exactly these edges
+%     inside cycles);
 %   - `constraint(order_after(Anchor))` pseudo-constraints (the PDEPEND
 %     ordering channel, Handbook chapter 12) — post-merge by nature,
 %     best-effort by Portage semantics;
@@ -243,10 +246,19 @@ prefers(H, D) :-
 
 %! ordering:runtime_dep(+Core)
 %
-% True for runtime dependency-group literals (RDEPEND provenance):
-% ordered early when possible, never required.
+% True for preference-only body literals: ordered early when possible,
+% never required. Two families:
+%
+%   - grouped :run heads (RDEPEND provenance) — a runtime dep does not
+%     gate the build;
+%   - :fetchonly heads (grouped or concrete) — fetching another
+%     package's sources does not gate fetching this one. Distfiles are
+%     independent; a fetchonly cycle is not a bootstrap failure.
 
 runtime_dep(grouped_package_dependency(_, _, _, _):run).
+runtime_dep(grouped_package_dependency(_, _, _, _):fetchonly).
+runtime_dep(grouped_package_dependency(_, _, _):fetchonly).
+runtime_dep(_://_:fetchonly).
 
 
 % -----------------------------------------------------------------------------
@@ -395,8 +407,13 @@ phase_actions(run, [run]).
 %
 % The installed system, as it stands, already provides requirement D of
 % consumer H — the LFS argument: a fact about the present system, cited
-% from the VDB. Three shapes:
+% from the VDB. Four shapes:
 %
+%   - D is a :fetchonly or :download action (grouped or concrete):
+%     distfiles are not temporally gated, so a fetch-only requirement
+%     is always world-available. Must precede the VDB clauses: those
+%     cut on any grouped dep / concrete action and would otherwise
+%     demand an installed package for a mere fetch;
 %   - H is a dependency group and D its chosen provider (the cycle-bridge
 %     case): the group's version and USE constraints — not the provider's
 %     identity — are what H actually requires, so the world provides D
@@ -410,6 +427,11 @@ phase_actions(run, [run]).
 world(_H, D) :-
   ordering:world_override(D),
   !.
+
+world(_H, _Repository://_Entry:fetchonly) :- !.
+world(_H, _Repository://_Entry:download) :- !.
+world(_H, grouped_package_dependency(_, _, _, _):fetchonly) :- !.
+world(_H, grouped_package_dependency(_, _, _):fetchonly) :- !.
 
 world(grouped_package_dependency(no, C, N, Deps):_, _Repository://_Entry:_Action) :-
   !,

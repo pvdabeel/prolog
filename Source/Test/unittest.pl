@@ -3603,6 +3603,17 @@ test(benign_run_cycle_no_assumption) :-
   \+ gen_assoc(assumed(_), Model, _),
   forall(gen_assoc(K, Proof, _), K \= assumed(rule(_))).
 
+% A fetchonly cycle is likewise benign: distfiles are independent, so
+% "fetch A requires fetch B requires fetch A" is not a bootstrap failure
+% and must not surface as assumed(rule(...:fetchonly)) ("assumed fetched").
+test(benign_fetchonly_cycle_no_assumption) :-
+  issue73_rules([(p:fetchonly)-[q:fetchonly], (q:fetchonly)-[p:fetchonly]]),
+  resolver:resolve([p:fetchonly], t, Proof, t, Model, t, _Cons, t, _Triggers),
+  get_assoc(p:fetchonly, Model, _),
+  get_assoc(q:fetchonly, Model, _),
+  \+ gen_assoc(assumed(_), Model, _),
+  forall(gen_assoc(K, Proof, _), K \= assumed(rule(_))).
+
 % A domain assumption (assumed/1 emitted by a rule body) is stored under the
 % proof key rule(assumed(X)) — the OTHER axis of the assumption taxonomy —
 % and never as a prover cycle-break key.
@@ -3741,6 +3752,19 @@ test(cyclic_preference_dropped_silently) :-
   issue73_wave(Plan, lib, WLib),
   issue73_wave(Plan, G, WG),
   WProg < WLib, WLib < WG.
+
+% Fetchonly inter-package edges are preferences, not hard requirements.
+% A parent<->child fetchonly cycle (the calligra / qtbase shape) must
+% not produce unreachable/2 domain assumptions: distfiles can be
+% retrieved in any order.
+test(fetchonly_cycle_no_unreachable) :-
+  G = grouped_package_dependency(no, cat, lib, []):fetchonly,
+  issue73_rules([(prog:fetchonly)-[G], G-[lib:fetchonly], (lib:fetchonly)-[prog:fetchonly]]),
+  ordering_engine_plan([prog:fetchonly], ProofOut, Plan),
+  ordering_engine_unreachables(ProofOut, []),
+  issue73_wave(Plan, prog:fetchonly, _),
+  issue73_wave(Plan, lib:fetchonly, _),
+  issue73_wave(Plan, G, _).
 
 % order_after pseudo-constraints (the PDEPEND ordering channel) are
 % preferences on their anchor: the carrier lands after the anchor.

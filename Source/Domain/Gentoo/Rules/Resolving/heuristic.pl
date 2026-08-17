@@ -568,7 +568,12 @@ heuristic:should_union_ctx(assumed(_Repo://_Entry:_Action)) :- !.
 %
 % Succeeds if the cycle at Lit is benign.  Dependency-level literals
 % are always benign.  Cross-package cycles are benign when any step
-% in the CyclePath is a :run entry (RDEPEND-mediated).
+% in the CyclePath is a :run entry (RDEPEND-mediated) or a :fetchonly
+% entry (distfiles are independent; a fetch-only cycle is not a
+% bootstrap failure). The :run/:fetchonly match is on the *grouped*
+% dep (`grouped_package_dependency(...):run`), which is what actually
+% sits on a real-package cycle path — `Repo://Entry:run` does not
+% unify with `_:run` because `://` binds looser than `:`.
 
 heuristic:cycle_benign(Lit, _CyclePath) :-
     ( Lit = grouped_package_dependency(_,_,_,_):_
@@ -578,7 +583,9 @@ heuristic:cycle_benign(Lit, _CyclePath) :-
 
 heuristic:cycle_benign(_Lit, CyclePath) :-
     member(Entry, CyclePath),
-    Entry = _:run,
+    ( Entry = _:run
+    ; Entry = _:fetchonly
+    ),
     !.
 
 
