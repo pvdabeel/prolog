@@ -22,23 +22,43 @@ Target validation and resolution for CLI commands.
 % or has no matching entry in the knowledge base.
 
 interface:report_unresolvable_targets(Action, Args) :-
-  forall(member(Arg, Args),
+  forall((member(Arg, Args), Arg \== '--'),
     ( atom_codes(Arg, Codes),
       ( \+ phrase(eapi:qualified_target(_), Codes)
       -> message:warning(['Cannot parse target: ', Arg])
       ; phrase(eapi:qualified_target(Q), Codes),
         ( Action == uninstall
-        -> ( once((kb:query(Q, R0://E0), kb:query(installed(true), R0://E0)))
+        -> ( interface:target_query_installed(Q)
            -> true
            ;  message:warning(['Not installed: ', Arg])
            )
-        ; ( once(kb:query(Q, _R://_E))
+        ; ( interface:target_query_exists(Q)
           -> true
           ;  message:warning(['Package not found: ', Arg])
           )
         )
       )
     )).
+
+
+%! interface:target_query_exists(+Q) is semidet.
+%
+% True when Q matches at least one knowledge-base entry. Uses a copy
+% of Q so an unbound repository slot is not filled in by the first
+% hit (the tree is registered before overlays).
+
+interface:target_query_exists(Q) :-
+  copy_term(Q, Q0),
+  once(kb:query(Q0, _://_)).
+
+
+%! interface:target_query_installed(+Q) is semidet.
+%
+% Like target_query_exists/1, but requires an installed (VDB) match.
+
+interface:target_query_installed(Q) :-
+  copy_term(Q, Q0),
+  once((kb:query(Q0, R://E), kb:query(installed(true), R://E))).
 
 
 % -----------------------------------------------------------------------------

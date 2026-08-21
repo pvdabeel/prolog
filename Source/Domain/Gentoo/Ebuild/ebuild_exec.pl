@@ -431,7 +431,15 @@ ebuild_exec:start_phase_async(EbuildPath, Phase, LogPath, UseString, ExtraEnv, P
     path(sh),
     ['-c', '"$1" --skip-manifest "$2" "$3" >>"$4" 2>&1',
      '_', EbuildCmd, EbuildPath, PhaseStr, LogPath],
-    [process(Pid), environment(['USE'=UseString|ExtraEnv])]).
+    [process(Pid),
+     environment(['USE'=UseString,
+                  'GIT_TERMINAL_PROMPT'='0',
+                  'GIT_ASKPASS'='/bin/false',
+                  'GIT_CONFIG_COUNT'='2',
+                  'GIT_CONFIG_KEY_0'='credential.helper',
+                  'GIT_CONFIG_VALUE_0'='',
+                  'GIT_CONFIG_KEY_1'='credential.interactive',
+                  'GIT_CONFIG_VALUE_1'='never'|ExtraEnv])]).
 
 
 %! ebuild_exec:check_phase_done(+Pid, -ExitCode) is semidet.
@@ -682,7 +690,15 @@ ebuild_exec:run_phase(EbuildPath, Phase, UseString, ExitCode) :-
   process_create(
     path(EbuildCmd),
     ['--skip-manifest', EbuildPath, PhaseStr],
-    [stdout(null), stderr(null), process(Pid), environment(['USE'=UseString])]),
+    [stdout(null), stderr(null), process(Pid),
+     environment(['USE'=UseString,
+                  'GIT_TERMINAL_PROMPT'='0',
+                  'GIT_ASKPASS'='/bin/false',
+                  'GIT_CONFIG_COUNT'='2',
+                  'GIT_CONFIG_KEY_0'='credential.helper',
+                  'GIT_CONFIG_VALUE_0'='',
+                  'GIT_CONFIG_KEY_1'='credential.interactive',
+                  'GIT_CONFIG_VALUE_1'='never'])]),
   process_wait(Pid, exit(ExitCode)).
 
 
@@ -710,7 +726,15 @@ ebuild_exec:run_phase_logged_unlocked(EbuildPath, Phase, LogPath, UseString, Exi
     path(sh),
     ['-c', '"$1" --skip-manifest "$2" "$3" >>"$4" 2>&1',
      '_', EbuildCmd, EbuildPath, PhaseStr, LogPath],
-    [process(Pid), environment(['USE'=UseString])]),
+    [process(Pid),
+     environment(['USE'=UseString,
+                  'GIT_TERMINAL_PROMPT'='0',
+                  'GIT_ASKPASS'='/bin/false',
+                  'GIT_CONFIG_COUNT'='2',
+                  'GIT_CONFIG_KEY_0'='credential.helper',
+                  'GIT_CONFIG_VALUE_0'='',
+                  'GIT_CONFIG_KEY_1'='credential.interactive',
+                  'GIT_CONFIG_VALUE_1'='never'])]),
   process_wait(Pid, exit(ExitCode)).
 
 
@@ -1058,7 +1082,15 @@ ebuild_exec:run_phases_once(EbuildPath, Phases, UseString, ExtraEnv, ExitCode) :
   process_create(
     path(EbuildCmd),
     ['--skip-manifest', EbuildPath | PhaseStrs],
-    [stdout(null), stderr(null), process(Pid), environment(['USE'=UseString|ExtraEnv])]),
+    [stdout(null), stderr(null), process(Pid),
+     environment(['USE'=UseString,
+                  'GIT_TERMINAL_PROMPT'='0',
+                  'GIT_ASKPASS'='/bin/false',
+                  'GIT_CONFIG_COUNT'='2',
+                  'GIT_CONFIG_KEY_0'='credential.helper',
+                  'GIT_CONFIG_VALUE_0'='',
+                  'GIT_CONFIG_KEY_1'='credential.interactive',
+                  'GIT_CONFIG_VALUE_1'='never'|ExtraEnv])]),
   process_wait(Pid, exit(ExitCode)).
 
 

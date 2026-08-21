@@ -409,37 +409,39 @@ sync(kb) ::-
   (config:write_metadata(true) -> :update_cache ; true),
 
   concurrent_forall((:find_ebuild(E,T,C,N,V),\+(cache:entry_metadata(Repository,E,_,_))),
-          (:read_ebuild(E,Cd,M),
-           with_mutex(mutex,message:scroll(['Ebuild (local): ',E])),
-           assertz(cache:entry(Repository,E,C,N,V)),
-           assertz(cache:entry_metadata(Repository,E,timestamp,T)),
-           assertz(cache:entry_metadata(Repository,E,local,true)),
-           forall(member(L,M),
-                  (L=..[Key,Value],
-                   forall(member(I,Value),
-                          ( eapi:normalize_entry_metadata(Key, I, I1),
-                            assertz(cache:entry_metadata(Repository,E,Key,I1))
-                          )))),
-           (config:write_metadata(true) -> :update_metadata(E,Cd) ; true))),
+          (catch(:read_ebuild(E,Cd,M), _, fail)
+           -> (with_mutex(mutex,message:scroll(['Ebuild (local): ',E])),
+               assertz(cache:entry(Repository,E,C,N,V)),
+               assertz(cache:entry_metadata(Repository,E,timestamp,T)),
+               assertz(cache:entry_metadata(Repository,E,local,true)),
+               forall(member(L,M),
+                      (L=..[Key,Value],
+                       forall(member(I,Value),
+                              ( eapi:normalize_entry_metadata(Key, I, I1),
+                                assertz(cache:entry_metadata(Repository,E,Key,I1))
+                              )))),
+               (config:write_metadata(true) -> :update_metadata(E,Cd) ; true))
+           ; with_mutex(mutex,message:scroll(['Ebuild (local, skip): ',E])))),
 
 
   % Step 2.c: read ebuilds with outdated repository cache
 
   concurrent_forall((:find_ebuild(E,TE,C,N,V),cache:entry_metadata(Repository,E,timestamp,TC), TE > TC + 60), % time writing to disk
-          (:read_ebuild(E,Cd,M),
-           with_mutex(mutex,message:scroll(['Ebuild (changed): ',E])),
-           retractall(cache:entry(Repository,E,_,_,_)),
-           retractall(cache:entry_metadata(Repository,E,_,_)),
-           assertz(cache:entry(Repository,E,C,N,V)),
-           assertz(cache:entry_metadata(Repository,E,timestamp,TE)),
-           assertz(cache:entry_metadata(Repository,E,changed,true)),
-           forall(member(L,M),
-                  (L=..[Key,Value],
-                   forall(member(I,Value),
-                          ( eapi:normalize_entry_metadata(Key, I, I1),
-                            assertz(cache:entry_metadata(Repository,E,Key,I1))
-                          )))),
-           (config:write_metadata(true) -> :update_metadata(E,Cd) ; true))),
+          (catch(:read_ebuild(E,Cd,M), _, fail)
+           -> (with_mutex(mutex,message:scroll(['Ebuild (changed): ',E])),
+               retractall(cache:entry(Repository,E,_,_,_)),
+               retractall(cache:entry_metadata(Repository,E,_,_)),
+               assertz(cache:entry(Repository,E,C,N,V)),
+               assertz(cache:entry_metadata(Repository,E,timestamp,TE)),
+               assertz(cache:entry_metadata(Repository,E,changed,true)),
+               forall(member(L,M),
+                      (L=..[Key,Value],
+                       forall(member(I,Value),
+                              ( eapi:normalize_entry_metadata(Key, I, I1),
+                                assertz(cache:entry_metadata(Repository,E,Key,I1))
+                              )))),
+               (config:write_metadata(true) -> :update_metadata(E,Cd) ; true))
+           ; with_mutex(mutex,message:scroll(['Ebuild (changed, skip): ',E])))),
 
 
   % Step 3: update prolog cache:manifest facts for manifests in the repository

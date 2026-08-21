@@ -32,9 +32,14 @@ action:process_action(Action,ArgsSets,Options) :-
           ( member(Arg,Args),
             atom_codes(Arg,Codes),
             phrase(eapi:qualified_target(Q),Codes),
+            % Instantiate Q's repository to the preferred visible
+            % candidate (overlay before tree) so prove does not bind
+            % the first cache hit (`portage`) and then keyword-relax it.
             ( Action == uninstall
-              -> once((kb:query(Q, R0://E0), kb:query(installed(true), R0://E0)))
-              ;  once(kb:query(Q, _R://_E))
+              -> interface:target_query_installed(Q),
+                 once(target:resolve_installed_candidate(Q, _))
+              ;  interface:target_query_exists(Q),
+                 once(target:resolve_candidate(Q, _))
             )
           ),
           Proposal),!,

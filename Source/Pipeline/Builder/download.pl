@@ -743,20 +743,37 @@ download:is_fetch_restricted(Repo, Entry) :-
 download:extract_git_uri(Repo, Entry, URI) :-
   Repo:get_ebuild_file(Entry, EbuildPath),
   exists_file(EbuildPath),
+  download:entry_package_name(Repo, Entry, PN),
   setup_call_cleanup(
     open(EbuildPath, read, S),
-    download:scan_for_git_uri(S, URI),
+    download:scan_for_git_uri(S, PN, URI),
     close(S)).
 
-download:scan_for_git_uri(S, URI) :-
+
+%! download:entry_package_name(+Repo, +Entry, -PN)
+%
+% Package name for expanding ${PN} in EGIT_REPO_URI.
+
+download:entry_package_name(Repo, Entry, PN) :-
+  cache:ordered_entry(Repo, Entry, _Category, PN, _),
+  !.
+download:entry_package_name(_Repo, Entry, PN) :-
+  atomic_list_concat([_, PF], '/', Entry),
+  eapi:packageversion(PF, PN, _),
+  !.
+download:entry_package_name(_Repo, _Entry, '').
+
+
+download:scan_for_git_uri(S, PN, URI) :-
   read_line_to_string(S, Line),
   Line \== end_of_file,
-  ( download:parse_git_uri_line(Line, URI)
+  ( download:parse_git_uri_line(Line, PN, URI)
   -> true
-  ;  download:scan_for_git_uri(S, URI)
+  ;  download:scan_for_git_uri(S, PN, URI)
   ).
 
-download:parse_git_uri_line(Line, URI) :-
+
+download:parse_git_uri_line(Line, PN, URI) :-
   sub_string(Line, _, _, _, "EGIT_REPO_URI="),
   split_string(Line, "=", " \t", [_|Parts]),
   Parts \= [],
@@ -765,7 +782,42 @@ download:parse_git_uri_line(Line, URI) :-
   split_string(RawStr, "\"'", "\"'", ValueParts),
   member(VS, ValueParts),
   VS \= "",
-  atom_string(URI, VS),
+  download:expand_git_uri_vars(VS, PN, Expanded),
+  download:first_http_token(Expanded, Tok),
+  \+ sub_string(Tok, _, _, _, "$"),
+  \+ sub_string(Tok, _, _, _, "/api/"),
+  \+ sub_string(Tok, _, _, _, " "),
+  atom_string(URI, Tok),
+  !.
+
+
+%! download:expand_git_uri_vars(+Raw, +PN, -Expanded)
+%
+% Expand ${PN} / $PN so live ebuilds that write
+% EGIT_REPO_URI="https://.../${PN}.git" are fetchable. Emerge's git-r3
+% does this at unpack time; the download step must do it too or PN
+% fails while emerge succeeds.
+
+download:expand_git_uri_vars(Raw, '', Raw) :-
+  !.
+download:expand_git_uri_vars(Raw, PN, Expanded) :-
+  atom_string(PN, PNs),
+  re_replace('\\$\\{PN\\}'/g, PNs, Raw, Mid),
+  re_replace('\\$PN'/g, PNs, Mid, Expanded).
+
+
+%! download:first_http_token(+Value, -Token)
+%
+% Take the first http(s)/git URI when HOMEPAGE-style concatenation
+% leaked into EGIT_REPO_URI.
+
+download:first_http_token(Value, Token) :-
+  split_string(Value, " \t", " \t", Parts),
+  member(Token, Parts),
+  ( sub_string(Token, 0, 8, _, "https://")
+  ; sub_string(Token, 0, 7, _, "http://")
+  ; sub_string(Token, 0, 6, _, "git://")
+  ),
   !.
 
 
@@ -805,20 +857,43 @@ download:git_repo_cache_path(GitCacheDir, URI, RepoPath) :-
 
 download:start_git_clone_async(URI, RepoPath, LogPath, Pid) :-
   open(LogPath, append, LogStream),
+  download:git_spawn_opts(Out, Err, Pid, Opts),
+  download:git_no_cred_args(NoCred),
   ( exists_directory(RepoPath)
-  -> process_create(
-       path(git),
-       ['-C', RepoPath, 'fetch', '--progress', '--all'],
-       [stdout(pipe(Out)), stderr(pipe(Err)),
-        process(Pid)])
-  ;  process_create(
-       path(git),
-       ['clone', '--bare', '--progress', URI, RepoPath],
-       [stdout(pipe(Out)), stderr(pipe(Err)),
-        process(Pid)])
+  -> append(NoCred, ['-C', RepoPath, 'fetch', '--progress', '--all'], Args)
+  ;  append(NoCred, ['clone', '--bare', '--progress', URI, RepoPath], Args)
   ),
+  process_create(path(git), Args, Opts),
   thread_create(
     download:pipe_to_log(Out, Err, LogStream), _, [detached(true)]).
+
+
+%! download:git_no_cred_args(-Args) is det.
+%
+% Extra `git -c` flags that disable credential helpers so a public
+% HTTPS clone stays anonymous and a 401 fails instead of prompting.
+
+download:git_no_cred_args(['-c', 'credential.helper=',
+                           '-c', 'credential.interactive=never']).
+
+
+%! download:git_spawn_opts(-Out, -Err, -Pid, -Opts) is det.
+%
+% Common process_create/3 options for live-ebuild git clone/fetch.
+% stdin is closed and credential prompts are disabled so a 401/404
+% fails immediately instead of blocking on a username/password prompt.
+% Public HTTPS clones are anonymous; /bin/false (not /bin/true) is the
+% askpass so git does not treat an empty username as "answered".
+
+download:git_spawn_opts(Out, Err, Pid, Opts) :-
+  Opts = [stdin(null), stdout(pipe(Out)), stderr(pipe(Err)), process(Pid),
+          environment(['GIT_TERMINAL_PROMPT'='0',
+                       'GIT_ASKPASS'='/bin/false',
+                       'GIT_CONFIG_COUNT'='2',
+                       'GIT_CONFIG_KEY_0'='credential.helper',
+                       'GIT_CONFIG_VALUE_0'='',
+                       'GIT_CONFIG_KEY_1'='credential.interactive',
+                       'GIT_CONFIG_VALUE_1'='never'])].
 
 
 %! download:pipe_to_log(+Out, +Err, +LogStream) is det.

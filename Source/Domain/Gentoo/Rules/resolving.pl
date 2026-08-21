@@ -208,14 +208,13 @@ rule(Literal, Body) :-
 % 
 % Candidate selection is by default version-descending.
 %   
-% When the target specifies only category/name visible candidates 
-% (i.e. not masked, keyword-accepted, not license-masked) are tried first.
-% This avoids needlessly unmasking a live ebuild when another release
-% that satisfies the request is available.  
-
-% When an explicit version is given, all candidates are tried 
-% in standard order because the user intentionally picked that version.
-% This may result in the prover unmasking the specifically requested version.
+% Visible candidates (not masked, keyword-accepted, not license-masked)
+% are tried first for both CN and CNV targets. For CN this avoids
+% unmasking a live ebuild when a release satisfies the request. For CNV
+% it prefers a keyword-accepted overlay copy of the requested version
+% over a same-CPV tree entry that still needs keyword_acceptance.
+% Remaining candidates are still tried afterwards so an explicit
+% version can be unmasked when no visible copy exists.
 
 
 % 1. Fetchonly target: resolve query to a candidate and prove the fetchonly action.

@@ -13,7 +13,7 @@ Target-level query resolution and candidate-level action resolution helpers.
 
 Target resolution (target: prefix) turns a user query into a concrete candidate:
 
-  - `resolve_candidate/2`           — query → visible candidate (with fallback)
+  - `resolve_candidate/2`           — query → visible candidate first, then all
   - `resolve_installed_candidate/2`  — query → installed candidate (pkg)
 
 Candidate resolution (candidate: prefix) resolves proof conditions for a
@@ -71,22 +71,18 @@ target:is_cn_target(qualified_target(none, _, _, _, version_none, _)).
 
 %! target:resolve_candidate(+Q, -Repository://Ebuild) is nondet.
 %
-% For CN targets: generates visible candidates first (not masked, keyword-
-% accepted, not license-masked), then falls back to all candidates.  This
-% ensures the prover picks a visible version before resorting to relaxation.
-%
-% For CNV targets: generates candidates in standard version-descending order
-% without visibility bias, since the user explicitly requested a specific
-% version and relaxation is the expected path if it's not visible.
+% Generates visible candidates first (not masked, keyword-accepted, not
+% license-masked), then falls back to all candidates. This prefers a
+% keyword-accepted overlay copy (e.g. `live://cat/pkg-9999` under
+% `*/*::live **`) over a same-CPV tree entry that still needs
+% keyword_acceptance, and for CN targets avoids unmasking a live ebuild
+% when a release that satisfies the request is already visible.
 
 target:resolve_candidate(Q, Repository://Ebuild) :-
-  ( target:is_cn_target(Q) ->
-      ( query:search(Q, Repository://Ebuild),
-        acceptance:entry_has_accepted_keyword(Repository://Ebuild),
-        \+ query:search(masked(true), Repository://Ebuild),
-        \+ acceptance:license_masked(Repository://Ebuild)
-      ; query:search(Q, Repository://Ebuild)
-      )
+  ( query:search(Q, Repository://Ebuild),
+    acceptance:entry_has_accepted_keyword(Repository://Ebuild),
+    \+ query:search(masked(true), Repository://Ebuild),
+    \+ acceptance:license_masked(Repository://Ebuild)
   ; query:search(Q, Repository://Ebuild)
   ).
 

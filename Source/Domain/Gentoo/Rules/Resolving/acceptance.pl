@@ -299,18 +299,53 @@ acceptance:accepted_keyword_candidates_cached(Action, C, N, SlotReq, LockKey, Ca
 
 acceptance:package_keyword_entry(C, N, K) :-
   current_predicate(userconfig:package_keyword/2),
-  atomic_list_concat([C, N], '/', CatPkg),
-  userconfig:package_keyword(CatPkg, RawKW),
-  acceptance:raw_kw_to_term_(RawKW, K).
+  userconfig:package_keyword(Spec, RawKW),
+  acceptance:keyword_spec_matches(Spec, C, N, Repo),
+  ( RawKW == '**'
+  -> K = any(Repo)
+  ; acceptance:raw_kw_to_term_(RawKW, K)
+  ).
 
+
+%! acceptance:keyword_spec_matches(+Spec, +C, +N, -Repo) is semidet.
+%
+% Splits `atom` or `atom::repo` and succeeds when atom covers C/N.
+% Repo is unbound when Spec has no `::repo` suffix.
+
+acceptance:keyword_spec_matches(Spec, C, N, Repo) :-
+  (   sub_atom(Spec, B, 2, _, '::')
+  ->  sub_atom(Spec, 0, B, _, Atom),
+      After is B + 2,
+      sub_atom(Spec, After, _, 0, Repo)
+  ;   Atom = Spec
+  ),
+  (   Atom == '*/*'
+  ;   atomic_list_concat([C, N], '/', Atom)
+  ;   atomic_list_concat([C, '*'], '/', Atom)
+  ),
+  !.
+
+
+acceptance:raw_kw_to_term_('**', any(*)) :- !.
 acceptance:raw_kw_to_term_(RawKW, K) :-
   atom_codes(RawKW, Codes),
   catch(phrase(eapi:keywords([K]), Codes), _, fail).
+
 
 %! acceptance:query_keyword_candidate(+Action, +C, +N, +Keyword, +Context, -RepoEntry)
 %
 % Enumerates unmasked candidates for (C,N) matching keyword K. Handles
 % self-reference filtering when the parent is the same (C,N).
+% `any(Repo)` comes from package.accept_keywords `**` (optionally
+% `::repo`) and matches every unmasked candidate in that repository.
+
+acceptance:query_keyword_candidate(Action, C, N, any(Repo), Context, FoundRepo://Candidate) :-
+  !,
+  query:search([name(N), category(C)], FoundRepo://Candidate),
+  (var(Repo) -> true ; FoundRepo == Repo),
+  \+ acceptance:binpkg_repository(FoundRepo),
+  \+ preference:masked(FoundRepo://Candidate),
+  acceptance:query_keyword_self_ok(Action, C, N, Context, FoundRepo://Candidate).
 
 acceptance:query_keyword_candidate(Action, C, N, K, Context, FoundRepo://Candidate) :-
   ( Action \== run,
@@ -332,18 +367,58 @@ acceptance:query_keyword_candidate(Action, C, N, K, Context, FoundRepo://Candida
     \+ preference:masked(FoundRepo://Candidate)
   ).
 
+
+%! acceptance:query_keyword_self_ok(+Action, +C, +N, +Context, +RepoEntry)
+%
+% When the parent of the proof is the same (C,N), only the installed
+% copy is allowed (unless --emptytree). Same guard as the keyworded
+% query_keyword_candidate clause.
+
+acceptance:query_keyword_self_ok(Action, C, N, Context, FoundRepo://Candidate) :-
+  Action \== run,
+  memberchk(self(SelfRepo0://SelfEntry0), Context),
+  query:search([category(C), name(N)], SelfRepo0://SelfEntry0),
+  !,
+  (   FoundRepo == SelfRepo0,
+      Candidate == SelfEntry0
+  ->  \+ preference:flag(emptytree),
+      query:search(installed(true), FoundRepo://Candidate)
+  ;   true
+  ).
+acceptance:query_keyword_self_ok(_Action, _C, _N, _Context, _RepoEntry).
+
+
 %! acceptance:compare_candidate_version_desc(-Delta, +A, +B)
 %
 % Comparison predicate for predsort/3: orders candidates by version
-% descending (newest first).
+% descending (newest first). Equal versions prefer the higher
+% repository priority (and never compare as `=` across different
+% Repo://Id pairs, so predsort/3 does not drop overlay copies).
 
 acceptance:compare_candidate_version_desc(Delta, RepoA://IdA, RepoB://IdB) :-
   cache:ordered_entry(RepoA, IdA, _Ca, _Na, VerA),
   cache:ordered_entry(RepoB, IdB, _Cb, _Nb, VerB),
   ( eapi:version_compare(>, VerA, VerB) -> Delta = (<)
   ; eapi:version_compare(<, VerA, VerB) -> Delta = (>)
-  ; Delta = (=)
+  ; acceptance:repository_priority(RepoA, PriA),
+    acceptance:repository_priority(RepoB, PriB),
+    ( PriA > PriB -> Delta = (<)
+    ; PriA < PriB -> Delta = (>)
+    ; compare(Delta, RepoA-IdA, RepoB-IdB)
+    )
   ).
+
+
+%! acceptance:repository_priority(+Repo, -Priority) is det.
+%
+% Portage repos.conf-style priority. Higher wins when two repositories
+% provide the same CPV. Unlisted repositories default to 0.
+
+acceptance:repository_priority(Repo, Priority) :-
+  current_predicate(config:repository_priority/2),
+  config:repository_priority(Repo, Priority),
+  !.
+acceptance:repository_priority(_Repo, 0).
 
 
 %! acceptance:candidate_non_accepted_keyword(+RepoEntry, -NonAccKw) is semidet.
@@ -354,6 +429,7 @@ acceptance:compare_candidate_version_desc(Delta, RepoA://IdA, RepoB://IdB) :-
 % the user's arch at all, or has no keywords whatsoever.
 
 acceptance:candidate_non_accepted_keyword(Repo://Entry, NonAccKw) :-
+  \+ acceptance:entry_has_accepted_keyword(Repo://Entry),
   findall(K, preference:accept_keywords(K), AcceptedKs0),
   sort(AcceptedKs0, AcceptedKs),
   findall(NK,
@@ -417,16 +493,21 @@ acceptance:entry_has_keyword(Repo://Entry) :-
 %
 % True if the entry has at least one keyword in ACCEPT_KEYWORDS or
 % is accepted via per-package /etc/portage/package.accept_keywords.
+% `**` (optionally `::repo`) accepts live ebuilds with empty KEYWORDS.
 
 acceptance:entry_has_accepted_keyword(Repo://Entry) :-
   preference:accept_keywords(K),
   query:search(keyword(K), Repo://Entry),
   !.
-
 acceptance:entry_has_accepted_keyword(Repo://Entry) :-
   query:search([category(C), name(N)], Repo://Entry),
   cache:entry_metadata(Repo, Entry, keywords, K),
   preference:package_keyword_accepted(C, N, K),
+  !.
+acceptance:entry_has_accepted_keyword(Repo://Entry) :-
+  query:search([category(C), name(N)], Repo://Entry),
+  acceptance:package_keyword_entry(C, N, any(RepoK)),
+  ( var(RepoK) -> true ; Repo == RepoK ),
   !.
 
 

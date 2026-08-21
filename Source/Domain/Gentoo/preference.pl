@@ -565,10 +565,36 @@ preference:accept_keywords(X) :-
 
 preference:package_keyword_accepted(C, N, K) :-
   current_predicate(userconfig:package_keyword/2),
-  atomic_list_concat([C, N], '/', CatPkg),
-  userconfig:package_keyword(CatPkg, RawKW),
+  userconfig:package_keyword(Spec, RawKW),
+  preference:keyword_spec_matches_cn(Spec, C, N),
   preference:raw_keyword_matches_(RawKW, K),
   !.
+
+
+%! preference:keyword_spec_matches_cn(+Spec, +C, +N) is semidet.
+%
+% True when a package.accept_keywords atom (optionally `::repo`)
+% covers category C / name N. Supports `cat/pkg`, `cat/*`, and `*/*`.
+
+preference:keyword_spec_matches_cn(Spec, C, N) :-
+  preference:strip_repo_suffix(Spec, Atom),
+  ( Atom == '*/*'
+  ; atomic_list_concat([C, N], '/', Atom)
+  ; atomic_list_concat([C, '*'], '/', Atom)
+  ),
+  !.
+
+
+%! preference:strip_repo_suffix(+Spec, -Atom) is det.
+%
+% Strips a trailing `::repo` from a package.accept_keywords atom.
+
+preference:strip_repo_suffix(Spec, Atom) :-
+  sub_atom(Spec, B, 2, _, '::'),
+  !,
+  sub_atom(Spec, 0, B, _, Atom).
+preference:strip_repo_suffix(Spec, Spec).
+
 
 preference:raw_keyword_matches_('**', _) :- !.
 preference:raw_keyword_matches_('~*', unstable(_)) :- !.

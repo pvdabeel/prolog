@@ -9,6 +9,16 @@
 #
 set -eu
 
+# Live ebuilds clone via HTTPS. A bad/truncated GitLab path returns 401 and
+# git would otherwise block on "Username for 'https://...'".
+export GIT_TERMINAL_PROMPT=0
+export GIT_ASKPASS=/bin/false
+export GIT_CONFIG_COUNT=2
+export GIT_CONFIG_KEY_0=credential.helper
+export GIT_CONFIG_VALUE_0=
+export GIT_CONFIG_KEY_1=credential.interactive
+export GIT_CONFIG_VALUE_1=never
+
 # This script lives under Source/Application/Wrapper/, so the project root is three levels up.
 WRAPPER_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 ROOT_DIR="$(CDPATH= cd -- "$WRAPPER_DIR/../../.." && pwd)"

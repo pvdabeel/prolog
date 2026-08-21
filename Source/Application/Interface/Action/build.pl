@@ -44,7 +44,8 @@ action:process_build(ArgsSets, Options) :-
           ( member(Arg, Args),
             atom_codes(Arg, Codes),
             phrase(eapi:qualified_target(Q), Codes),
-            once(kb:query(Q, _R://_E))
+            interface:target_query_exists(Q),
+            once(target:resolve_candidate(Q, _))
           ),
           Proposal),
   !,

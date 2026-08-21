@@ -32,11 +32,22 @@ interface:argv(Options,Args) :-
 interface:argv(Options,Args) :-
   interface:spec(S),
   catch(
-    opt_arguments(S,Options,Args),
+    opt_arguments(S,Options,Args0),
     E,
     interface:argv_handle_parse_error(E)
   ),
+  interface:drop_end_of_options(Args0, Args),
   assertz(interface:argv_(Options,Args)).
+
+
+%! interface:drop_end_of_options(+Args0, -Args) is det.
+%
+% Drops a leading GNU `--` end-of-options marker. tinderbox-ng (and
+% other wrappers) pass `--` before atoms such as `=cat/pkg-9999`.
+
+interface:drop_end_of_options(['--'|Rest], Rest) :- !.
+interface:drop_end_of_options(Args, Args).
+
 
 %! interface:argv_handle_parse_error(+Exception) is det.
 %
