@@ -53,43 +53,37 @@ swipl
 
 %! main(+Mode) is det.
 %
-% Mode-specific startup. Verifies CLI flags, loads the appropriate
-% modules, initializes the system, starts mode-specific services,
+% Mode-specific startup. Modules for Mode are already loaded by
+% main/0. Initializes the system, starts mode-specific services,
 % and enters the request loop.
 
 main(standalone) :-
-  load_modules(standalone),
   init_knowledgebase,
   interface:process_requests(standalone).
 
 main(ipc) :-
-  load_modules(ipc),
   ipc:autostart,
   ipc:connect(ExitCode),
   halt(ExitCode).
 
 main(daemon) :-
-  load_modules(daemon),
   init_knowledgebase,
   daemon:start,
   interface:process_requests(daemon).
 
 main(client) :-
-  load_modules(client),
   interface:process_server(Host, Port),
   kb:newinstance(knowledgebase(Host, Port)),
   preference:init,
   interface:process_requests(client).
 
 main(worker) :-
-  load_modules(worker),
   init_knowledgebase,
   interface:process_server(Host, Port),
   worker:start(Host, Port),
   interface:process_requests(worker).
 
 main(server) :-
-  load_modules(server),
   init_knowledgebase,
   server:start_server,
   at_halt(server:stop_server),
@@ -118,9 +112,9 @@ init_knowledgebase :-
 
 %! main is det.
 %
-% Entry point. Loads common modules via load_modules/1, determines
-% the operating mode from command-line arguments, and calls main/1
-% for mode-specific initialization and request processing.
+% Entry point. Loads common modules, determines the operating mode
+% from command-line arguments, loads that mode's modules, and calls
+% main/1 for mode-specific initialization and request processing.
 %
 % @see Source/loader.pl for module loading
 % @see interface:verify_mode/1 for CLI flag verification
@@ -132,11 +126,12 @@ main :-
   interface:verify_mode(Mode),
   ( Mode == ipc
   -> % IPC client does not need working_dir / world; connect and halt.
-     main(ipc)
+     true
   ;  config:working_dir(Dir),
      cd(Dir),
      config:world_file(File),
      world:newinstance(set(File)),
-     world:load,
-     main(Mode)
-  ).
+     world:load
+  ),
+  load_modules(Mode),
+  main(Mode).
