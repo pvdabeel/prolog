@@ -91,16 +91,6 @@ main(server) :-
   bonjour:advertise.
 
 
-%! init_working_dir is det.
-%
-% Changes to the configured working directory so relative Knowledge/
-% paths resolve.
-
-init_working_dir :-
-  config:working_dir(Dir),
-  cd(Dir).
-
-
 %! init_knowledgebase is det.
 %
 % Local knowledge base bootstrap used by standalone, daemon, worker,
@@ -150,7 +140,7 @@ main :-
   interface:get_mode(Mode),
   interface:init_tty,
   interface:verify_mode(Mode),
-  init_working_dir,
+  interface:init_working_dir,
   load_modules(Mode),
   main(Mode),
   interface:process_requests(Mode).

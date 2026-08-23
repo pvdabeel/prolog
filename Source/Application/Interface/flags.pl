@@ -10,7 +10,8 @@
 
 /** <module> FLAGS
 Option handling: translating parsed CLI flags into runtime preferences and
-config overrides, plus derived accessors (mode, port, server, tty init)
+config overrides, plus derived accessors (mode, port, server, tty and
+working-directory init)
 (included into the INTERFACE module via interface.pl).
 */
 
@@ -304,3 +305,13 @@ interface:init_tty :-
      catch(prolog_history(enable), _, true)
   ; true
   ).
+
+
+%! interface:init_working_dir is det.
+%
+% Changes to the configured working directory so relative Knowledge/
+% paths resolve.
+
+interface:init_working_dir :-
+  config:working_dir(Dir),
+  cd(Dir).

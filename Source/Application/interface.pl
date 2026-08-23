@@ -21,7 +21,7 @@ here via include/1; every fragment contributes clauses to this module:
   - Interface/version.pl   : version strings and system information
   - Interface/spec.pl      : the optparse command-line flag specification
   - Interface/argv.pl      : argv parsing, parse errors, flag suggestions
-  - Interface/flags.pl     : flag processing and derived accessors
+  - Interface/flags.pl     : flag processing, derived accessors, tty and cwd init
   - Interface/verify.pl    : mode flag verification and early-exit handlers
   - Interface/requests.pl  : main request dispatch
   - Interface/exitcodes.pl : exit-code lookup table and CI exit-code logic
