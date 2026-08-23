@@ -58,8 +58,9 @@ swipl
 % The request loop is entered by main/0 afterwards.
 
 main(standalone) :-
-  init_knowledgebase,
-  init_world.
+  init_knowledgebase(local),
+  init_world,
+  preference:init.
 
 main(ipc) :-
   ipc:autostart,
@@ -67,58 +68,60 @@ main(ipc) :-
   halt(ExitCode).
 
 main(daemon) :-
-  init_knowledgebase,
+  init_knowledgebase(local),
   init_world,
+  preference:init,
   daemon:start.
 
 main(client) :-
+  init_knowledgebase(remote),
   init_world,
-  interface:process_server(Host, Port),
-  kb:newinstance(knowledgebase(Host, Port)),
   preference:init.
 
 main(worker) :-
-  init_knowledgebase,
+  init_knowledgebase(local),
   init_world,
+  preference:init,
   interface:process_server(Host, Port),
   worker:start(Host, Port).
 
 main(server) :-
-  init_knowledgebase,
+  init_knowledgebase(local),
   init_world,
+  preference:init,
   server:start_server,
   at_halt(server:stop_server),
   bonjour:advertise.
 
 
-%! init_knowledgebase is det.
+%! init_knowledgebase(+Kind) is det.
 %
-% Local knowledge base bootstrap used by standalone, daemon, worker,
-% and server. Preference init may snapshot an empty world;
-% init_world/0 refreshes that after the world set exists.
+% Kind is `local` (on-disk knowledge base) or `remote` (server
+% proxy). Preference init is left to the caller so init_world/0 can
+% run first.
 
-init_knowledgebase :-
+init_knowledgebase(local) :-
   stats:newinstance(stat),
   kb:newinstance(knowledgebase),
   config:systemconfig(Config),
   ensure_loaded(Config),
   kb:load,
-  feedback:load,
-  preference:init.
+  feedback:load.
+init_knowledgebase(remote) :-
+  interface:process_server(Host, Port),
+  kb:newinstance(knowledgebase(Host, Port)).
 
 
 %! init_world is det.
 %
-% Loads the host world set and snapshots it into
-% preference:local_world_entry/1. Client has a local world and no
-% local KB, so it calls this first. The other local modes call it
-% after init_knowledgebase/0. ipc has neither.
+% Loads the host world set. Called after init_knowledgebase/1 and
+% before preference:init so the preference snapshot sees the loaded
+% set. ipc has neither.
 
 init_world :-
   config:world_file(File),
   world:newinstance(set(File)),
-  world:load,
-  catch(preference:init_world_entries, _, true).
+  world:load.
 
 
 % -----------------------------------------------------------------------------
