@@ -13,6 +13,16 @@ Feature exploration
 
 - choicelog: do we actually need this
 
+- query: replace dep_model_assuming_bits bits(K,U,C,B) with named flags (readability only; used just in the cache key + two unit tests)
+
+- query: iuse_state_priority_ weight table (1000/900/800/…) — same smell as package ranking. Prefer an explicit source cascade (first match: profile force/mask, package.use, preference, ebuild IUSE+/-, default) instead of keysort-by-number
+
+- query: group_dependencies — key/pair/msort/group/split/reverse pipeline is hard to read and does extra work (group then split_multislot back to singletons). One grouping key, no unused dependency_key/1, avoid the foldl+reverse if we can emit groups in order
+
+- query: split_grouped_singletons PlDoc is a yall/#17 postmortem, not a why. Rewrite: why we split multi-slot/exactish groups into singletons (independent resolve), drop the dead lambda story
+
+- query: use_dep_mode_flag vs iuse_flag_atom vs eapi:strip_use_default — three unwraps of plus/minus/enable/disable wrappers to get the flag atom. Same idea, different functors; fold into one eapi helper (keep polarity when the caller needs enable/disable)
+
 - overall code cleanup
 
 - prefix

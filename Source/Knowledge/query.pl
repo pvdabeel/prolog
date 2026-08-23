@@ -1996,14 +1996,10 @@ deep_member(preference,Predicate,Model) :-
 
 
 % -----------------------------------------------------------------------------
-%  Load-time self-check: macro clause arity
+%  Load-time check: compile_query_compound/3 only
 % -----------------------------------------------------------------------------
 
-% A macro clause accidentally written with its body goals as extra head
-% arguments silently defines compile_query_compound/4 (or /5) instead of
-% extending the /3 macro table; the intended inlining then never happens and
-% queries quietly degrade to the runtime fallback. Fail loudly at load time
-% so this class of typo cannot go unnoticed (portage-ng#32).
+% Catch typos that accidentally define compile_query_compound/4 or /5.
 
 :- ( ( current_predicate(query:compile_query_compound/4)
      ; current_predicate(query:compile_query_compound/5) )
