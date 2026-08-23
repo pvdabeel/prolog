@@ -58,6 +58,7 @@ swipl
 % The request loop is entered by main/0 afterwards.
 
 main(standalone) :-
+  init_world,
   init_knowledgebase(local).
 
 main(ipc) :-
@@ -66,18 +67,22 @@ main(ipc) :-
   halt(ExitCode).
 
 main(daemon) :-
+  init_world,
   init_knowledgebase(local),
   daemon:start.
 
 main(client) :-
+  init_world,
   init_knowledgebase(remote).
 
 main(worker) :-
+  init_world,
   init_knowledgebase(local),
   interface:process_server(Host, Port),
   worker:start(Host, Port).
 
 main(server) :-
+  init_world,
   init_knowledgebase(local),
   server:start_server,
   at_halt(server:stop_server),
@@ -87,8 +92,8 @@ main(server) :-
 %! init_knowledgebase(+Kind) is det.
 %
 % Kind is `local` (on-disk knowledge base) or `remote` (server
-% proxy). Both load the world set and then run preference:init so
-% the snapshot sees a loaded set. ipc calls neither.
+% proxy). Both end with preference:init, so the caller loads the
+% world set first. ipc calls neither.
 
 init_knowledgebase(local) :-
   stats:newinstance(stat),
@@ -97,19 +102,17 @@ init_knowledgebase(local) :-
   ensure_loaded(Config),
   kb:load,
   feedback:load,
-  init_world,
   preference:init.
 init_knowledgebase(remote) :-
   interface:process_server(Host, Port),
   kb:newinstance(knowledgebase(Host, Port)),
-  init_world,
   preference:init.
 
 
 %! init_world is det.
 %
-% Loads the host world set. Called from init_knowledgebase/1 before
-% preference:init.
+% Loads the host world set. Called before init_knowledgebase/1 so
+% preference:init can snapshot the loaded set.
 
 init_world :-
   config:world_file(File),
