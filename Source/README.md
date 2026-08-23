@@ -62,7 +62,6 @@ Source/
     repository.pl                      Portage tree sync, load, save operations
     knowledgebase.pl                   Repository registration and serialization
     query.pl                           Goal-expanded queries with compile-time optimization
-    stat.pl                            Progress tracking, timing, statistics
     Sets/                              Package set data files (world, system)
 
   Config/                              (per-host configuration)
@@ -75,4 +74,5 @@ Source/
     unittest.pl                        207 PLUnit tests
     test.pl                            Integration test cases and expectations
     tester.pl                          Test runner and trace utilities
+    stat.pl                            Progress counter for tester title updates
 ```
