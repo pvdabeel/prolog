@@ -49,7 +49,7 @@ Three roles interact in the portage-ng architecture:
 :- http_handler('/graph',      reply, [id('graph'),      methods([post]), time_limit(infinite)]).
 :- http_handler('/prove',      reply, [id('prove'),      methods([post]), time_limit(infinite)]).
 :- http_handler('/import-vdb', reply, [id('importvdb'),  methods([post]), time_limit(infinite)]).
-:- http_handler('/info',  reply, [id('info'),       methods([get])]).
+:- http_handler('/info',       reply, [id('info'),       methods([get])]).
 
 
 %! server:start_server

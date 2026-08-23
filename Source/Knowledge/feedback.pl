@@ -143,12 +143,16 @@ feedback:read_assert_terms(S) :-
 
 feedback:safe_feedback_term(discovered_dep(A, B, C, D)) :-
   ground(A), ground(B), ground(C), ground(D).
+
 feedback:safe_feedback_term(discovered_usedep(A, B, C, D)) :-
   ground(A), ground(B), ground(C), ground(D).
+
 feedback:safe_feedback_term(excluded_version(A, B, C, D)) :-
   ground(A), ground(B), ground(C), ground(D).
+
 feedback:safe_feedback_term(unresolved_diagnostic(A, B)) :-
   ground(A), ground(B).
+
 feedback:safe_feedback_term(required_kernel_config(A, B, C)) :-
   ground(A), ground(B), ground(C).
 
