@@ -61,8 +61,8 @@ interface:process_flags :-
   (lists:memberchk(binpkgchangeddeps(true), Options) -> asserta(preference:local_flag(binpkgchangeddeps)) ; true),
   (lists:memberchk(binpkgrespectuse(true),  Options) -> asserta(preference:local_flag(binpkgrespectuse)) ; true),
   (lists:memberchk(rebuiltbinaries(true),   Options) -> asserta(preference:local_flag(rebuiltbinaries)) ; true),
-  (lists:memberchk(ask(true),              Options) -> asserta(preference:local_flag(ask)) ; true),
-  (lists:memberchk(alert(true),            Options) -> asserta(preference:local_flag(alert)) ; true),
+  (lists:memberchk(ask(true),               Options) -> asserta(preference:local_flag(ask)) ; true),
+  (lists:memberchk(alert(true),             Options) -> asserta(preference:local_flag(alert)) ; true),
   (lists:memberchk(quiet(true),             Options) -> asserta(preference:local_flag(quiet)) ; true),
   (lists:memberchk(verbose(true),           Options) -> asserta(config:verbose(true)) ; true),
   (lists:memberchk(choicelog(true),         Options)
@@ -80,9 +80,9 @@ interface:process_flags :-
   (lists:memberchk(permitdowngrade(true),   Options) -> asserta(preference:local_flag(permitdowngrade)) ; true),
   (lists:memberchk(color(n),                Options) -> retractall(config:color_output) ; true),
   (lists:memberchk(showdescriptions(SD),    Options), SD \== none
-                                                   -> asserta(config:show_use_descriptions(SD)) ; true),
+                                                     -> asserta(config:show_use_descriptions(SD)) ; true),
   (lists:memberchk(continuefailure(CF),     Options), CF \== never
-                                                   -> asserta(config:continue_on_failure(CF)) ; true),
+                                                     -> asserta(config:continue_on_failure(CF)) ; true),
   % convenience presets
   (lists:memberchk(lazy(true), Options) ->
     asserta(preference:local_flag(noreplace)),

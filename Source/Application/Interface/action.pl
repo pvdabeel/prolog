@@ -25,7 +25,6 @@ Each action file is textually included into this module via :- include/1.
 :- include('Action/search.pl').
 :- include('Action/upgrade.pl').
 :- include('Action/merge.pl').
-
 :- include('Action/graph.pl').
 :- include('Action/sync.pl').
 :- include('Action/bugs.pl').
