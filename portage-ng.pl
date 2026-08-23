@@ -58,9 +58,7 @@ swipl
 % The request loop is entered by main/0 afterwards.
 
 main(standalone) :-
-  init_knowledgebase(local),
-  init_world,
-  preference:init.
+  init_knowledgebase(local).
 
 main(ipc) :-
   ipc:autostart,
@@ -69,26 +67,18 @@ main(ipc) :-
 
 main(daemon) :-
   init_knowledgebase(local),
-  init_world,
-  preference:init,
   daemon:start.
 
 main(client) :-
-  init_knowledgebase(remote),
-  init_world,
-  preference:init.
+  init_knowledgebase(remote).
 
 main(worker) :-
   init_knowledgebase(local),
-  init_world,
-  preference:init,
   interface:process_server(Host, Port),
   worker:start(Host, Port).
 
 main(server) :-
   init_knowledgebase(local),
-  init_world,
-  preference:init,
   server:start_server,
   at_halt(server:stop_server),
   bonjour:advertise.
@@ -97,8 +87,8 @@ main(server) :-
 %! init_knowledgebase(+Kind) is det.
 %
 % Kind is `local` (on-disk knowledge base) or `remote` (server
-% proxy). Preference init is left to the caller so init_world/0 can
-% run first.
+% proxy). Both load the world set and then run preference:init so
+% the snapshot sees a loaded set. ipc calls neither.
 
 init_knowledgebase(local) :-
   stats:newinstance(stat),
@@ -106,17 +96,20 @@ init_knowledgebase(local) :-
   config:systemconfig(Config),
   ensure_loaded(Config),
   kb:load,
-  feedback:load.
+  feedback:load,
+  init_world,
+  preference:init.
 init_knowledgebase(remote) :-
   interface:process_server(Host, Port),
-  kb:newinstance(knowledgebase(Host, Port)).
+  kb:newinstance(knowledgebase(Host, Port)),
+  init_world,
+  preference:init.
 
 
 %! init_world is det.
 %
-% Loads the host world set. Called after init_knowledgebase/1 and
-% before preference:init so the preference snapshot sees the loaded
-% set. ipc has neither.
+% Loads the host world set. Called from init_knowledgebase/1 before
+% preference:init.
 
 init_world :-
   config:world_file(File),
