@@ -44,6 +44,7 @@ llmknowledge:topic(Name, Text) :-
   atom(Name),
   llmknowledge:topic_text(Name, Text),
   !.
+
 llmknowledge:topic(Name, Text) :-
   llmknowledge:topics(Topics),
   format(atom(Text),
@@ -289,87 +290,97 @@ llmknowledge:skip_and_take(S, Cur, Start, Left, Acc, Out) :-
 % -----------------------------------------------------------------------------
 
 %! llmknowledge:topic_text(+Name, -Text) is semidet.
+%
+% Curated digest for a catalogue topic.
 
 llmknowledge:topic_text(architecture, Text) :-
-  Text = 'portage-ng pipeline (standalone):\n\c
-reader/parser (eapi.md5-cache) -> cache facts\n\c
-prover -> ProofAVL, ModelAVL, ConstraintsAVL, TriggersAVL\n\c
-orderer -> second prover pass over planning laws -> wave plan\n\c
-printer -> plan + assumptions\n\c
-builder -> ebuild phases; fixup + feedback may replan\n\c
-\n\c
-Entry points: pipeline:prove_plan_with_fallback/5..7 (full),\n\c
-pipeline:prove_with_fallback/4 (prover only). Fallback tiers:\n\c
-strict, keyword_acceptance, blockers, unmask, keyword_unmask.\n\c
-\n\c
-Not emerge: same tree/VDB/config, different solver. Never suggest\n\c
-emerge as a fix for portage-ng resolver behaviour.'.
-
+  atomic_list_concat(
+    [ 'portage-ng pipeline (standalone):',
+      'reader/parser (eapi.md5-cache) -> cache facts',
+      'prover -> ProofAVL, ModelAVL, ConstraintsAVL, TriggersAVL',
+      'orderer -> second prover pass over planning laws -> wave plan',
+      'printer -> plan + assumptions',
+      'builder -> ebuild phases; fixup + feedback may replan',
+      '',
+      'Entry points: pipeline:prove_plan_with_fallback/5..7 (full),',
+      'pipeline:prove_with_fallback/4 (prover only). Fallback tiers:',
+      'strict, keyword_acceptance, blockers, unmask, keyword_unmask.',
+      '',
+      'Not emerge: same tree/VDB/config, different solver. Never suggest',
+      'emerge as a fix for portage-ng resolver behaviour.'
+    ], '\n', Text).
 llmknowledge:topic_text(proof, Text) :-
-  Text = 'Proof literals: Repo://Entry:Action?{Context}.\n\c
-ProofAVL keys: rule(Lit) normal; rule(assumed(X)) domain assumption;\n\c
-assumed(rule(X)) prover cycle-break. ModelAVL: Lit or assumed(Lit).\n\c
-TriggersAVL: reverse deps (body -> heads). Context list holds\n\c
-required_use, build_with_use, self, constraint, slots, reasons.\n\c
-Introspection: explainer:why_in_proof/3,4; why_in_plan/5,6;\n\c
-why_assumption/4,5. Lists: prover:proof_to_list/2, model_to_list/2.'.
-
+  atomic_list_concat(
+    [ 'Proof literals: Repo://Entry:Action?{Context}.',
+      'ProofAVL keys: rule(Lit) normal; rule(assumed(X)) domain assumption;',
+      'assumed(rule(X)) prover cycle-break. ModelAVL: Lit or assumed(Lit).',
+      'TriggersAVL: reverse deps (body -> heads). Context list holds',
+      'required_use, build_with_use, self, constraint, slots, reasons.',
+      'Introspection: explainer:why_in_proof/3,4; why_in_plan/5,6;',
+      'why_assumption/4,5. Lists: prover:proof_to_list/2, model_to_list/2.'
+    ], '\n', Text).
 llmknowledge:topic_text(assumptions, Text) :-
-  Text = 'Domain assumption polarity:\n\c
-POSITIVE/actionable: masked, keyword_filtered, license,\n\c
-blocker_assumption — suggest package.unmask / accept_keywords /\n\c
-package.license / unblock.\n\c
-NEGATIVE/blocking: non_existent_dependency, missing_dependency,\n\c
-required_use_violation, slot_conflict, version_no_candidate,\n\c
-version_conflict, unsatisfied_constraints, issue_with_model.\n\c
-Cycle breaks (*_cycle, naf_cycle) are separate (exit 1), not domain.\n\c
-CI: 0 clean, 1 cycles only, 2 any domain assumptions.\n\c
-Taxonomy: Printer/Plan/assumption.pl.'.
-
+  atomic_list_concat(
+    [ 'Domain assumption polarity:',
+      'POSITIVE/actionable: masked, keyword_filtered, license,',
+      'blocker_assumption — suggest package.unmask / accept_keywords /',
+      'package.license / unblock.',
+      'NEGATIVE/blocking: non_existent_dependency, missing_dependency,',
+      'required_use_violation, slot_conflict, version_no_candidate,',
+      'version_conflict, unsatisfied_constraints, issue_with_model.',
+      'Cycle breaks (*_cycle, naf_cycle) are separate (exit 1), not domain.',
+      'CI: 0 clean, 1 cycles only, 2 any domain assumptions.',
+      'Taxonomy: Printer/Plan/assumption.pl.'
+    ], '\n', Text).
 llmknowledge:topic_text(learning, Text) :-
-  Text = 'Two learning stores — do not mix:\n\c
-1) prover:learn/3 — prove-time cn_domain / USE narrowing only.\n\c
-2) feedback:* — build-time durable edges (Knowledge/feedback.pl):\n\c
-   discovered_dep, discovered_usedep, excluded_version,\n\c
-   required_kernel_config; unresolved_diagnostic is backlog only.\n\c
-Plans are re-derived after feedback, never patched.\n\c
-Fixups: Exceptions/* register fixup:mechanism/1 and\n\c
-phase_retry_hook/10 (collision, ghcabi, ocamlabi, missing_provider,\n\c
-useenable, kernelconfig). Metacircular LLM proposes feedback or\n\c
-draft_fixup sketches under Knowledge/drafts/ after confirm.'.
-
+  atomic_list_concat(
+    [ 'Two learning stores — do not mix:',
+      '1) prover:learn/3 — prove-time cn_domain / USE narrowing only.',
+      '2) feedback:* — build-time durable edges (Knowledge/feedback.pl):',
+      '   discovered_dep, discovered_usedep, excluded_version,',
+      '   required_kernel_config; unresolved_diagnostic is backlog only.',
+      'Plans are re-derived after feedback, never patched.',
+      'Fixups: Exceptions/* register fixup:mechanism/1 and',
+      'phase_retry_hook/10 (collision, ghcabi, ocamlabi, missing_provider,',
+      'useenable, kernelconfig). Metacircular LLM proposes feedback or',
+      'draft_fixup sketches under Knowledge/drafts/ after confirm.'
+    ], '\n', Text).
 llmknowledge:topic_text(code_map, Text) :-
-  Text = 'Key Source files:\n\c
-Source/Pipeline/{prover,resolver,orderer,pipeline,printer,builder}.pl\n\c
-Source/Domain/Gentoo/Rules/ordering.pl (pass-2 rule set: laws + bindings)\n\c
-Source/Pipeline/Prover/{explainer,explanation}.pl\n\c
-Source/Domain/Gentoo/Rules/resolving.pl + Rules/Resolving/*.pl (pass-1 rule set)\n\c
-Source/Domain/Gentoo/Exceptions/{fixup,missing_provider,useenable,...}.pl\n\c
-Source/Domain/Gentoo/{eapi,version,vdb,profile}.pl\n\c
-Source/Knowledge/{cache,query,feedback,repository,knowledgebase}.pl\n\c
-Source/Application/{llm,interface}.pl + Llm/{explain,metacircular,\n\c
-knowledge,semantic}.pl\n\c
-Source/Config/<host>.local.pl — tree/VDB paths\n\c
-\n\c
-Naming: Source filenames use concatenated lowercase (no hyphens),\n\c
-except grandfathered portage-ng.pl and a few binpkg/ebuild_*.pl.\n\c
-\n\c
-Use llmknowledge:print_handbook(architecture) or\n\c
-llmknowledge:print_source(\'Source/Pipeline/prover.pl\', 1, 80).'.
-
+  atomic_list_concat(
+    [ 'Key Source files:',
+      'Source/Pipeline/{prover,resolver,orderer,pipeline,printer,builder}.pl',
+      'Source/Domain/Gentoo/Rules/ordering.pl (pass-2 rule set: laws + bindings)',
+      'Source/Pipeline/Prover/{explainer,explanation}.pl',
+      'Source/Domain/Gentoo/Rules/resolving.pl + Rules/Resolving/*.pl (pass-1 rule set)',
+      'Source/Domain/Gentoo/Exceptions/{fixup,missing_provider,useenable,...}.pl',
+      'Source/Domain/Gentoo/{eapi,version,vdb,profile}.pl',
+      'Source/Knowledge/{cache,query,feedback,repository,knowledgebase}.pl',
+      'Source/Application/{llm,interface}.pl + Llm/{explain,metacircular,',
+      'knowledge,semantic}.pl',
+      'Source/Config/<host>.local.pl — tree/VDB paths',
+      '',
+      'Naming: Source filenames use concatenated lowercase (no hyphens),',
+      'except grandfathered portage-ng.pl and a few binpkg/ebuild_*.pl.',
+      '',
+      'Use llmknowledge:print_handbook(architecture) or',
+      'llmknowledge:print_source(\'Source/Pipeline/prover.pl\', 1, 80).'
+    ], '\n', Text).
 llmknowledge:topic_text(context_words, Text) :-
-  Text = 'Three meanings of "context" in this codebase:\n\c
-1) OO context — Source/Logic/context.pl (::, :this).\n\c
-2) Proof-term context — ?{Context} list on literals.\n\c
-3) Pengines/sandbox context — server mode thread-local.\n\c
-Always qualify which you mean.'.
-
+  atomic_list_concat(
+    [ 'Three meanings of "context" in this codebase:',
+      '1) OO context — Source/Logic/context.pl (::, :this).',
+      '2) Proof-term context — ?{Context} list on literals.',
+      '3) Pengines/sandbox context — server mode thread-local.',
+      'Always qualify which you mean.'
+    ], '\n', Text).
 llmknowledge:topic_text(howto_inspect, Text) :-
-  Text = 'Sandboxed inspection recipe:\n\c
-:- llmknowledge:list_topics.\n\c
-:- llmknowledge:print_topic(architecture).\n\c
-:- llmknowledge:print_handbook(prover).\n\c
-:- llmknowledge:print_source(\'Source/Knowledge/feedback.pl\', 1, 60).\n\c
-KB queries: cache:ordered_entry/5, query:search/2.\n\c
-Why: explainer:why_in_proof/3 (needs live AVLs in shell).\n\c
-Do not call feedback:record_* or prover:learn from sandbox.'.
+  atomic_list_concat(
+    [ 'Sandboxed inspection recipe:',
+      ':- llmknowledge:list_topics.',
+      ':- llmknowledge:print_topic(architecture).',
+      ':- llmknowledge:print_handbook(prover).',
+      ':- llmknowledge:print_source(\'Source/Knowledge/feedback.pl\', 1, 60).',
+      'KB queries: cache:ordered_entry/5, query:search/2.',
+      'Why: explainer:why_in_proof/3 (needs live AVLs in shell).',
+      'Do not call feedback:record_* or prover:learn from sandbox.'
+    ], '\n', Text).

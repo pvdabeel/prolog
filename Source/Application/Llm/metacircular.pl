@@ -229,22 +229,28 @@ metacircular:balanced_term_atom(From, TermAtom) :-
 metacircular:take_balanced([], Depth, _, Acc, Acc) :-
   Depth =:= 0,
   Acc \== [].
+
 metacircular:take_balanced([0''|Rest], Depth, in_plain, Acc, AccOut) :-
   !,
   metacircular:take_balanced(Rest, Depth, in_atom_quote, [0''|Acc], AccOut).
+
 metacircular:take_balanced([0''|Rest], Depth, in_atom_quote, Acc, AccOut) :-
   !,
   metacircular:take_balanced(Rest, Depth, in_plain, [0''|Acc], AccOut).
+
 metacircular:take_balanced([0'\\, C|Rest], Depth, in_atom_quote, Acc, AccOut) :-
   !,
   metacircular:take_balanced(Rest, Depth, in_atom_quote, [C,0'\\|Acc], AccOut).
+
 metacircular:take_balanced([C|Rest], Depth, in_atom_quote, Acc, AccOut) :-
   !,
   metacircular:take_balanced(Rest, Depth, in_atom_quote, [C|Acc], AccOut).
+
 metacircular:take_balanced([0'( |Rest], Depth, in_plain, Acc, AccOut) :-
   !,
   Depth1 is Depth + 1,
   metacircular:take_balanced(Rest, Depth1, in_plain, [0'(|Acc], AccOut).
+
 metacircular:take_balanced([0')|Rest], Depth, in_plain, Acc, AccOut) :-
   !,
   Depth1 is Depth - 1,
@@ -253,9 +259,11 @@ metacircular:take_balanced([0')|Rest], Depth, in_plain, Acc, AccOut) :-
   ;  Depth1 > 0,
      metacircular:take_balanced(Rest, Depth1, in_plain, [0')|Acc], AccOut)
   ).
+
 metacircular:take_balanced([C|Rest], 0, in_plain, Acc, AccOut) :-
   !,
   metacircular:take_balanced(Rest, 0, in_plain, [C|Acc], AccOut).
+
 metacircular:take_balanced([C|Rest], Depth, in_plain, Acc, AccOut) :-
   Depth > 0,
   metacircular:take_balanced(Rest, Depth, in_plain, [C|Acc], AccOut).
@@ -277,7 +285,9 @@ metacircular:validate_actions(Raw, Valid) :-
 %! metacircular:validate_actions_(+Raw, +Left, +Acc, -Out) is det.
 
 metacircular:validate_actions_([], _, Acc, Acc).
+
 metacircular:validate_actions_(_, 0, Acc, Acc) :- !.
+
 metacircular:validate_actions_([A|Rest], Left, Acc, Out) :-
   ( metacircular:valid_action(A)
   -> Left1 is Left - 1,
@@ -296,6 +306,7 @@ metacircular:valid_action(action(record_discovery, Target, Provider, Kind, Evide
   Kind == bdepend,
   nonvar(Evidence),
   metacircular:provider_in_tree(Provider).
+
 metacircular:valid_action(action(record_usedep, Target, Provider, UseDeps, Evidence)) :-
   Target = _://_,
   atom(Provider),
@@ -304,13 +315,16 @@ metacircular:valid_action(action(record_usedep, Target, Provider, UseDeps, Evide
   forall(member(U, UseDeps), metacircular:valid_usedep(U)),
   nonvar(Evidence),
   metacircular:provider_in_tree(Provider).
+
 metacircular:valid_action(action(record_excluded_version, C, N, Ver, Evidence)) :-
   atom(C), atom(N), nonvar(Ver), nonvar(Evidence).
+
 metacircular:valid_action(action(record_kernel_config, Target, Options, Evidence)) :-
   Target = _://_,
   is_list(Options),
   Options \== [],
   nonvar(Evidence).
+
 metacircular:valid_action(action(draft_fixup, Mechanism, Synopsis, SketchBody)) :-
   atom(Mechanism),
   ( atom(Synopsis) ; string(Synopsis) ),
@@ -321,6 +335,7 @@ metacircular:valid_action(action(draft_fixup, Mechanism, Synopsis, SketchBody)) 
 
 metacircular:valid_usedep(use(enable(Flag), none)) :-
   atom(Flag).
+
 metacircular:valid_usedep(use(disable(Flag), none)) :-
   atom(Flag).
 
@@ -350,6 +365,7 @@ metacircular:confirm_and_apply(Actions, AppliedCount) :-
 %! metacircular:confirm_and_apply_(+Actions, +Acc, -Applied) is det.
 
 metacircular:confirm_and_apply_([], Acc, Acc).
+
 metacircular:confirm_and_apply_([Action|Rest], Acc0, Applied) :-
   metacircular:describe_action(Action, Desc),
   nl,
@@ -380,18 +396,23 @@ metacircular:confirm_and_apply_([Action|Rest], Acc0, Applied) :-
 metacircular:describe_action(action(record_discovery, Target, Provider, Kind, _), Desc) :-
   !,
   format(atom(Desc), 'record_discovery ~w needs ~w (~w)', [Target, Provider, Kind]).
+
 metacircular:describe_action(action(record_usedep, Target, Provider, UseDeps, _), Desc) :-
   !,
   format(atom(Desc), 'record_usedep ~w needs ~w ~w', [Target, Provider, UseDeps]).
+
 metacircular:describe_action(action(record_excluded_version, C, N, Ver, _), Desc) :-
   !,
   format(atom(Desc), 'record_excluded_version ~w/~w-~w', [C, N, Ver]).
+
 metacircular:describe_action(action(record_kernel_config, Target, Options, _), Desc) :-
   !,
   format(atom(Desc), 'record_kernel_config ~w ~w', [Target, Options]).
+
 metacircular:describe_action(action(draft_fixup, Mechanism, Synopsis, _), Desc) :-
   !,
   format(atom(Desc), 'draft_fixup ~w (~w) -> Knowledge/drafts/', [Mechanism, Synopsis]).
+
 metacircular:describe_action(Action, Desc) :-
   format(atom(Desc), '~w', [Action]).
 
@@ -407,6 +428,7 @@ metacircular:apply_action(action(record_discovery, Target, Provider, Kind, Evide
   -> fixup:record(metacircular, Entry, discovered(Provider))
   ;  true
   ).
+
 metacircular:apply_action(action(record_usedep, Target, Provider, UseDeps, Evidence), feedback) :-
   !,
   feedback:record_usedep(Target, Provider, UseDeps, Evidence),
@@ -414,9 +436,11 @@ metacircular:apply_action(action(record_usedep, Target, Provider, UseDeps, Evide
   -> fixup:record(metacircular, Entry, usedep(Provider, UseDeps))
   ;  true
   ).
+
 metacircular:apply_action(action(record_excluded_version, C, N, Ver, Evidence), feedback) :-
   !,
   feedback:record_excluded_version(C, N, Ver, Evidence).
+
 metacircular:apply_action(action(record_kernel_config, Target, Options0, Evidence), feedback) :-
   !,
   metacircular:normalize_kernel_options(Options0, Options),
@@ -425,6 +449,7 @@ metacircular:apply_action(action(record_kernel_config, Target, Options0, Evidenc
   -> fixup:record(metacircular, Entry, kernel_config(Options))
   ;  true
   ).
+
 metacircular:apply_action(action(draft_fixup, Mechanism, Synopsis, SketchBody), draft) :-
   !,
   metacircular:write_draft_fixup(Mechanism, Synopsis, SketchBody).
@@ -439,6 +464,7 @@ metacircular:normalize_kernel_options(In, Out) :-
 %! metacircular:normalize_kernel_option(+In, -Out) is det.
 
 metacircular:normalize_kernel_option(config(Name, State), config(Name, State)) :- !.
+
 metacircular:normalize_kernel_option(Name, config(Name, y)) :-
   atom(Name).
 
