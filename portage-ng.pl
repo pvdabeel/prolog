@@ -91,16 +91,23 @@ main(server) :-
   bonjour:advertise.
 
 
+%! init_working_dir is det.
+%
+% Changes to the configured working directory so relative Knowledge/
+% paths resolve.
+
+init_working_dir :-
+  config:working_dir(Dir),
+  cd(Dir).
+
+
 %! init_knowledgebase is det.
 %
 % Local knowledge base bootstrap used by standalone, daemon, worker,
-% and server. Changes to the configured working directory first so
-% relative Knowledge/ paths resolve. Preference init may snapshot an
-% empty world; init_world/0 refreshes that after the world set exists.
+% and server. Preference init may snapshot an empty world;
+% init_world/0 refreshes that after the world set exists.
 
 init_knowledgebase :-
-  config:working_dir(Dir),
-  cd(Dir),
   stats:newinstance(stat),
   kb:newinstance(knowledgebase),
   config:systemconfig(Config),
@@ -112,15 +119,12 @@ init_knowledgebase :-
 
 %! init_world is det.
 %
-% Changes to the configured working directory, loads the host world
-% set, and snapshots it into preference:local_world_entry/1. Client
-% has a local world and no local KB, so it calls this first. The
-% other local modes call it after init_knowledgebase/0. ipc has
-% neither.
+% Loads the host world set and snapshots it into
+% preference:local_world_entry/1. Client has a local world and no
+% local KB, so it calls this first. The other local modes call it
+% after init_knowledgebase/0. ipc has neither.
 
 init_world :-
-  config:working_dir(Dir),
-  cd(Dir),
   config:world_file(File),
   world:newinstance(set(File)),
   world:load,
@@ -134,8 +138,9 @@ init_world :-
 %! main is det.
 %
 % Entry point. Loads common modules, determines the operating mode
-% from command-line arguments, loads that mode's modules, runs
-% mode-specific startup, and enters the request loop.
+% from command-line arguments, sets the working directory, loads that
+% mode's modules, runs mode-specific startup, and enters the request
+% loop.
 %
 % @see Source/loader.pl for module loading
 % @see interface:verify_mode/1 for CLI flag verification
@@ -145,6 +150,7 @@ main :-
   interface:get_mode(Mode),
   interface:init_tty,
   interface:verify_mode(Mode),
+  init_working_dir,
   load_modules(Mode),
   main(Mode),
   interface:process_requests(Mode).
