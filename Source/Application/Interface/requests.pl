@@ -159,7 +159,11 @@ interface:dispatch_request(_, _, Options) :-
 % recognised flag (--sync, --graph, --merge, etc.) onto the corresponding
 % action predicate via the request_handler/5 table. Falls through to the
 % catch-all clause (halt(1)) if no handler matches or the action fails.
+% ipc is a no-op: main(ipc) already connects and halt/1s. server, daemon
+% and worker drop into the Prolog toplevel.
 
+interface:process_requests(ipc) :-
+  !.
 interface:process_requests(server) :-
   !, prolog.
 interface:process_requests(daemon) :-

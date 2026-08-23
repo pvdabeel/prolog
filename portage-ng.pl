@@ -54,12 +54,11 @@ swipl
 %! main(+Mode) is det.
 %
 % Mode-specific startup. Modules for Mode are already loaded by
-% main/0. Initializes the system, starts mode-specific services,
-% and enters the request loop.
+% main/0. Initializes the system and starts mode-specific services.
+% The request loop is entered by main/0 afterwards.
 
 main(standalone) :-
-  init_knowledgebase,
-  interface:process_requests(standalone).
+  init_knowledgebase.
 
 main(ipc) :-
   ipc:autostart,
@@ -68,27 +67,23 @@ main(ipc) :-
 
 main(daemon) :-
   init_knowledgebase,
-  daemon:start,
-  interface:process_requests(daemon).
+  daemon:start.
 
 main(client) :-
   interface:process_server(Host, Port),
   kb:newinstance(knowledgebase(Host, Port)),
-  preference:init,
-  interface:process_requests(client).
+  preference:init.
 
 main(worker) :-
   init_knowledgebase,
   interface:process_server(Host, Port),
-  worker:start(Host, Port),
-  interface:process_requests(worker).
+  worker:start(Host, Port).
 
 main(server) :-
   init_knowledgebase,
   server:start_server,
   at_halt(server:stop_server),
-  bonjour:advertise,
-  interface:process_requests(server).
+  bonjour:advertise.
 
 
 %! init_knowledgebase is det.
@@ -113,8 +108,9 @@ init_knowledgebase :-
 %! main is det.
 %
 % Entry point. Loads common modules, determines the operating mode
-% from command-line arguments, loads that mode's modules, and calls
-% main/1 for mode-specific initialization and request processing.
+% from command-line arguments, prepares the workspace, loads that
+% mode's modules, runs mode-specific startup, and enters the request
+% loop.
 %
 % @see Source/loader.pl for module loading
 % @see interface:verify_mode/1 for CLI flag verification
@@ -124,14 +120,11 @@ main :-
   interface:get_mode(Mode),
   interface:init_tty,
   interface:verify_mode(Mode),
-  ( Mode == ipc
-  -> % IPC client does not need working_dir / world; connect and halt.
-     true
-  ;  config:working_dir(Dir),
-     cd(Dir),
-     config:world_file(File),
-     world:newinstance(set(File)),
-     world:load
-  ),
+  config:working_dir(Dir),
+  cd(Dir),
+  config:world_file(File),
+  world:newinstance(set(File)),
+  world:load,
   load_modules(Mode),
-  main(Mode).
+  main(Mode),
+  interface:process_requests(Mode).
