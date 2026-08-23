@@ -92,7 +92,7 @@ This implementation is thread-safe and supports serialization.
 -------------------------------------------------------------------------------
  * Examples:
 -------------------------------------------------------------------------------
-@see examples/person.pl for an example 'person' class.
+@see Context/Examples/person.pl for an example 'person' class.
 */
 
 

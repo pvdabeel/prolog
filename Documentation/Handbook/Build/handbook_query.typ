@@ -7013,7 +7013,7 @@ contexts:
 == Example: a Person class
 <example-a-person-class>
 The following example (from
-#link("../Source/Logic/Examples/person.pl")[`Source/Logic/Examples/person.pl`])
+#link("../Source/Logic/Context/Examples/person.pl")[`Source/Logic/Context/Examples/person.pl`])
 shows a simple class with public, protected, and private members:
 
 ```prolog
