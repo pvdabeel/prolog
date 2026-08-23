@@ -446,7 +446,8 @@ The canonical load graph for standalone is in `portage-ng.pl`:
   (3) `memo:selected_cn_snap_` evolves during the proof (affects OR group ordering),
   (4) `variant:use_override` / `variant:branch_prefer` change during variant mode.
   Profiling showed 25-30% of proving time in these queries, with up to 88%
-  of calls redundant for complex packages. See top-of-file comment in `query.pl`.
+  of calls redundant for complex packages. See the
+  "Dependency-model cache key" section in `query.pl`.
 
 ## Development flow
 - We use a git workflow.

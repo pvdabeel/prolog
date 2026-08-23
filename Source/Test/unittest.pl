@@ -2441,8 +2441,8 @@ test(begin_pass_fresh_drops_prior_proven_witness) :-
 
 :- begin_tests(dep_model_cache).
 
-% Hazard-encoded cache key for model(dependency) queries (see the design
-% comment at the top of Source/Knowledge/query.pl).
+% Hazard-encoded cache key for model(dependency) queries (see the
+% "Dependency-model cache key" section in Source/Knowledge/query.pl).
 
 test(choice_cn_extraction_only_inside_choice_groups) :-
   T1 = any_of_group([package_dependency(install,no,'dev-lang','python',none,version_none,[],[]),

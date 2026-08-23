@@ -3615,8 +3615,8 @@ state changed were abandoned as unsound. The current design instead
 encodes every mutable input #strong[in the cache key]: results are
 memoised per proof in `memo:dep_model_cache_/5` under a hazard-encoded
 key (proof-context USE state, assumption flags, choice-group signature),
-gated by `config:dep_model_cache/1`. See the comment at the top of
-`Source/Knowledge/query.pl` for the full key design.
+gated by `config:dep_model_cache/1`. See the "Dependency-model cache
+key" section in `Source/Knowledge/query.pl` for the full key design.
 
 == Further reading
 <further-reading-5>

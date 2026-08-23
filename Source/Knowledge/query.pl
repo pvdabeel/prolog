@@ -9,77 +9,22 @@
 
 
 /** <module> QUERY
-An implementation of a query language for the knowledge base
+Compile-time query language that makes common cache lookups as fast as
+possible.
 */
 
 :- module(query,[]).
-
-% model(dependency) queries are cached per proof with a hazard-encoded key
-% (memo:dep_model_cache_/5, gated by config:dep_model_cache/1).
-%
-% The output of model construction depends on mutable proof state beyond
-% the explicit proof-context (`?{Context}`) argument.  Instead of clearing
-% the cache whenever that state might change (the approach of two earlier,
-% abandoned attempts), every mutable input is ENCODED IN THE CACHE KEY, so
-% entries stay valid for the whole proof (across fallback tiers, reprove
-% passes and partial restarts).  The hazards and their key encodings:
-%
-%   1. Proof-context (build_with_use:use_state(Pos,Neg)) — the same
-%      (Ebuild,Phase) is reached through different dependency paths that
-%      impose different USE requirements (e.g. qtbase reached with
-%      [concurrent,dbus,...] vs [gui]).
-%      -> the full (ground) proof-context term is part of the key.  This
-%      also means no re-contextualisation is needed on a hit: the cached
-%      output embeds exactly the keyed proof context.
-%
-%   2. prover:assuming(keyword_acceptance) / assuming(unmask) / assuming
-%      (conflicts) / assuming(blockers) — nb_setval flags that change between
-%      fallback tiers.  any_of_config_dep_ok calls
-%      acceptance:accepted_keyword_candidate, which checks these flags.
-%      -> encoded as a 4-bit term in the key (dep_model_assuming_bits/1).
-%
-%   3. memo_selected_cn_snap — evolves DURING a single proof attempt as
-%      packages are selected.  any_of_group:config calls
-%      prioritize_deps_keep_all -> dep_snapshot_selected, so the snapshot
-%      can reorder OR branches and lock a different choice into the model.
-%      -> per-entry choice-group C/N pairs are extracted once from the dep
-%      metadata (memo:dep_model_choice_cns_/3) and their snapshot presence
-%      bits form a signature in the key (dep_model_choice_sig/3).  Entries
-%      without choice groups get signature 0 and are immune to this hazard.
-%
-%   4. variant:use_override/2 and variant:branch_prefer/1 — thread_local state
-%      active only during variant exploration; affects effective_use_for_entry
-%      and OR group ordering.
-%      -> cache bypassed entirely while variant state is active (key = none).
-%
-% Remaining inputs (VDB installed state, /etc/portage preferences, profile,
-% keyword/license/mask config, favour/avoid flags) are constant within one
-% proof; the cache is thread_local and cleared by memo:clear_caches at the
-% start of each proof run, so cross-proof drift cannot leak.
-%
-% Why this is worth it: profiling shows 25-30% of proving time in these
-% queries.  Two earlier caches failed to produce wall-clock wins because
-% they were cleared per pass to dodge hazards 2/3, capturing only ~6% of
-% calls on heavy meta packages.  Measurement on kde-apps-meta (2718 calls,
-% 995 distinct (entry,phase) pairs) shows the redundancy is CROSS-PASS:
-% an exact-key cache valid across passes hits 58.9%.  Projection-keyed
-% variants (guard-flag / conditional-flip projections of the BWU context)
-% were also measured and add only ~3pp over the exact key — the distinct
-% BWU states are genuinely different inputs, since the flags consumers
-% force are exactly the flags gating conditionals — so the simple exact
-% key is used.
 
 % =============================================================================
 %  QUERY MACROS
 % =============================================================================
 
-% Query essentially queries the cache facts, which are maintained
-% by the knowledge base.
-%
-% All access to cache should happen through this module, as queries
-% are optimized for efficiency at compile time using Prolog goal
-% expansion (macro's). A fallback to runtime queries is provided
-% if no goal_expansion macro is available.
+% The goal of this module is to make the common knowledge-base cache
+% queries as performant as possible. The knowledge base owns the cache
+% facts; every lookup should go through query so those calls can be
+% compiled down to indexed cache:ordered_entry / cache:entry_metadata
+% predicates via goal expansion. A runtime fallback remains when no
+% macro applies.
 %
 % We deal with queries from command line:
 %
@@ -115,18 +60,12 @@ An implementation of a query language for the knowledge base
 %  GOAL EXPANSION
 % -----------------------------------------------------------------------------
 
-% We treat both list queries and compound queries
-
-% IMPORTANT (portage-ng#59):
-% The search/2 expansion is a MODULE-LOCAL hook (query:goal_expansion/2),
-% not a user:goal_expansion/2 clause. When SWI-Prolog compiles a qualified
-% goal `query:search(Q, R://Id)` in any module, it strips the qualifier and
-% consults the goal-expansion hooks of module query with the bare
-% `search(Q, R://Id)` term — so this hook fires for every qualified caller
-% (and for bare search/2 calls inside this module). A bare search/2 call in
-% another module never reaches this hook, so a module defining its own
-% search/2 cannot be miscompiled; callers must use the query:-qualified
-% form to opt in to compile-time inlining.
+% search/2 expansion is module-local (query:goal_expansion/2), not
+% user:goal_expansion/2. SWI strips the qualifier when compiling
+% `query:search(Q, R://Id)` and consults this module's hooks with the
+% bare term, so every qualified caller (and bare search/2 here) is
+% inlined. A bare search/2 in another module never reaches this hook;
+% callers must write query:search/2 to opt in.
 
 goal_expansion(search(Q, Repo://Id), Expanded) :-
   is_list(Q),!,
@@ -136,31 +75,18 @@ goal_expansion(search(Q, Repo://Id), Expanded) :-
   compound(Q),!,
   compile_query_compound(Q, Repo://Id, Expanded).
 
-% Cross-module inlining for hot candidate.pl predicates, hooked module-
-% locally into module candidate for the same reason as above: SWI consults
-% candidate's goal-expansion hooks with the stripped eligible/installed/
-% resolve term when compiling `candidate:...` goals. The hooks live HERE
-% (not in candidate.pl/target.pl) because query.pl is loaded before
-% resolving.pl — the main consumer — while candidate.pl and target.pl load
-% after it (see Source/loader.pl).
+% Hot candidate.pl predicates are inlined via candidate:goal_expansion/2
+% for the same qualifier-stripping reason. The hooks live here (not in
+% candidate.pl/target.pl) because query.pl loads before resolving.pl —
+% the main consumer — while those files load after it.
 %
-% To prevent drift (portage-ng#59), the expanded bodies are derived from
-% the same compile_query_compound/3 table the predicate definitions
-% themselves compile through:
-%   candidate:installed/1 -> query:search(installed(true), ...)
-%   candidate:eligible/1  -> query:search(ebuild(...)/masked(true), ...)
-%                            (Source/Domain/Gentoo/Rules/Resolving/candidate.pl)
-%   candidate:resolve/2   -> :download clause in
-%                            Source/Domain/Gentoo/Rules/Resolving/target.pl
+% Expanded bodies go through compile_query_compound/3 so they cannot
+% drift from the predicate definitions. Each clause nonvar/==-checks
+% Action before committing: head unification must not bind a variable
+% Action at expansion time.
 %
-% Guards: head unification may bind variables of the call site, but a
-% clause only keeps those bindings when it succeeds. Each clause therefore
-% nonvar/==-checks the Action before committing, so a call site with a
-% variable Action is never miscompiled by binding it at expansion time
-% (the old download macro head could do exactly that).
-%
-% The multifile declaration is required: without it, loading candidate.pl
-% (which redefines module candidate) would abolish these hook clauses.
+% The multifile declaration is required: loading candidate.pl would
+% otherwise abolish these hook clauses.
 
 :- multifile candidate:goal_expansion/2.
 
@@ -184,13 +110,6 @@ candidate:goal_expansion(eligible(Repo://Id:Action?{_}), Expanded) :-
 candidate:goal_expansion(resolve(_Repo://_Id:Action?{Context}, Conditions), Expanded) :-
   Action == download,
   Expanded = featureterm:get(after, Context, Conditions).
-
-% NOTE (portage-ng#59): a user:goal_expansion/2 clause with the qualified
-% head version_domain:normalize_version_term/2 used to live here. It never
-% fired (SWI strips the module qualifier before consulting expansion hooks)
-% and its body diverged from the predicate for unbound input. The working,
-% faithful hook now lives next to the predicate in
-% Source/Domain/Gentoo/version.pl.
 
 
 % -----------------------------------------------------------------------------
@@ -261,7 +180,7 @@ query:pdepend_dep_as_pdepend(T, T).
 % When proving them, we annotate every term with :validate?{[self(Self)]} so
 % the rules know (a) we are validating, and (b) which ebuild provides the
 % effective USE context.  No global flag is needed.
-%
+
 query:with_required_use_validate(Self, Terms, AnnotatedTerms) :-
   Ctx = [self(Self)],
   maplist(query:annotate_validate(Ctx), Terms, AnnotatedTerms).
@@ -337,6 +256,7 @@ compile_query_compound(keywords(KW), Repo://Id,
 % Installed-state lookups resolve the active VDB repository at runtime via
 % knowledgebase:vdb_repository/1 (memoized): `pkg` in standalone mode, the
 % per-client import (`pkg@<clienthost>`) in a Pengines sandbox context.
+
 compile_query_compound(installed(true), Repo://Id,
   ( knowledgebase:vdb_repository(VdbRepo),
     cache:ordered_entry(VdbRepo, Id, _, _, _),
@@ -491,7 +411,7 @@ compile_query_compound(dependency(D,fetchonly), Repo://Id,
 
 % Variable operator: emit a runtime dispatch over the operator. The Key is
 % ==-checked so a query with a variable key is never miscompiled by binding
-% it to 'version' at expansion time (portage-ng#59).
+% it to 'version' at expansion time.
 
 compile_query_compound(select(Key, Op, Ver), Repo://Id, Expanded) :-
   Key == version,
@@ -535,13 +455,10 @@ compile_query_compound(select(Key, Op, Ver), Repo://Id, Expanded) :-
   ).
 
 % Slot-constraint queries dispatch on the constraint-list skeleton. The
-% skeleton must be sufficiently instantiated (proper list, nonvar elements)
-% so that compiling never binds variables in the caller's query term; the
-% inner slot/subslot arguments may be unbound (they are output arguments).
-% This clause must precede the generic nonground-Cmp fallback below: it is
-% the single implementation of slot-constraint semantics, used both for
-% compile-time inlining and by the runtime search/2 compile-then-call path
-% (the former duplicate runtime clauses were removed, portage-ng#59).
+% skeleton must be a proper list of nonvar elements so compiling never
+% binds variables in the caller's query term; inner slot/subslot
+% arguments may stay unbound (they are outputs). This clause must
+% precede the generic nonground-Cmp fallback below.
 
 compile_query_compound(select(Key,Cmp,Sn), Repo://Id, Goal) :-
   Key == slot,
@@ -555,12 +472,12 @@ compile_query_compound(select(Key,Cmp,Value), Repo://Id,
   ( search(select(Key,Cmp,Value), Repo://Id ) ))  :-
   nonground(Cmp,_),!.   % Important: filter out runtime bound Cmp
 
-% `select(repository,notequal,pkg)` is the canonical "tree counterpart of an
-% installed entry" filter: Id must exist in the VDB, while the selected Repo
-% must not be a VDB repository. The literal atom `pkg` is interpreted as
-% "the active VDB repository" (knowledgebase:vdb_repository/1), so the same
-% call sites work in standalone mode and against per-client imports
-% (`pkg@<clienthost>`) in a Pengines sandbox context.
+% `select(repository,notequal,pkg)` is the tree counterpart of an
+% installed entry: Id must exist in the VDB, while Repo must not be a
+% VDB repository. The atom `pkg` means the active VDB
+% (`knowledgebase:vdb_repository/1`), so the same call sites work in
+% standalone mode and against per-client imports (`pkg@<clienthost>`).
+
 compile_query_compound(select(repository,notequal,pkg), Repo://Id,
   ( knowledgebase:vdb_repository(VdbRepo),
     cache:ordered_entry(VdbRepo,Id,_,_,_),
@@ -752,6 +669,7 @@ compile_query_compound(select(subslot,tilde,S), Repo://Id,
 compile_query_compound(select(subslot,wildcard,S), Repo://Id,
   ( cache:entry_metadata(Repo,Id,slot,subslot(M)),
     wildcard_match(S,M) ) ) :- !.
+
 
 %! query:slot_constraint_goal(+Constraint, ?Sn, +RepoId, -Goal)
 %
@@ -969,12 +887,65 @@ compile_query_compound(all(dependency(D,fetchonly)):A?{C}, Repo://Id,
 %  Dependency-model cache key (hazard encoding)
 % -----------------------------------------------------------------------------
 
+% model(dependency) queries are cached per proof with a hazard-encoded key
+% (memo:dep_model_cache_/5, gated by config:dep_model_cache/1).
+%
+% Model construction depends on mutable proof state beyond the explicit
+% proof-context (`?{Context}`) argument.  Instead of clearing the cache
+% whenever that state might change (two earlier, abandoned attempts),
+% every mutable input is encoded in the cache key, so entries stay valid
+% for the whole proof (across fallback tiers, reprove passes and partial
+% restarts).  The hazards and their key encodings:
+%
+%   1. Proof-context (build_with_use:use_state(Pos,Neg)) — the same
+%      (Ebuild,Phase) is reached through different dependency paths that
+%      impose different USE requirements (e.g. qtbase reached with
+%      [concurrent,dbus,...] vs [gui]).
+%      -> the full (ground) proof-context term is part of the key.  This
+%      also means no re-contextualisation is needed on a hit: the cached
+%      output embeds exactly the keyed proof context.
+%
+%   2. prover:assuming(keyword_acceptance) / assuming(unmask) / assuming
+%      (conflicts) / assuming(blockers) — nb_setval flags that change between
+%      fallback tiers.  any_of_config_dep_ok calls
+%      acceptance:accepted_keyword_candidate, which checks these flags.
+%      -> encoded as a 4-bit term in the key (dep_model_assuming_bits/1).
+%
+%   3. memo_selected_cn_snap — evolves during a single proof attempt as
+%      packages are selected.  any_of_group:config calls
+%      prioritize_deps_keep_all -> dep_snapshot_selected, so the snapshot
+%      can reorder OR branches and lock a different choice into the model.
+%      -> per-entry choice-group C/N pairs are extracted once from the dep
+%      metadata (memo:dep_model_choice_cns_/3) and their snapshot presence
+%      bits form a signature in the key (dep_model_choice_sig/3).  Entries
+%      without choice groups get signature 0 and are immune to this hazard.
+%
+%   4. variant:use_override/2 and variant:branch_prefer/1 — thread_local state
+%      active only during variant exploration; affects effective_use_for_entry
+%      and OR group ordering.
+%      -> cache bypassed entirely while variant state is active (key = none).
+%
+% Remaining inputs (VDB installed state, /etc/portage preferences, profile,
+% keyword/license/mask config, favour/avoid flags) are constant within one
+% proof; the cache is thread_local and cleared by memo:clear_caches at the
+% start of each proof run, so cross-proof drift cannot leak.
+%
+% Profiling shows 25-30% of proving time in these queries.  Two earlier
+% caches failed to produce wall-clock wins because they were cleared per
+% pass to dodge hazards 2/3, capturing only ~6% of calls on heavy meta
+% packages.  Measurement on kde-apps-meta (2718 calls, 995 distinct
+% (entry,phase) pairs) shows the redundancy is cross-pass: an exact-key
+% cache valid across passes hits 58.9%.  Projection-keyed variants
+% (guard-flag / conditional-flip projections of the BWU context) add only
+% ~3pp over the exact key — the distinct BWU states are genuinely
+% different inputs, since the flags consumers force are exactly the flags
+% gating conditionals — so the simple exact key is used.
+
 %! query:dep_model_key(+Repo, +Id, +Context, -Key) is det
 %
 % Compute the hazard-encoded cache key for a model(dependency) query, or
 % `none` when the query must not be cached (cache disabled, variant
-% exploration active, or non-ground context).  See the comment block at
-% the top of this file for the hazard taxonomy.
+% exploration active, or non-ground context).
 
 query:dep_model_key(Repo, Id, Context, Key) :-
   ( query:dep_model_cache_enabled,
@@ -1072,15 +1043,19 @@ query:dep_model_choice_cns(Repo, Id, CNs) :-
 query:dep_model_choice_cn(any_of_group(Deps), CN) :-
   member(D, Deps),
   query:dep_model_cn_under(D, CN).
+
 query:dep_model_choice_cn(exactly_one_of_group(Deps), CN) :-
   member(D, Deps),
   query:dep_model_cn_under(D, CN).
+
 query:dep_model_choice_cn(at_most_one_of_group(Deps), CN) :-
   member(D, Deps),
   query:dep_model_cn_under(D, CN).
+
 query:dep_model_choice_cn(all_of_group(Deps), CN) :-
   member(D, Deps),
   query:dep_model_choice_cn(D, CN).
+
 query:dep_model_choice_cn(use_conditional_group(_, _, _, Deps), CN) :-
   member(D, Deps),
   query:dep_model_choice_cn(D, CN).
@@ -1092,18 +1067,23 @@ query:dep_model_choice_cn(use_conditional_group(_, _, _, Deps), CN) :-
 % which may themselves be nested groups).
 
 query:dep_model_cn_under(package_dependency(_, _, C, N, _, _, _, _), C-N).
+
 query:dep_model_cn_under(all_of_group(Deps), CN) :-
   member(D, Deps),
   query:dep_model_cn_under(D, CN).
+
 query:dep_model_cn_under(any_of_group(Deps), CN) :-
   member(D, Deps),
   query:dep_model_cn_under(D, CN).
+
 query:dep_model_cn_under(exactly_one_of_group(Deps), CN) :-
   member(D, Deps),
   query:dep_model_cn_under(D, CN).
+
 query:dep_model_cn_under(at_most_one_of_group(Deps), CN) :-
   member(D, Deps),
   query:dep_model_cn_under(D, CN).
+
 query:dep_model_cn_under(use_conditional_group(_, _, _, Deps), CN) :-
   member(D, Deps),
   query:dep_model_cn_under(D, CN).
@@ -1365,20 +1345,17 @@ compile_query_compound(Stmt, Entry,
 %  Query: Search
 % -----------------------------------------------------------------------------
 
-%! query:search(Query)
+%! query:search(+Query, ?Entry) is nondet.
 %
-% Search - iterate over list
-% Traverse a list of statements that narrow down the search results.
+% Compile-then-call: `compile_query_compound/3` is the single source of
+% truth for every query form it covers. A runtime call compiles the
+% query and executes the cache-level goal, so macro-covered forms have
+% exactly one implementation. When there is no compilation rule, the
+% compiler falls back to `search(Stmt, Entry)` (the deferred nonground
+% Cmp clause does the same); detect that and let the runtime-only
+% clauses below handle the query (all/model/latest, manifest, iuse
+% state, use-expand, set membership, generic metadata).
 
-% Compile-then-call (portage-ng#59):
-% compile_query_compound/3 is the single source of truth for every query form
-% it covers. Runtime calls compile the query at call time and execute the
-% resulting cache-level goal, so macro-covered forms have exactly one
-% implementation. When there is no compilation rule, compile_query_compound/3
-% falls back to `search(Stmt,Entry)` (and the deferred nonground-Cmp clause
-% falls back likewise); detect that and let the runtime-only clauses below
-% handle the query (all/model/latest, manifest, iuse state, use-expand,
-% set membership, generic metadata).
 search(Q, Repository://Entry) :-
   sampler:maybe_record_callsite(Q, Repository://Entry),
   ( is_list(Q)
@@ -1572,24 +1549,17 @@ search(select(Key,Comparator,Value),R://I) :-
 % This search based on qualified_target makes lookup initial lookup very fast. We
 % apply filtering on the remaining choicepoints.
 
-% NOTE (portage-ng#59): version-comparison and slot-constraint runtime
-% clauses used to be duplicated here. They were shadowed by (or drifted
-% from) the compile_query_compound/3 expansions, which are now the single
-% implementation: the compile-then-call clause above handles these forms
-% for runtime-constructed queries as well.
-
 % -----------------------------------------------------------------------------
 %  Search: slot constraint with an under-instantiated skeleton
 % -----------------------------------------------------------------------------
 
-% Runtime-only: reached when the compile-then-call clause deferred the query
-% because the constraint skeleton still contains variables (partial list or
-% var elements) — slot_constraint_goal/4 refuses to bind the caller's term
-% during compilation, but at call time binding is the desired generator
-% semantics. once/1 commits to the first matching skeleton pattern of
-% slot_constraint_goal_/4 exactly like the head-unification + cut of the
-% former runtime clauses (a fully unbound constraint unifies with [] first
-% and enumerates all entries); the cache goal itself then backtracks freely.
+% Runtime-only: reached when compile-then-call deferred the query because
+% the constraint skeleton still contains variables. Compilation must not
+% bind the caller's term; at call time that binding is the generator.
+% once/1 commits to the first matching skeleton pattern of
+% slot_constraint_goal_/4 (a fully unbound constraint unifies with []
+% first and enumerates all entries); the cache goal then backtracks
+% freely.
 
 search(select(slot,constraint(C),Sn), Repo://Id) :-
   !,
@@ -1608,14 +1578,6 @@ search(manifest(Scope,Type,Binary,Size),R://I) :-
    cache:manifest(R,P,_,Category,Name),
    cache:manifest_metadata(R,P,Type,Binary,Size,_Checksums).
 
-
-% NOTE (portage-ng#59): a runtime `search(iuse(Iuse), ...)` clause used to
-% live here, stripping +/- defaults — a silent divergence from the
-% compile_query_compound iuse/1 expansion (which returns the raw metadata
-% value, e.g. plus(flag)). The clause was unreachable: the compile-then-call
-% clause above always wins, so the macro semantics (raw value) is THE
-% semantics; callers strip defaults themselves via eapi:strip_use_default/2.
-% CLI iuse searches (-s iuse=...) are handled by the select/4 clauses below.
 
 % -----------------------------------------------------------------------------
 %  Search: iuse with use flag state
@@ -1796,11 +1758,6 @@ select(iuse,tilde,Value,R://I) :-
   query:iuse_sign_matches(Raw, RequiredSign),
   query:iuse_flag_atom(Raw, Flag),
   dwim_match(Pattern, Flag).
-
-% NOTE (portage-ng#59): maintainer-specific select/4 clauses used to live
-% here; they were unreachable duplicates of the select(maintainer,...)
-% compile_query_compound expansions, which handle these queries on both the
-% compile-time and the runtime (compile-then-call) path.
 
 select(Key,equal,Value,R://I) :-
   !,
