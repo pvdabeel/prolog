@@ -25,6 +25,7 @@
 action:process_graph([]) :-
   kb:graph,
   !.
+
 action:process_graph([modified]) :-
   setup_call_cleanup(
     asserta(config:interface_graph_modified_only(true)),
@@ -32,6 +33,7 @@ action:process_graph([modified]) :-
     retractall(config:interface_graph_modified_only(_))
   ),
   !.
+
 action:process_graph([full]) :-
   setup_call_cleanup(
     asserta(config:interface_graph_modified_only(false)),
@@ -39,9 +41,11 @@ action:process_graph([full]) :-
     retractall(config:interface_graph_modified_only(_))
   ),
   !.
+
 action:process_graph([emerge]) :-
   kb:graph_emerge,
   !.
+
 action:process_graph([emerge, modified]) :-
   setup_call_cleanup(
     asserta(config:interface_graph_modified_only(true)),
@@ -49,6 +53,7 @@ action:process_graph([emerge, modified]) :-
     retractall(config:interface_graph_modified_only(_))
   ),
   !.
+
 action:process_graph([emerge, full]) :-
   setup_call_cleanup(
     ( asserta(config:interface_graph_modified_only(false)),
@@ -58,6 +63,7 @@ action:process_graph([emerge, full]) :-
       retractall(config:force_emerge_regen(_)) )
   ),
   !.
+
 action:process_graph(Args) :-
   message:warning(['--graph: ignoring unexpected args: ', Args]),
   kb:graph.
