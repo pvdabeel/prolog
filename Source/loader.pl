@@ -187,6 +187,10 @@ loader:group(printer_modules,
     portage('Source/Pipeline/printer.pl'),
     portage('Source/Pipeline/pipeline.pl')]).
 
+loader:group(standalone_libraries,
+   [library('http/http_open'),
+    library('http/http_json')]).
+
 loader:group(standalone_modules,
    [portage('Source/Domain/Gentoo/mirror.pl'),
     portage('Source/Pipeline/Builder/buildtime.pl'),
@@ -225,8 +229,6 @@ loader:group(standalone_modules,
     portage('Source/Domain/Gentoo/depclean.pl'),
     portage('Source/Application/System/linkage.pl'),
     portage('Source/Application/Output/Report/report.pl'),
-    library('http/http_open'),
-    library('http/http_json'),
     portage('Source/Domain/Gentoo/upstream.pl'),
     portage('Source/Domain/Gentoo/bugs.pl'),
     portage('Source/Test/test.pl')]).
@@ -378,6 +380,7 @@ load_client_modules :-
 load_standalone_modules :-
 
    loader:load_groups([pipeline_libraries,
+                       standalone_libraries,
                        knowledge_modules,
                        domain_modules,
                        pipeline_modules,
