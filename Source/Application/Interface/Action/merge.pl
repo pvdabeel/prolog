@@ -28,114 +28,187 @@ action:process_action(Action,ArgsSets,Options) :-
   ( memberchk(pretend(true), Options) -> PretendMode = true ; PretendMode = false ),
   eapi:substitute_sets(ArgsSets,Args),
   interface:report_unresolvable_targets(Action, Args),
+  action:build_proposal(Action, Args, Proposal),
+  !,
+  message:log(['Proposal:  ',Proposal]),
+  ( Proposal == []
+  -> action:handle_empty_proposal(ArgsSets, Args, Options)
+  ;  true
+  ),
+  action:dispatch_proposal(Mode, Host, Port, Proposal, Options, PretendMode).
+
+
+% -----------------------------------------------------------------------------
+%  Proposal construction
+% -----------------------------------------------------------------------------
+
+%! action:build_proposal(+Action, +Args, -Proposal) is det.
+%
+% Parses CLI atoms into prove targets. Instantiates each target's
+% repository to the preferred visible candidate (overlay before tree)
+% so prove does not bind the first cache hit (`portage`) and then
+% keyword-relax it. Uninstall uses installed VDB candidates.
+
+action:build_proposal(Action, Args, Proposal) :-
   findall(target(Q,Arg):Action?{[]},
           ( member(Arg,Args),
             atom_codes(Arg,Codes),
             phrase(eapi:qualified_target(Q),Codes),
-            % Instantiate Q's repository to the preferred visible
-            % candidate (overlay before tree) so prove does not bind
-            % the first cache hit (`portage`) and then keyword-relax it.
-            ( Action == uninstall
-              -> interface:target_query_installed(Q),
-                 once(target:resolve_installed_candidate(Q, _))
-              ;  interface:target_query_exists(Q),
-                 once(target:resolve_candidate(Q, _))
-            )
+            action:bind_proposal_target(Action, Q)
           ),
-          Proposal),!,
-  message:log(['Proposal:  ',Proposal]),
-  ( Proposal == [] ->
-      ( action:empty_computed_set_message(ArgsSets, EmptyMsg) ->
-          ignore(message:inform(EmptyMsg)),
-          % Empty computed sets are success (nothing to do), not a bad atom.
-          ( memberchk(ci(true), Options) -> halt(0) ; true )
-      ; ignore(( config:llm_support(Prompt),
-                 atomic_list_concat([Prompt|Args], Message),
-                 config:llm_default(Service),
-                 current_predicate(Service:Service/2),
-                 explainer:call_llm(Service, Message, _) )),
-        ignore(message:failure('No valid targets found.')),
-        action:exit_on_invalid_targets(Options)
-      )
-  ; true
+          Proposal).
+
+
+%! action:bind_proposal_target(+Action, ?Q) is semidet.
+%
+% Resolves Q against the installed VDB for uninstall, otherwise
+% against visible tree/overlay candidates.
+
+action:bind_proposal_target(uninstall, Q) :-
+  !,
+  interface:target_query_installed(Q),
+  once(target:resolve_installed_candidate(Q, _)).
+action:bind_proposal_target(_Action, Q) :-
+  interface:target_query_exists(Q),
+  once(target:resolve_candidate(Q, _)).
+
+
+%! action:handle_empty_proposal(+ArgsSets, +Args, +Options) is det.
+%
+% Empty computed sets are success (nothing to do), not a bad atom.
+% Any other empty proposal is an invalid-target failure.
+
+action:handle_empty_proposal(ArgsSets, Args, Options) :-
+  ( action:empty_computed_set_message(ArgsSets, EmptyMsg) ->
+      ignore(message:inform(EmptyMsg)),
+      ( memberchk(ci(true), Options) -> halt(0) ; true )
+  ; ignore(( config:llm_support(Prompt),
+             atomic_list_concat([Prompt|Args], Message),
+             config:llm_default(Service),
+             current_predicate(Service:Service/2),
+             explainer:call_llm(Service, Message, _) )),
+    ignore(message:failure('No valid targets found.')),
+    action:exit_on_invalid_targets(Options)
+  ).
+
+
+% -----------------------------------------------------------------------------
+%  Prove, print, and post-plan actions
+% -----------------------------------------------------------------------------
+
+%! action:dispatch_proposal(+Mode, +Host, +Port, +Proposal, +Options, +PretendMode) is det.
+%
+% Client mode RPCs prove+print to the server. Other modes prove locally.
+
+action:dispatch_proposal(client, Host, Port, Proposal, _Options, _PretendMode) :-
+  !,
+  client:rpc_execute(Host, Port,
+    ( pipeline:prove_plan_with_fallback(Proposal, ProofAVL, ModelAVL, Plan, Triggers, SCCs, _FallbackUsed),
+      printer:print(Proposal, ModelAVL, ProofAVL, Plan, Triggers, SCCs)
+    ),
+    Output),
+  writeln(Output).
+action:dispatch_proposal(_Mode, _Host, _Port, Proposal, Options, PretendMode) :-
+  action:run_local_proposal(Proposal, Options, PretendMode).
+
+
+%! action:run_local_proposal(+Proposal, +Options, +PretendMode) is det.
+%
+% Proves and prints locally, honoring `--timeout`, then applies CI
+% exit codes and world-file side effects.
+
+action:run_local_proposal(Proposal, Options, PretendMode) :-
+  ( memberchk(timeout(TimeLimitSec), Options) -> true ; TimeLimitSec = 0 ),
+  ( TimeLimitSec =< 0 ->
+      action:prove_print_proposal(Proposal, Options, PretendMode,
+                                  ProofAVL, ModelAVL, Plan, FallbackUsed)
+  ; catch(
+      call_with_time_limit(TimeLimitSec,
+        action:prove_print_proposal(Proposal, Options, PretendMode,
+                                    ProofAVL, ModelAVL, Plan, FallbackUsed)),
+      time_limit_exceeded,
+      action:halt_with_error(' Time limit exceeded while proving/planning. Try increasing --timeout or narrowing the target.')
+    )
   ),
-  (Mode == 'client' ->
-    (client:rpc_execute(Host,Port,
-     (pipeline:prove_plan_with_fallback(Proposal, ProofAVL, ModelAVL, Plan, Triggers, SCCs, _FallbackUsed),
-      printer:print(Proposal,ModelAVL,ProofAVL,Plan,Triggers,SCCs)),
-     Output),
-     writeln(Output));
-    ( ( memberchk(timeout(TimeLimitSec), Options) -> true ; TimeLimitSec = 0 ),
-      ( memberchk(variants(VariantsOpt), Options) -> true ; VariantsOpt = none ),
-      ( memberchk(explain(ExplainOpt), Options) -> true ; ExplainOpt = none ),
-      ( TimeLimitSec =< 0 ->
-          ( ( pipeline:prove_plan_with_fallback(Proposal, ProofAVL, ModelAVL, Plan, Triggers, SCCs, FallbackUsed) ->
-                true
-            ; message:bubble(red,'Error'),
-              message:color(red),
-              message:print(' Proof/planning failed. Check that the target is valid and all dependencies exist.'), nl,
-              message:color(normal),
-              flush_output,
-              choicelog:maybe_dump,
-              halt(1)
-            ),
-            printer:print(Proposal,ModelAVL,ProofAVL,Plan,Triggers,SCCs),
-            ( VariantsOpt \== none, PretendMode == true
-            -> run_variants(VariantsOpt, Proposal, ProofAVL, Plan, Triggers)
-            ;  true
-            ),
-            ( ExplainOpt \== none, PretendMode == true
-            -> run_explain(ExplainOpt, Proposal, ProofAVL, ModelAVL, Plan, Triggers)
-            ;  true
-            ),
-            choicelog:maybe_dump
-          )
-      ; catch(
-          call_with_time_limit(TimeLimitSec,
-            ( ( pipeline:prove_plan_with_fallback(Proposal, ProofAVL, ModelAVL, Plan, Triggers, SCCs, FallbackUsed) ->
-                  true
-              ; message:bubble(red,'Error'),
-                message:color(red),
-                message:print(' Proof/planning failed. Check that the target is valid and all dependencies exist.'), nl,
-                message:color(normal),
-                flush_output,
-                choicelog:maybe_dump,
-                halt(1)
-              ),
-              printer:print(Proposal,ModelAVL,ProofAVL,Plan,Triggers,SCCs),
-              ( VariantsOpt \== none, PretendMode == true
-              -> run_variants(VariantsOpt, Proposal, ProofAVL, Plan, Triggers)
-              ;  true
-              ),
-              ( ExplainOpt \== none, PretendMode == true
-              -> run_explain(ExplainOpt, Proposal, ProofAVL, ModelAVL, Plan, Triggers)
-              ;  true
-              ),
-              choicelog:maybe_dump
-            )),
-          time_limit_exceeded,
-          ( message:bubble(red,'Error'),
-            message:color(red),
-            message:print(' Time limit exceeded while proving/planning. Try increasing --timeout or narrowing the target.'), nl,
-            message:color(normal),
-            flush_output,
-            choicelog:maybe_dump,
-            halt(1)
-          )
-        )
-      ),
-      ( memberchk(ci(true), Options) ->
-          interface:ci_exit_code(ModelAVL, ProofAVL, ExitCode),
-          halt(ExitCode)
-      ; true
-      ),
-      ( FallbackUsed == false,
-        PretendMode == false ->
-            execute_world_plan(Plan),
-            world:save
-        ; true
-        )
-    )).
+  action:maybe_ci_halt(Options, ModelAVL, ProofAVL),
+  action:maybe_execute_world(FallbackUsed, PretendMode, Plan).
+
+
+%! action:prove_print_proposal(+Proposal, +Options, +PretendMode, -ProofAVL, -ModelAVL, -Plan, -FallbackUsed) is det.
+%
+% Proves a plan, prints it, and optionally runs variants/explain on
+% `--pretend`. Halts on proof failure.
+
+action:prove_print_proposal(Proposal, Options, PretendMode,
+                            ProofAVL, ModelAVL, Plan, FallbackUsed) :-
+  ( pipeline:prove_plan_with_fallback(Proposal, ProofAVL, ModelAVL, Plan, Triggers, SCCs, FallbackUsed) ->
+      true
+  ; action:halt_with_error(' Proof/planning failed. Check that the target is valid and all dependencies exist.')
+  ),
+  printer:print(Proposal, ModelAVL, ProofAVL, Plan, Triggers, SCCs),
+  action:maybe_run_variants(Options, PretendMode, Proposal, ProofAVL, Plan, Triggers),
+  action:maybe_run_explain(Options, PretendMode, Proposal, ProofAVL, ModelAVL, Plan, Triggers),
+  choicelog:maybe_dump.
+
+
+%! action:maybe_run_variants(+Options, +PretendMode, +Proposal, +ProofAVL, +Plan, +Triggers) is det.
+
+action:maybe_run_variants(Options, PretendMode, Proposal, ProofAVL, Plan, Triggers) :-
+  ( memberchk(variants(VariantsOpt), Options),
+    VariantsOpt \== none,
+    PretendMode == true
+  -> run_variants(VariantsOpt, Proposal, ProofAVL, Plan, Triggers)
+  ;  true
+  ).
+
+
+%! action:maybe_run_explain(+Options, +PretendMode, +Proposal, +ProofAVL, +ModelAVL, +Plan, +Triggers) is det.
+
+action:maybe_run_explain(Options, PretendMode, Proposal, ProofAVL, ModelAVL, Plan, Triggers) :-
+  ( memberchk(explain(ExplainOpt), Options),
+    ExplainOpt \== none,
+    PretendMode == true
+  -> run_explain(ExplainOpt, Proposal, ProofAVL, ModelAVL, Plan, Triggers)
+  ;  true
+  ).
+
+
+%! action:maybe_ci_halt(+Options, +ModelAVL, +ProofAVL) is det.
+%
+% In `--ci` mode, halt with the assumption-derived exit code.
+
+action:maybe_ci_halt(Options, ModelAVL, ProofAVL) :-
+  ( memberchk(ci(true), Options) ->
+      interface:ci_exit_code(ModelAVL, ProofAVL, ExitCode),
+      halt(ExitCode)
+  ; true
+  ).
+
+
+%! action:maybe_execute_world(+FallbackUsed, +PretendMode, +Plan) is det.
+%
+% Applies world-file side effects only on a real (non-pretend) merge
+% that did not fall through a fallback tier.
+
+action:maybe_execute_world(false, false, Plan) :-
+  !,
+  execute_world_plan(Plan),
+  world:save.
+action:maybe_execute_world(_, _, _).
+
+
+%! action:halt_with_error(+Message) is det.
+%
+% Prints a red error bubble, dumps the choice log, and halt(1).
+
+action:halt_with_error(Message) :-
+  message:bubble(red,'Error'),
+  message:color(red),
+  message:print(Message), nl,
+  message:color(normal),
+  flush_output,
+  choicelog:maybe_dump,
+  halt(1).
 
 
 % -----------------------------------------------------------------------------
