@@ -101,6 +101,19 @@ init_knowledgebase :-
   preference:init.
 
 
+%! init_world is det.
+%
+% Changes to the configured working directory and loads the host
+% world set.
+
+init_world :-
+  config:working_dir(Dir),
+  cd(Dir),
+  config:world_file(File),
+  world:newinstance(set(File)),
+  world:load.
+
+
 % -----------------------------------------------------------------------------
 %  Main predicate
 % -----------------------------------------------------------------------------
@@ -120,11 +133,7 @@ main :-
   interface:get_mode(Mode),
   interface:init_tty,
   interface:verify_mode(Mode),
-  config:working_dir(Dir),
-  cd(Dir),
-  config:world_file(File),
-  world:newinstance(set(File)),
-  world:load,
+  init_world,
   load_modules(Mode),
   main(Mode),
   interface:process_requests(Mode).
