@@ -422,8 +422,8 @@ Bottom line: `resolver:test_stats` is a valid substitute for regenerating
 `.merge` files when checking domain assumption accuracy.
 
 The canonical load graph for standalone is in `portage-ng.pl`:
-- `load_common_modules/0`
-- `load_standalone_modules/0`
+- `load_modules(common)`
+- `load_modules(standalone)`
 
 ### Non-interactive / sandbox robustness
 - Terminal size lookups must go through `config:printing_tty_size/2` (direct `tty_size/2` may throw in non-tty environments).

@@ -9,11 +9,14 @@
 
 
 /** <module> LOADER
-Per-mode module loading. Module groups are declared as loader:group/2 facts
-and the per-mode loaders (standalone, client, server, worker, ...) are
-composed from those groups. A module needed by several modes lives in exactly
-one shared group, so additions propagate automatically and the delta between
-modes (e.g. standalone vs worker) stays explicit and reviewable.
+Per-mode module loading.
+
+Module groups are declared as loader:group/2 facts. Operating modes
+are declared as loader:mode/3 facts (ordered group list plus whether
+to load LLM backends). load_modules/1 is the single entry point. A
+module needed by several modes lives in exactly one shared group, so
+additions propagate automatically and the delta between modes
+(e.g. standalone vs worker) stays explicit and reviewable.
 */
 
 % =============================================================================
@@ -277,14 +280,66 @@ loader:group(llm_modules,
 
 
 % -----------------------------------------------------------------------------
+%  Mode table
+% -----------------------------------------------------------------------------
+
+%! loader:mode(?Mode, ?Groups, ?Llm) is nondet.
+%
+% Declares the module groups and optional LLM load for an operating
+% mode. Groups is an ordered list of loader:group/2 names. Llm is
+% `llm` when the mode should load Generative AI backends (subject to
+% config:load_llm_modules/1), or `none`.
+%
+% common is a prerequisite loaded before mode dispatch. daemon and
+% server extend standalone so pipeline additions propagate.
+
+loader:mode(common,
+   [common_libraries,
+    common_modules], none).
+
+loader:mode(ipc,
+   [ipc_modules], none).
+
+loader:mode(client,
+   [client_libraries,
+    client_core_modules,
+    printer_modules,
+    client_modules], llm).
+
+loader:mode(standalone,
+   [pipeline_libraries,
+    standalone_libraries,
+    knowledge_modules,
+    domain_modules,
+    pipeline_modules,
+    printer_modules,
+    standalone_modules], llm).
+
+loader:mode(worker,
+   [pipeline_libraries,
+    rpc_libraries,
+    knowledge_modules,
+    domain_modules,
+    pipeline_modules,
+    printer_modules,
+    worker_modules], llm).
+
+loader:mode(daemon, [daemon_modules|Groups], Llm) :-
+   loader:mode(standalone, Groups, Llm).
+
+loader:mode(server, Groups, Llm) :-
+   loader:mode(standalone, Standalone, Llm),
+   append(Standalone, [server_libraries, server_modules], Groups).
+
+
+% -----------------------------------------------------------------------------
 %  Group loading
 % -----------------------------------------------------------------------------
 
 %! loader:load_group(+Group) is det.
 %
 % Loads every file spec in a module group, in declaration order. Files are
-% loaded into the user module, matching the load context of the historical
-% per-mode loader predicates.
+% loaded into the user module, matching the load context of load_modules/1.
 
 loader:load_group(Group) :-
    loader:group(Group, Specs),
@@ -300,149 +355,31 @@ loader:load_groups(Groups) :-
 
 
 % -----------------------------------------------------------------------------
-%  Common modules
+%  Mode loading
 % -----------------------------------------------------------------------------
 
-%! load_common_modules is det.
+%! load_modules(+Mode) is det.
 %
-% Loads libraries and application modules shared by all modes.
+% Loads every module group declared for Mode, then the LLM backends
+% when the mode table says llm and config:load_llm_modules(true).
 
-load_common_modules :-
+load_modules(Mode) :-
+   loader:mode(Mode, Groups, Llm),
+   loader:load_groups(Groups),
+   format(atom(Msg), 'Loaded ~w modules...', [Mode]),
+   message:log(Msg),
+   loader:maybe_load_llm(Llm).
 
-   loader:load_groups([common_libraries,
-                       common_modules]),
 
-   message:log('Loaded common modules...').
-
-
-% -----------------------------------------------------------------------------
-%  IPC client modules
-% -----------------------------------------------------------------------------
-
-%! load_ipc_modules is det.
+%! loader:maybe_load_llm(+Llm) is det.
 %
-% Loads the ultralight ipclient plus the ipc façade (fork_background for
-% daemon/server --background; connect/status/halt delegate to ipclient).
-% Needed by ipc mode and by the early-exit --background launch path of
-% daemon and server modes.
+% Loads the Generative AI / LLM integration modules when Llm is `llm`
+% and config:load_llm_modules(true). When false (or the config
+% predicate is absent), skips loading so builder/CLI continue without
+% LLM backends; call sites must tolerate that (stubs + soft call_llm).
 
-load_ipc_modules :-
-
-   loader:load_groups([ipc_modules]),
-
-   message:log('Loaded ipc modules...').
-
-
-% -----------------------------------------------------------------------------
-%  Daemon server modules
-% -----------------------------------------------------------------------------
-
-%! load_daemon_modules is det.
-%
-% Loads the daemon server loop module (accept loop, request dispatch,
-% per-request state isolation). Only needed in daemon mode.
-
-load_daemon_modules :-
-
-   loader:load_groups([daemon_modules]),
-
-   message:log('Loaded daemon modules...').
-
-
-% -----------------------------------------------------------------------------
-%  Client modules
-% -----------------------------------------------------------------------------
-
-%! load_client_modules is det.
-%
-% Loads the client modules for remote server communication: KB front-end,
-% printers, and the client RPC module.
-
-load_client_modules :-
-
-   loader:load_groups([client_libraries,
-                       client_core_modules,
-                       printer_modules,
-                       client_modules]),
-
-   message:log('Loaded client modules...').
-
-
-% -----------------------------------------------------------------------------
-%  Standalone modules
-% -----------------------------------------------------------------------------
-
-%! load_standalone_modules is det.
-%
-% Loads the full standalone pipeline: KB, prover, orderer,
-% printer, builder, grapher, depclean, and test framework.
-
-load_standalone_modules :-
-
-   loader:load_groups([pipeline_libraries,
-                       standalone_libraries,
-                       knowledge_modules,
-                       domain_modules,
-                       pipeline_modules,
-                       printer_modules,
-                       standalone_modules]),
-
-   message:log('Loaded standalone modules...').
-
-
-% -----------------------------------------------------------------------------
-%  Worker modules
-% -----------------------------------------------------------------------------
-
-%! load_worker_modules is det.
-%
-% Loads the full proving pipeline plus client RPC for communicating
-% with the server. Shares knowledge_modules, domain_modules,
-% pipeline_modules and printer_modules with standalone; the delta is
-% standalone_modules (builder/grapher/test extras) vs worker_modules
-% (client RPC).
-
-load_worker_modules :-
-
-   loader:load_groups([pipeline_libraries,
-                       rpc_libraries,
-                       knowledge_modules,
-                       domain_modules,
-                       pipeline_modules,
-                       printer_modules,
-                       worker_modules]),
-
-   message:log('Loaded worker modules...').
-
-
-% -----------------------------------------------------------------------------
-%  Server modules
-% -----------------------------------------------------------------------------
-
-%! load_server_modules is det.
-%
-% Loads the HTTP server, Pengines, and sandbox modules.
-
-load_server_modules :-
-
-   loader:load_groups([server_libraries,
-                       server_modules]),
-
-   message:log('Loaded server modules...').
-
-
-% -----------------------------------------------------------------------------
-%  LLM modules
-% -----------------------------------------------------------------------------
-
-%! load_llm_modules is det.
-%
-% Loads the Generative AI / LLM integration modules when
-% config:load_llm_modules(true). When false (or the config predicate
-% is absent), skips loading so builder/CLI continue without LLM
-% backends; call sites must tolerate that (stubs + soft call_llm).
-
-load_llm_modules :-
+loader:maybe_load_llm(none).
+loader:maybe_load_llm(llm) :-
   ( catch(config:load_llm_modules(true), _, fail)
   -> loader:load_groups([llm_libraries,
                          llm_modules]),

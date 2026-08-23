@@ -32,9 +32,8 @@ jobs:
             -p portage=. \
             -Dverbose_autoload=false \
             -g "
-              load_common_modules,
-              load_standalone_modules,
-              load_llm_modules,
+              load_modules(common),
+              load_modules(standalone),
               load_files(portage('Source/Test/unittest'), [if(true)]),
               (run_tests -> halt(0) ; halt(1))
             " -t 'halt(2)'

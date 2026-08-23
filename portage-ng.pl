@@ -41,7 +41,7 @@ swipl
 % Load modules
 % -----------------------------------------------------------------------------
 
-% loader.pl takes care of loading the appropriate modules for a given mode.
+% loader.pl declares groups and modes; load_modules/1 is the entry point.
 % Mode can be standalone, ipc, daemon, client, worker, or server.
 
 :- include(portage('Source/loader')).
@@ -58,44 +58,39 @@ swipl
 % and enters the request loop.
 
 main(standalone) :-
-  load_standalone_modules,
-  load_llm_modules,
+  load_modules(standalone),
   init_knowledgebase,
   interface:process_requests(standalone).
 
 main(ipc) :-
-  load_ipc_modules,
+  load_modules(ipc),
   ipc:autostart,
   ipc:connect(ExitCode),
   halt(ExitCode).
 
 main(daemon) :-
-  load_daemon_modules,
-  load_standalone_modules,
-  load_llm_modules,
+  load_modules(daemon),
   init_knowledgebase,
   daemon:start,
   interface:process_requests(daemon).
 
 main(client) :-
-  load_client_modules,
-  load_llm_modules,
+  load_modules(client),
   interface:process_server(Host, Port),
   kb:newinstance(knowledgebase(Host, Port)),
   preference:init,
   interface:process_requests(client).
 
 main(worker) :-
-  load_worker_modules,
-  load_llm_modules,
+  load_modules(worker),
   init_knowledgebase,
   interface:process_server(Host, Port),
   worker:start(Host, Port),
   interface:process_requests(worker).
 
 main(server) :-
-  main(standalone),
-  load_server_modules,
+  load_modules(server),
+  init_knowledgebase,
   server:start_server,
   at_halt(server:stop_server),
   bonjour:advertise,
@@ -123,15 +118,15 @@ init_knowledgebase :-
 
 %! main is det.
 %
-% Entry point. Loads common modules, determines the operating mode
-% from command-line arguments, and calls main/1 for mode-specific
-% initialization and request processing.
+% Entry point. Loads common modules via load_modules/1, determines
+% the operating mode from command-line arguments, and calls main/1
+% for mode-specific initialization and request processing.
 %
 % @see Source/loader.pl for module loading
 % @see interface:verify_mode/1 for CLI flag verification
 
 main :-
-  load_common_modules,
+  load_modules(common),
   interface:get_mode(Mode),
   interface:init_tty,
   interface:verify_mode(Mode),

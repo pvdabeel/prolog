@@ -17,7 +17,7 @@ Supports single-shot mode (question on the command line) and
 conversational mode (interactive prompt for follow-up questions).
 
 This module is loaded only when LLM support is available
-(via load_llm_modules in portage-ng.pl).
+(via load_modules/1 when the mode table says llm).
 */
 
 :- module(explain, []).

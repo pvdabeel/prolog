@@ -2268,26 +2268,32 @@ TLS certificate setup and cluster configuration.
 Each mode loads only the modules it needs. This keeps startup time,
 memory footprint, and failure modes appropriate to the deployment:
 
-The load order is defined in `Source/loader.pl`. Each operating mode
-loads a different subset of modules:
+The load order is defined in `Source/loader.pl`. `load_modules/1`
+selects a mode's groups from `loader:mode/3`:
 
 ```
-load_common_modules        — SWI-Prolog libraries, OO context, config, OS,
+load_modules(common)       — SWI-Prolog libraries, OO context, config, OS,
                              interface, EAPI, reader, subprocess, bonjour,
-                             feature unification, daemon
+                             feature unification
+                             (loaded before mode dispatch)
 
-load_standalone_modules    — Full pipeline: KB (cache, repository, query),
+load_modules(standalone)   — Full pipeline: KB (cache, repository, query),
                              Gentoo domain (version, rules, ebuild, VDB,
                              preference), prover, planner, scheduler,
                              printer, builder, grapher, writer, test
+                             (also loads LLM backends unless
+                             config:load_llm_modules(false))
 
-load_server_modules        — HTTP server, Pengines, sandbox
+load_modules(server)       — Standalone groups plus HTTP server, Pengines,
+                             sandbox
 
-load_client_modules        — HTTP/socket client, subset of printer/pipeline
+load_modules(client)       — HTTP/socket client, subset of printer/pipeline
 
-load_worker_modules        — Same pipeline as standalone + client + cluster
+load_modules(worker)       — Same pipeline as standalone + client + cluster
 
-load_llm_modules           — LLM provider backends, explain, semantic search
+load_modules(daemon)       — Standalone groups plus the daemon accept loop
+
+load_modules(ipc)          — Ultralight IPC client (no LLM)
 ```
 
 == Domain-agnostic core vs Gentoo-specific rules

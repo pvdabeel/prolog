@@ -46,18 +46,18 @@ interface:early_exit(ipc, Options) :-
 
 interface:early_exit(ipc, Options) :-
   memberchk(status(true), Options), !,
-  user:load_ipc_modules,
+  user:load_modules(ipc),
   ( ipc:status -> halt(0) ; halt(1) ).
 
 interface:early_exit(ipc, Options) :-
   memberchk(cmd(Cmd), Options), Cmd \= none, !,
-  user:load_ipc_modules,
+  user:load_modules(ipc),
   ipc:send_command(Cmd),
   halt(0).
 
 interface:early_exit(daemon, Options) :-
   memberchk(background(true), Options), !,
-  user:load_ipc_modules,
+  user:load_modules(ipc),
   ipc:fork_background(daemon),
   halt(0).
 
@@ -79,6 +79,6 @@ interface:early_exit(client, Options) :-
 
 interface:early_exit(server, Options) :-
   memberchk(background(true), Options), !,
-  user:load_ipc_modules,
+  user:load_modules(ipc),
   ipc:fork_background(server),
   halt(0).

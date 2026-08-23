@@ -1922,7 +1922,7 @@ config:llm_capability(metacircular,Capability) :-
 
 %! config:load_llm_modules(?Bool)
 %
-% When false, `load_llm_modules/0` is a no-op (no provider backends,
+% When false, `load_modules/1` skips the LLM backends (no provider backends,
 % explain, metacircular, or semantic search). Builder/CLI paths that
 % need LLM support detect the absence and skip with a warning.
 % Override from a host config with
