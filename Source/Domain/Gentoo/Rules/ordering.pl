@@ -23,7 +23,8 @@ the pass-1 proof and the VDB (installed packages):
 
   - step/1     : is this literal a pass-1 plan step?
   - requires/2 : what does a step require before it can be placed
-                 (build-time deps, downloads, the :install under a :run)?
+                 (build-time deps, including a planned same-CN merge
+                 when the grouped :install is keep-installed)?
   - prefers/2  : what would a step like placed earlier without insisting
                  (runtime dep groups, PDEPEND ordering hints)?
   - world/2    : does the installed system, as it stands, already provide
@@ -143,12 +144,23 @@ step_body(H, Body) :-
 %! ordering:requires(+H, -D)
 %
 % Hard requirement: D must be available before step H can be placed.
-% Enumerated from H's pass-1 proof body — every body literal that is
-% itself a step, except preference-only deps (`runtime_dep/1`: grouped
-% :run heads, and :fetchonly heads). A runtime dep does not gate the
-% build; fetching another package's sources does not gate fetching
-% this one. Constraints and body literals without a proof entry carry
-% no ordering information.
+% Two sources, both read from H's pass-1 proof body:
+%
+%   - every body literal that is itself a step, except preference-only
+%     deps (`runtime_dep/1`: grouped :run heads, and :fetchonly heads).
+%     A runtime dep does not gate the build; fetching another package's
+%     sources does not gate fetching this one;
+%   - grouped BDEPEND/DEPEND alias: a concrete grouped :install is often
+%     *not* the plan step (keep-installed groups have an empty body, so
+%     they are a wave-1 leaf). When a merge-family action for the same
+%     CN *is* planned, the consumer must wait for that rebuild — otherwise
+%     it co-waves with the provider and configures against the stale
+%     install (perl 5.42→5.44 / Syntax-Keyword-Try before
+%     XS-Parse-Keyword). Assumed grouped deps stay a preference
+%     (portage-ng#95); this clause is the hard edge for the
+%     keep-installed path. Constraints and body literals without a
+%     proof entry and without a planned same-CN merge carry no
+%     ordering information.
 
 requires(H, D) :-
   ordering:step_body(H, Body),
@@ -159,6 +171,13 @@ requires(H, D) :-
   \+ ordering:runtime_dep(Core),
   ordering:step(Core),
   D = Core.
+
+requires(H, D) :-
+  ordering:step_body(H, Body),
+  member(Literal, Body),
+  prover:canon_literal(Literal, Core, _),
+  ordering:grouped_install_planned(Core, D),
+  D \== H.
 
 
 %! ordering:prefers(+H, -D)
@@ -275,8 +294,9 @@ runtime_dep(_://_:fetchonly).
 %     up here (via dep_anchor_key/2) to prefer the post-install group
 %     earlier (portage-ng#18/#19);
 %   - the concrete-action index maps cn(Category-Name)-Action to the
-%     concrete plan steps for that package, so assumed grouped deps can
-%     alias to the planned provider (portage-ng#95).
+%     concrete plan steps for that package, so grouped :install deps
+%     (hard requires) and assumed grouped deps (portage-ng#95 preference)
+%     can alias to the planned provider.
 
 %! ordering:prepare_pass
 %
@@ -363,12 +383,45 @@ build_cn_action_index(Idx) :-
           ( assoc:gen_assoc(ProofKey, Proof, _),
             ( ProofKey = rule(Head) -> true ; ProofKey = assumed(rule(Head)) ),
             Head = Repository://Entry:Action,
-            catch(query:search([category(C), name(N)], Repository://Entry), _, fail)
+            ordering:entry_cn(Repository, Entry, C, N)
           ),
           Pairs0),
   sort(Pairs0, Pairs),
   empty_assoc(I0),
   foldl(ordering:anchor_index_put, Pairs, I0, Idx).
+
+
+%! ordering:entry_cn(+Repository, +Entry, -C, -N)
+%
+% Category and name of a repository entry. Prefers the KB query; falls
+% back to parsing `Category/PF` so the concrete-action index works in
+% KB-free synthetic tests (`portage://'fake/sg-1'`).
+
+entry_cn(Repository, Entry, C, N) :-
+  catch(query:search([category(C), name(N)], Repository://Entry), _, fail),
+  !.
+entry_cn(_Repository, Entry, C, N) :-
+  atomic(Entry),
+  atomic_list_concat([C, PF], '/', Entry),
+  eapi:packageversion(PF, N, _).
+
+
+%! ordering:grouped_install_planned(+Core, -D)
+%
+% The planned merge-family action that satisfies a concrete grouped
+% :install BDEPEND/DEPEND. Fails for assumed wrappers (those stay a
+% preference, portage-ng#95), for :run/:fetchonly, and when no merge
+% of that CN is in the pass-1 proof.
+
+grouped_install_planned(Core, D) :-
+  Core = G:install,
+  ordering:grouped_cn(G, C, N),
+  ordering:phase_actions(install, Actions),
+  ordering:cn_action_index(Idx),
+  member(A, Actions),
+  get_assoc(cn(C-N)-A, Idx, Steps),
+  member(D, Steps),
+  ordering:step(D).
 
 
 %! ordering:grouped_cn(+G, -C, -N)
@@ -446,6 +499,15 @@ world(_H, Repository://Entry:Action) :-
   !,
   catch(ordering:installed_same_version(Repository, Entry), _, fail).
 
+% A planned :update/:downgrade/:reinstall is a step, so the availability
+% law waits for it whenever that is acyclic. This clause is only reached
+% when citing the rebuild would close a loop (python/tk/fontconfig): an
+% already-installed CN of the same package still bridges the cycle.
+world(_H, Repository://Entry:Action) :-
+  memberchk(Action, [update, downgrade, reinstall]),
+  !,
+  catch(ordering:installed_same_cn(Repository, Entry), _, fail).
+
 
 %! ordering:installed_satisfies(+C, +N, +Deps)
 %
@@ -472,4 +534,16 @@ installed_same_version(Repository, Entry) :-
   knowledgebase:vdb_repository(VdbRepo),
   query:search([name(N), category(C), installed(true)], VdbRepo://Installed),
   cache:ordered_entry(VdbRepo, Installed, _, _, Version),
+  !.
+
+
+%! ordering:installed_same_cn(+Repository, +Entry)
+%
+% Some version of Repository://Entry's category-name is already
+% installed. Used only as a cycle bridge for a planned rebuild (the
+% acyclic path waits for the rebuild itself).
+
+installed_same_cn(Repository, Entry) :-
+  cache:ordered_entry(Repository, Entry, C, N, _),
+  ranking:cn_is_installed(C, N),
   !.

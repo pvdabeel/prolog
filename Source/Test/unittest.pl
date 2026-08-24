@@ -3857,6 +3857,25 @@ test(configure_closure_delays_install_after_run_providers, [nondet]) :-
   issue73_wave(Plan, portage://'fake/sg-1':run, WSgR),
   WG < WSgI, WSgI < WSgR.
 
+% Grouped BDEPEND keep-installed alias: the group is a wave-1 leaf
+% (empty body — old XS-Parse-Keyword still "satisfies" the version
+% constraint) while a same-CN :update is planned after a perl subslot
+% bump. Without the alias, Try only waits for the group and co-waves
+% with the rebuild; configure then dies looking for Builder.pm under
+% the new perl. The alias is a hard requires/2, not a preference.
+test(grouped_bdepend_waits_for_provider_rebuild) :-
+  G = grouped_package_dependency(no, 'dev-perl', 'XS-Parse-Keyword', []):install,
+  Try = portage://'dev-perl/Syntax-Keyword-Try-0.310.0':install,
+  XSPK = portage://'dev-perl/XS-Parse-Keyword-0.38.0':update,
+  Perl = portage://'dev-lang/perl-5.44.0':update,
+  issue73_rules([Try-[G], G-[], XSPK-[Perl], Perl-[]]),
+  ordering_engine_plan([Try, XSPK], ProofOut, Plan),
+  ordering_engine_unreachables(ProofOut, []),
+  issue73_wave(Plan, Perl, WPerl),
+  issue73_wave(Plan, XSPK, WXSPK),
+  issue73_wave(Plan, Try, WTry),
+  WPerl < WXSPK, WXSPK < WTry.
+
 :- end_tests(ordering_engine_synthetic).
 
 

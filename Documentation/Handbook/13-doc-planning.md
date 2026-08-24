@@ -112,7 +112,7 @@ the pass-1 proof and the VDB:
 | Binding | Question answered | Source |
 | :--- | :--- | :--- |
 | `step/1` | What are the plan's steps? | Pass-1 proof rule heads |
-| `requires/2` | What must exist before a step? | Build-time deps (DEPEND/BDEPEND) in the step's pass-1 rule body |
+| `requires/2` | What must exist before a step? | Build-time deps (DEPEND/BDEPEND) in the step's pass-1 rule body, including a planned same-CN merge when the grouped `:install` is keep-installed |
 | `prefers/2` | What would we like earlier, without insisting? | Runtime deps (RDEPEND), PDEPEND completion, ordering hints |
 | `world/2` | What does the system already provide? | VDB (installed packages) |
 
@@ -135,7 +135,16 @@ preference:
 
 - **DEPEND** and **BDEPEND** — build-time dependencies.  They must be
   satisfied before the build can start, so they become **`requires/2`**
-  edges: the consumer's `scheduled/1` proof waits on them.
+  edges: the consumer's `scheduled/1` proof waits on them.  A keep-installed
+  grouped `:install` is a wave-1 leaf (empty body: the installed copy
+  still matches the version constraint).  When a merge of the same
+  category-name is *also* planned — typically a subslot rebuild — the
+  binding aliases the group onto that planned action so the consumer
+  cannot share a wave with the rebuild and configure against the stale
+  install (perl 5.42→5.44 / `Syntax-Keyword-Try` before
+  `XS-Parse-Keyword`).  Assumed grouped deps stay a preference
+  (portage-ng#95); this alias is the hard edge for the keep-installed
+  path.
 
 - **RDEPEND** — runtime dependencies.  They must be satisfied before the
   package is *used*, not before it is built.  They become **`prefers/2`**
