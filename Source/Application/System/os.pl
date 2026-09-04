@@ -27,19 +27,29 @@ Eventually this could become a class with different subclasses.
 %! os:compose_path(+Path,+RelativePath,-NewPath)
 %
 % Given a path (relative or absolute) and a relative path, composes a
-% new path by combining both paths and a separator.
+% new path by combining both with exactly one separator, whether or not
+% Path already ends in one. This is the single filesystem path join of
+% the code base.
 
 os:compose_path(Path,RelativePath,NewPath) :-
-  atomic_list_concat([Path,'/',RelativePath],NewPath).
+  directory_file_path(Path,RelativePath,NewPath).
 
 
 %! os:compose_path(+List,-Path)
 %
-% Given a list of path components, composes a new path by combining
-% path segments using correct OS seperator
+% Given a non-empty list of path components, composes a new path by
+% joining the components left to right.
 
-os:compose_path(List,Path) :-
-  atomic_list_concat(List,'/',Path).
+os:compose_path([First|Rest],Path) :-
+  foldl(os:append_path_component,Rest,First,Path).
+
+
+%! os:append_path_component(+Component,+Path,-NewPath)
+%
+% foldl/4 step for os:compose_path/2.
+
+os:append_path_component(Component,Path,NewPath) :-
+  directory_file_path(Path,Component,NewPath).
 
 
 % -----------------------------------------------------------------------------

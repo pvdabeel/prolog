@@ -82,7 +82,7 @@ glsa:injected_file(File) :-
 
 glsa:cache_file(File) :-
   working_directory(Cwd, Cwd),
-  directory_file_path(Cwd, 'Knowledge/glsa.qlf', File).
+  os:compose_path(Cwd, 'Knowledge/glsa.qlf', File).
 
 
 %! glsa:raw_file(-File) is det.
@@ -91,7 +91,7 @@ glsa:cache_file(File) :-
 
 glsa:raw_file(File) :-
   working_directory(Cwd, Cwd),
-  directory_file_path(Cwd, 'Knowledge/glsa.raw', File).
+  os:compose_path(Cwd, 'Knowledge/glsa.raw', File).
 
 
 % -----------------------------------------------------------------------------
@@ -289,7 +289,7 @@ glsa:parse_directory(Dir, Advisories, Packages, Ranges) :-
           ( member(F, Entries0),
             atom_concat('glsa-', Rest, F),
             atom_concat(Id, '.xml', Rest),
-            atomic_list_concat([Dir, '/', F], Path)
+            os:compose_path(Dir, F, Path)
           ),
           Pairs0),
   sort(Pairs0, Pairs),

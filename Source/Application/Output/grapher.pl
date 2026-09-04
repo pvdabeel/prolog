@@ -179,7 +179,7 @@ grapher:copy_graph_asset(Key, TargetName, Directory) :-
     config:graph_asset_source(Key, Source),
     exists_file(Source)
   ->
-    atomic_list_concat([Directory,'/',TargetName], Target),
+    os:compose_path(Directory, TargetName, Target),
     ( exists_file(Target) -> catch(delete_file(Target), _, true) ; true ),
     catch(copy_file(Source, Target), E,
           message:warning(['Failed to copy graph asset ', Source, ' -> ', Target, ' (', E, ')']))

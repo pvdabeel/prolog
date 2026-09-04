@@ -148,7 +148,7 @@ terminal:resolve_graph_dir(Repository, Dir) :-
     current_predicate(config:graph_directory/1),
     config:graph_directory(BaseDir),
     !,
-    atomic_list_concat([BaseDir, '/', Repository], Dir).
+    os:compose_path(BaseDir, Repository, Dir).
 terminal:resolve_graph_dir(_, '/tmp').
 
 

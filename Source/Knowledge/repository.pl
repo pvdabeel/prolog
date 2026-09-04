@@ -373,10 +373,6 @@ sync(kb) ::-
   :this(Repository),
   message:hc,
 
-  % We sync in parallel
-
-  % config:number_of_cpus(Cpus),
-
   % Step 1: clean prolog cache
 
   retractall(cache:repository(Repository)),
@@ -1029,7 +1025,7 @@ get_ebuild_file(Entry,File) ::-
 get_cache_file(Entry,File) ::-
   ::cache(Cache),
   :entry(Entry),
-  atomic_list_concat([Cache,'/',Entry],File).
+  os:compose_path(Cache, Entry, File).
 
 
 %! repository:location(?Location)

@@ -458,7 +458,7 @@ candidate:eligible(Repo://Entry:_Action?{_}) :-
 candidate:eligible(use_conditional(positive, Use, _R://_E):_?{Context}) :-
   use:assumed(Context, Use), !.
 candidate:eligible(use_conditional(positive, Use, R://E):_?{_}) :-
-  \+ Use =.. [minus,_],
+  Use \= minus(_),
   preference:global_use(Use),
   \+ ( query:search(iuse(Value), R://E),
        eapi:use_flag_name(Value, Use) ), !.

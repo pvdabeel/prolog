@@ -154,7 +154,7 @@ ebuild_exec:ensure_log_dir :-
 
 ebuild_exec:phase_stats_file(Path) :-
   working_directory(Cwd, Cwd),
-  directory_file_path(Cwd, 'Knowledge/phase_stats.pl', Path).
+  os:compose_path(Cwd, 'Knowledge/phase_stats.pl', Path).
 
 
 %! ebuild_exec:load_phase_stats is det.
@@ -983,7 +983,7 @@ ebuild_exec:reactivation_log_path(LogPath) :-
   current_predicate(config:build_log_dir/1),
   config:build_log_dir(Dir),
   catch(make_directory_path(Dir), _, true),
-  atomic_list_concat([Dir, '/', 'toolchain-reactivation.log'], LogPath).
+  os:compose_path(Dir, 'toolchain-reactivation.log', LogPath).
 
 
 %! ebuild_exec:log_phase_header(+LogPath, +Phase) is det.

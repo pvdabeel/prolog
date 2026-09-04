@@ -673,13 +673,13 @@ rule(use_conditional_group(negative,_,_://_,_):_?{_},[]) :- !.
 
 rule(use_conditional_group(positive,Use,_://_,Deps), Conditions) :-
   preference:global_use(Use), !,
-  findall(D, member(D, Deps), Conditions).
+  Conditions = Deps.
 
 rule(use_conditional_group(positive,_,_://_,_),[]) :- !.
 
 rule(use_conditional_group(negative,Use,_://_,Deps), Conditions) :-
   preference:global_use(minus(Use)), !,
-  findall(D, member(D, Deps), Conditions).
+  Conditions = Deps.
 
 rule(use_conditional_group(negative,_,_://_,_),[]) :- !.
 
@@ -765,8 +765,7 @@ rule(any_of_group(Deps):Action?{Context}, Conditions) :-
 rule(all_of_group(Deps):Action?{Context}, Conditions) :-
   findall(D:Action?{Context}, member(D, Deps), Conditions), !.
 
-rule(all_of_group(Deps), Conditions) :-
-  findall(D, member(D, Deps), Conditions), !.
+rule(all_of_group(Deps), Deps) :- !.
 
 
 % -----------------------------------------------------------------------------
@@ -791,12 +790,12 @@ rule(uri(_):_,[]) :- !.
 % groups from arbitrarily enabling the first alternative.
 
 rule(required(Use):_?{Context},[]) :-
-  \+Use =.. [minus,_],
+  Use \= minus(_),
   use:effective_use_in_context(Context, Use, positive),
   !.
 
 rule(required(minus(Use)):_?{Context},[]) :-
-  \+Use =.. [minus,_],
+  Use \= minus(_),
   use:effective_use_in_context(Context, Use, negative),
   !.
 
@@ -810,28 +809,28 @@ rule(required(minus(Use)):_?{_}, Conditions) :-
   rule(required(minus(Use)), Conditions).
 
 rule(required(minus(Use)),[minus(Use)]) :-
-  \+Use =.. [minus,_],
+  Use \= minus(_),
   preference:global_use(minus(Use)),!.
 
 rule(required(Use),[Use]) :-
-  \+Use =.. [minus,_],
+  Use \= minus(_),
   preference:global_use(Use),!.
 
 rule(required(Use),[assumed(conflict(required,Use))]) :-
-  \+Use =.. [minus,_],
+  Use \= minus(_),
   preference:global_use(minus(Use)),!.
 
 rule(required(minus(Use)),[assumed(conflict(required,minus(Use)))]) :-
-  \+Use =.. [minus,_],
+  Use \= minus(_),
   preference:global_use(Use),!.
 
 rule(required(minus(Use)),[assumed(minus(Use))]) :-
-  \+Use =.. [minus,_],
+  Use \= minus(_),
   \+preference:global_use(Use),
   \+preference:global_use(minus(Use)),!.
 
 rule(required(Use),[assumed(Use)]) :-
-  \+Use =.. [minus,_],
+  Use \= minus(_),
   \+preference:global_use(Use),
   \+preference:global_use(minus(Use)),!.
 
@@ -844,12 +843,12 @@ rule(required(Use),[assumed(Use)]) :-
 % use effective USE for the ebuild.
 
 rule(blocking(Use):_?{Context},[]) :-
-  \+Use =.. [minus,_],
+  Use \= minus(_),
   use:effective_use_in_context(Context, Use, negative),
   !.
 
 rule(blocking(minus(Use)):_?{Context},[]) :-
-  \+Use =.. [minus,_],
+  Use \= minus(_),
   use:effective_use_in_context(Context, Use, positive),
   !.
 
@@ -857,38 +856,38 @@ rule(blocking(minus(Use)):_?{Context},[]) :-
 % to bare rules for assumption/conflict handling.
 
 rule(blocking(Use):_?{_}, Conditions) :-
-  \+Use =.. [minus,_],
+  Use \= minus(_),
   rule(blocking(Use), Conditions).
 
 rule(blocking(minus(Use)):_?{_}, Conditions) :-
-  \+Use =.. [minus,_],
+  Use \= minus(_),
   rule(blocking(minus(Use)), Conditions).
 
 % Global profile fallback (bare literals, no context).
 
 rule(blocking(minus(Use)),[Use]) :-
-  \+Use =.. [minus,_],
+  Use \= minus(_),
   preference:global_use(Use),!.
 
 rule(blocking(Use),[minus(Use)]) :-
-  \+Use =.. [minus,_],
+  Use \= minus(_),
   preference:global_use(minus(Use)),!.
 
 rule(blocking(Use),[assumed(conflict(blocking,Use))]) :-
-  \+Use =.. [minus,_],
+  Use \= minus(_),
   preference:global_use(Use),!.
 
 rule(blocking(minus(Use)),[assumed(conflict(blocking,minus(Use)))]) :-
-  \+Use =.. [minus,_],
+  Use \= minus(_),
   preference:global_use(minus(Use)),!.
 
 rule(blocking(minus(Use)),[assumed(Use),naf(blocking(Use))]) :-
-  \+Use =.. [minus,_],
+  Use \= minus(_),
   \+preference:global_use(Use),
   \+preference:global_use(minus(Use)),!.
 
 rule(blocking(Use),[assumed(minus(Use)),naf(required(Use))]) :-
-  \+Use =.. [minus,_],
+  Use \= minus(_),
   \+preference:global_use(Use),
   \+preference:global_use(minus(Use)),!.
 

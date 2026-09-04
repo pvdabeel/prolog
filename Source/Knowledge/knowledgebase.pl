@@ -187,8 +187,8 @@ save ::-
 save ::-
   \+ proxy,!,
   config:working_dir(Dir),
-  directory_file_path(Dir,'Knowledge/kb.raw',Raw),
-  directory_file_path(Dir,'Knowledge/kb.qlf',Qlf),
+  os:compose_path(Dir,'Knowledge/kb.raw',Raw),
+  os:compose_path(Dir,'Knowledge/kb.qlf',Qlf),
   lock:with_system_lock(kb_save(Dir),
     with_mutex(save,
       (setup_call_cleanup(
@@ -225,7 +225,7 @@ load ::-
 load ::-
   \+ proxy,
   config:working_dir(Dir),
-  directory_file_path(Dir,'Knowledge/kb.qlf',Qlf),
+  os:compose_path(Dir,'Knowledge/kb.qlf',Qlf),
   exists_file(Qlf),!,
   sanitize:ensure_file_integrity(Qlf),
   ensure_loaded(Qlf),

@@ -12,6 +12,10 @@
 The reader reads lines from a file.
 Input:  A full path to a file
 Output: A list of strings, each string represents a line.
+
+It also provides the one reading of Gentoo-style configuration files
+(profiles, /etc/portage, layout.conf): `#` comments dropped, whitespace
+normalized, blank lines removed (reader:config_lines/2).
 */
 
 :- module(reader, []).
@@ -65,6 +69,40 @@ reader:read_lines_to_codes(Stream, Lines) :-
     ;   Lines = [L|Rest],
         reader:read_lines_to_codes(Stream, Rest)
     ).
+
+
+%! reader:config_lines(+File, -Lines)
+%
+% The meaningful lines of a Gentoo-style configuration file, as strings in
+% file order: `#` comments are dropped, whitespace is normalized and blank
+% lines are removed. A missing or unreadable file yields [].
+
+reader:config_lines(File, Lines) :-
+  catch(read_file_to_string(File, S, []), _, S = ""),
+  reader:string_config_lines(S, Lines).
+
+
+%! reader:string_config_lines(+String, -Lines)
+%
+% As reader:config_lines/2, for configuration content already in memory.
+
+reader:string_config_lines(S, Lines) :-
+  split_string(S, "\n", "\r", Raw),
+  findall(L, ( member(R, Raw), reader:config_line(R, L), L \== "" ), Lines).
+
+
+%! reader:config_line(+Raw, -Line)
+%
+% Normalize one configuration line: drop a `#` comment and collapse
+% whitespace. Line is "" for blank and comment-only lines.
+
+reader:config_line(Raw, Line) :-
+  ( sub_string(Raw, Before, _, _, "#")
+  -> sub_string(Raw, 0, Before, _, S0)
+  ;  S0 = Raw
+  ),
+  normalize_space(string(Line), S0).
+
 
 %! reader:test(+Repository)
 %

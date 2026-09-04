@@ -119,7 +119,7 @@ use:effective_use_in_context(Context, Use, State) :-
 
 use:effective_use_for_entry(RepoEntry0, Use, State) :-
   RepoEntry0 = Repo://Id,
-  \+ Use =.. [minus,_],
+  Use \= minus(_),
   ( memo:eff_use_cache_(Repo, Id, Use, Cached) ->
       State = Cached
   ;
@@ -883,14 +883,14 @@ use:build_with_use_requirements(use_state(En, Dis), MustEnable, MustDisable) :-
 use:build_with_use_requirements(BuildWithUse, MustEnable, MustDisable) :-
   findall(U,
           ( member(required(U), BuildWithUse),
-            \+ U =.. [minus,_]
+            U \= minus(_)
           ),
           En0),
   findall(U,
           ( ( member(naf(required(U)), BuildWithUse)
             ; member(assumed(minus(U)), BuildWithUse)
             ),
-            \+ U =.. [minus,_]
+            U \= minus(_)
           ),
           Dis0),
   sort(En0, MustEnable),
@@ -1104,11 +1104,11 @@ use:symmetric_diff_nonempty(A, B) :-
 % exactly_one_of_group/1, and at_most_one_of_group/1.
 
 use:required_use_term_satisfied(Ctx, required(Use)) :-
-  \+ Use =.. [minus,_],
+  Use \= minus(_),
   use:effective_use_in_context(Ctx, Use, positive),
   !.
 use:required_use_term_satisfied(Ctx, required(minus(Use))) :-
-  \+ Use =.. [minus,_],
+  Use \= minus(_),
   use:effective_use_in_context(Ctx, Use, negative),
   !.
 use:required_use_term_satisfied(Ctx, use_conditional_group(positive, Use, _Self, Deps)) :-
@@ -1128,12 +1128,10 @@ use:required_use_term_satisfied(Ctx, any_of_group(Deps)) :-
   use:required_use_term_satisfied(Ctx, D),
   !.
 use:required_use_term_satisfied(Ctx, exactly_one_of_group(Deps)) :-
-  findall(1, (member(D, Deps), use:required_use_term_satisfied(Ctx, D)), Ones),
-  length(Ones, 1),
+  aggregate_all(count, (member(D, Deps), use:required_use_term_satisfied(Ctx, D)), 1),
   !.
 use:required_use_term_satisfied(Ctx, at_most_one_of_group(Deps)) :-
-  findall(1, (member(D, Deps), use:required_use_term_satisfied(Ctx, D)), Ones),
-  length(Ones, N),
+  aggregate_all(count, (member(D, Deps), use:required_use_term_satisfied(Ctx, D)), N),
   N =< 1,
   !.
 
@@ -1393,8 +1391,7 @@ use:requse_term_fixes(RepoEntry, En, Dis, exactly_one_of_group(Deps), Fixes) :-
     Fixes0 \== [],
     Fixes = Fixes0.
 use:requse_term_fixes(RepoEntry, En, Dis, exactly_one_of_group(Deps), [enable(Flag)]) :-
-    findall(1, (member(D, Deps), use:requse_term_ok_with_bwu(RepoEntry, En, Dis, D)), Sat),
-    length(Sat, 0),
+    aggregate_all(count, (member(D, Deps), use:requse_term_ok_with_bwu(RepoEntry, En, Dis, D)), 0),
     use:requse_pick_satisfying_flag(RepoEntry, Deps, Flag), !.
 use:requse_term_fixes(RepoEntry, En, Dis,
                   use_conditional_group(positive, Use, _, SubDeps), Fixes) :-
@@ -1407,17 +1404,17 @@ use:requse_term_fixes(RepoEntry, En, Dis,
     foldl(use:collect_requse_fixes(RepoEntry, En, Dis), SubDeps, [], Fixes),
     Fixes \== [], !.
 use:requse_term_fixes(RepoEntry, En, Dis, required(Use), [enable(Use)]) :-
-    \+ Use =.. [minus,_],
+    Use \= minus(_),
     \+ use:requse_flag_is_positive(RepoEntry, En, Dis, Use), !.
 use:requse_term_fixes(RepoEntry, En, Dis, required(minus(Use)), [disable(Use)]) :-
-    \+ Use =.. [minus,_],
+    Use \= minus(_),
     \+ use:requse_flag_is_negative(RepoEntry, En, Dis, Use), !.
 use:requse_term_fixes(RepoEntry, En, Dis, blocking(Use), [disable(Use)]) :-
-    \+ Use =.. [minus,_],
+    Use \= minus(_),
     \+ use:requse_flag_is_negative(RepoEntry, En, Dis, Use), !.
 use:requse_term_fixes(RepoEntry, En, Dis, at_most_one_of_group(Deps), []) :-
-    findall(1, (member(D, Deps), use:requse_term_ok_with_bwu(RepoEntry, En, Dis, D)), Sat),
-    length(Sat, N), N > 1, !.
+    aggregate_all(count, (member(D, Deps), use:requse_term_ok_with_bwu(RepoEntry, En, Dis, D)), N),
+    N > 1, !.
 use:requse_term_fixes(_RepoEntry, _En, _Dis, _, []).
 
 
@@ -1586,19 +1583,19 @@ use:use_dep_atom_satisfiable(RepoEntry, BWU) :-
 % applying the Enable/Disable overrides.
 
 use:requse_term_ok_with_bwu(RepoEntry, Enable, Disable, required(Use)) :-
-    \+ Use =.. [minus,_], !,
+    Use \= minus(_), !,
     ( memberchk(Use, Enable) -> true
     ; memberchk(Use, Disable) -> fail
     ; use:effective_use_for_entry(RepoEntry, Use, positive)
     ).
 use:requse_term_ok_with_bwu(RepoEntry, Enable, Disable, required(minus(Use))) :-
-    \+ Use =.. [minus,_], !,
+    Use \= minus(_), !,
     ( memberchk(Use, Disable) -> true
     ; memberchk(Use, Enable) -> fail
     ; use:effective_use_for_entry(RepoEntry, Use, negative)
     ).
 use:requse_term_ok_with_bwu(RepoEntry, Enable, Disable, blocking(Use)) :-
-    \+ Use =.. [minus,_], !,
+    Use \= minus(_), !,
     ( memberchk(Use, Disable) -> true
     ; memberchk(Use, Enable) -> fail
     ; use:effective_use_for_entry(RepoEntry, Use, negative)
@@ -1627,15 +1624,16 @@ use:requse_term_ok_with_bwu(RepoEntry, Enable, Disable, any_of_group(Deps)) :- !
     member(D, Deps),
     use:requse_term_ok_with_bwu(RepoEntry, Enable, Disable, D), !.
 use:requse_term_ok_with_bwu(RepoEntry, Enable, Disable, exactly_one_of_group(Deps)) :- !,
-    findall(1, (member(D, Deps),
-                use:requse_term_ok_with_bwu(RepoEntry, Enable, Disable, D)),
-            Sat),
-    length(Sat, 1).
+    aggregate_all(count,
+                  ( member(D, Deps),
+                    use:requse_term_ok_with_bwu(RepoEntry, Enable, Disable, D) ),
+                  1).
 use:requse_term_ok_with_bwu(RepoEntry, Enable, Disable, at_most_one_of_group(Deps)) :- !,
-    findall(1, (member(D, Deps),
-                use:requse_term_ok_with_bwu(RepoEntry, Enable, Disable, D)),
-            Sat),
-    length(Sat, N), N =< 1.
+    aggregate_all(count,
+                  ( member(D, Deps),
+                    use:requse_term_ok_with_bwu(RepoEntry, Enable, Disable, D) ),
+                  N),
+    N =< 1.
 use:requse_term_ok_with_bwu(_, _, _, _).
 
 

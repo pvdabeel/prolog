@@ -4730,12 +4730,12 @@ md5cache_collect_entries(CacheDir, Entries) :-
   exclude([X]>>memberchk(X, ['.', '..']), Cats0, Cats),
   findall(entry(Cat, PF, Path),
     ( member(Cat, Cats),
-      atomic_list_concat([CacheDir, '/', Cat], CatDir),
+      os:compose_path(CacheDir, Cat, CatDir),
       exists_directory(CatDir),
       directory_files(CatDir, PFs0),
       member(PF, PFs0),
       \+ memberchk(PF, ['.', '..']),
-      atomic_list_concat([CatDir, '/', PF], Path),
+      os:compose_path(CatDir, PF, Path),
       exists_file(Path)
     ),
     Entries0),
@@ -4780,7 +4780,7 @@ md5cache_build_batch_([entry(Cat, PF, Path)|Rest], RepoRoot, Idx,
 % directory for the matching package-name subdirectory.
 
 md5cache_find_ebuild(RepoRoot, Cat, PF, Ebuild, PN) :-
-  atomic_list_concat([RepoRoot, '/', Cat], CatDir),
+  os:compose_path(RepoRoot, Cat, CatDir),
   exists_directory(CatDir),
   directory_files(CatDir, PNs),
   member(PN, PNs),
@@ -5687,7 +5687,7 @@ profile_mask_golden_expected(Ids) :-
 profile_mask_golden_write_source(Ids) :-
   profile_mask_golden_unittest_file(RelPath),
   config:working_dir(Dir),
-  atomic_list_concat([Dir, '/', RelPath], Path),
+  os:compose_path(Dir, RelPath, Path),
   read_file_to_string(Path, Content, [encoding(utf8)]),
   profile_mask_golden_replace_block(Content, Ids, NewContent),
   NewContent \== '',

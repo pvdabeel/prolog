@@ -512,7 +512,7 @@ builder:is_install_rule(rule(Repo://Entry:Action?{_Ctx}, _Body), Repo, Entry, Ac
 % which matches the on-disk VDB layout (cf. repository:find_vdb_entry/4).
 
 builder:vdb_entry_present(VdbRoot, Entry) :-
-  atomic_list_concat([VdbRoot, '/', Entry], Path),
+  os:compose_path(VdbRoot, Entry, Path),
   exists_directory(Path).
 
 
@@ -1203,7 +1203,7 @@ builder:write_auto_config(ConfDir, SubDir, Line) :-
     )).
 
 builder:write_auto_config_locked(ConfDir, SubDir, Line) :-
-  atomic_list_concat([ConfDir, '/', SubDir], DirPath),
+  os:compose_path(ConfDir, SubDir, DirPath),
   ( exists_directory(DirPath) -> true ; make_directory_path(DirPath) ),
   atomic_list_concat([DirPath, '/00portage-ng-auto'], Path),
   ( builder:line_already_present(Path, Line)
@@ -1215,30 +1215,13 @@ builder:write_auto_config_locked(ConfDir, SubDir, Line) :-
 
 %! builder:line_already_present(+Path, +Line) is semidet.
 %
-% True if Path exists and contains Line (after stripping trailing
-% comments and surrounding whitespace from each existing line).
+% True if Path exists and contains Line, comparing configuration lines
+% (comments dropped, whitespace normalized) on both sides.
 
 builder:line_already_present(Path, Line) :-
-  exists_file(Path),
-  read_file_to_string(Path, S, []),
-  split_string(S, "\n", "", Lines),
-  member(L0, Lines),
-  builder:strip_comment_and_trim(L0, LStr),
-  LStr \== "",
-  atom_string(LAtom, LStr),
-  LAtom == Line, !.
-
-
-%! builder:strip_comment_and_trim(+Line0, -Line) is det.
-%
-% Drop `# ...` trailing comments and surrounding whitespace.
-
-builder:strip_comment_and_trim(L0, L) :-
-  ( sub_string(L0, Before, _, _, "#")
-  -> sub_string(L0, 0, Before, _, L1)
-  ;  L1 = L0
-  ),
-  split_string(L1, "", " \t\r", [L]).
+  reader:config_lines(Path, Lines),
+  normalize_space(string(LineStr), Line),
+  memberchk(LineStr, Lines).
 
 
 %! builder:append_with_header(+Path, +SubDir, +Line) is det.

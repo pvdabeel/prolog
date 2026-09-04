@@ -1212,32 +1212,37 @@ test:expect(overlay://'test72/app-1.0':run?{[]},
 % -----------------------------------------------------------------------------
 %  VDB-dependent tests (test73..test78)
 % -----------------------------------------------------------------------------
+%
+% The overlay ships no VDB, so these cases only assert that the fresh-system
+% proof reaches the expected dependency; the update / downgrade / reinstall /
+% newuse / depclean behaviours their fixtures were written for are checked by
+% the tinderbox-ng regression against a populated VDB, not here.
 
-% test73: update -- lib-1.0 installed, lib-2.0 available (compile dep)
+% test73: update fixture -- app depends on lib (compile dep), lib-2.0 chosen
 test:expect(overlay://'test73/app-1.0':run?{[]},
             [ test:must_have(overlay://'test73/app-1.0':run?{_}),
               test:must_have(overlay://'test73/lib-2.0':install?{_})
             ]).
 
-% test74: downgrade -- lib-2.0 installed, =lib-1.0 required (compile dep)
+% test74: downgrade fixture -- app requires =lib-1.0 (compile dep)
 test:expect(overlay://'test74/app-1.0':run?{[]},
             [ test:must_have(overlay://'test74/app-1.0':run?{_}),
               test:must_have(overlay://'test74/lib-1.0':install?{_})
             ]).
 
-% test75: reinstall -- os-1.0 installed, emptytree re-proves
+% test75: reinstall fixture -- app depends on os-1.0 (runtime dep)
 test:expect(overlay://'test75/app-1.0':run?{[]},
             [ test:must_have(overlay://'test75/app-1.0':run?{_}),
               test:must_have(overlay://'test75/os-1.0':run?{_})
             ]).
 
-% test76: newuse rebuild -- os-1.0 installed without linux USE (compile dep)
+% test76: newuse fixture -- app depends on os-1.0 with linux USE (compile dep)
 test:expect(overlay://'test76/app-1.0':run?{[]},
             [ test:must_have(overlay://'test76/app-1.0':run?{_}),
               test:must_have(overlay://'test76/os-1.0':install?{_})
             ]).
 
-% test77: depclean -- orphan-1.0 should be identified as removable
+% test77: depclean fixture -- app depends on os-1.0; orphan-1.0 is never pulled in
 test:expect(overlay://'test77/app-1.0':run?{[]},
             [ test:must_have(overlay://'test77/app-1.0':run?{_}),
               test:must_have(overlay://'test77/os-1.0':run?{_})

@@ -76,7 +76,7 @@ news:display_items(NewsDir) :-
 % .en.txt file in the item directory.
 
 news:display_single(NewsDir, ItemName) :-
-  atomic_list_concat([NewsDir, '/', ItemName], ItemDir),
+  os:compose_path(NewsDir, ItemName, ItemDir),
   ( exists_directory(ItemDir)
   -> atomic_list_concat([ItemDir, '/', ItemName, '.en.txt'], TxtFile),
      ( exists_file(TxtFile)

@@ -295,7 +295,7 @@ client:local_vdb_mtime(MTime) :-
             member(E, Entries),
             E \== '.',
             E \== '..',
-            directory_file_path(Root, E, Path),
+            os:compose_path(Root, E, Path),
             exists_directory(Path),
             catch(time_file(Path, T), _, fail) ),
           Ts),
@@ -338,7 +338,7 @@ client:reset_vdb_state :-
 
 client:vdb_import_file(File) :-
   config:working_dir(Dir),
-  directory_file_path(Dir, 'Knowledge/vdbimport.pl', File).
+  os:compose_path(Dir, 'Knowledge/vdbimport.pl', File).
 
 
 %! client:stored_vdb_import(+Server, -Repo, -Stamp, -Time) is semidet.

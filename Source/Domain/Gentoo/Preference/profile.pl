@@ -135,13 +135,8 @@ profile:system_packages(ProfileRel, Packages) :-
   findall(Cat-Name,
           ( member(Dir, Dirs),
             os:compose_path(Dir, 'packages', File),
-            exists_file(File),
-            catch(read_file_to_string(File, S, []), _, fail),
-            split_string(S, "\n", "\r\n", Lines),
-            member(L0, Lines),
-            profile:profile_strip_comment(L0, L1),
-            normalize_space(string(L2), L1),
-            L2 \== "",
+            reader:config_lines(File, Lines),
+            member(L2, Lines),
             sub_string(L2, 0, 1, _, "*"),
             sub_string(L2, 1, _, 0, AtomStr0),
             normalize_space(string(AtomStr), AtomStr0),
@@ -279,9 +274,7 @@ profile:profile_dirs_from_dir(Dir, Seen0, Seen) :-
   % ordered result (reversed by profile_dirs/2), so afterwards Dir is moved
   % back to the head to keep the leaf-last (root-first after reverse) order.
   ( exists_file(ParentFile) ->
-      read_file_to_string(ParentFile, S, []),
-      split_string(S, "\n", "\r\n\t ", Lines0),
-      exclude(profile:profile_comment_or_empty, Lines0, Lines),
+      reader:config_lines(ParentFile, Lines),
       foldl(profile:profile_parent_dir(Dir), Lines, [Dir|Seen0], Seen1),
       selectchk(Dir, Seen1, Seen2),
       Seen = [Dir|Seen2]
@@ -307,7 +300,7 @@ profile:profile_dirs_from_dir(Dir, Seen0, Seen) :-
 % make.defaults or a parent file.
 
 profile:profile_implicit_parent_dir(Dir, ParentDir) :-
-  directory_file_path(Dir, '..', ParentDir0),
+  os:compose_path(Dir, '..', ParentDir0),
   absolute_file_name(ParentDir0, ParentDir, [file_type(directory), access(read)]),
   profile:profiles_root(Root),
   sub_atom(ParentDir, 0, _, _, Root),
@@ -366,43 +359,15 @@ profile:package_unmask_file(Dir, File) :-
   os:compose_path(Dir, 'package.unmask', File).
 
 
-% -----------------------------------------------------------------------------
-%  Line parsing helpers
-% -----------------------------------------------------------------------------
-
-%! profile:profile_strip_comment(+S0, -S) is det
-%
-% Strip '#' comments from a line (Gentoo profile file style).
-
-profile:profile_strip_comment(S0, S) :-
-  ( sub_string(S0, Before, _, _, "#") ->
-      sub_string(S0, 0, Before, _, S)
-  ; S = S0
-  ).
-
-
-%! profile:profile_comment_or_empty(+Line) is semidet
-%
-% Succeeds when Line is empty or starts with '#'.
-
-profile:profile_comment_or_empty(Line) :-
-  Line == "" ;
-  sub_string(Line, 0, 1, _, "#").
-
-
-%! profile:profile_parent_dir(+ChildDir, +ParentRel0, +Seen0, -Seen) is det
+%! profile:profile_parent_dir(+ChildDir, +ParentRel, +Seen0, -Seen) is det
 %
 % Resolve a single parent-relative path from a `parent` file entry and
 % recurse into its profile chain.  Used as foldl/4 goal.
 
-profile:profile_parent_dir(ChildDir, ParentRel0, Seen0, Seen) :-
-  normalize_space(string(ParentRel), ParentRel0),
-  ( ParentRel == "" ->
-      Seen = Seen0
-  ; directory_file_path(ChildDir, ParentRel, ParentDir0),
-    absolute_file_name(ParentDir0, ParentDir, [file_type(directory), access(read)]),
-    profile:profile_dirs_from_dir(ParentDir, Seen0, Seen)
-  ).
+profile:profile_parent_dir(ChildDir, ParentRel, Seen0, Seen) :-
+  os:compose_path(ChildDir, ParentRel, ParentDir0),
+  absolute_file_name(ParentDir0, ParentDir, [file_type(directory), access(read)]),
+  profile:profile_dirs_from_dir(ParentDir, Seen0, Seen).
 
 
 % =============================================================================
@@ -415,16 +380,8 @@ profile:profile_parent_dir(ChildDir, ParentRel0, Seen0, Seen) :-
 % in order, preserving leading '-' for incremental unmask operations.
 
 profile:profile_read_atoms_file(File, Atoms) :-
-  read_file_to_string(File, S, []),
-  split_string(S, "\n", "\r\n", Lines0),
-  findall(A,
-          ( member(L0, Lines0),
-            profile:profile_strip_comment(L0, L1),
-            normalize_space(string(L), L1),
-            \+ profile:profile_comment_or_empty(L),
-            atom_string(A, L)
-          ),
-          Atoms).
+  reader:config_lines(File, Lines),
+  findall(A, ( member(L, Lines), atom_string(A, L) ), Atoms).
 
 
 %! profile:profile_collect(+Dirs, -Data) is det
@@ -534,9 +491,7 @@ profile:apply_expand_decl_token(P, Vars0, Vars) :-
 profile:parse_use_op_file(Dir, Basename, Ops) :-
   os:compose_path(Dir, Basename, File),
   ( exists_file(File) ->
-      read_file_to_string(File, S, []),
-      split_string(S, "\n", "\r\n\t ", Lines0),
-      exclude(profile:profile_comment_or_empty, Lines0, Lines),
+      reader:config_lines(File, Lines),
       findall(Op,
               ( member(L, Lines),
                 split_string(L, " ", "\t ", Words0),
@@ -841,11 +796,11 @@ profile:profile_finalize(st(Enabled0, Disabled0, Force0, Mask0), Terms) :-
 
 profile:cache_file(File) :-
   working_directory(Cwd, Cwd),
-  directory_file_path(Cwd, 'Knowledge/profile.qlf', File).
+  os:compose_path(Cwd, 'Knowledge/profile.qlf', File).
 
 profile:raw_file(File) :-
   working_directory(Cwd, Cwd),
-  directory_file_path(Cwd, 'Knowledge/profile.raw', File).
+  os:compose_path(Cwd, 'Knowledge/profile.raw', File).
 
 
 % =============================================================================
@@ -1029,13 +984,8 @@ profile:collect_profile_package_use(ProfileRel, Entries) :-
 
 profile:collect_package_use_from_dir(Dir, Spec, Flag, State) :-
   os:compose_path(Dir, 'package.use', File),
-  exists_file(File),
-  catch(read_file_to_string(File, S, []), _, fail),
-  split_string(S, "\n", "\r\n", Lines0),
-  member(L0, Lines0),
-  profile:profile_strip_comment(L0, L1),
-  normalize_space(string(L2), L1),
-  L2 \== "",
+  reader:config_lines(File, Lines),
+  member(L2, Lines),
   split_string(L2, " ", "\t ", Ws0),
   exclude(=(""), Ws0, Ws),
   Ws = [AtomS|FlagSs],
@@ -1073,13 +1023,8 @@ profile:collect_profile_package_use_file(ProfileRel, Basename, Entries) :-
       findall(op(Spec, Flag, State),
               ( member(Dir, Dirs),
                 os:compose_path(Dir, Basename, File),
-                exists_file(File),
-                catch(read_file_to_string(File, S, []), _, fail),
-                split_string(S, "\n", "\r\n", Lines0),
-                member(L0, Lines0),
-                profile:profile_strip_comment(L0, L1),
-                normalize_space(string(L2), L1),
-                L2 \== "",
+                reader:config_lines(File, Lines),
+                member(L2, Lines),
                 split_string(L2, " ", "\t ", Ws0),
                 exclude(=(""), Ws0, Ws),
                 Ws = [AtomS|FlagSs],
@@ -1139,13 +1084,9 @@ profile:collect_license_groups(Groups) :-
   ( catch(portage:get_location(Root), _, fail),
     os:compose_path([Root, 'profiles', 'license_groups'], File),
     exists_file(File) ->
-      catch(read_file_to_string(File, S, []), _, S = ""),
-      split_string(S, "\n", "\r\n", Lines0),
+      reader:config_lines(File, Lines),
       findall(lic_group(Name, Members),
-              ( member(L0, Lines0),
-                profile:profile_strip_comment(L0, L1),
-                normalize_space(string(L2), L1),
-                L2 \== "",
+              ( member(L2, Lines),
                 split_string(L2, " ", "\t ", Ws0),
                 exclude(=(""), Ws0, Ws),
                 Ws = [NameS|MemberSs],

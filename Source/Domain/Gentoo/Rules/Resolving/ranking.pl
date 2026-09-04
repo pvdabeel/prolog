@@ -109,11 +109,11 @@ ranking:seed_bwu_memo_from_dep(_).
 % IUSE, minus-wrapped, or RepoEntry unbound), keeping seeding conservative.
 
 ranking:seed_use_conditional_inactive(positive, Use, Repo://Id) :-
-  \+ Use =.. [minus, _],
+  Use \= minus(_),
   use:effective_use_for_entry(Repo://Id, Use, negative),
   !.
 ranking:seed_use_conditional_inactive(negative, Use, Repo://Id) :-
-  \+ Use =.. [minus, _],
+  Use \= minus(_),
   use:effective_use_for_entry(Repo://Id, Use, positive),
   !.
 
@@ -1068,12 +1068,12 @@ ranking:take_digits(Cs, [], Cs).
 % status, or all_of_group member satisfaction.
 
 ranking:is_preferred_dep(_Context, use_conditional_group(positive, Use, RepoEntry, _Deps)) :-
-  \+ Use =.. [minus,_],
+  Use \= minus(_),
   RepoEntry = _Repo://_Id,
   use:effective_use_for_entry(RepoEntry, Use, positive),
   !.
 ranking:is_preferred_dep(_Context, use_conditional_group(negative, Use, RepoEntry, _Deps)) :-
-  \+ Use =.. [minus,_],
+  Use \= minus(_),
   RepoEntry = _Repo://_Id,
   use:effective_use_for_entry(RepoEntry, Use, negative),
   !.

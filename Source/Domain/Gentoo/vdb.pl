@@ -100,7 +100,7 @@ vdb:outdated(Category, Name, pkg://InstalledEntry, portage://LatestEntry) :-
 vdb:read_contents(Entry, Contents) :-
   current_predicate(config:pkg_directory/1),
   config:pkg_directory(PkgDir),
-  atomic_list_concat([PkgDir, '/', Entry, '/CONTENTS'], File),
+  os:compose_path([PkgDir, Entry, 'CONTENTS'], File),
   ( exists_file(File) ->
     read_file_to_string(File, Str, []),
     split_string(Str, "\n", "\n", Lines),
@@ -190,7 +190,7 @@ vdb:print_contents_item(sym(Path, Target, _MTime)) :-
 vdb:read_metadata_file(Entry, Key, Value) :-
   current_predicate(config:pkg_directory/1),
   config:pkg_directory(PkgDir),
-  atomic_list_concat([PkgDir, '/', Entry, '/', Key], File),
+  os:compose_path([PkgDir, Entry, Key], File),
   exists_file(File),
   read_file_to_string(File, Str, []),
   normalize_space(atom(Value), Str),
@@ -497,8 +497,8 @@ vdb:import_package(Category, Name, Version) :-
   current_predicate(config:pkg_directory/1),
   config:pkg_directory(PkgDir),
   atomic_list_concat([Name, '-', Version], PV),
-  atomic_list_concat([PkgDir, '/', Category], CatDir),
-  atomic_list_concat([CatDir, '/', PV], EntryDir),
+  os:compose_path(PkgDir, Category, CatDir),
+  os:compose_path(CatDir, PV, EntryDir),
   ( \+ exists_directory(CatDir) -> make_directory_path(CatDir) ; true ),
   ( exists_directory(EntryDir) ->
     message:warning(['VDB entry already exists: ', Category, '/', PV]),
@@ -521,7 +521,7 @@ vdb:import_package(Category, Name, Version) :-
 % Writes a single VDB metadata file.
 
 vdb:write_vdb_file(Dir, FileName, Content) :-
-  atomic_list_concat([Dir, '/', FileName], Path),
+  os:compose_path(Dir, FileName, Path),
   setup_call_cleanup(
     open(Path, write, Out),
     ( atom_string(Content, ContentStr),
@@ -630,7 +630,7 @@ vdb:is_dot_entry('..').
 %! vdb:check_unmanaged_entry(+Dir, +OwnedSet, +MaxDepth, +Name, +Acc, -NewAcc) is det.
 
 vdb:check_unmanaged_entry(Dir, OwnedSet, MaxDepth, Name, Acc, NewAcc) :-
-  atomic_list_concat([Dir, '/', Name], FullPath),
+  os:compose_path(Dir, Name, FullPath),
   ( exists_directory(FullPath) ->
     ( sanitize:not_symlink(FullPath) ->
       vdb:find_unmanaged(FullPath, OwnedSet, MaxDepth, SubUnmanaged),

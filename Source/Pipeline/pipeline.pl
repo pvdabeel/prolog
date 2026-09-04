@@ -9,13 +9,13 @@
 
 
 /** <module> PIPELINE
-The Pipeline orchestrates the two core resolution stages — prover
+The Pipeline orchestrates the two core resolution stages — resolver
 (pass 1) and orderer (pass 2) — into a single entry point.
 
 Architecture context:
 
-  reader/parser  →  prover  →  orderer  →  printer
-                    └───── pipeline ────┘
+  reader/parser  →  resolver  →  orderer  →  printer
+                    └────── pipeline ─────┘
 
 The pipeline sits between the parsing layer (reader + eapi grammar) and
 the output layer (printer + writer).  It takes a list of proof goals and
@@ -25,7 +25,7 @@ returns a completed proof, model, ordered plan, and triggers AVL:
 
 Two canonical entry points with 5-tier progressive relaxation:
 - prove_plan_with_fallback/5  — full pipeline (prove + order)
-- prove_with_fallback/4       — prover only (for layered tests)
+- prove_with_fallback/4       — resolve only (for layered tests)
 
 Callers:
 - interface.pl  — interactive CLI proving  (--pretend / --merge)

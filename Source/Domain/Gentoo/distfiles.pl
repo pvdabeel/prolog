@@ -31,7 +31,7 @@ providing predicates to query, verify and clean the distfiles store.
 distfiles:present(Filename) :-
   sanitize:safe_filename(Filename),
   distfiles:get_location(Dir),
-  atomic_list_concat([Dir, '/', Filename], Path),
+  os:compose_path(Dir, Filename, Path),
   exists_file(Path).
 
 
@@ -45,7 +45,7 @@ distfiles:path(Filename, Path) :-
                 context(distfiles:path/2, 'Invalid distfile name')))
   ),
   distfiles:get_location(Dir),
-  atomic_list_concat([Dir, '/', Filename], Path).
+  os:compose_path(Dir, Filename, Path).
 
 
 % -----------------------------------------------------------------------------
@@ -71,7 +71,7 @@ distfiles:list(Files) :-
 
 distfiles:is_regular_file(Dir, Name) :-
   \+ member(Name, ['.', '..']),
-  atomic_list_concat([Dir, '/', Name], Path),
+  os:compose_path(Dir, Name, Path),
   exists_file(Path).
 
 
@@ -98,7 +98,7 @@ distfiles:total_size(TotalBytes) :-
   distfiles:get_location(Dir),
   aggregate_all(sum(S),
     ( member(F, Files),
-      atomic_list_concat([Dir, '/', F], P),
+      os:compose_path(Dir, F, P),
       size_file(P, S)
     ),
     TotalBytes).
@@ -128,6 +128,6 @@ distfiles:clean(RepositoryAtom) :-
   distfiles:orphans(RepositoryAtom, Orphans),
   distfiles:get_location(Dir),
   forall(member(F, Orphans),
-    ( atomic_list_concat([Dir, '/', F], Path),
+    ( os:compose_path(Dir, F, Path),
       catch(delete_file(Path), _, true)
     )).

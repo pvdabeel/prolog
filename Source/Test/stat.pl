@@ -142,8 +142,7 @@ runningtime(Min,Sec) ::-
 % Counts how many times Generator predicate is true
 
 times(Generator,Count) ::-
-  findall(1,Generator,List),
-  length(List,Count).
+  aggregate_all(count,Generator,Count).
 
 
 %! stat:total

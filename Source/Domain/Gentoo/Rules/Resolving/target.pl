@@ -257,15 +257,13 @@ candidate:resolve(use_conditional(Deps):Action?{Context}, Conditions) :-
 % Returns [] when satisfied, or an assumed(conflict(...)) when violated.
 
 candidate:resolve(required_use(exactly_one_of, Deps):validate?{Ctx}, []) :-
-  findall(1, (member(D, Deps), use:required_use_term_satisfied(Ctx, D)), Ones),
-  length(Ones, 1),
+  aggregate_all(count, (member(D, Deps), use:required_use_term_satisfied(Ctx, D)), 1),
   !.
 candidate:resolve(required_use(exactly_one_of, Deps):validate?{_},
                   [assumed(conflict(required_use, exactly_one_of_group(Deps)))]).
 
 candidate:resolve(required_use(at_most_one_of, Deps):validate?{Ctx}, []) :-
-  findall(1, (member(D, Deps), use:required_use_term_satisfied(Ctx, D)), Ones),
-  length(Ones, N),
+  aggregate_all(count, (member(D, Deps), use:required_use_term_satisfied(Ctx, D)), N),
   N =< 1,
   !.
 candidate:resolve(required_use(at_most_one_of, Deps):validate?{_},

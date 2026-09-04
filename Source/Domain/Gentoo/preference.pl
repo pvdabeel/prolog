@@ -983,22 +983,16 @@ preference:apply_profile_package_use_force :-
 preference:apply_profile_package_use_file(Dir, Basename, Kind) :-
   os:compose_path(Dir, Basename, File),
   ( exists_file(File) ->
-      catch(read_file_to_string(File, S, []), _, S = ""),
-      split_string(S, "\n", "\r\n", Lines0),
-      forall(member(L0, Lines0),
-             ( profile:profile_strip_comment(L0, L1),
-               normalize_space(string(L2), L1),
-               ( L2 == "" ->
-                   true
-               ; split_string(L2, " ", "\t ", Ws0),
-                 exclude(=(""), Ws0, Ws),
-                 ( Ws = [AtomS|FlagSs],
-                   atom_string(AtomA, AtomS),
-                   preference:profile_package_use_spec(AtomA, Spec) ->
-                     forall(member(FlagS0, FlagSs),
-                            preference:apply_profile_package_use_flag(Kind, Spec, FlagS0))
-                 ; true
-                 )
+      reader:config_lines(File, Lines),
+      forall(member(L2, Lines),
+             ( split_string(L2, " ", "\t ", Ws0),
+               exclude(=(""), Ws0, Ws),
+               ( Ws = [AtomS|FlagSs],
+                 atom_string(AtomA, AtomS),
+                 preference:profile_package_use_spec(AtomA, Spec) ->
+                   forall(member(FlagS0, FlagSs),
+                          preference:apply_profile_package_use_flag(Kind, Spec, FlagS0))
+               ; true
                )
              ))
   ; true
@@ -1083,23 +1077,16 @@ preference:apply_profile_package_use :-
 preference:apply_profile_package_use_dir(Dir) :-
   os:compose_path(Dir, 'package.use', File),
   ( exists_file(File) ->
-      catch(read_file_to_string(File, S, []), _, S = ""),
-      split_string(S, "\n", "\r\n", Lines0),
-      forall(member(L0, Lines0),
-             ( profile:profile_strip_comment(L0, L1),
-               normalize_space(string(L2), L1),
-               ( L2 == "" ->
-                   true
-               ; split_string(L2, " ", "\t ", Ws0),
-                 exclude(=(""), Ws0, Ws),
-                 ( Ws = [AtomS|FlagSs] ->
-                     atom_string(AtomA, AtomS),
-                     ( preference:profile_package_use_spec(AtomA, Spec) ->
-                         forall(member(FlagS0, FlagSs),
-                                preference:apply_profile_use_soft_flag(Spec, FlagS0))
-                     ; true )
-                 ; true
-                 )
+      reader:config_lines(File, Lines),
+      forall(member(L2, Lines),
+             ( split_string(L2, " ", "\t ", Ws0),
+               exclude(=(""), Ws0, Ws),
+               ( Ws = [AtomS|FlagSs],
+                 atom_string(AtomA, AtomS),
+                 preference:profile_package_use_spec(AtomA, Spec) ->
+                   forall(member(FlagS0, FlagSs),
+                          preference:apply_profile_use_soft_flag(Spec, FlagS0))
+               ; true
                )
              ))
   ; true
@@ -1609,37 +1596,23 @@ preference:load_license_groups :-
   retractall(preference:local_license_group_raw(_, _)),
   ( portage:get_location(PortageRoot) ->
     os:compose_path(PortageRoot, 'profiles/license_groups', LicGroupFile),
-    ( exists_file(LicGroupFile) ->
-      read_file_to_string(LicGroupFile, Content, []),
-      split_string(Content, "\n", "\r", Lines),
-      forall(member(Line, Lines),
-             preference:parse_license_group_line_(Line))
-    ; true
-    )
+    reader:config_lines(LicGroupFile, Lines),
+    forall(member(Line, Lines),
+           preference:parse_license_group_line_(Line))
   ; true
   ).
 
 
 %! preference:parse_license_group_line_(+Line) is det.
 %
-% Parse a single line from the license_groups file.  Blank lines and
-% '#'-prefixed comments are ignored.
+% Parse one configuration line of the license_groups file: the group name
+% followed by its members.
 
 preference:parse_license_group_line_(Line) :-
-  normalize_space(string(Trimmed), Line),
-  string_codes(Trimmed, Codes),
-  ( Codes = [] -> true
-  ; Codes = [0'#|_] -> true
-  ; split_string(Trimmed, " \t", " \t", Tokens),
-    ( Tokens = [GroupNameS | MemberSs],
-      GroupNameS \== "" ->
-      atom_string(GroupName, GroupNameS),
-      maplist([S,A]>>atom_string(A, S), MemberSs, Members0),
-      exclude(==(''), Members0, Members),
-      assertz(preference:local_license_group_raw(GroupName, Members))
-    ; true
-    )
-  ).
+  split_string(Line, " ", "", [GroupNameS | MemberSs]),
+  atom_string(GroupName, GroupNameS),
+  maplist([S,A]>>atom_string(A, S), MemberSs, Members),
+  assertz(preference:local_license_group_raw(GroupName, Members)).
 
 
 %! preference:expand_license_group(+GroupName, -Licenses:list) is det.
@@ -1916,7 +1889,7 @@ preference:cache_invalidate :-
 
 preference:cache_file(File) :-
   working_directory(Cwd, Cwd),
-  directory_file_path(Cwd, 'Knowledge/preference.qlf', File).
+  os:compose_path(Cwd, 'Knowledge/preference.qlf', File).
 
 
 %! preference:raw_file(-File) is det.
@@ -1925,7 +1898,7 @@ preference:cache_file(File) :-
 
 preference:raw_file(File) :-
   working_directory(Cwd, Cwd),
-  directory_file_path(Cwd, 'Knowledge/preference.raw', File).
+  os:compose_path(Cwd, 'Knowledge/preference.raw', File).
 
 
 %! preference:stamp_file(-File) is det.
@@ -1934,7 +1907,7 @@ preference:raw_file(File) :-
 
 preference:stamp_file(File) :-
   working_directory(Cwd, Cwd),
-  directory_file_path(Cwd, 'Knowledge/preference.stamp', File).
+  os:compose_path(Cwd, 'Knowledge/preference.stamp', File).
 
 
 preference:cache_enabled :-
@@ -1981,7 +1954,7 @@ preference:cache_tracked_path(Path) :-
                 'package.unmask',
                 'package.accept_keywords',
                 'package.license' ]),
-  directory_file_path(Dir, Base, Path).
+  os:compose_path(Dir, Base, Path).
 
 preference:cache_tracked_path(Path) :-
   current_predicate(config:set_dir/1),
@@ -1990,7 +1963,7 @@ preference:cache_tracked_path(Path) :-
   directory_files(Dir, Names),
   member(Name, Names),
   \+ preference:cache_skip_set_name(Name),
-  directory_file_path(Dir, Name, Path),
+  os:compose_path(Dir, Name, Path),
   exists_file(Path).
 
 preference:cache_tracked_path(Path) :-

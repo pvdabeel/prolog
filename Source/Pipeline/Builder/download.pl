@@ -479,7 +479,7 @@ download:fetch_one(MirrorUrl, Layout, Distdir, Filename, ExpectedSize, Pairs) :-
                 context(download:fetch_one/6, 'Invalid distfile name (path traversal rejected)')))
   ),
   download:mirror_download_url(MirrorUrl, Layout, Filename, URL),
-  atomic_list_concat([Distdir, '/', Filename], DestPath),
+  os:compose_path(Distdir, Filename, DestPath),
   download:tmp_dest_path(DestPath, TmpPath),
   download:curl_download(URL, TmpPath, ExitCode),
   ( ExitCode =:= 0
@@ -834,7 +834,7 @@ download:git_repo_cache_path(GitCacheDir, URI, RepoPath) :-
   -> RepoName = SafeName
   ;  atom_concat(SafeName, '.git', RepoName)
   ),
-  atomic_list_concat([GitCacheDir, '/', RepoName], RepoPath).
+  os:compose_path(GitCacheDir, RepoName, RepoPath).
 
 
 %! download:start_git_clone_async(+URI, +RepoPath, +LogPath, -Pid) is det.

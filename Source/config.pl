@@ -614,8 +614,8 @@ config:digest_passwordfile(Filename) :-
 %  Graphing
 % -----------------------------------------------------------------------------
 
-% Interface can dynamically override graphing behavior for a single run.
-% (Used by CLI flags like --graph-modified / --graph-full.)
+% Interface can dynamically override graphing behavior for a single run
+% (set by action:graph/1 for `--graph modified` and `--graph full`).
 
 :- dynamic config:interface_graph_modified_only/1.
 

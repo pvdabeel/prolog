@@ -89,7 +89,7 @@ userconfig:load(Dir) :-
 
 userconfig:load_make_conf(Dir) :-
   retractall(userconfig:env(_, _)),
-  directory_file_path(Dir, 'make.conf', File),
+  os:compose_path(Dir, 'make.conf', File),
   ( exists_file(File) ->
       read_file_to_string(File, S, []),
       profile:make_defaults_kv(S, KV),
@@ -112,7 +112,7 @@ userconfig:load_make_conf(Dir) :-
 % overrides via preference:register_fallback_package_use/2.
 
 userconfig:load_package_use(Dir) :-
-  directory_file_path(Dir, 'package.use', Path),
+  os:compose_path(Dir, 'package.use', Path),
   userconfig:read_package_lines(Path, Lines),
   forall(member(Line, Lines),
          userconfig:apply_package_use_line(Line)).
@@ -138,7 +138,7 @@ userconfig:apply_package_use_line(Line) :-
 % Parse package.mask (file or directory) and mask the matching entries.
 
 userconfig:load_package_mask(Dir) :-
-  directory_file_path(Dir, 'package.mask', Path),
+  os:compose_path(Dir, 'package.mask', Path),
   userconfig:read_atom_lines(Path, Atoms),
   forall(member(Atom, Atoms),
          catch(preference:mask_profile_atom(Atom), _, true)).
@@ -153,7 +153,7 @@ userconfig:load_package_mask(Dir) :-
 % Parse package.unmask (file or directory) and unmask the matching entries.
 
 userconfig:load_package_unmask(Dir) :-
-  directory_file_path(Dir, 'package.unmask', Path),
+  os:compose_path(Dir, 'package.unmask', Path),
   userconfig:read_atom_lines(Path, Atoms),
   forall(member(Atom, Atoms),
          catch(preference:unmask_profile_atom(Atom), _, true)).
@@ -170,7 +170,7 @@ userconfig:load_package_unmask(Dir) :-
 
 userconfig:load_package_accept_keywords(Dir) :-
   retractall(userconfig:package_keyword(_, _)),
-  directory_file_path(Dir, 'package.accept_keywords', Path),
+  os:compose_path(Dir, 'package.accept_keywords', Path),
   userconfig:read_package_lines(Path, Lines),
   forall(member(Line, Lines),
          userconfig:apply_package_keyword_line(Line)).
@@ -241,7 +241,7 @@ userconfig:current_arch(Arch) :-
 
 userconfig:load_package_license(Dir) :-
   retractall(userconfig:package_license_entry(_, _)),
-  directory_file_path(Dir, 'package.license', Path),
+  os:compose_path(Dir, 'package.license', Path),
   userconfig:read_package_lines(Path, Lines),
   forall(member(Line, Lines),
          userconfig:apply_package_license_line(Line)).
@@ -269,15 +269,8 @@ userconfig:apply_package_license_line(Line) :-
 % Returns one atom per non-empty, non-comment line.
 
 userconfig:read_atom_lines(Path, Atoms) :-
-  userconfig:collect_files(Path, Files),
-  findall(A,
-          ( member(F, Files),
-            userconfig:read_stripped_lines(F, Lines),
-            member(L, Lines),
-            L \== "",
-            atom_string(A, L)
-          ),
-          Atoms).
+  userconfig:read_package_lines(Path, Lines),
+  findall(A, ( member(L, Lines), atom_string(A, L) ), Atoms).
 
 
 %! userconfig:read_package_lines(+Path, -Lines) is det.
@@ -290,9 +283,8 @@ userconfig:read_package_lines(Path, Lines) :-
   userconfig:collect_files(Path, Files),
   findall(L,
           ( member(F, Files),
-            userconfig:read_stripped_lines(F, Ls),
-            member(L, Ls),
-            L \== ""
+            reader:config_lines(F, Ls),
+            member(L, Ls)
           ),
           Lines).
 
@@ -312,7 +304,7 @@ userconfig:collect_files(Path, Files) :-
       msort(Entries1, Entries),
       findall(Full,
               ( member(E, Entries),
-                directory_file_path(Path, E, Full),
+                os:compose_path(Path, E, Full),
                 exists_file(Full)
               ),
               Files)
@@ -320,21 +312,3 @@ userconfig:collect_files(Path, Files) :-
   ).
 
 userconfig:dot_entry(E) :- sub_atom(E, 0, 1, _, '.').
-
-
-%! userconfig:read_stripped_lines(+File, -Lines) is det.
-%
-% Read a file and return its lines with comments stripped and whitespace
-% trimmed.  Empty lines are preserved (caller filters them).
-
-userconfig:read_stripped_lines(File, Lines) :-
-  catch(read_file_to_string(File, S, []), _, S = ""),
-  split_string(S, "\n", "\r\n", RawLines),
-  maplist(userconfig:strip_comment_and_trim, RawLines, Lines).
-
-userconfig:strip_comment_and_trim(Raw, Trimmed) :-
-  ( sub_string(Raw, Before, _, _, "#") ->
-      sub_string(Raw, 0, Before, _, S0)
-  ; S0 = Raw
-  ),
-  normalize_space(string(Trimmed), S0).

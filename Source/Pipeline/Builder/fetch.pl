@@ -201,7 +201,7 @@ fetch:prepare_download_jobs(Layout, Distdir, [dist(Filename, Size, Pairs)|Rest],
   ( mirror:flat_present(Distdir, Filename)
   -> fetch:prepare_download_jobs(Layout, Distdir, Rest, Idx1, Repo, Entry, Jobs)
   ;  fetch:mirror_urls_for_file(Layout, Filename, URLs),
-     atomic_list_concat([Distdir, '/', Filename], DestPath),
+     os:compose_path(Distdir, Filename, DestPath),
      download:tmp_dest_path(DestPath, TmpPath),
      catch(delete_file(TmpPath), _, true),
      download:start_curl_async(URLs, TmpPath, Pid),

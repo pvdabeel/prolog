@@ -54,36 +54,9 @@ mirror:layout(MirrorRoot, Layout) :-
 % extracts [structure] sections, and picks the lowest-index recognized entry.
 
 mirror:parse_layout_conf(S, Layout) :-
-  split_string(S, "\n", "\r", Lines0),
-  include(mirror:not_blank, Lines0, Lines1),
-  mirror:strip_comments(Lines1, Lines),
+  reader:string_config_lines(S, Lines),
   mirror:parse_layout_lines(Lines, none, Structures),
   mirror:pick_structure(Structures, Layout).
-
-
-%! mirror:not_blank(+Line) is semidet.
-%
-% True if Line contains at least one non-whitespace character.
-
-mirror:not_blank(Line) :- string_codes(Line, Cs), \+ phrase(mirror:blank, Cs).
-
-mirror:blank --> [C], { code_type(C, space) }, mirror:blank.
-mirror:blank --> [].
-
-
-%! mirror:strip_comments(+Lines, -Stripped) is det.
-%
-% Remove `#` comments from each line and normalize whitespace.
-
-mirror:strip_comments([], []).
-
-mirror:strip_comments([L0|Ls0], [L|Ls]) :-
-  ( sub_string(L0, Before, _, _, "#") ->
-      sub_string(L0, 0, Before, _, L1),
-      normalize_space(string(L), L1)
-  ; normalize_space(string(L), L0)
-  ),
-  mirror:strip_comments(Ls0, Ls).
 
 
 %! mirror:parse_layout_lines(+Lines, +Section, -Structures) is det.
@@ -208,13 +181,13 @@ mirror:pick_structure_([_|Rest], Layout) :-
 % filename is hashed and split into directory segments per the cutoff widths.
 
 mirror:distfile_path(Root, flat, Filename, Path) :-
-  atomic_list_concat([Root, '/', Filename], Path).
+  os:compose_path(Root, Filename, Path).
 
 mirror:distfile_path(Root, filename_hash(Alg, CutoffsBits), Filename, Path) :-
   mirror:filename_hash_hex(Alg, Filename, Hex),
   mirror:hash_segments(Hex, CutoffsBits, Segments),
   atomic_list_concat([Root|Segments], '/', Dir0),
-  atomic_list_concat([Dir0, '/', Filename], Path).
+  os:compose_path(Dir0, Filename, Path).
 
 
 %! mirror:mirror_present(+MirrorRoot, +Layout, +Filename) is semidet.

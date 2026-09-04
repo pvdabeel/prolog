@@ -1120,38 +1120,52 @@ prover:collect_proof_obligations(_Literal, Proof, Proof, _Model, Rest, Rest) :-
   \+ current_predicate(heuristic:proof_obligation/4),
   !.
 prover:collect_proof_obligations(Literal, Proof0, Proof, Model, Rest0, Rest) :-
-  % Cheap skip: if the domain can compute the key without doing expensive work,
-  % avoid calling the full obligation when that key is already marked done.
-  ( current_predicate(heuristic:proof_obligation_key/4),
-    once(heuristic:proof_obligation_key(Literal, Model, Key0, NeedsFull)),
-    ( get_assoc(obligation_done(Key0), Proof0, true) ->
-        sampler:hook_done_hit,
-        Proof = Proof0,
-        Rest = Rest0
-    ; NeedsFull == false ->
-        put_assoc(obligation_done(Key0), Proof0, true, Proof),
-        Rest = Rest0
-    ; fail
-    )
-  ; current_predicate(heuristic:proof_obligation_key/3),
-    once(heuristic:proof_obligation_key(Literal, Model, Key1)),
-    get_assoc(obligation_done(Key1), Proof0, true) ->
-      sampler:hook_done_hit,
-      Proof = Proof0,
-      Rest = Rest0
-  ;
-  % The domain obligation predicate is expected to be deterministic (0 or 1
-  % result). Keep this fast: avoid `findall/3` for the common case where
-  % there is no result.
+  % Cheap skip: when the domain can compute the obligation key without
+  % dependency-model work, an obligation already marked done -- or one the
+  % domain says cannot yield extra literals -- never reaches the full hook.
+  ( prover:obligation_key(Literal, Model, Key, NeedsFull) ->
+      ( get_assoc(obligation_done(Key), Proof0, true) ->
+          sampler:hook_done_hit,
+          Proof = Proof0,
+          Rest = Rest0
+      ; NeedsFull == false ->
+          put_assoc(obligation_done(Key), Proof0, true, Proof),
+          Rest = Rest0
+      ; prover:run_proof_obligation(Literal, Proof0, Proof, Model, Rest0, Rest)
+      )
+  ; prover:run_proof_obligation(Literal, Proof0, Proof, Model, Rest0, Rest)
+  ).
+
+
+%! prover:obligation_key(+Literal, +Model, -Key, -NeedsFull) is semidet
+%
+% The domain's cheap obligation key for Literal: heuristic:proof_obligation_key/4
+% when defined, otherwise /3 (which cannot tell whether the full hook is
+% needed, so NeedsFull is true). Fails when the domain defines neither or
+% has no key for Literal.
+
+prover:obligation_key(Literal, Model, Key, NeedsFull) :-
+  ( current_predicate(heuristic:proof_obligation_key/4) ->
+      once(heuristic:proof_obligation_key(Literal, Model, Key, NeedsFull))
+  ; current_predicate(heuristic:proof_obligation_key/3) ->
+      once(heuristic:proof_obligation_key(Literal, Model, Key)),
+      NeedsFull = true
+  ).
+
+
+%! prover:run_proof_obligation(+Literal, +Proof0, -Proof, +Model, +Rest0, -Rest) is det
+%
+% Call the full domain hook. It is expected to be deterministic (0 or 1
+% result), so the single result is processed directly instead of through
+% findall/3.
+
+prover:run_proof_obligation(Literal, Proof0, Proof, Model, Rest0, Rest) :-
   ( once(heuristic:proof_obligation(Literal, Model, Key, ExtraLits)) ->
-      Obligations = [obligation(Key, ExtraLits)]
-  ; Obligations = []
-  ),
-  prover:collect_proof_obligations_list(Obligations, Proof0, Proof, Model, Rest0, Rest),
-  true
-  ),
-  !.
-prover:collect_proof_obligations(_Literal, Proof, Proof, _Model, Rest, Rest).
+      prover:collect_proof_obligations_list([obligation(Key, ExtraLits)],
+                                            Proof0, Proof, Model, Rest0, Rest)
+  ; Proof = Proof0,
+    Rest = Rest0
+  ).
 
 
 %! prover:obligation_candidate(+Literal) is semidet
@@ -1361,7 +1375,8 @@ prover:currently_proving(Lit) :-
 
 %! prover:debug_hook(+Target, +Proof, +Model, +Constraints)
 %
-% This predicate is expanded by user:goal_expansion
+% Calls of this predicate are compiled to `true` by the user:goal_expansion
+% clause at the top of this file unless the `instrumentation` flag is set.
 
 :- thread_local prover:debug_hook_handler/1.
 
@@ -1381,8 +1396,8 @@ prover:with_debug_hook(Handler, Goal) :-
 
 %! prover:maybe_debug_hook(+Target, +Proof, +Model, +Constraints) is det
 %
-% Guarded debug hook for the hot path.  Compiled to `true` when
-% instrumentation is off (via goal_expansion in sampler.pl).
+% Guarded debug hook for the hot path.  Compiled to `true` when the
+% `instrumentation` flag is off (user:goal_expansion at the top of this file).
 
 prover:maybe_debug_hook(Target, Proof, Model, Constraints) :-
   ( prover:debug_hook_handler(Handler) ->
