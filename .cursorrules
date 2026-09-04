@@ -190,8 +190,20 @@ Self-dep handling:
 - Cross-slot self-deps (same C/N, different slot) are regular dependencies.
 
 Dep priority ordering (`dep_priority/2`):
-- BaseK=1 (tight upper bound), 4 (tilde), 8 (wildcard), 999 (unconstrained).
+- The key's leading component is the dep's position in the declared
+  `ranking:tightness_classes/1` list (sub-slot pin, tight upper bound,
+  tilde, slot pin, wildcard, any-same-slot, any-different-slot,
+  unconstrained, ...); the first class that applies wins.
 - Tighter constraints proved first to lock `selected_cn` early.
+
+Preferences are declared, not weighted (`ranking.pl`): choice-group arms
+are ranked by `ranking:choice_criteria/1`, an ordered list of criteria
+whose values (`yes`/`no`, counts, `version/7` terms, digit-group lists
+such as `[3,10]`, the `pref/6` compound) are compared criterion by
+criterion with the standard order of terms, larger preferred, ebuild
+index last. Do not reintroduce weighted sums, negated integers, or
+digits packed into one number to express an order — add a criterion or
+a class to the declaration instead.
 
 Inspired by Zeller's feature logic (incremental domain narrowing) and
 Vermeir/Van Nieuwenborgh's ordered logic programs (priority-based conflict

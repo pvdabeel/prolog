@@ -602,7 +602,7 @@ builder:skip_remaining([Step|Rest], PlanStep, NumSteps, C0, F0, S0, C, F, S) :-
 %   6. Tally outcomes, clean up
 
 builder:execute_step(Step, PlanStep, NumSteps, C0, F0, S0, C, F, S, HasJobs) :-
-  plan:stable_sort_by_weight(Step, Sorted),
+  plan:sort_by_display_order(Step, Sorted),
   include(builder:is_executable_rule, Sorted, Executable),
   length(Executable, NumJobs),
   ( NumJobs > 0

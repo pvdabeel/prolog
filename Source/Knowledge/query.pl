@@ -913,7 +913,8 @@ compile_query_compound(all(dependency(D,fetchonly)):A?{C}, Repo://Id,
 %
 %   3. memo_selected_cn_snap — evolves during a single proof attempt as
 %      packages are selected.  any_of_group:config calls
-%      prioritize_deps_keep_all -> dep_snapshot_selected, so the snapshot
+%      prioritize_deps_keep_all -> dep_snap_all_ok (the snap_all
+%      criterion), so the snapshot
 %      can reorder OR branches and lock a different choice into the model.
 %      -> per-entry choice-group C/N pairs are extracted once from the dep
 %      metadata (memo:dep_model_choice_cns_/3) and their snapshot presence

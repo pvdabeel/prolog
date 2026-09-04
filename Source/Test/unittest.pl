@@ -2002,12 +2002,12 @@ rap_text2(all_of_group([
 test(no_downgrade_demotes_older_arm,
      [setup(rap_text_setup), cleanup(rap_text_cleanup)]) :-
   rap_text12(B1), rap_text2(B2),
-  ranking:dep_choice_scores([], B1,
-    scores(_, _, _, _, ND1, _, _)),
-  ranking:dep_choice_scores([], B2,
-    scores(_, _, _, _, ND2, _, _)),
-  ND1 =:= 0,
-  ND2 =:= 1.
+  ranking:analyse_arm([], B1, A1),
+  ranking:analyse_arm([], B2, A2),
+  ranking:criterion_value(no_downgrade, [], same_cn, A1, ND1),
+  ranking:criterion_value(no_downgrade, [], same_cn, A2, ND2),
+  ND1 == no,
+  ND2 == yes.
 
 % VerScore must stay inactive across different CNs: a 9999 live ebuild of a
 % later arm must not beat the first arm's ebuild order (portage-ng#115/#116,
@@ -2607,34 +2607,39 @@ test(prefers_effective_negative, [true(S == negative)]) :-
 % The any_of/exactly-one choice ranking prefers the newest USE_EXPAND target
 % when the profile has not forced one. This used to be hardcoded for the
 % llvm_slot and lua5 families only (ecosystem-specific literals in the domain
-% rules). It is now generic over every eapi:use_expand/1 family: the rank is
-% derived from the trailing version digits of the flag.
+% rules). It is now generic over every eapi:use_expand/1 family: the key is
+% the list of digit groups of the flag, compared in the standard order of
+% terms (newer = larger); `none` when the flag carries no digits.
 
 :- begin_tests(use_expand_target_rank).
 
-test(llvm_slot_numeric, [true(R == 20)]) :-
-  ranking:use_rank('llvm_slot_20', R).
+test(llvm_slot_key, [true(K == [20])]) :-
+  ranking:use_expand_target_key('llvm_slot_20', K).
 
 test(llvm_slot_newer_ranks_higher) :-
-  ranking:use_rank('llvm_slot_20', R20),
-  ranking:use_rank('llvm_slot_19', R19),
-  R20 > R19.
+  ranking:use_expand_target_key('llvm_slot_20', K20),
+  ranking:use_expand_target_key('llvm_slot_19', K19),
+  K20 @> K19.
 
 test(python_single_target_newer_ranks_higher) :-
-  ranking:use_rank('python_single_target_python3_13', R13),
-  ranking:use_rank('python_single_target_python3_12', R12),
-  R13 > R12.
+  ranking:use_expand_target_key('python_single_target_python3_13', K13),
+  ranking:use_expand_target_key('python_single_target_python3_12', K12),
+  K13 @> K12.
 
 test(lua5_newer_ranks_higher) :-
-  ranking:use_rank('lua_single_target_lua5-4', R4),
-  ranking:use_rank('lua_single_target_lua5-3', R3),
-  R4 > R3.
+  ranking:use_expand_target_key('lua_single_target_lua5-4', K4),
+  ranking:use_expand_target_key('lua_single_target_lua5-3', K3),
+  K4 @> K3.
 
-test(lua_non_numeric_is_zero, [true(R == 0)]) :-
-  ranking:use_rank('lua_single_target_luajit', R).
+test(lua_non_numeric_is_none, [true(K == none)]) :-
+  ranking:use_expand_target_key('lua_single_target_luajit', K).
 
-test(non_use_expand_is_zero, [true(R == 0)]) :-
-  ranking:use_rank(some_random_flag, R).
+test(non_use_expand_is_none, [true(K == none)]) :-
+  ranking:use_expand_target_key(some_random_flag, K).
+
+test(none_sorts_below_every_target) :-
+  ranking:use_expand_target_key('llvm_slot_19', K19),
+  none @< K19.
 
 test(digit_groups_multi, [true(G == [3,13])]) :-
   atom_codes('python3_13', Cs),
@@ -2645,6 +2650,155 @@ test(digit_groups_none, [true(G == [])]) :-
   ranking:digit_groups(Cs, G).
 
 :- end_tests(use_expand_target_rank).
+
+
+% =============================================================================
+%  Declarative preference ranking
+% =============================================================================
+%
+% Choice-arm preference and proof-order tightness are *declared* orders
+% (ranking:choice_criteria/1, ranking:tightness_classes/1) compared with
+% the standard order of terms -- not weighted sums or packed integers.
+% These tests pin the declared order, the comparator, and the value
+% encodings the criteria rely on.
+
+:- begin_tests(ranking_declarative).
+
+% The documented criterion order (12-doc-resolution.md, "Preference keys").
+test(choice_criteria_order) :-
+  ranking:choice_criteria(Cs),
+  Cs == [license_ok, use_sat, use_unmasked, preference, snap_all, slot,
+         no_downgrade, installed, overlap, version, use_expand].
+
+% Every criterion yields a value for every arm shape (keys always align).
+test(arm_key_is_total_over_arm_shapes) :-
+  ranking:choice_criteria(Cs),
+  length(Cs, N),
+  forall(member(Dep, [package_dependency(run,no,cat,pkg,none,version_none,[],[]),
+                      all_of_group([package_dependency(run,no,cat,pkg,none,version_none,[],[])]),
+                      use_conditional_group(positive, flag, qtest://'cat/parent-0', []),
+                      required(llvm_slot_20),
+                      required(minus(llvm_slot_20))]),
+         ( ranking:analyse_arm([], Dep, Arm),
+           ranking:arm_key([], multi_cn, Arm, Key),
+           length(Key, N)
+         )).
+
+% Lexicographic: the first differing criterion decides, larger preferred.
+test(compare_preference_first_difference_wins) :-
+  ranking:compare_preference(O1, [yes, no, 0], [yes, yes, 9]),
+  O1 == (>),
+  ranking:compare_preference(O2, [yes, yes, 0], [no, yes, 9]),
+  O2 == (<),
+  ranking:compare_preference(O3, [yes, 1], [yes, 1]),
+  O3 == (=).
+
+% Equal keys keep ebuild order (index ascending); nothing is dropped.
+test(prefer_arm_ties_keep_ebuild_order) :-
+  ranking:prefer_arm(O1, [yes]-2-b, [yes]-1-a),
+  O1 == (>),
+  ranking:prefer_arm(O2, [yes]-1-a, [no]-2-b),
+  O2 == (<).
+
+% Slot keys are digit-group lists: '3.10' is newer than '3.3' (atom_number
+% would read 3.1), and slot 0 counts as no explicit slot.
+test(slot_value_compares_component_wise) :-
+  ranking:dep_slot_value([package_dependency(run,no,'dev-lang',ruby,none,version_none,[slot('3.10')],[])], S310),
+  ranking:dep_slot_value([package_dependency(run,no,'dev-lang',ruby,none,version_none,[slot('3.3')],[])], S33),
+  S310 == [3,10],
+  S310 @> S33.
+
+test(slot_zero_is_none, [true(S == none)]) :-
+  ranking:dep_slot_value([package_dependency(run,no,cat,pkg,none,version_none,[slot('0'),subslot('1')],[])], S).
+
+test(slot_value_takes_highest, [true(S == [20])]) :-
+  ranking:dep_slot_value([package_dependency(run,no,'llvm-core',llvm,none,version_none,[slot('19')],[]),
+                          package_dependency(run,no,'llvm-core',llvm,none,version_none,[slot('20')],[])], S).
+
+% version/7 terms compare as versions; version_none sorts below them.
+test(version_criterion_orders_versions) :-
+  V1 = version([1,2,5,0],'',4,0,[],1,'1.2.5.0-r1'),
+  V2 = version([2,1,1],'',4,0,[],0,'2.1.1'),
+  V2 @> V1,
+  version_none @< V1.
+
+% pref/6: Preferred dominates --favour, which dominates self-CN, which
+% dominates a forced upgrade, which dominates -bootstrap, which dominates
+% the USE_EXPAND target -- strictly, by argument position.
+test(preference_signal_order) :-
+  pref(yes, -1, no, no, no, none) @> pref(no, 1, yes, yes, yes, [20]),
+  pref(no, 1, no, no, no, none)   @> pref(no, 0, yes, yes, yes, [20]),
+  pref(no, 0, yes, no, no, none)  @> pref(no, 0, no, yes, yes, [20]),
+  pref(no, 0, yes, yes, no, none) @> pref(no, 0, yes, no, yes, [20]),
+  pref(no, 0, yes, yes, yes, none) @> pref(no, 0, yes, yes, no, [20]),
+  pref(no, 0, yes, yes, no, [20]) @> pref(no, 0, yes, yes, no, [19]),
+  pref(no, 0, yes, yes, no, [19]) @> pref(no, 0, yes, yes, no, none).
+
+test(favour_signal_values) :-
+  ranking:favour_signal_(yes, no, 1),
+  ranking:favour_signal_(no, yes, -1),
+  ranking:favour_signal_(yes, yes, 0),
+  ranking:favour_signal_(no, no, 0).
+
+test(bootstrap_package_is_flagged) :-
+  ranking:preference_value([], package_dependency(run,no,'dev-lang',
+                              'rust-bootstrap',none,version_none,[],[]),
+                           pref(_, _, _, _, Bootstrap, none)),
+  Bootstrap == yes.
+
+test(required_use_arm_carries_target) :-
+  ranking:preference_value([], required(llvm_slot_20), pref(_, 0, yes, yes, no, [20])),
+  ranking:preference_value([], required(minus(llvm_slot_19)), pref(_, 0, yes, yes, no, [19])),
+  ranking:preference_value([], all_of_group([]), pref(_, 0, yes, yes, no, none)).
+
+% Proof-order tightness: the declared class order, and the first
+% applicable class wins (a sub-slot pin beats a tight upper bound; an
+% upper bound beats a tilde; a plain slot pin beats a wildcard).
+test(tightness_classes_order) :-
+  ranking:tightness_classes(Cs),
+  Cs == [subslot_pinned, upper_bounded, tilde, slot_pinned, wildcard,
+         any_same_slot, any_different_slot, unconstrained, other_slot_req,
+         no_slot_restriction, not_a_package_dep].
+
+rd_dep(SlotReq, Ops, grouped_package_dependency(no, cat, pkg, PDs):install?{[]}) :-
+  findall(package_dependency(install, no, cat, pkg, Op, V, SlotReq, []),
+          member(Op-V, Ops), PDs).
+
+rd_pos(Dep, Pos) :- ranking:dep_priority(Dep, key(Pos, _, _, _)).
+
+test(dep_priority_first_applicable_class) :-
+  V = version([1],'',4,0,[],0,'1'),
+  rd_dep([slot('0'),subslot('1')], [smaller-V], SubslotAndUpper),
+  rd_dep([], [smaller-V], Upper),
+  rd_dep([], [tilde-V], Tilde),
+  rd_dep([slot('0')], [none-version_none], Slot),
+  rd_dep([], [none-version_none], Plain),
+  rd_dep([any_same_slot], [none-version_none], AnySame),
+  rd_dep([any_different_slot], [none-version_none], AnyDiff),
+  maplist(rd_pos, [SubslotAndUpper, Upper, Tilde, Slot, AnySame, AnyDiff, Plain], Ps),
+  ranking:tightness_position(subslot_pinned, P0),
+  ranking:tightness_position(upper_bounded, P1),
+  ranking:tightness_position(tilde, P2),
+  ranking:tightness_position(slot_pinned, P3),
+  ranking:tightness_position(any_same_slot, P5),
+  ranking:tightness_position(any_different_slot, P6),
+  ranking:tightness_position(unconstrained, P7),
+  Ps == [P0, P1, P2, P3, P5, P6, P7],
+  msort(Ps, Ps).
+
+test(dep_priority_upper_bound_carried, [true(T == V)]) :-
+  V = version([1],'',4,0,[],0,'1'),
+  rd_dep([], [smaller-V], Dep),
+  ranking:dep_priority(Dep, key(_, T, cat, pkg)).
+
+test(dep_priority_non_package_dep_last) :-
+  ranking:dep_priority(constraint(foo), key(Pos, none, zz, zz)),
+  ranking:tightness_position(not_a_package_dep, Pos),
+  ranking:tightness_classes(Cs),
+  length(Cs, Len),
+  Pos =:= Len - 1.
+
+:- end_tests(ranking_declarative).
 
 
 :- begin_tests(use_iuse_assoc).

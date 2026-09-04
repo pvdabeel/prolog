@@ -303,10 +303,10 @@ When a disjunctive dependency group (`||`, `^^`, `exactly_one_of`) must
 `ranking:prioritize_deps_keep_all/3` and commits to the first arm that
 passes config checks (see [Any-of (`||`) arm selection](#any-of-arm-selection)
 below).  Profile-forced and installed preferences still dominate via
-`is_preferred_dep/2` inside the `Rank` key; USE_EXPAND target digits
-(`ranking:use_expand_target_rank/2`) contribute to `Rank` /
-`UEScore` — `llvm_slot_20` → `20`, `python_single_target_python3_13` →
-`[3,13]`, and so on.
+`is_preferred_dep/2`, the leading signal of the `preference` criterion;
+USE_EXPAND target digits (`ranking:use_expand_target_key/2`) are its
+last signal and also feed `use_expand` — `llvm_slot_20` → `[20]`,
+`python_single_target_python3_13` → `[3,13]`, and so on.
 
 
 ## Any-of (`||`) arm selection {#any-of-arm-selection}
@@ -324,41 +324,57 @@ the text-2.x arm when that is the newest tree candidate
 | | **Portage** | **portage-ng** |
 | :--- | :--- | :--- |
 | Mechanism | `dep_zapdeps` ordered `choice_bins` + intra-bin upgrade promotion (`lib/portage/dep/dep_check.py`) | `candidate:resolve(choice_group…)` → `ranking:prioritize_deps_keep_all/3` then first `any_of_config_dep_ok` |
-| Structure | Nine preference bins (lists) | One multi-key `keysort` (negated ints + original index) |
-| Graph reuse | Digraph `all_in_graph` | `selected_cn` snapshot (`SnapAll`) |
+| Structure | Nine preference bins (lists) | One declared criterion list (`ranking:choice_criteria/1`), compared lexicographically by standard order of terms, original index last |
+| Graph reuse | Digraph `all_in_graph` | `selected_cn` snapshot (`snap_all`) |
 
 Ranking *is* the preference policy: after the cut commits, later arms
 are not tried unless the proof backtracks for another reason.
 
-### Preference keys (highest first)
+### Preference criteria (most significant first)
 
-Implemented in `ranking:dep_choice_scores/3` and assembled in
-`prioritize_deps_keep_all/3`.  Higher scores win; the original ebuild
-index `I` breaks remaining ties (left-to-right).
+Declared as `ranking:choice_criteria/1`; each criterion's value comes
+from `ranking:criterion_value/5` and `prioritize_deps_keep_all/3`
+compares arms criterion by criterion (`ranking:compare_preference/3`)
+using the standard order of terms — a *larger* value is preferred, and
+the original ebuild index breaks remaining ties (left-to-right).  There
+is no weighted sum and no integer packing: booleans are `no @< yes`,
+counts are integers, versions are `version/7` terms (which compare as
+PMS versions), slots and USE_EXPAND targets are digit-group lists
+(`'3.10'` → `[3,10]` `@>` `[3,3]`), and `none` sorts below everything
+else.  Adding a preference means adding a criterion to the list, not
+choosing a magnitude.
 
-| **Key** | **Intent** | **Emerge analogue** |
-| :--- | :--- | :--- |
-| `LicOk` | Prefer license-acceptable arms | Availability / license gate |
-| `UseSat` | Prefer arms needing no USE flip on the arm’s best candidate | `preferred_*` vs `unsat_use_*` |
-| `UseUnmasked` | Among USE-unsat arms, prefer flips that do not fight use.mask / use.force | `all_use_unmasked` (masked → `other`) |
-| `Rank` | Installed / preferred / `--favour` / `--avoid` / self-CN | `preferred_installed` + favour |
-| `SnapAll` | Prefer arms whose non-`virtual/` CNs are already in the proof snapshot | `all_in_graph` |
-| `SlotScore` | Prefer higher explicit package slot (`pkg:N`) — only active when *all* arms target the same (C,N) | `want_update` / higher-slot promotion |
-| `NoDowngrade` | Demote arms whose newest admitted version is below installed or snap-selected | `downgrade_probe` → `other` |
-| `InstScore` | Prefer arms that reuse more installed CNs | `other_installed` / `_some` / `_any_slot` |
-| `Overlap` | Prefer arms that appear in several sibling `\|\|` groups | Soft stand-in for minimize-slots pressure |
-| `VerScore` | Prefer the arm that admits the newest tree version — only active when *all* arms target the same (C,N) | Intra-bin `has_upgrade and not has_downgrade` |
-| `UEScore` | Prefer USE_EXPAND profile alignment | Profile target preference |
-| index `I` | Stable left-to-right when all else equal | Ebuild order fallback |
+| **Criterion** | **Value** | **Intent** | **Emerge analogue** |
+| :--- | :--- | :--- | :--- |
+| `license_ok` | `yes`/`no` | Prefer license-acceptable arms | Availability / license gate |
+| `use_sat` | `yes`/`no` | Prefer arms needing no USE flip on the arm’s best candidate | `preferred_*` vs `unsat_use_*` |
+| `use_unmasked` | `yes`/`no` | Among USE-unsat arms, prefer flips that do not fight use.mask / use.force | `all_use_unmasked` (masked → `other`) |
+| `preference` | `pref/6` | Installed / profile-preferred, `--favour` / `--avoid`, not self-CN, no forced upgrade, `-bootstrap`, USE_EXPAND target — in that order, as the six arguments of one compound | `preferred_installed` + favour |
+| `snap_all` | `yes`/`no` | Prefer arms whose non-`virtual/` CNs are already in the proof snapshot | `all_in_graph` |
+| `slot` | digit list / `none` | Prefer higher explicit package slot (`pkg:N`) — only active when *all* arms target the same (C,N) | `want_update` / higher-slot promotion |
+| `no_downgrade` | `yes`/`no` | Demote arms whose newest admitted version is below installed or snap-selected | `downgrade_probe` → `other` |
+| `installed` | count | Prefer arms that reuse more installed CNs | `other_installed` / `_some` / `_any_slot` |
+| `overlap` | count | Prefer arms that appear in several sibling `\|\|` groups | Soft stand-in for minimize-slots pressure |
+| `version` | `version/7` / `version_none` | Prefer the arm that admits the newest tree version — only active when *all* arms target the same (C,N) | Intra-bin `has_upgrade and not has_downgrade` |
+| `use_expand` | integer | Prefer USE_EXPAND profile alignment (+1 per matching target, −1 per mismatch) | Profile target preference |
+| ebuild index | integer, ascending | Stable left-to-right when all else equal | Ebuild order fallback |
 
 Worked examples:
 
-- `|| ( foo[a] foo[b] )` with `a` already effective → `UseSat` picks `foo[a]`.
-- Cabal text ranges (above) → `VerScore` picks the text-2.x arm.
-- `|| ( sys-devel/llvm:18 sys-devel/llvm:20 )` → `SlotScore` prefers `:20`.
-- An arm whose packages are already in `selected_cn` beats a fresh CN → `SnapAll`.
+- `|| ( foo[a] foo[b] )` with `a` already effective → `use_sat` picks `foo[a]`.
+- Cabal text ranges (above) → `version` picks the text-2.x arm.
+- `|| ( sys-devel/llvm:18 sys-devel/llvm:20 )` → `slot` prefers `:20`.
+- An arm whose packages are already in `selected_cn` beats a fresh CN → `snap_all`.
 
-`VerScore` and `SlotScore` are gated to same-CN groups because
+The same pattern orders the *proof* of a package's dependencies:
+`ranking:dep_priority/2` sorts sibling deps by their position in the
+declared `ranking:tightness_classes/1` list (sub-slot pin, tight upper
+bound, tilde, slot pin, wildcard, any-same-slot, any-different-slot,
+unconstrained, …), taking the first class that applies, so the tightest
+constraint locks `selected_cn` before a looser sibling can pick a
+conflicting version.
+
+`version` and `slot` are gated to same-CN groups because
 comparing newest tree versions — or highest slots — of *different*
 packages is meaningless and overrides ebuild order: `virtual/mta`
 would pick `notqmail` (a `-9999` live ebuild inflates its score) over
@@ -372,8 +388,8 @@ toggle that emerge never takes (webkit-gtk build cluster, Aug-2026
 tinderbox run).  Emerge never version- or slot-ranks across CPs inside
 a choice; it falls back to ebuild order there.
 
-`virtual/` atoms are skipped for `SnapAll`, `InstScore`, and
-`NoDowngrade` (Portage’s zero-cost treatment of virtuals in those
+`virtual/` atoms are skipped for `snap_all`, `installed`, and
+`no_downgrade` (Portage’s zero-cost treatment of virtuals in those
 checks).  Scores are computed once per arm per
 `prioritize_deps_keep_all/3` call, with a short-lived per-call cache for
 installed / reference-version lookups.  Ranking must not walk the
@@ -392,9 +408,9 @@ sorts bins by ascending new-slot count.  portage-ng does not rewrite
 the dep tree into DNF: expansion is exponential in overlapping width and
 does not belong on the per-`choice_group` hot path.  The prover already
 commits `selected_cn` / learned `cn_domain` across the proof; later `||`
-sites reuse those choices via `SnapAll` and constraint guards — the same
+sites reuse those choices via `snap_all` and constraint guards — the same
 “prefer packages already chosen” effect without a cross-product.
-`Overlap`, `InstScore`, and `SnapAll` cover the common “don’t pull a
+`overlap`, `installed`, and `snap_all` cover the common “don’t pull a
 second redundant package” pressure.  Remaining edge cases (two
 overlapping `||`s neither yet selected) are rare relative to cost; if
 tinderbox surfaces one, prefer a targeted heuristic over full DNF.

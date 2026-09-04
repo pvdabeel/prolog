@@ -271,52 +271,72 @@ plan:printable_element(_,assumed(rule(_,_))) :- !, fail.
 % plan:printable_element(_,rule(package_dependency(run,_,_,_,_,_,_,_),_)) :- !.
 
 
-%! plan:element_weight(+Literal)
+%! plan:display_order(-Groups)
 %
-% Declares a weight for ordering elements of a step in a plan
+% Display order of the elements within one plan step, first group
+% printed first. Elements whose kinds share a group keep the orderer's
+% relative order (merge-order bias / refcount priority). The position of
+% a group in this list is the sort key; nothing else encodes the order.
+% Run comes after install within a step.
 
-plan:element_weight(assumed(_),                                      0) :- !. % assumed
-plan:element_weight(rule(assumed(_),_),                              0) :- !. % assumed
-plan:element_weight(rule(uri(_),_),                                  0) :- !. % provide
-plan:element_weight(rule(uri(_,_,_),_),                              1) :- !. % fetch
-plan:element_weight(rule(package_dependency(_,_,_,_,_,_,_,_),_),     1) :- !. % confirm
-plan:element_weight(rule(_Repository://_Entry:verify?_,_),           2) :- !. % verify
-% Run should come after install within a step.
-plan:element_weight(rule(_Repository://_Entry:run?_,_),              6) :- !. % run
-plan:element_weight(rule(_Repository://_Entry:download?_,_),         4) :- !. % download
-plan:element_weight(rule(_Repository://_Entry:fetchonly?_,_),        5) :- !. % fetchonly
-plan:element_weight(rule(_Repository://_Entry:install?_,_),          5) :- !. % install
-plan:element_weight(rule(_Repository://_Entry:reinstall?_,_),        6) :- !. % reinstall
-plan:element_weight(rule(_Repository://_Entry:uninstall?_,_),        6) :- !. % uninstall
-plan:element_weight(rule(_Repository://_Entry:update?_,_),           6) :- !. % update
-plan:element_weight(rule(_Repository://_Entry:downgrade?_,_),        6) :- !. % downgrade
-plan:element_weight(rule(_Repository://_Entry:upgrade?_,_),          6) :- !. % upgrade
-plan:element_weight(_,                                               7) :- !. % everything else
+plan:display_order([[assumed, provide],
+                    [fetch, confirm],
+                    [verify],
+                    [download],
+                    [fetchonly, install],
+                    [run, reinstall, uninstall, update, downgrade, upgrade],
+                    [other]]).
 
 
-%! plan:sort_by_weight(+Comparator,+Literal,+Literal)
+%! plan:element_kind(+Literal, -Kind) is det.
 %
-% Sorts elements in a plan by weight
+% Kind of a plan element, as named in display_order/1.
 
-plan:sort_by_weight(C,L1,L2) :-
-  plan:element_weight(L1,W1),
-  plan:element_weight(L2,W2),
-  compare(C,W1:L1,W2:L2).
+plan:element_kind(assumed(_),                                     assumed)   :- !.
+plan:element_kind(rule(assumed(_),_),                             assumed)   :- !.
+plan:element_kind(rule(uri(_),_),                                 provide)   :- !.
+plan:element_kind(rule(uri(_,_,_),_),                             fetch)     :- !.
+plan:element_kind(rule(package_dependency(_,_,_,_,_,_,_,_),_),    confirm)   :- !.
+plan:element_kind(rule(_Repository://_Entry:verify?_,_),          verify)    :- !.
+plan:element_kind(rule(_Repository://_Entry:run?_,_),             run)       :- !.
+plan:element_kind(rule(_Repository://_Entry:download?_,_),        download)  :- !.
+plan:element_kind(rule(_Repository://_Entry:fetchonly?_,_),       fetchonly) :- !.
+plan:element_kind(rule(_Repository://_Entry:install?_,_),         install)   :- !.
+plan:element_kind(rule(_Repository://_Entry:reinstall?_,_),       reinstall) :- !.
+plan:element_kind(rule(_Repository://_Entry:uninstall?_,_),       uninstall) :- !.
+plan:element_kind(rule(_Repository://_Entry:update?_,_),          update)    :- !.
+plan:element_kind(rule(_Repository://_Entry:downgrade?_,_),       downgrade) :- !.
+plan:element_kind(rule(_Repository://_Entry:upgrade?_,_),         upgrade)   :- !.
+plan:element_kind(_,                                              other).
 
-%! plan:stable_sort_by_weight(+Step, -Sorted)
+
+%! plan:element_position(+Literal, -Pos) is det.
 %
-% Sort by element_weight, preserving the orderer's within-weight ordering
-% (which reflects merge-order bias / refcount priority).
-plan:stable_sort_by_weight(Step, Sorted) :-
-  plan:tag_with_weight_index(Step, 0, Tagged),
+% Position of the element's display group in display_order/1.
+
+plan:element_position(Literal, Pos) :-
+  plan:element_kind(Literal, Kind),
+  plan:display_order(Groups),
+  nth0(Pos, Groups, Group),
+  memberchk(Kind, Group),
+  !.
+
+
+%! plan:sort_by_display_order(+Step, -Sorted)
+%
+% Sort a step's elements by display_order/1, preserving the orderer's
+% relative order within a display group.
+
+plan:sort_by_display_order(Step, Sorted) :-
+  plan:tag_with_position_index(Step, 0, Tagged),
   keysort(Tagged, SortedTagged),
   findall(Rule, member(_-Rule, SortedTagged), Sorted).
 
-plan:tag_with_weight_index([], _, []) :- !.
-plan:tag_with_weight_index([R|Rs], I, [(W-I)-R|Rest]) :-
-  plan:element_weight(R, W),
+plan:tag_with_position_index([], _, []) :- !.
+plan:tag_with_position_index([R|Rs], I, [(P-I)-R|Rest]) :-
+  plan:element_position(R, P),
   I1 is I + 1,
-  plan:tag_with_weight_index(Rs, I1, Rest).
+  plan:tag_with_position_index(Rs, I1, Rest).
 
 
 %! plan:print_element(+State, +Printable)
@@ -956,7 +976,7 @@ plan:print_cycle_break_detail(Content) :-
 plan:print_steps_in_plan(_, [], _, Count, Count) :- !.
 
 plan:print_steps_in_plan(State, [Step|Rest], Call, Count, CountFinal) :-
-  plan:stable_sort_by_weight(Step, SortedRules),
+  plan:sort_by_display_order(Step, SortedRules),
   plan:print_first_in_step(State, SortedRules, Count, CountNew),
   call(Call, SortedRules), !,
   plan:print_steps_in_plan(State, Rest, Call, CountNew, CountFinal).

@@ -12,11 +12,17 @@
 Dependency ordering and ranking heuristics for the portage-ng resolver.
 
 Split out of candidate.pl (issue #64). Contains the dependency ordering
-heuristic (order_deps_for_proof/3, dep_priority/2), bracket-USE memo
-seeding, equality-USE pin propagation, choice-group ranking
-(prioritize_deps/2,3, prioritize_deps_keep_all/3, dep_choice_scores/3,
-dep_rank/3), USE_EXPAND profile-match scoring, any_of_group preference
-helpers, and provider-reuse candidate reordering.
+heuristic (order_deps_for_proof/3, dep_priority/2 over the declared
+tightness_classes/1), bracket-USE memo seeding, equality-USE pin
+propagation, choice-group arm ranking (prioritize_deps_keep_all/3 over
+the declared choice_criteria/1, criterion_value/5, preference_value/3),
+USE_EXPAND profile-match scoring, any_of_group preference helpers, and
+provider-reuse candidate reordering.
+
+Every preference in this module is an *ordered declaration* -- a list of
+classes or criteria, most significant first -- compared with the
+standard order of terms. Nothing is encoded as a weighted sum, a
+negated integer, or digits packed into one number.
 */
 
 :- module(ranking, []).
@@ -33,8 +39,9 @@ helpers, and provider-reuse candidate reordering.
 %
 % Sorts dependency groups for deterministic proof search. Tighter
 % constraints (fewer candidates, installed packages, blockers) are
-% proved first, reducing the backtracking search space. Uses a
-% numeric priority key computed by dep_priority/2.
+% proved first, reducing the backtracking search space. The key is
+% dep_priority/2, whose leading component is the dep's position in
+% tightness_classes/1.
 
 ranking:order_deps_for_proof(_Action, Deps, Ordered) :-
   maplist(dep_priority_kv, Deps, KVs),
@@ -275,44 +282,107 @@ ranking:apply_equality_pins(Repo://Entry, BWU0, BWU) :-
   ).
 
 
-ranking:dep_priority_kv(Dep, K-Dep) :-
-  dep_priority(Dep, K),
+% -----------------------------------------------------------------------------
+%  Proof-order tightness classes
+% -----------------------------------------------------------------------------
+
+%! ranking:tightness_classes(-Classes)
+%
+% Proof-order tightness classes, tightest first. A grouped dependency is
+% proved in the order of the *first* class in this list that applies to
+% it: a sub-slot pin beats a tight upper bound, which beats a tilde
+% constraint, which beats a plain slot pin, which beats a wildcard, and
+% so on down to unconstrained deps. Tight constraints are proved first so
+% that `selected_cn` locks the version before a looser sibling picks a
+% conflicting one. The position in this list is the sort key; nothing
+% else encodes the order.
+
+ranking:tightness_classes([subslot_pinned,
+                           upper_bounded,
+                           tilde,
+                           slot_pinned,
+                           wildcard,
+                           any_same_slot,
+                           any_different_slot,
+                           unconstrained,
+                           other_slot_req,
+                           no_slot_restriction,
+                           not_a_package_dep]).
+
+
+%! ranking:tightness_position(+Class, -Pos) is det.
+%
+% Position of Class in tightness_classes/1 (lower is proved first).
+
+ranking:tightness_position(Class, Pos) :-
+  ranking:tightness_classes(Classes),
+  nth0(Pos, Classes, Class),
   !.
+
 
 %! ranking:dep_priority(+DepLiteral, -Key)
 %
-% Computes a priority key for a dependency literal. Lower keys are
-% proved first. Key is `key(BaseK, TightUpper, C, N)` where BaseK
-% accounts for upper-bound tightness, tilde constraints, wildcard
-% constraints, and slot specificity. Tilde deps (BaseK=4) are proved
-% before wildcards (8) and unconstrained deps (999) so that
-% selected_cn locks the version before a sibling picks a conflicting
-% one.
+% Proof-order key for a dependency literal; lower keys are proved first.
+% Key is `key(Pos, TightUpper, C, N)`: Pos is the dep's tightness class
+% position (tightness_classes/1), TightUpper the tightest `<`/`<=` bound
+% (or `none`) so that, among upper-bounded deps, the tighter bound goes
+% first, and (C, N) keep the order deterministic.
 
-ranking:dep_priority(grouped_package_dependency(_T,C,N,PackageDeps):Action?{_Context}, K) :-
+ranking:dep_priority(grouped_package_dependency(_T,C,N,PackageDeps):Action?{_Context},
+                     key(Pos, TightUpper, C, N)) :-
   !,
   ( slotmeta:merge_slot_restriction(Action, C, N, PackageDeps, SlotReq) ->
-      ( dep_tightest_upper_bound(C, N, PackageDeps, TightUpper) ->
-          UpperK0 = 1
-      ; TightUpper = none,
-        ( cnselect:dep_has_tilde_constraint(C, N, PackageDeps)          -> UpperK0 = 4
-        ; cnselect:dep_has_equal_wildcard_constraint(C, N, PackageDeps) -> UpperK0 = 8
-        ; UpperK0 = 999
-        )
+      ( ranking:dep_tightest_upper_bound(C, N, PackageDeps, TightUpper) -> true
+      ; TightUpper = none
       ),
-      slotreq_priority(SlotReq, SlotK0),
-      BaseK is min(UpperK0, SlotK0),
-      K = key(BaseK, TightUpper, C, N)
-  ; K = key(50, none, C, N)
-  ).
-ranking:dep_priority(_Other, key(90, none, zz, zz)) :- !.
+      ranking:tightness_class(dep(C, N, PackageDeps, SlotReq, TightUpper), Class)
+  ; TightUpper = none,
+    Class = no_slot_restriction
+  ),
+  ranking:tightness_position(Class, Pos).
+ranking:dep_priority(_Other, key(Pos, none, zz, zz)) :-
+  ranking:tightness_position(not_a_package_dep, Pos).
 
-ranking:slotreq_priority([slot(_),subslot(_)|_], 0) :- !.
-ranking:slotreq_priority([slot(_)|_],             5) :- !.
-ranking:slotreq_priority([any_same_slot],        10) :- !.
-ranking:slotreq_priority([any_different_slot],   15) :- !.
-ranking:slotreq_priority([],                     20) :- !.
-ranking:slotreq_priority(_Other,                 30) :- !.
+
+ranking:dep_priority_kv(Dep, K-Dep) :-
+  ranking:dep_priority(Dep, K),
+  !.
+
+
+%! ranking:tightness_class(+Dep, -Class) is det.
+%
+% First class in tightness_classes/1 that applies to
+% dep(C, N, PackageDeps, SlotReq, TightUpper).
+
+ranking:tightness_class(Dep, Class) :-
+  ranking:tightness_classes(Classes),
+  member(Class, Classes),
+  ranking:in_tightness_class(Dep, Class),
+  !.
+
+
+%! ranking:in_tightness_class(+Dep, +Class) is semidet.
+%
+% Membership test per class. `other_slot_req` applies to every
+% slot-restricted dep and closes the list for them.
+
+ranking:in_tightness_class(dep(_, _, _, [slot(_),subslot(_)|_], _), subslot_pinned).
+ranking:in_tightness_class(dep(_, _, _, _, TightUpper), upper_bounded) :-
+  TightUpper \== none.
+ranking:in_tightness_class(dep(C, N, PackageDeps, _, _), tilde) :-
+  cnselect:dep_has_tilde_constraint(C, N, PackageDeps).
+ranking:in_tightness_class(dep(_, _, _, [slot(_)|_], _), slot_pinned).
+ranking:in_tightness_class(dep(C, N, PackageDeps, _, _), wildcard) :-
+  cnselect:dep_has_equal_wildcard_constraint(C, N, PackageDeps).
+ranking:in_tightness_class(dep(_, _, _, [any_same_slot], _), any_same_slot).
+ranking:in_tightness_class(dep(_, _, _, [any_different_slot], _), any_different_slot).
+ranking:in_tightness_class(dep(_, _, _, [], _), unconstrained).
+ranking:in_tightness_class(dep(_, _, _, _, _), other_slot_req).
+
+
+%! ranking:dep_tightest_upper_bound(+C, +N, +PackageDeps, -Tightest) is semidet.
+%
+% Tightest `<` / `<=` version bound on (C, N) among PackageDeps.
 
 ranking:dep_tightest_upper_bound(C, N, PackageDeps, Tightest) :-
   member(package_dependency(_, no, C, N, Op0, _, _, _), PackageDeps),
@@ -343,50 +413,68 @@ ranking:dep_extract_cn_packagedeps(grouped_package_dependency(_T, C, N, PackageD
 
 
 % -----------------------------------------------------------------------------
-%  Dependency ranking / prioritization
+%  Choice-group arm ranking (emerge dep_zapdeps alignment)
 % -----------------------------------------------------------------------------
 
-%! ranking:prioritize_deps(+Deps, -SortedDeps)
+%! ranking:choice_criteria(-Criteria)
 %
-% Sorts dependency groups by priority class and sub-ranking (slot
-% specificity, blocker status). Used at the rule level to present
-% candidates in deterministic order.
-
-ranking:prioritize_deps(Deps, SortedDeps) :-
-  prioritize_deps(Deps, [], SortedDeps).
-
-%! ranking:prioritize_deps(+Deps, +Context, -SortedDeps)
+% Ordered preference criteria for the arms of a choice group (`||`, `^^`,
+% `??`), most significant first. Each criterion yields a term for an arm
+% (criterion_value/5); arms are compared criterion by criterion using the
+% standard order of terms, and a *larger* term is preferred. Values are
+% therefore chosen so that standard order is the preference order:
+% `no @< yes`, counts are integers, versions are version/7 terms (see
+% .cursorrules, "Version representation"), slots and USE_EXPAND targets
+% are digit-group lists (`'3.10'` -> [3,10] @> [3,3]), and `none` (an
+% atom) sorts below every list or compound. No arithmetic, no negation,
+% no packing of several signals into one integer.
 %
-% Sorts dependency groups by rank using Context for installed/use checks.
+% The order mirrors emerge's dep_zapdeps choice bins; see
+% Documentation/Handbook/12-doc-resolution.md ("Any-of (||) arm
+% selection") for the intent and emerge analogue of every criterion.
+%
+%   license_ok    arm is license-acceptable
+%   use_sat       bracket USE needs no flip on the arm's best candidate
+%   use_unmasked  required flips respect profile use.mask / use.force
+%   preference    installed / profile-preferred / --favour / self-CN
+%                 (pref/6 compound, see preference_value/3)
+%   snap_all      every non-virtual CN already in the selected_cn snapshot
+%   slot          highest explicit slot -- same-CN groups only
+%   no_downgrade  newest admitted version not below installed / snapshot
+%   installed     number of installed CNs the arm reuses
+%   overlap       arm's CN appears in several sibling || groups
+%   version       newest admitted tree version -- same-CN groups only
+%   use_expand    USE_EXPAND alignment with the profile selection
+%
+% `slot` and `version` only apply when every arm targets one single (C,N)
+% (portage-ng#112 cabal text ranges, `|| ( llvm:20 llvm:19 )`). Comparing
+% newest versions or highest slots of *different* packages is meaningless
+% and flips choices away from ebuild order (portage-ng#115 openjdk vs
+% openjdk-bin, portage-ng#116 notqmail-9999 vs nullmailer, ruby-single
+% `( ruby:3.3 rubygems[ruby33] )` vs `( ruby:4.0 rubygems[ruby40] )` in
+% the webkit-gtk cluster). Emerge never ranks across CPs inside a choice;
+% it falls back to ebuild order, and so do we: the arm's original index
+% breaks every remaining tie.
 
-ranking:prioritize_deps(Deps, Context, SortedDeps) :-
-  predsort(ranking:compare_dep_rank(Context), Deps, SortedDeps).
+ranking:choice_criteria([license_ok,
+                         use_sat,
+                         use_unmasked,
+                         preference,
+                         snap_all,
+                         slot,
+                         no_downgrade,
+                         installed,
+                         overlap,
+                         version,
+                         use_expand]).
+
 
 %! ranking:prioritize_deps_keep_all(+Deps, +Context, -SortedDeps)
 %
-% Like prioritize_deps/3 but uses a multi-key ranking approximating
-% emerge dep_zapdeps choice_bins. Keys (higher preferred; negated for
-% keysort), then original index I for stable left-to-right ties:
-%
-%   LicOk, UseSat, UseUnmasked, Rank, SnapAll, SlotScore,
-%   NoDowngrade, InstScore, Overlap, VerScore, UEScore, I
-%
-% See Documentation/Handbook/12-doc-resolution.md ("Any-of (||) arm selection").
-% VerScore covers Haskell-style same-CN ranges (portage-ng#112). It is
-% only active when every arm targets the same (C,N): comparing newest
-% tree versions of *different* packages is meaningless and flips choices
-% away from ebuild order (portage-ng#115 openjdk vs openjdk-bin,
-% portage-ng#116 notqmail-9999 vs nullmailer). Emerge never version-ranks
-% across CPs inside a choice; it falls back to ebuild order there.
-%
-% SlotScore is gated by the same single-CN condition. Ranking the max
-% explicit slot across multi-CN arms flipped ruby-single choices --
-% `( ruby:3.3 rubygems[ruby33] )` listed first lost to
-% `( ruby:4.0 rubygems[ruby40] )` because 4.0 > 3.3 -- scheduling the
-% ~arch ruby:4.0 slot plus a ruby_targets_ruby40 USE toggle that emerge
-% never takes (webkit-gtk cluster, Aug-2026 tinderbox regression).
-% Same-CN groups (`|| ( llvm:20 llvm:19 )`) keep the newest-slot
-% preference.
+% Orders the arms of a choice group most-preferred first, keeping every
+% arm, by the criteria of choice_criteria/1 with the original ebuild
+% index as the final tie-breaker. A thread-local variant:branch_prefer/1
+% override moves its arms to the front afterwards.
 
 ranking:prioritize_deps_keep_all(Deps, Context, SortedDeps) :-
   setup_call_cleanup(
@@ -399,36 +487,118 @@ ranking:prioritize_deps_keep_all(Deps, Context, SortedDeps) :-
 
 
 ranking:prioritize_deps_keep_all_body(Deps, Context, SortedDeps) :-
-  ( ranking:deps_share_single_cn(Deps) -> SameCN = true ; SameCN = false ),
-  findall(NegLicOk-NegUseSat-NegUseUnmasked-NegRank-NegSnapAll-NegSlotScore-NegNoDowngrade-NegInstScore-NegOverlap-NegVerScore-NegUEScore-I-Dep,
+  ( ranking:deps_share_single_cn(Deps) -> Gate = same_cn ; Gate = multi_cn ),
+  findall(Key-I-Dep,
           ( nth1(I, Deps, Dep),
-            dep_rank(Context, Dep, Rank),
-            dep_overlap_group_count(Context, Dep, OvRaw),
-            ( OvRaw > 1 -> Overlap = OvRaw ; Overlap = 0 ),
-            ( acceptance:dep_license_ok(Dep) -> LicOk = 1 ; LicOk = 0 ),
-            dep_use_expand_profile_score(Dep, UEScore),
-            ranking:dep_choice_scores(Context, Dep,
-              scores(UseSat, UseUnmasked, SnapAll, SlotScore0,
-                     NoDowngrade, InstScore, VerScore0)),
-            ( SameCN == true -> VerScore = VerScore0 ; VerScore = 0 ),
-            ( SameCN == true -> SlotScore = SlotScore0 ; SlotScore = 0 ),
-            NegLicOk is -LicOk,
-            NegUseSat is -UseSat,
-            NegUseUnmasked is -UseUnmasked,
-            NegRank is -Rank,
-            NegSnapAll is -SnapAll,
-            NegSlotScore is -SlotScore,
-            NegNoDowngrade is -NoDowngrade,
-            NegInstScore is -InstScore,
-            NegOverlap is -Overlap,
-            NegVerScore is -VerScore,
-            NegUEScore is -UEScore
+            ranking:analyse_arm(Context, Dep, Arm),
+            ranking:arm_key(Context, Gate, Arm, Key)
           ),
-          Ranked),
-  keysort(Ranked, RankedSorted),
-  findall(Dep, member(_-_-_-_-_-_-_-_-_-_-_-_-Dep, RankedSorted), SortedDeps0),
+          Keyed),
+  predsort(ranking:prefer_arm, Keyed, Sorted),
+  findall(Dep, member(_-_-Dep, Sorted), SortedDeps0),
   ranking:boost_variant_preferred(SortedDeps0, SortedDeps),
   !.
+
+
+%! ranking:arm_key(+Context, +Gate, +Arm, -Key) is det.
+%
+% Key is the list of criterion values for Arm, in choice_criteria/1
+% order. Every criterion is det, so keys of different arms align.
+
+ranking:arm_key(Context, Gate, Arm, Key) :-
+  ranking:choice_criteria(Criteria),
+  maplist(ranking:arm_criterion(Context, Gate, Arm), Criteria, Key).
+
+
+ranking:arm_criterion(Context, Gate, Arm, Criterion, Value) :-
+  ranking:criterion_value(Criterion, Context, Gate, Arm, Value),
+  !.
+
+
+%! ranking:prefer_arm(-Order, +KeyedA, +KeyedB) is det.
+%
+% predsort/3 comparator over Key-Index-Dep triples: the arm with the
+% larger value on the first differing criterion sorts first; equal keys
+% fall back to the original (ascending) index, so no arm is ever dropped.
+
+ranking:prefer_arm(Order, KeyA-IA-_, KeyB-IB-_) :-
+  ( ranking:compare_preference(O, KeyA, KeyB),
+    O \== (=)
+  -> Order = O
+  ;  compare(Order, IA, IB)
+  ).
+
+
+%! ranking:compare_preference(-Order, +KeyA, +KeyB) is det.
+%
+% Lexicographic comparison of two criterion-value lists in which a
+% larger value is preferred (sorts first): Order is `<` when KeyA is
+% preferred over KeyB.
+
+ranking:compare_preference(=, [], []) :- !.
+ranking:compare_preference(Order, [A|As], [B|Bs]) :-
+  compare(C, B, A),
+  ( C == (=) ->
+      ranking:compare_preference(Order, As, Bs)
+  ; Order = C
+  ).
+
+
+% -----------------------------------------------------------------------------
+%  Arm analysis (computed once per arm, shared by the criteria)
+% -----------------------------------------------------------------------------
+
+%! ranking:analyse_arm(+Context, +Dep, -Arm) is det.
+%
+% Arm = arm(Dep, Atoms, BestRE, BestVer, UseFit): the arm's package
+% atoms, its newest tree candidate admitted by the arm's same-CN version
+% domain (Repo://Entry and version/7, or `none` / `version_none`), and
+% use_fit(UseSat, UseUnmasked) for the arm's bracket USE against that
+% candidate. Computed once per arm; the criteria only read it.
+
+ranking:analyse_arm(Context, Dep, arm(Dep, Atoms, BestRE, BestVer, use_fit(UseSat, UseUnmasked))) :-
+  ranking:dep_arm_package_atoms(Dep, Atoms),
+  ranking:dep_best_admitted(Dep, BestRE, BestVer),
+  ranking:dep_use_fit(Context, Atoms, BestRE, UseSat, UseUnmasked),
+  !.
+
+
+%! ranking:criterion_value(+Criterion, +Context, +Gate, +Arm, -Value) is det.
+%
+% Value of one criterion of choice_criteria/1 for Arm. Larger is
+% preferred (standard order of terms). Gate is `same_cn` or `multi_cn`;
+% the two gated criteria yield their bottom value for multi-CN groups.
+
+ranking:criterion_value(license_ok, _Context, _Gate, arm(Dep, _, _, _, _), Value) :-
+  ranking:yes_no(acceptance:dep_license_ok(Dep), Value).
+ranking:criterion_value(use_sat, _Context, _Gate, arm(_, _, _, _, use_fit(UseSat, _)), UseSat).
+ranking:criterion_value(use_unmasked, _Context, _Gate, arm(_, _, _, _, use_fit(_, UseUnmasked)), UseUnmasked).
+ranking:criterion_value(preference, Context, _Gate, arm(Dep, _, _, _, _), Pref) :-
+  ranking:preference_value(Context, Dep, Pref).
+ranking:criterion_value(snap_all, _Context, _Gate, arm(_, Atoms, _, _, _), Value) :-
+  ranking:yes_no(ranking:dep_snap_all_ok(Atoms), Value).
+ranking:criterion_value(slot, _Context, same_cn, arm(_, Atoms, _, _, _), Slot) :-
+  ranking:dep_slot_value(Atoms, Slot).
+ranking:criterion_value(slot, _Context, multi_cn, _Arm, none).
+ranking:criterion_value(no_downgrade, _Context, _Gate, arm(Dep, _, _, BestVer, _), Value) :-
+  ranking:dep_no_downgrade_value(Dep, BestVer, Value).
+ranking:criterion_value(installed, _Context, _Gate, arm(_, Atoms, _, _, _), Count) :-
+  ranking:dep_installed_count(Atoms, Count).
+ranking:criterion_value(overlap, Context, _Gate, arm(Dep, _, _, _, _), Overlap) :-
+  ranking:dep_overlap_group_count(Context, Dep, Raw),
+  ( Raw > 1 -> Overlap = Raw ; Overlap = 0 ).
+ranking:criterion_value(version, _Context, same_cn, arm(_, _, _, BestVer, _), BestVer).
+ranking:criterion_value(version, _Context, multi_cn, _Arm, version_none).
+ranking:criterion_value(use_expand, _Context, _Gate, arm(Dep, _, _, _, _), Score) :-
+  ranking:dep_use_expand_profile_score(Dep, Score).
+
+
+%! ranking:yes_no(:Goal, -Value) is det.
+%
+% Value is `yes` when Goal succeeds, `no` otherwise (`no @< yes`).
+
+ranking:yes_no(Goal, Value) :-
+  ( call(Goal) -> Value = yes ; Value = no ).
 
 
 %! ranking:boost_variant_preferred(+Deps, -Reordered) is det.
@@ -446,27 +616,8 @@ ranking:boost_variant_preferred(Deps, Reordered) :-
 
 
 % -----------------------------------------------------------------------------
-%  Choice-group arm scores (emerge dep_zapdeps alignment)
+%  Criterion helpers
 % -----------------------------------------------------------------------------
-
-%! ranking:dep_choice_scores(+Context, +Dep, -Scores) is det.
-%
-% Single-pass arm analysis for prioritize_deps_keep_all/3. Scores is
-% scores(UseSat, UseUnmasked, SnapAll, SlotScore, NoDowngrade, InstScore,
-% VerScore). Uses a per-call nb_setval cache (ranking_choice_cache) for
-% installed/snap lookups shared across arms.
-
-ranking:dep_choice_scores(Context, Dep,
-    scores(UseSat, UseUnmasked, SnapAll, SlotScore, NoDowngrade, InstScore, VerScore)) :-
-  ranking:dep_arm_package_atoms(Dep, Atoms),
-  ranking:dep_best_admitted(Dep, BestRE, BestVer, VerScore),
-  ranking:dep_use_sat_scores(Context, Atoms, BestRE, UseSat, UseUnmasked),
-  ranking:dep_snap_all_score(Atoms, SnapAll),
-  ranking:dep_slot_score(Atoms, SlotScore),
-  ranking:dep_no_downgrade_score(Dep, BestVer, NoDowngrade),
-  ranking:dep_inst_score(Atoms, InstScore),
-  !.
-
 
 %! ranking:deps_share_single_cn(+Deps) is semidet.
 %
@@ -516,14 +667,14 @@ ranking:dep_blocker_strength(weak).
 ranking:dep_blocker_strength(strong).
 
 
-%! ranking:dep_use_sat_scores(+Context, +Atoms, +BestRE, -UseSat, -UseUnmasked) is det.
+%! ranking:dep_use_fit(+Context, +Atoms, +BestRE, -UseSat, -UseUnmasked) is det.
 %
-% UseSat=1 when bracket USE needs no change on BestRE (or no USE deps).
-% UseUnmasked=1 when required flips respect profile use.mask/force.
-% Neutral (1,1) when BestRE is unavailable so incomplete arms are not
-% demoted spuriously.
+% UseSat = yes when bracket USE needs no change on BestRE (or there are
+% no USE deps). UseUnmasked = yes when the required flips respect profile
+% use.mask / use.force. Neutral (yes, yes) when BestRE is unavailable so
+% incomplete arms are not demoted spuriously.
 
-ranking:dep_use_sat_scores(Context, Atoms, BestRE, UseSat, UseUnmasked) :-
+ranking:dep_use_fit(Context, Atoms, BestRE, UseSat, UseUnmasked) :-
   findall(U,
           ( member(package_dependency(_, Str, _, _, _, _, _, Us), Atoms),
             \+ ranking:dep_blocker_strength(Str),
@@ -532,38 +683,29 @@ ranking:dep_use_sat_scores(Context, Atoms, BestRE, UseSat, UseUnmasked) :-
           ),
           UseDeps),
   ( UseDeps == []
-  -> UseSat = 1,
-     UseUnmasked = 1
+  -> UseSat = yes,
+     UseUnmasked = yes
   ; BestRE == none
-  -> UseSat = 1,
-     UseUnmasked = 1
+  -> UseSat = yes,
+     UseUnmasked = yes
   ; catch(use:directives_to_bwu(Context, UseDeps, BWU), _,
           BWU = use_state([], [])),
     ( BWU = use_state([], [])
-    -> UseSat = 1,
-       UseUnmasked = 1
+    -> UseSat = yes,
+       UseUnmasked = yes
     ; use:build_with_use_changes(BWU, BestRE, Changes),
-      ( Changes == [] -> UseSat = 1 ; UseSat = 0 ),
-      ( catch(use:bwu_respects_profile_hard(BestRE, BWU), _, fail)
-      -> UseUnmasked = 1
-      ; UseUnmasked = 0
-      )
+      ranking:yes_no(Changes == [], UseSat),
+      ranking:yes_no(catch(use:bwu_respects_profile_hard(BestRE, BWU), _, fail),
+                     UseUnmasked)
     )
   ).
 
 
-%! ranking:dep_snap_all_score(+Atoms, -SnapAll) is det.
+%! ranking:dep_snap_all_ok(+Atoms) is semidet.
 %
-% 1 iff every non-blocker, non-virtual package atom's (C,N) is present
-% in the selected_cn snapshot (emerge all_in_graph stand-in).
-
-ranking:dep_snap_all_score([], 0) :- !.
-ranking:dep_snap_all_score(Atoms, SnapAll) :-
-  ( ranking:dep_snap_all_ok(Atoms)
-  -> SnapAll = 1
-  ; SnapAll = 0
-  ).
-
+% True iff Atoms is non-empty and every non-blocker, non-virtual package
+% atom's (C,N) is present in the selected_cn snapshot (emerge
+% all_in_graph stand-in).
 
 ranking:dep_snap_all_ok(Atoms) :-
   Atoms \== [],
@@ -574,56 +716,32 @@ ranking:dep_snap_all_ok(Atoms) :-
          )).
 
 
-%! ranking:dep_slot_score(+Atoms, -SlotScore) is det.
+%! ranking:dep_slot_value(+Atoms, -Slot) is det.
 %
-% Max numeric explicit slot among arm atoms (llvm-style || slot prefer).
-% Only honoured for same-CN groups: prioritize_deps_keep_all_body/3
-% zeroes this score when arms span multiple (C,N)s (see
-% deps_share_single_cn/1).
+% Highest explicit slot among the arm's non-blocker atoms as a
+% version_key/2 digit-group list (llvm-style `|| ( llvm:20 llvm:19 )`
+% slot preference), or `none` when no atom pins a non-zero numeric slot.
+% Only honoured for same-CN groups (criterion_value/5 yields `none` for
+% multi-CN groups, see deps_share_single_cn/1).
 
-ranking:dep_slot_score(Atoms, SlotScore) :-
-  findall(S,
-          ( member(package_dependency(_, Str, _, _, _, _, SlotReq, _), Atoms),
+ranking:dep_slot_value(Atoms, Slot) :-
+  findall(Key,
+          ( member(package_dependency(_, Str, _, _, _, _, [slot(S)|_], _), Atoms),
             \+ ranking:dep_blocker_strength(Str),
-            ranking:slot_req_numeric_score(SlotReq, S),
-            S > 0
+            ranking:version_key(S, Key),
+            Key \== [0]
           ),
-          Scores),
-  ( Scores == [] -> SlotScore = 0 ; max_list(Scores, SlotScore) ).
+          Keys),
+  ( Keys == [] -> Slot = none ; max_member(Slot, Keys) ).
 
 
-%! ranking:slot_req_numeric_score(+SlotReq, -Score) is det.
-
-ranking:slot_req_numeric_score([slot(S)|_], Score) :-
-  ranking:slot_atom_numeric(S, Score),
-  !.
-ranking:slot_req_numeric_score(_, 0).
-
-
-%! ranking:slot_atom_numeric(+Slot, -N) is semidet.
-
-ranking:slot_atom_numeric(S, N) :-
-  integer(S),
-  !,
-  N = S.
-ranking:slot_atom_numeric(S, N) :-
-  atom(S),
-  atom_number(S, N),
-  !.
-ranking:slot_atom_numeric(S, N) :-
-  atom(S),
-  atom_codes(S, Codes),
-  ranking:take_digits(Codes, Digits, _),
-  Digits \== [],
-  number_codes(N, Digits).
-
-
-%! ranking:dep_no_downgrade_score(+Dep, +BestVer, -NoDowngrade) is det.
+%! ranking:dep_no_downgrade_value(+Dep, +BestVer, -NoDowngrade) is det.
 %
-% 0 when the arm's newest admitted version is strictly below the highest
-% installed or snap-selected version for that CN (emerge downgrade demotion).
+% `no` when the arm's newest admitted version is strictly below the
+% highest installed or snap-selected version for that CN (emerge
+% downgrade demotion), `yes` otherwise.
 
-ranking:dep_no_downgrade_score(Dep, BestVer, NoDowngrade) :-
+ranking:dep_no_downgrade_value(Dep, BestVer, NoDowngrade) :-
   BestVer \== version_none,
   compound(BestVer),
   ranking:dep_cn_version_domain(Dep, C, N, _),
@@ -631,8 +749,8 @@ ranking:dep_no_downgrade_score(Dep, BestVer, NoDowngrade) :-
   ranking:reference_highest_version(C, N, RefVer),
   RefVer \== version_none,
   !,
-  ( BestVer @< RefVer -> NoDowngrade = 0 ; NoDowngrade = 1 ).
-ranking:dep_no_downgrade_score(_, _, 1).
+  ranking:yes_no(BestVer @>= RefVer, NoDowngrade).
+ranking:dep_no_downgrade_value(_, _, yes).
 
 
 %! ranking:reference_highest_version(+C, +N, -Ver) is det.
@@ -667,20 +785,19 @@ ranking:reference_version_candidate(C, N, Ver) :-
   catch(query:search(version(Ver), Repo://Entry), _, fail).
 
 
-%! ranking:dep_inst_score(+Atoms, -InstScore) is det.
+%! ranking:dep_installed_count(+Atoms, -Count) is det.
 %
-% Count of non-blocker, non-virtual atoms whose CN is installed (partial
+% Number of non-blocker, non-virtual atoms whose CN is installed (partial
 % other_installed fuzzy bin).
 
-ranking:dep_inst_score(Atoms, InstScore) :-
-  findall(1,
-          ( member(package_dependency(_, Str, C, N, _, _, _, _), Atoms),
-            \+ ranking:dep_blocker_strength(Str),
-            C \== virtual,
-            ranking:cn_is_installed(C, N)
-          ),
-          Hits),
-  length(Hits, InstScore).
+ranking:dep_installed_count(Atoms, Count) :-
+  aggregate_all(count,
+                ( member(package_dependency(_, Str, C, N, _, _, _, _), Atoms),
+                  \+ ranking:dep_blocker_strength(Str),
+                  C \== virtual,
+                  ranking:cn_is_installed(C, N)
+                ),
+                Count).
 
 
 %! ranking:cn_is_installed(+C, +N) is semidet.
@@ -712,12 +829,15 @@ ranking:choice_cache_put(Key, Value) :-
   nb_setval(ranking_choice_cache, AVL1).
 
 
-%! ranking:dep_best_admitted(+Dep, -BestRE, -BestVer, -VerScore) is det.
+%! ranking:dep_best_admitted(+Dep, -BestRE, -BestVer) is det.
 %
 % Newest tree version admitted by Dep's same-CN version domain, plus its
-% Repo://Entry (or none / version_none / 0 when not applicable).
+% Repo://Entry (or none / version_none when not applicable). BestVer is
+% a version/7 term and is compared directly by the `version` criterion:
+% standard order on version/7 is the PMS version order, and the atom
+% version_none sorts below every version term.
 
-ranking:dep_best_admitted(Dep, BestRE, BestVer, VerScore) :-
+ranking:dep_best_admitted(Dep, BestRE, BestVer) :-
   ranking:dep_cn_version_domain(Dep, C, N, Domain),
   \+ version_domain:domain_inconsistent(Domain),
   !,
@@ -728,23 +848,11 @@ ranking:dep_best_admitted(Dep, BestRE, BestVer, VerScore) :-
           Pairs),
   ( Pairs == []
   -> BestRE = none,
-     BestVer = version_none,
-     VerScore = 0
+     BestVer = version_none
   ; sort(Pairs, Sorted),
-    last(Sorted, BestVer-BestRE),
-    ranking:version_to_sort_score(BestVer, VerScore)
+    last(Sorted, BestVer-BestRE)
   ).
-ranking:dep_best_admitted(_Dep, none, version_none, 0).
-
-
-%! ranking:dep_max_candidate_version_score(+Dep, -Score) is det.
-%
-% Score for ||-branch ordering: newest tree version admitted by Dep's
-% version constraints on a single (C,N), packed as a comparable integer.
-% Returns 0 when Dep is not a pure version-bounded package branch.
-
-ranking:dep_max_candidate_version_score(Dep, Score) :-
-  ranking:dep_best_admitted(Dep, _, _, Score).
+ranking:dep_best_admitted(_Dep, none, version_none).
 
 
 %! ranking:dep_cn_version_domain(+Dep, -C, -N, -Domain) is semidet.
@@ -765,41 +873,17 @@ ranking:dep_cn_version_domain(all_of_group(Deps), C, N, Domain) :-
   version_domain:domain_from_packagedeps(run, C, N, Deps, Domain).
 
 
-%! ranking:version_to_sort_score(+Version, -Score) is det.
-%
-% Packs the leading numeric components of a version/7 into a single
-% integer so keysort can prefer newer versions (via NegVerScore).
-
-ranking:version_to_sort_score(version(Nums, _, _, _, _, Rev, _), Score) :-
-  !,
-  ranking:version_nums_pad4(Nums, A, B, C, D),
-  ( integer(Rev) -> R = Rev ; R = 0 ),
-  Score is (((A * 1000 + B) * 1000 + C) * 1000 + D) * 1000 + R.
-ranking:version_to_sort_score(_, 0).
-
-
-ranking:version_nums_pad4([A,B,C,D|_], A, B, C, D) :- !.
-ranking:version_nums_pad4([A,B,C], A, B, C, 0) :- !.
-ranking:version_nums_pad4([A,B], A, B, 0, 0) :- !.
-ranking:version_nums_pad4([A], A, 0, 0, 0) :- !.
-ranking:version_nums_pad4([], 0, 0, 0, 0).
-
-
 %! ranking:dep_matches_prefer(+Preferred, +Dep) is semidet.
 
 ranking:dep_matches_prefer(Pref, Dep) :-
   Pref = package_dependency(_, _, PC, PN, _, _, _, _),
   Dep  = package_dependency(_, _, PC, PN, _, _, _, _).
 
-%! ranking:dep_snapshot_selected(+Dep) is semidet.
-%
-% True when every non-virtual, non-blocker package atom in Dep is
-% already in the selected_cn snapshot (SnapAll=1).
 
-ranking:dep_snapshot_selected(Dep) :-
-  ranking:dep_arm_package_atoms(Dep, Atoms),
-  ranking:dep_snap_all_ok(Atoms),
-  !.
+%! ranking:dep_overlap_group_count(+Context, +Dep, -Count) is det.
+%
+% Number of active `||` groups in the parent ebuild's dependency strings
+% that mention Dep's (C,N); 0 for non-package arms or without a parent.
 
 ranking:dep_overlap_group_count(Context, package_dependency(_,_,C,N,_,_,_,_), Count) :-
   memberchk(self(Repo://Ebuild), Context),
@@ -821,119 +905,131 @@ ranking:dep_entry_active_any_of_with_cn(all_of_group(Deps), RepoEntry, C, N) :-
   member(D, Deps),
   dep_entry_active_any_of_with_cn(D, RepoEntry, C, N), !.
 
-ranking:compare_dep_rank(Context, Delta, A, B) :-
-  dep_rank(Context, A, Ra),
-  dep_rank(Context, B, Rb),
-  compare(C, Rb, Ra),
-  ( C == (<) -> Delta = (<)
-  ; C == (>) -> Delta = (>)
-  ; Delta = (=)
-  ).
 
-%! ranking:dep_rank(+Context, +Dep, -Rank)
+% -----------------------------------------------------------------------------
+%  The `preference` criterion
+% -----------------------------------------------------------------------------
+
+%! ranking:preference_value(+Context, +Dep, -Pref) is det.
 %
-% Computes a numeric rank for a dependency term. Higher rank = preferred.
+% Pref = pref(Preferred, Favour, NotSelf, InstalledOk, Bootstrap, Target),
+% compared argument-wise by the standard order of terms, so the six
+% signals form a strict lexicographic order (most significant first):
+%
+%   Preferred    yes when is_preferred_dep/2 holds (profile-selected USE,
+%                installed package satisfying the atom, ...)
+%   Favour       1 / 0 / -1 for --favour / neither or both / --avoid
+%   NotSelf      no when the atom names the parent's own (C,N)
+%   InstalledOk  no when the CN is installed but no installed version
+%                satisfies the atom (a forced upgrade)
+%   Bootstrap    yes for `*-bootstrap` packages
+%   Target       USE_EXPAND target digits of a `required(Use)` arm
+%                (use_expand_target_key/2), else `none`
+%
+% Non-package arms (all_of_group, use_conditional_group, required(Use))
+% are neutral on the package-only signals.
 
-ranking:dep_rank(Context, Dep, Rank) :-
-  Dep \= package_dependency(_,_,_,_,_,_,_,_),
-  ( is_preferred_dep(Context, Dep) -> Pref = 1 ; Pref = 0 ),
-  dep_intrinsic_rank(Dep, Base),
-  Rank is Pref*1000000000 + Base,
-  !.
+ranking:preference_value(Context, package_dependency(Phase,Strength,C,N,O,V,S,U),
+                         pref(Preferred, Favour, NotSelf, InstalledOk, Bootstrap, none)) :-
+  !,
+  Dep = package_dependency(Phase,Strength,C,N,O,V,S,U),
+  ranking:yes_no(ranking:is_preferred_dep(Context, Dep), Preferred),
+  ranking:favour_signal(C, N, Favour),
+  ranking:yes_no(\+ ranking:self_cn(Context, C, N), NotSelf),
+  ranking:yes_no(\+ ranking:installed_version_mismatch(Dep), InstalledOk),
+  ranking:yes_no(atom_concat(_, '-bootstrap', N), Bootstrap).
+ranking:preference_value(Context, Dep, pref(Preferred, 0, yes, yes, no, Target)) :-
+  ranking:yes_no(ranking:is_preferred_dep(Context, Dep), Preferred),
+  ranking:required_use_target(Dep, Target).
 
-ranking:dep_rank(Context, package_dependency(Phase,Strength,C,N,O,V,S,U), Rank) :-
-  ( self_cn(Context, C, N) -> Base0 = -100000000 ; Base0 = 0 ),
-  installed_version_mismatch_penalty(package_dependency(Phase,Strength,C,N,O,V,S,U), BaseInst),
-  ( is_preferred_dep(Context, package_dependency(Phase,Strength,C,N,O,V,S,U)) -> Pref = 1 ; Pref = 0 ),
-  dep_intrinsic_rank(package_dependency(Phase,Strength,C,N,O,V,S,U), Base1),
-  dep_favour_avoid_bonus(C, N, FavAvoid),
-  Rank is Pref*1000000000 + Base0 + BaseInst + Base1 + FavAvoid,
-  !.
+
+%! ranking:self_cn(+Context, +C, +N) is semidet.
+%
+% True when (C, N) is the parent ebuild carried in the proof context.
 
 ranking:self_cn(Context, C, N) :-
   memberchk(self(Repo://Id), Context),
   query:search([category(C),name(N)], Repo://Id),
   !.
 
-ranking:dep_intrinsic_rank(required(Use), Rank) :-
-  use_rank(Use, Rank),
-  !.
-ranking:dep_intrinsic_rank(required(minus(Use)), Rank) :-
-  use_rank(Use, Rank),
-  !.
-ranking:dep_intrinsic_rank(package_dependency(_Phase,_Strength,_C,N,_O,_V,_S,_U), Rank) :-
-  ( atom_concat(_, '-bootstrap', N) -> Rank = 50000
-  ; Rank = 0
-  ),
-  !.
-ranking:dep_intrinsic_rank(_, 0).
 
-
-%! ranking:dep_favour_avoid_bonus(+Category, +Name, -Bonus) is det.
+%! ranking:favour_signal(+Category, +Name, -Signal) is det.
 %
-% Returns a large positive bonus for --favour'd packages and a large
-% negative penalty for --avoid'd packages in || dep resolution.
+% 1 for a --favour'd package, -1 for an --avoid'd one, 0 otherwise (or
+% when both apply).
 
-ranking:dep_favour_avoid_bonus(C, N, Bonus) :-
+ranking:favour_signal(C, N, Signal) :-
   atomic_list_concat([C, '/', N], CN),
-  ( config:dep_favour(CN) -> FavBonus = 500000000
-  ; config:dep_favour(N)  -> FavBonus = 500000000
-  ; FavBonus = 0
-  ),
-  ( config:dep_avoid(CN) -> AvoidPen = -500000000
-  ; config:dep_avoid(N)  -> AvoidPen = -500000000
-  ; AvoidPen = 0
-  ),
-  Bonus is FavBonus + AvoidPen.
+  ranking:yes_no(( config:dep_favour(CN) ; config:dep_favour(N) ), Fav),
+  ranking:yes_no(( config:dep_avoid(CN)  ; config:dep_avoid(N)  ), Avoid),
+  ranking:favour_signal_(Fav, Avoid, Signal).
 
-ranking:use_rank(Use, Rank) :-
-  atom(Use),
-  ranking:use_expand_target_rank(Use, Rank),
-  !.
-ranking:use_rank(_, 0).
+ranking:favour_signal_(yes, no,  1).
+ranking:favour_signal_(no,  yes, -1).
+ranking:favour_signal_(yes, yes, 0).
+ranking:favour_signal_(no,  no,  0).
 
 
-%! ranking:use_expand_target_rank(+Use, -Rank) is semidet.
+%! ranking:required_use_target(+Dep, -Target) is det.
 %
-% Derives a positive rank from the trailing version/slot digits of a
-% USE_EXPAND target/slot flag, so that when a choice group offers several
-% single-target alternatives and the profile has NOT forced one, the
-% newest target/slot is preferred -- mirroring emerge's "highest available
-% slot" behaviour.
+% USE_EXPAND target key of a `required(Use)` / `required(minus(Use))`
+% arm (use_expand_target_key/2), `none` for every other arm.
+
+ranking:required_use_target(required(minus(Use)), Target) :-
+  !,
+  ranking:use_expand_target_key(Use, Target).
+ranking:required_use_target(required(Use), Target) :-
+  !,
+  ranking:use_expand_target_key(Use, Target).
+ranking:required_use_target(_, none).
+
+
+%! ranking:use_expand_target_key(+Use, -Key) is det.
+%
+% Version key of a USE_EXPAND target/slot flag, so that when a choice
+% group offers several single-target alternatives and the profile has
+% NOT forced one, the newest target/slot is preferred -- mirroring
+% emerge's "highest available slot" behaviour. `none` when Use is not a
+% USE_EXPAND flag or carries no digits.
 %
 % Generic across every USE_EXPAND family registered in eapi:use_expand/1
 % (llvm_slot, lua_single_target, python_single_target, ruby_targets, ...):
-% the family prefix is stripped and the remaining digit groups are packed
-% into the rank, e.g. llvm_slot_20 -> 20,
-% lua_single_target_lua5-4 -> key([5,4]),
-% python_single_target_python3_13 -> key([3,13]). Flags with no numeric
-% component (e.g. lua_single_target_luajit) fail and fall through to rank 0
-% via use_rank/2. This was previously hardcoded for llvm_slot and lua5
-% only -- the two families whose profile defaults were dropped -- which
-% baked ecosystem-specific literals into the domain rules. Profile-selected
-% targets are handled separately by is_preferred_dep/2 (Pref*1e9), which
-% always dominates this tiebreaker.
+% the family prefix is stripped and the remaining digit groups form the
+% key, e.g. llvm_slot_20 -> [20], lua_single_target_lua5-4 -> [5,4],
+% python_single_target_python3_13 -> [3,13]; lua_single_target_luajit ->
+% none. Profile-selected targets are handled separately by
+% is_preferred_dep/2 (the Preferred signal of pref/6), which always
+% dominates this tiebreaker.
 
-ranking:use_expand_target_rank(Use, Rank) :-
+ranking:use_expand_target_key(Use, Key) :-
+  atom(Use),
   preference:use_expand_env(_EnvVar, Prefix),
   atom_concat(Prefix, '_', PrefixU),
   atom_concat(PrefixU, Value, Use),
   Value \== '',
-  ranking:use_expand_version_key(Value, Rank),
+  ranking:version_key(Value, Key),
   !.
+ranking:use_expand_target_key(_, none).
 
 
-%! ranking:use_expand_version_key(+Value, -Key) is semidet.
+% -----------------------------------------------------------------------------
+%  Version keys for slots and USE_EXPAND targets
+% -----------------------------------------------------------------------------
+
+%! ranking:version_key(+Atomic, -Key) is semidet.
 %
-% Packs the maximal decimal-digit runs of Value into a single comparable
-% integer (newer = larger; each component occupies a fixed field). Fails
-% when Value carries no digits.
+% Key is the list of maximal decimal-digit runs in Atomic, e.g. '3.10' ->
+% [3,10], 'python3_13' -> [3,13], 'lua5-4' -> [5,4], 20 -> [20]. Lists of
+% integers compare component-wise in the standard order of terms, so
+% [3,10] @> [3,3] and [20] @> [19] -- newer is larger without packing the
+% components into one integer (and without atom_number/2 reading '3.10'
+% as 3.1). Fails when Atomic carries no digits ('luajit').
 
-ranking:use_expand_version_key(Value, Key) :-
-  atom_codes(Value, Codes),
-  ranking:digit_groups(Codes, Groups),
-  Groups \== [],
-  ranking:pack_version_key(Groups, 0, Key).
+ranking:version_key(Atomic, Key) :-
+  atomic(Atomic),
+  atom_codes(Atomic, Codes),
+  ranking:digit_groups(Codes, Key),
+  Key \== [].
 
 
 %! ranking:digit_groups(+Codes, -Groups) is det.
@@ -962,12 +1058,9 @@ ranking:take_digits([C|Cs], [C|Ds], Rest) :-
 ranking:take_digits(Cs, [], Cs).
 
 
-%! ranking:pack_version_key(+Groups, +Acc, -Key) is det.
-
-ranking:pack_version_key([], Key, Key).
-ranking:pack_version_key([G|Gs], Acc0, Key) :-
-  Acc1 is Acc0 * 10000 + G,
-  ranking:pack_version_key(Gs, Acc1, Key).
+% -----------------------------------------------------------------------------
+%  Preferred arms (profile USE, installed satisfaction)
+% -----------------------------------------------------------------------------
 
 %! ranking:is_preferred_dep(+Context, +Dep)
 %
@@ -1145,21 +1238,20 @@ ranking:installed_pkg_satisfies_dep(ParentContext,
   use:installed_pkg_satisfies_use_reqs(ParentContext, VdbRepo://InstalledId, UseReqs),
   !.
 
-%! ranking:installed_version_mismatch_penalty(+PackageDep, -Penalty)
+%! ranking:installed_version_mismatch(+PackageDep) is semidet.
 %
-% Returns a large negative penalty if a package is installed but the
-% installed version does not match the constraint, indicating a forced upgrade.
+% True when the package is installed but no installed version satisfies
+% the atom's version constraint, i.e. choosing this arm forces an
+% upgrade (the InstalledOk signal of pref/6).
 
-ranking:installed_version_mismatch_penalty(package_dependency(_Phase,_Strength,C,N,O,V,_S,_U), Penalty) :-
+ranking:installed_version_mismatch(package_dependency(_Phase,_Strength,C,N,O,V,_S,_U)) :-
   O \== none,
   knowledgebase:vdb_repository(VdbRepo),
   query:search([name(N),category(C),installed(true)], VdbRepo://_),
   \+ ( query:search([name(N),category(C),installed(true)], VdbRepo://InstalledId),
        query:search(select(version, O, V), VdbRepo://InstalledId)
      ),
-  Penalty is -50000000,
   !.
-ranking:installed_version_mismatch_penalty(_Dep, 0).
 
 
 % -----------------------------------------------------------------------------
