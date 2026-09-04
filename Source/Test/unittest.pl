@@ -3876,6 +3876,67 @@ test(grouped_bdepend_waits_for_provider_rebuild) :-
   issue73_wave(Plan, Try, WTry),
   WPerl < WXSPK, WXSPK < WTry.
 
+% Virtual collapse (portage-ng#119): typeprof DEPENDs on the empty
+% virtual/rubygems whose RDEPEND is dev-ruby/rubygems. The virtual's
+% :install body names that provider as a grouped :run head. As a mere
+% preference it loses to a competing preference processed earlier in
+% sort order — here rubygems' own wish to land after the virtual (in the
+% tree: the PDEPEND completion pull of ruby's post-install group, which
+% contains virtual/rubygems) — and the consumer co-waves with the empty
+% virtual while rubygems lands sixty steps later. For a virtual being
+% merged the provider is a hard requirement, so the consumer lands
+% strictly after the real provider's :run. (Version 0 keeps the entries
+% out of the real KB so no pass-1 hook fires on them.)
+test(virtual_install_waits_for_its_runtime_providers) :-
+  GV   = grouped_package_dependency(no, virtual, rubygems, []):install,
+  V    = portage://'virtual/rubygems-0':install,
+  GR   = grouped_package_dependency(no, 'dev-ruby', rubygems, []):run,
+  RRun = portage://'dev-ruby/rubygems-0':run,
+  RIns = portage://'dev-ruby/rubygems-0':install,
+  Tp   = portage://'dev-ruby/typeprof-0':install,
+  issue73_rules([Tp-[GV], GV-[V], V-[GR], GR-[RRun], RRun-[RIns],
+                 RIns-[constraint(order_after(V):{[]})]]),
+  ordering_engine_plan([Tp], ProofOut, Plan),
+  ordering_engine_unreachables(ProofOut, []),
+  issue73_wave(Plan, RIns, WRIns),
+  issue73_wave(Plan, RRun, WRRun),
+  issue73_wave(Plan, V, WV),
+  issue73_wave(Plan, Tp, WTp),
+  WRIns < WRRun, WRRun < WV, WV < WTp.
+
+% ...whereas a regular (non-virtual) package's grouped :run body heads
+% stay preferences: its consumer does not hard-wait on them, so a
+% runtime cycle is still relaxed silently instead of surfacing as an
+% unreachable assumption.
+test(non_virtual_install_runtime_groups_stay_preferences) :-
+  G   = grouped_package_dependency(no, cat, lib, []):run,
+  App = portage://'cat/app-1':install,
+  Lib = portage://'cat/lib-1':run,
+  issue73_rules([App-[G], G-[Lib], Lib-[App]]),
+  ordering_engine_plan([App], ProofOut, Plan),
+  ordering_engine_unreachables(ProofOut, []),
+  issue73_wave(Plan, App, WApp),
+  issue73_wave(Plan, Lib, WLib),
+  WApp < WLib.
+
+% Blocker groups never alias onto a planned merge (portage-ng#119):
+% ocaml's BDEPEND `!dev-ml/findlib:0/0` is a weak blocker group whose CN
+% has a planned :install. Aliasing it would make ocaml hard-require
+% findlib, close a cycle with findlib's DEPEND on ocaml, and leave
+% findlib configuring before ocaml is on PATH (two unreachable
+% assumptions). The blocker carries no ordering; the DEPEND wins.
+test(blocker_group_does_not_alias_onto_planned_merge) :-
+  GO  = grouped_package_dependency(no, 'dev-lang', ocaml, []):install,
+  BF  = grouped_package_dependency(weak, 'dev-ml', findlib, []):install,
+  Oc  = portage://'dev-lang/ocaml-0':install,
+  Fl  = portage://'dev-ml/findlib-0':install,
+  issue73_rules([Fl-[GO], GO-[Oc], Oc-[BF], BF-[]]),
+  ordering_engine_plan([Fl, Oc], ProofOut, Plan),
+  ordering_engine_unreachables(ProofOut, []),
+  issue73_wave(Plan, Oc, WOc),
+  issue73_wave(Plan, Fl, WFl),
+  WOc < WFl.
+
 :- end_tests(ordering_engine_synthetic).
 
 

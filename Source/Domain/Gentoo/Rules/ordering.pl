@@ -24,7 +24,8 @@ the pass-1 proof and the VDB (installed packages):
   - step/1     : is this literal a pass-1 plan step?
   - requires/2 : what does a step require before it can be placed
                  (build-time deps, including a planned same-CN merge
-                 when the grouped :install is keep-installed)?
+                 when the grouped :install is keep-installed, and the
+                 runtime providers of a virtual being merged)?
   - prefers/2  : what would a step like placed earlier without insisting
                  (runtime dep groups, PDEPEND ordering hints)?
   - world/2    : does the installed system, as it stands, already provide
@@ -144,7 +145,7 @@ step_body(H, Body) :-
 %! ordering:requires(+H, -D)
 %
 % Hard requirement: D must be available before step H can be placed.
-% Two sources, both read from H's pass-1 proof body:
+% Three sources, all read from H's pass-1 proof body:
 %
 %   - every body literal that is itself a step, except preference-only
 %     deps (`runtime_dep/1`: grouped :run heads, and :fetchonly heads).
@@ -158,9 +159,25 @@ step_body(H, Body) :-
 %     install (perl 5.42→5.44 / Syntax-Keyword-Try before
 %     XS-Parse-Keyword). Assumed grouped deps stay a preference
 %     (portage-ng#95); this clause is the hard edge for the
-%     keep-installed path. Constraints and body literals without a
-%     proof entry and without a planned same-CN merge carry no
-%     ordering information.
+%     keep-installed path. Blocker groups never alias: a blocker names
+%     a package that must be *absent*, so `!dev-ml/findlib` in ocaml's
+%     BDEPEND must not make ocaml wait for the planned findlib merge
+%     (that closed a hard cycle and pushed findlib before ocaml,
+%     portage-ng#119);
+%   - virtual collapse (portage-ng#119): a `virtual/*` package has no
+%     build and installs no files — a DEPEND/BDEPEND on it means the
+%     consumer needs the virtual's RDEPEND providers at build time
+%     (Portage collapses the virtual's runtime deps onto the consumer
+%     with the consumer's dep priority). The pass-1 :install body of
+%     the virtual already names those providers as grouped :run heads;
+%     for a virtual being merged they are hard requirements, not
+%     preferences, so `dev-ruby/typeprof` cannot co-wave with an empty
+%     `virtual/rubygems` while `dev-ruby/rubygems` lands sixty steps
+%     later. Consumers of a keep-installed virtual are covered by the
+%     same-CN alias whenever the virtual itself is re-merged.
+%
+% Constraints and body literals without a proof entry and without a
+% planned same-CN merge carry no ordering information.
 
 requires(H, D) :-
   ordering:step_body(H, Body),
@@ -178,6 +195,15 @@ requires(H, D) :-
   prover:canon_literal(Literal, Core, _),
   ordering:grouped_install_planned(Core, D),
   D \== H.
+
+requires(H, D) :-
+  ordering:virtual_merge_step(H),
+  ordering:step_body(H, Body),
+  member(Literal, Body),
+  prover:canon_literal(Literal, Core, _),
+  Core = grouped_package_dependency(no, _, _, _):run,
+  ordering:step(Core),
+  D = Core.
 
 
 %! ordering:prefers(+H, -D)
@@ -426,12 +452,27 @@ grouped_install_planned(Core, D) :-
 
 %! ordering:grouped_cn(+G, -C, -N)
 %
-% Category and name of a grouped dependency literal. Assumed grouped
-% deps occur both with the 4-argument (strength-carrying) and the
-% 3-argument (strength-stripped, phantom path) shape.
+% Category and name of a regular (non-blocker) grouped dependency
+% literal. Assumed grouped deps occur both with the 4-argument
+% (strength-carrying) and the 3-argument (strength-stripped, phantom
+% path) shape. Weak/strong blocker groups deliberately fail: they name
+% a package to be absent, so they must never alias onto that package's
+% planned merge (portage-ng#119).
 
-grouped_cn(grouped_package_dependency(_, C, N, _), C, N).
+grouped_cn(grouped_package_dependency(no, C, N, _), C, N).
 grouped_cn(grouped_package_dependency(C, N, _), C, N).
+
+
+%! ordering:virtual_merge_step(+H)
+%
+% H is a merge-family plan step of a `virtual/*` package: the step
+% whose grouped :run body literals are hard requirements (virtual
+% collapse, see requires/2).
+
+virtual_merge_step(Repository://Entry:Action) :-
+  memberchk(Action, [install, update, downgrade, reinstall]),
+  ordering:entry_cn(Repository, Entry, C, _),
+  C == virtual.
 
 
 %! ordering:phase_actions(+DepAction, -PlanActions)

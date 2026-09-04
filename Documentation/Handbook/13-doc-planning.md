@@ -112,7 +112,7 @@ the pass-1 proof and the VDB:
 | Binding | Question answered | Source |
 | :--- | :--- | :--- |
 | `step/1` | What are the plan's steps? | Pass-1 proof rule heads |
-| `requires/2` | What must exist before a step? | Build-time deps (DEPEND/BDEPEND) in the step's pass-1 rule body, including a planned same-CN merge when the grouped `:install` is keep-installed |
+| `requires/2` | What must exist before a step? | Build-time deps (DEPEND/BDEPEND) in the step's pass-1 rule body, including a planned same-CN merge when the grouped `:install` is keep-installed, and the runtime providers of a `virtual/*` package being merged |
 | `prefers/2` | What would we like earlier, without insisting? | Runtime deps (RDEPEND), PDEPEND completion, ordering hints |
 | `world/2` | What does the system already provide? | VDB (installed packages) |
 
@@ -144,12 +144,28 @@ preference:
   install (perl 5.42→5.44 / `Syntax-Keyword-Try` before
   `XS-Parse-Keyword`).  Assumed grouped deps stay a preference
   (portage-ng#95); this alias is the hard edge for the keep-installed
-  path.
+  path.  Blocker groups never alias: `!dev-ml/findlib` in ocaml's
+  BDEPEND names a package that must be *absent*, so it must not make
+  ocaml wait for the planned findlib merge — that closed a hard cycle
+  with findlib's own DEPEND on ocaml and left findlib configuring
+  before ocaml was on `PATH` (portage-ng#119).
 
 - **RDEPEND** — runtime dependencies.  They must be satisfied before the
   package is *used*, not before it is built.  They become **`prefers/2`**
   edges: honored whenever that closes no cycle, never allowed to force a
-  world bridge or an unreachable assumption.
+  world bridge or an unreachable assumption.  One exception, the
+  **virtual collapse** (portage-ng#119): a `virtual/*` package has no
+  build and installs no files, so a DEPEND/BDEPEND on it means the
+  consumer needs the virtual's RDEPEND providers at build time — Portage
+  collapses a GLEP 37 virtual's runtime deps onto the consumer with the
+  consumer's dep priority.  The pass-1 `:install` body of the virtual
+  already names those providers as grouped `:run` heads; for a virtual
+  being merged they are **`requires/2`** edges, so `dev-ruby/typeprof`
+  waits for `dev-ruby/rubygems` through `virtual/rubygems` instead of
+  co-waving with the empty virtual (the orderer-era recurrence of
+  portage-ng#18).  A preference would not do: it competes on equal
+  footing with the PDEPEND completion pull of ruby's post-install group
+  (which contains the virtual itself) and loses by processing order.
 
 - **PDEPEND** — post-install dependencies.  They are resolved inside the
   pass-1 proof (via `heuristic:proof_obligation/4`, see Chapter 8) and create no proof
