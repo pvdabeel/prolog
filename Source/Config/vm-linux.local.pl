@@ -70,10 +70,10 @@ config:graph_directory('/root/Graph').
 % -----------------------------------------------------------------------------
 %
 % Location: directory containing the per-CPV gpkg.tar files (one subtree
-%   per category, e.g. /srv/.../binpkgs/app-misc/jq/jq-1.8.1-9.gpkg.tar).
+%           per category, e.g. /srv/.../binpkgs/app-misc/jq/jq-1.8.1-9.gpkg.tar).
 % Cache:    full path to the RFC822-style `Packages` index file at the
-%   root of that directory. binpkg_index:parse_file reads this file
-%   during repository:sync(kb).
+%           root of that directory. binpkg_index:parse_file reads this file
+%           during repository:sync(kb).
 %
 % Repository is populated externally by tinderbox-ng matrix sessions
 % (FEATURES=buildpkg) and by emerge's bintree.inject(). This config just
