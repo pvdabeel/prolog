@@ -452,11 +452,15 @@ candidate:eligible(Repo://Entry:_Action?{_}) :-
 %
 % Succeeds when a USE conditional is active. Checks in order:
 %   1. Context-assumed (dependency-induced or required_use)
-%   2. Global profile USE on a non-IUSE flag (e.g. kernel_linux)
-%   3. Effective USE for the ebuild (IUSE defaults + profile/env/package.use)
+%   2. `test?` groups of a requested target under --with-test-deps
+%      (the `with_test_deps` context marker, target:target_context/2)
+%   3. Global profile USE on a non-IUSE flag (e.g. kernel_linux)
+%   4. Effective USE for the ebuild (IUSE defaults + profile/env/package.use)
 
 candidate:eligible(use_conditional(positive, Use, _R://_E):_?{Context}) :-
   use:assumed(Context, Use), !.
+candidate:eligible(use_conditional(positive, test, _R://_E):_?{Context}) :-
+  memberchk(with_test_deps, Context), !.
 candidate:eligible(use_conditional(positive, Use, R://E):_?{_}) :-
   Use \= minus(_),
   preference:global_use(Use),
@@ -665,6 +669,14 @@ candidate:grouped_dep_keep_installed(Action, C, N, PackageDeps1, Context) :-
   ),
   ( preference:flag(changeddeps) ->
       \+ sets:entry_deps_outdated(VdbRepo://InstalledEntry)
+  ; true
+  ),
+  ( preference:flag(changedslot) ->
+      \+ sets:entry_slot_changed(VdbRepo://InstalledEntry)
+  ; true
+  ),
+  ( preference:flag(rebuiltbinaries) ->
+      \+ sets:entry_has_rebuilt_binary(VdbRepo://InstalledEntry)
   ; true
   ),
   \+ target:rebuild_if_newer_available(VdbRepo://InstalledEntry),
@@ -1036,7 +1048,8 @@ candidate:grouped_dep_determine_action(gd(Action, C, N, _PackageDeps, _SlotReq, 
 %! candidate:grouped_dep_update_reason(+C, +N, +CandEntry, +InstalledEntry, +Context, -UpdateAction, -UpdateCtx) is semidet.
 %
 % Determines the specific update reason (version change, BWU rebuild,
-% --newuse, --changed-use, --rebuild-if-new-*).
+% --newuse, --changed-use, --changed-deps, --changed-slot,
+% --rebuilt-binaries, --rebuild-if-new-*).
 
 candidate:grouped_dep_update_reason(_C, _N, FoundRepo://Candidate,
                                     VdbRepo://InstalledEntry2, NewerContext,
@@ -1083,6 +1096,20 @@ candidate:grouped_dep_update_reason(_C, _N, _FoundRepo://_Candidate,
   sets:entry_deps_outdated(VdbRepo://InstalledEntry2),
   !,
   feature_unification:unify([replaces(VdbRepo://InstalledEntry2),rebuild_reason(changeddeps)], NewerContext, UpdateCtx).
+candidate:grouped_dep_update_reason(_C, _N, _FoundRepo://_Candidate,
+                                    VdbRepo://InstalledEntry2, NewerContext,
+                                    update, UpdateCtx) :-
+  preference:flag(changedslot),
+  sets:entry_slot_changed(VdbRepo://InstalledEntry2),
+  !,
+  feature_unification:unify([replaces(VdbRepo://InstalledEntry2),rebuild_reason(changedslot)], NewerContext, UpdateCtx).
+candidate:grouped_dep_update_reason(_C, _N, _FoundRepo://_Candidate,
+                                    VdbRepo://InstalledEntry2, NewerContext,
+                                    update, UpdateCtx) :-
+  preference:flag(rebuiltbinaries),
+  sets:entry_has_rebuilt_binary(VdbRepo://InstalledEntry2),
+  !,
+  feature_unification:unify([replaces(VdbRepo://InstalledEntry2),rebuild_reason(rebuilt_binary)], NewerContext, UpdateCtx).
 candidate:grouped_dep_update_reason(_C, _N, _FoundRepo://_Candidate,
                                     VdbRepo://InstalledEntry2, NewerContext,
                                     update, UpdateCtx) :-

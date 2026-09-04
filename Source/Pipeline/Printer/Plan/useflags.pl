@@ -174,14 +174,16 @@ useflags:print_config(Style, Repository://Ebuild:download?{_Context}) :-
 % no downloads
 
 useflags:print_config(_Style, Repository://Ebuild:download?{_Context}) :-
-  \+(query:search(manifest(preference,_,_,_),Repository://Ebuild)),!.
+  ebuild:distfile_scope(Scope),
+  \+(query:search(manifest(Scope,_,_,_),Repository://Ebuild)),!.
 
 
 % at least one download
 
 useflags:print_config(Style, Repository://Ebuild:download?{_Context}) :-
   !,
-  findall([File,Size],query:search(manifest(preference,_,File,Size),Repository://Ebuild),Downloads),
+  ebuild:distfile_scope(Scope),
+  findall([File,Size],query:search(manifest(Scope,_,File,Size),Repository://Ebuild),Downloads),
   sort(Downloads,[[FirstFile,FirstSize]|Rest]),
   useflags:print_config_prefix(Style, 'file'),
   useflags:print_config_item('download',FirstFile,FirstSize),

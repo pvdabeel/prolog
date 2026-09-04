@@ -442,17 +442,33 @@ ebuild_exec:start_phase_async(EbuildPath, Phase, LogPath, UseString, ExtraEnv, P
 %                      (sanitize argv contract).
 %
 % The environment carries USE, the non-interactive git settings (a live
-% ebuild's git fetch must fail on a 401 rather than prompt) and ExtraEnv
-% (e.g. the serial-make MAKEOPTS override; env overrides make.conf in
-% Portage's config stack).
+% ebuild's git fetch must fail on a 401 rather than prompt), the EPREFIX
+% of `--prefix` when given (prefix_env/1) and ExtraEnv (e.g. the
+% serial-make MAKEOPTS override; env overrides make.conf in Portage's
+% config stack).
 
 ebuild_exec:spawn_ebuild(EbuildPath, Phases, Sink, UseString, ExtraEnv, Pid) :-
   config:ebuild_command(EbuildCmd),
   maplist(atom_string, Phases, PhaseStrs),
   subprocess:noninteractive_git_env(GitEnv),
-  append(['USE'=UseString|GitEnv], ExtraEnv, Env),
+  ebuild_exec:prefix_env(PrefixEnv),
+  append([['USE'=UseString|GitEnv], PrefixEnv, ExtraEnv], Env),
   ebuild_exec:ebuild_argv(Sink, EbuildCmd, EbuildPath, PhaseStrs, Exe, Argv, SinkOpts),
   process_create(Exe, Argv, [process(Pid), environment(Env)|SinkOpts]).
+
+
+%! ebuild_exec:prefix_env(-Env) is det.
+%
+% `['EPREFIX'=Dir]` when `--prefix Dir` was given (config:cli_prefix/1),
+% the same thing Portage's `--prefix` does: it sets EPREFIX for the
+% ebuild run, so the package is merged into that offset prefix. [] by
+% default.
+
+ebuild_exec:prefix_env(Env) :-
+  ( config:cli_prefix(Dir)
+  -> Env = ['EPREFIX'=Dir]
+  ;  Env = []
+  ).
 
 
 %! ebuild_exec:ebuild_argv(+Sink, +EbuildCmd, +EbuildPath, +PhaseStrs, -Exe, -Argv, -SinkOpts) is det.
@@ -1219,19 +1235,58 @@ ebuild_exec:execute_dispatch(run, _Repo, _Entry, _Ctx, done) :- !.
 % USE-compatible binpkg variant exists. If so, short-circuit through
 % binpkg_exec:execute/6 (extract gpkg + qmerge) instead of running the
 % full source build phase sequence. Falls through to the source path
-% silently if no candidate fits (or if config:use_binpkg is false, or
-% the binpkg repo is not registered).
+% silently if no candidate fits (or binpkg consumption is off for the
+% entry, or the binpkg repo is not registered) -- unless the run is
+% binary-only (--usepkg-only / --getbinpkg-only), in which case the step
+% fails instead (ebuild_exec:binpkg_fallback/6).
 ebuild_exec:execute_dispatch(Action, Repo, Entry, Ctx, Outcome) :-
   memberchk(Action, [install, reinstall, update, downgrade]),
   binpkg_exec:available_for(Repo, Entry, Ctx, BinpkgEntryId),
-  ( binpkg_exec:execute(Action, Repo, Entry, BinpkgEntryId, Ctx, BinOutcome),
-    BinOutcome == done
+  ebuild_exec:binpkg_outcome(
+    binpkg_exec:execute(Action, Repo, Entry, BinpkgEntryId, Ctx, BinOutcome0),
+    BinOutcome0, BinOutcome),
+  ( BinOutcome == done
   -> Outcome = done
-  ;  ebuild_exec:execute_phases(Action, Repo, Entry, Ctx, Outcome)
+  ;  ebuild_exec:binpkg_fallback(BinOutcome, Action, Repo, Entry, Ctx, Outcome)
   ),
   !.
 
+ebuild_exec:execute_dispatch(Action, _Repo, _Entry, _Ctx, Outcome) :-
+  memberchk(Action, [install, reinstall, update, downgrade]),
+  binpkg_exec:binary_only,
+  !,
+  Outcome = failed(no_binpkg).
+
 ebuild_exec:execute_dispatch(Action, Repo, Entry, Ctx, Outcome) :-
+  ebuild_exec:execute_phases(Action, Repo, Entry, Ctx, Outcome).
+
+
+%! ebuild_exec:binpkg_outcome(:Goal, ?BinOutcome0, -BinOutcome) is det.
+%
+% Runs the binary merge Goal (which binds BinOutcome0) and always yields
+% a bound outcome: `done`, the merge's own `failed(_)`, or
+% `failed(binpkg)` when the goal failed or returned something else.
+
+:- meta_predicate ebuild_exec:binpkg_outcome(0, ?, -).
+
+ebuild_exec:binpkg_outcome(Goal, BinOutcome0, BinOutcome) :-
+  ( call(Goal),
+    ( BinOutcome0 == done ; nonvar(BinOutcome0), BinOutcome0 = failed(_) )
+  -> BinOutcome = BinOutcome0
+  ;  BinOutcome = failed(binpkg)
+  ).
+
+
+%! ebuild_exec:binpkg_fallback(+BinOutcome, +Action, +Repo, +Entry, +Ctx, -Outcome) is det.
+%
+% What a merge step does after its binary merge did not complete: build
+% from source, or -- in a binary-only run -- fail with the binpkg's own
+% outcome.
+
+ebuild_exec:binpkg_fallback(BinOutcome, _Action, _Repo, _Entry, _Ctx, BinOutcome) :-
+  binpkg_exec:binary_only,
+  !.
+ebuild_exec:binpkg_fallback(_BinOutcome, Action, Repo, Entry, Ctx, Outcome) :-
   ebuild_exec:execute_phases(Action, Repo, Entry, Ctx, Outcome).
 
 
@@ -1248,7 +1303,8 @@ ebuild_exec:execute_phases(Action, Repo, Entry, Ctx, Outcome) :-
      )
   ;  Outcome = failed(no_ebuild)
   ),
-  ebuild_exec:maybe_inject_built(Action, Repo, Entry, Ctx, Outcome).
+  ebuild_exec:maybe_inject_built(Action, Repo, Entry, Ctx, Outcome),
+  ebuild_exec:maybe_fail_clean(Repo, Entry, Ctx, Outcome).
 
 
 %! ebuild_exec:execute_with_progress(+Action, +Repo, +Entry, +Ctx, :PhaseCallback, -Outcome) is det.
@@ -1287,16 +1343,37 @@ ebuild_exec:execute_with_progress_dispatch(Action, Repo, Entry, Ctx, PhaseCallba
   memberchk(Action, [install, reinstall, update, downgrade]),
   binpkg_exec:available_for(Repo, Entry, Ctx, BinpkgEntryId),
   catch(call(PhaseCallback, qmerge, active), _, true),
-  ( ebuild_exec:with_portage_pkg_merge_lock(qmerge,
-        binpkg_exec:execute(Action, Repo, Entry, BinpkgEntryId, Ctx, BinOutcome)),
-    BinOutcome == done
+  ebuild_exec:binpkg_outcome(
+    ebuild_exec:with_portage_pkg_merge_lock(qmerge,
+        binpkg_exec:execute(Action, Repo, Entry, BinpkgEntryId, Ctx, BinOutcome0)),
+    BinOutcome0, BinOutcome),
+  ( BinOutcome == done
   -> catch(call(PhaseCallback, qmerge, done), _, true),
      Outcome = done
-  ;  ebuild_exec:execute_phases_sequential(Action, Repo, Entry, Ctx, PhaseCallback, Outcome)
+  ;  ebuild_exec:binpkg_fallback_with_progress(BinOutcome, Action, Repo, Entry, Ctx, PhaseCallback, Outcome)
   ),
   !.
 
+ebuild_exec:execute_with_progress_dispatch(Action, _Repo, _Entry, _Ctx, _PhaseCallback, Outcome) :-
+  memberchk(Action, [install, reinstall, update, downgrade]),
+  binpkg_exec:binary_only,
+  !,
+  Outcome = failed(no_binpkg).
+
 ebuild_exec:execute_with_progress_dispatch(Action, Repo, Entry, Ctx, PhaseCallback, Outcome) :-
+  ebuild_exec:execute_phases_sequential(Action, Repo, Entry, Ctx, PhaseCallback, Outcome).
+
+
+%! ebuild_exec:binpkg_fallback_with_progress(+BinOutcome, +Action, +Repo, +Entry, +Ctx, :PhaseCallback, -Outcome) is det.
+%
+% binpkg_fallback/6 for the progress-reporting path.
+
+:- meta_predicate ebuild_exec:binpkg_fallback_with_progress(+, +, +, +, +, 2, -).
+
+ebuild_exec:binpkg_fallback_with_progress(BinOutcome, _Action, _Repo, _Entry, _Ctx, _PhaseCallback, BinOutcome) :-
+  binpkg_exec:binary_only,
+  !.
+ebuild_exec:binpkg_fallback_with_progress(_BinOutcome, Action, Repo, Entry, Ctx, PhaseCallback, Outcome) :-
   ebuild_exec:execute_phases_sequential(Action, Repo, Entry, Ctx, PhaseCallback, Outcome).
 
 
@@ -1314,7 +1391,8 @@ ebuild_exec:execute_phases_sequential(Action, Repo, Entry, Ctx, PhaseCallback, O
      ebuild_exec:save_phase_stats
   ;  Outcome = failed(no_ebuild)
   ),
-  ebuild_exec:maybe_inject_built(Action, Repo, Entry, Ctx, Outcome).
+  ebuild_exec:maybe_inject_built(Action, Repo, Entry, Ctx, Outcome),
+  ebuild_exec:maybe_fail_clean(Repo, Entry, Ctx, Outcome).
 
 
 %! ebuild_exec:maybe_inject_built(+Action, +Repo, +Entry, +Ctx, +Outcome) is det.
@@ -1336,6 +1414,27 @@ ebuild_exec:maybe_inject_built(Action, Repo, Entry, Ctx, done) :-
   catch(binpkg_exec:inject_built_binpkg(Repo, Entry, Ctx), _, true).
 
 ebuild_exec:maybe_inject_built(_Action, _Repo, _Entry, _Ctx, _Outcome).
+
+
+%! ebuild_exec:maybe_fail_clean(+Repo, +Entry, +Ctx, +Outcome) is det.
+%
+% Under `--fail-clean` (Portage's FEATURES=fail-clean), remove the build
+% directory of a SOURCE build that failed in one of its phases by running
+% the ebuild's `clean` phase, so a failed build does not leave its work
+% tree behind. Only a phase failure (`failed(ExitCode)`) qualifies: a
+% missing ebuild left nothing to clean. Always succeeds; the clean runs
+% with output discarded and its exit status is ignored.
+
+ebuild_exec:maybe_fail_clean(Repo, Entry, Ctx, failed(ExitCode)) :-
+  integer(ExitCode),
+  preference:flag(failclean),
+  ebuild_exec:ebuild_path(Repo, Entry, EbuildPath),
+  !,
+  ebuild_exec:collect_use_string(Repo, Entry, Ctx, UseString),
+  catch(( ebuild_exec:spawn_ebuild(EbuildPath, [clean], null, UseString, [], Pid),
+          process_wait(Pid, _)
+        ), _, true).
+ebuild_exec:maybe_fail_clean(_Repo, _Entry, _Ctx, _Outcome).
 
 
 % =============================================================================

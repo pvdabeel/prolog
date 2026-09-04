@@ -44,6 +44,10 @@ Source/Test/Unit/interfacetest.pl).
 % 'update' is a plain :run merge: for a single target Portage's --update
 % resolves the full runtime closure and replaces where needed, which is
 % exactly what proving :run does.
+%
+% 'fetchall' (--fetch-all-uri) is a fetchonly run: Portage's -F fetches
+% instead of building; the "all SRC_URI regardless of USE" half is the
+% distfile scope (ebuild:distfile_scope/1), read from the flag.
 
 interface:request_handler(snapshots,       _,    _,    _,       snapshot:list).
 interface:request_handler(rollback,        _,    _,    Options, (memberchk(rollback(Id), Options),
@@ -70,6 +74,7 @@ interface:request_handler(sync,            Mode, Args, _,       action:process_s
 interface:request_handler(save,            _,    _,    _,       kb:save).
 interface:request_handler(load,            _,    _,    _,       kb:load).
 interface:request_handler(fetchonly,       _,    Args, Options, action:process_action(fetchonly, Args, Options)).
+interface:request_handler(fetchall,        _,    Args, Options, action:process_action(fetchonly, Args, Options)).
 interface:request_handler(resume,          _,    Args, Options, (action:assert_resume_skip_args(Args),
                                                                  builder:build_resume,
                                                                  action:maybe_ci_exit_on_build_failure(Options))).

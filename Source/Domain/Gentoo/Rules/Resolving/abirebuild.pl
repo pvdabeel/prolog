@@ -58,15 +58,39 @@ assumption machinery.
 
 %! abirebuild:enabled is semidet.
 %
-% True when rebuild obligations should be produced: config:subslot_rebuild/1
-% is not false (defaults to enabled when unset), the mechanism is not
-% suspended, and this is not an emptytree run (rebuilding installed
-% consumers contradicts emptytree semantics — the VDB is ignored there).
+% True when sub-slot rebuild obligations should be produced:
+% `--rebuild-if-new-slot` or config:subslot_rebuild/1 not false (defaults
+% to enabled when unset), the mechanism is not suspended, and this is not
+% an emptytree run (rebuilding installed consumers contradicts emptytree
+% semantics — the VDB is ignored there).
 
 abirebuild:enabled :-
+  abirebuild:active,
+  ( preference:flag(rebuildnewslot)
+  -> true
+  ;  catch(config:subslot_rebuild(Bool), _, fail) -> Bool == true
+  ;  true
+  ).
+
+
+%! abirebuild:unbuilt_enabled is semidet.
+%
+% True when `--rebuild-if-unbuilt` obligations should be produced: the
+% flag is set and the mechanism is active.
+
+abirebuild:unbuilt_enabled :-
+  preference:flag(rebuildunbuilt),
+  abirebuild:active.
+
+
+%! abirebuild:active is semidet.
+%
+% The consumer-rebuild channel is usable at all: not suspended by a bulk
+% harness and not an emptytree run.
+
+abirebuild:active :-
   \+ abirebuild:suspended,
-  \+ preference:flag(emptytree),
-  ( catch(config:subslot_rebuild(Bool), _, fail) -> Bool == true ; true ).
+  \+ preference:flag(emptytree).
 
 
 % -----------------------------------------------------------------------------
@@ -100,35 +124,69 @@ abirebuild:provider_change(Repo, Entry, C, N, Slot, OldSub, NewSub) :-
 %
 % ExtraLits are the rebuild literals owed after proving the merge-action
 % literal AnchorCore (`Repo://Entry:Action`): one same-version `:update`
-% goal per installed `:=` consumer of the changed provider, or an
+% goal per installed consumer that the merge invalidates — the `:=`
+% consumers of a changed sub-slot and, under `--rebuild-if-unbuilt`, the
+% build-time (DEPEND/BDEPEND) consumers of any merged provider — or an
 % `assumed(...)` wrap for masked / keyword-filtered consumers. [] when
-% the mechanism is disabled, the anchor changes no sub-slot, or every
+% both mechanisms are off, the anchor invalidates no consumer, or every
 % consumer is already merged in Model.
 
 abirebuild:obligations(AnchorCore, Model, ExtraLits) :-
   AnchorCore = (Repo://Entry:_Action),
+  abirebuild:subslot_consumers(Repo, Entry, SubslotConsumers),
+  abirebuild:build_consumers(Repo, Entry, BuildConsumers),
+  append(SubslotConsumers, BuildConsumers, Raw),
+  abirebuild:consumer_rebuilds(AnchorCore, Raw, Model, ExtraLits).
+
+
+%! abirebuild:subslot_consumers(+Repo, +Entry, -Consumers) is det.
+%
+% The installed `:=` consumers of Repo://Entry's package when merging it
+% changes the sub-slot (`c(ICEntry, TreeRepo, subslot_change(C/N, OldSub,
+% NewSub))` terms); [] otherwise.
+
+abirebuild:subslot_consumers(Repo, Entry, Consumers) :-
   ( abirebuild:enabled,
     abirebuild:provider_change(Repo, Entry, C, N, Slot, OldSub, NewSub)
-  -> abirebuild:consumer_rebuilds(AnchorCore, C, N, Slot, OldSub, NewSub, Model, ExtraLits)
-  ;  ExtraLits = []
+  -> findall(c(ICEntry, TreeRepo, subslot_change(C/N, OldSub, NewSub)),
+             abirebuild:consumer_of(C, N, Slot, ICEntry, TreeRepo),
+             Consumers)
+  ;  Consumers = []
   ).
 
 
-%! abirebuild:consumer_rebuilds(+AnchorCore, +C, +N, +Slot, +OldSub, +NewSub, +Model, -ExtraLits) is det.
+%! abirebuild:build_consumers(+Repo, +Entry, -Consumers) is det.
 %
-% Collects the installed `:=` consumers of provider C/N in Slot (once,
-% deduplicated by VDB entry), drops those the proof already merges, and
-% renders the rest as rebuild goals — `assumed(...)`-wrapped when the
-% consumer is masked or keyword-filtered (portage-ng#118). Eligible goals
-% carry a `rebuild_after(AnchorCore)` marker: rule expansion turns it
-% into a `constraint(schedule_after(AnchorCore))` body literal, so pass 2
-% places each rebuild in a wave after the provider whenever that closes
-% no cycle.
+% Under `--rebuild-if-unbuilt`, the installed packages whose tree
+% DEPEND/BDEPEND names Repo://Entry's package (`c(ICEntry, TreeRepo,
+% rebuild_if_unbuilt(C/N))` terms): merging the provider from source
+% invalidates what they were built against. [] otherwise, and for a VDB
+% anchor.
 
-abirebuild:consumer_rebuilds(AnchorCore, C, N, Slot, OldSub, NewSub, Model, ExtraLits) :-
-  findall(c(ICEntry, TreeRepo, C/N, OldSub, NewSub),
-          abirebuild:consumer_of(C, N, Slot, ICEntry, TreeRepo),
-          Raw),
+abirebuild:build_consumers(Repo, Entry, Consumers) :-
+  ( abirebuild:unbuilt_enabled,
+    Repo \== pkg,
+    cache:ordered_entry(Repo, Entry, C, N, _)
+  -> findall(c(ICEntry, TreeRepo, rebuild_if_unbuilt(C/N)),
+             abirebuild:build_consumer_of(C, N, ICEntry, TreeRepo),
+             Consumers)
+  ;  Consumers = []
+  ).
+
+
+%! abirebuild:consumer_rebuilds(+AnchorCore, +Consumers, +Model, -ExtraLits) is det.
+%
+% Deduplicates Consumers by VDB entry (first occurrence wins, so a
+% sub-slot reason takes precedence over a build-time one), drops those
+% the proof already merges, and renders the rest as rebuild goals —
+% `assumed(...)`-wrapped when the consumer is masked or keyword-filtered
+% (portage-ng#118). Eligible goals carry a `rebuild_after(AnchorCore)`
+% marker: rule expansion turns it into a
+% `constraint(schedule_after(AnchorCore))` body literal, so pass 2 places
+% each rebuild in a wave after the provider whenever that closes no cycle.
+
+abirebuild:consumer_rebuilds(_AnchorCore, [], _Model, []) :- !.
+abirebuild:consumer_rebuilds(AnchorCore, Raw, Model, ExtraLits) :-
   sort(1, @<, Raw, Unique),
   findall(Lit,
           ( member(Cm, Unique),
@@ -149,16 +207,39 @@ abirebuild:consumer_rebuilds(AnchorCore, C, N, Slot, OldSub, NewSub, Model, Extr
 % sub-slot-bound (`:=` / `:slot=`) dependency on C/N in slot Slot.
 
 abirebuild:consumer_of(C, N, Slot, ICEntry, TreeRepo) :-
-  vdb:installed_entry(ICEntry),
-  cache:ordered_entry(pkg, ICEntry, ICC, ICN, _),
-  \+ ( ICC == C, ICN == N ),
-  cache:ordered_entry(TreeRepo, ICEntry, ICC, ICN, _),
-  TreeRepo \== pkg,
+  abirebuild:installed_tree_entry(C, N, ICEntry, TreeRepo),
   once(( member(Key, [rdepend, depend, bdepend, pdepend]),
          cache:entry_metadata(TreeRepo, ICEntry, Key, Dep),
          candidate:dep_contains_pkg_dep_on(Dep, C, N, _Op, _V, SlotReq),
          abirebuild:bound_slotspec(SlotReq, Slot)
        )).
+
+
+%! abirebuild:build_consumer_of(+C, +N, -ICEntry, -TreeRepo) is nondet.
+%
+% True for an installed package ICEntry (with a matching tree ebuild in
+% TreeRepo) that is not C/N itself and whose tree DEPEND or BDEPEND names
+% C/N — a build-time consumer for `--rebuild-if-unbuilt`.
+
+abirebuild:build_consumer_of(C, N, ICEntry, TreeRepo) :-
+  abirebuild:installed_tree_entry(C, N, ICEntry, TreeRepo),
+  once(( member(Key, [depend, bdepend]),
+         cache:entry_metadata(TreeRepo, ICEntry, Key, Dep),
+         candidate:dep_contains_pkg_dep_on(Dep, C, N, _Op, _V, _SlotReq)
+       )).
+
+
+%! abirebuild:installed_tree_entry(+C, +N, -ICEntry, -TreeRepo) is nondet.
+%
+% An installed package other than C/N whose exact version is also in a
+% non-VDB repository TreeRepo (the copy a same-version rebuild proves).
+
+abirebuild:installed_tree_entry(C, N, ICEntry, TreeRepo) :-
+  vdb:installed_entry(ICEntry),
+  cache:ordered_entry(pkg, ICEntry, ICC, ICN, _),
+  \+ ( ICC == C, ICN == N ),
+  cache:ordered_entry(TreeRepo, ICEntry, ICC, ICN, _),
+  TreeRepo \== pkg.
 
 
 %! abirebuild:bound_slotspec(+SlotReq, +Slot) is semidet.
@@ -181,14 +262,15 @@ abirebuild:bound_slotspec(SlotReq, Slot) :-
 %! abirebuild:consumer_goal(+Consumer, -Goal) is det.
 %
 % Builds the rebuild goal: a same-version `:update` of the installed
-% consumer that replaces the VDB entry and carries the subslot_change
-% reason. The update rule (target.pl) honors the incoming `replaces(...)`
-% annotation, and the goal's own dependency proof orders the rebuild
-% after the changed provider in pass 2.
+% consumer that replaces the VDB entry and carries the rebuild reason
+% (`subslot_change(Provider, OldSub, NewSub)` or
+% `rebuild_if_unbuilt(Provider)`). The update rule (target.pl) honors the
+% incoming `replaces(...)` annotation, and the goal's own dependency proof
+% orders the rebuild after the changed provider in pass 2.
 
-abirebuild:consumer_goal(c(Entry, TreeRepo, Provider, OldSub, NewSub),
+abirebuild:consumer_goal(c(Entry, TreeRepo, Reason),
                          TreeRepo://Entry:update?{[replaces(pkg://Entry),
-                                                  rebuild_reason(subslot_change(Provider, OldSub, NewSub))]}).
+                                                  rebuild_reason(Reason)]}).
 
 
 %! abirebuild:ordered_goal(+AnchorCore, +Goal0, -Goal) is det.

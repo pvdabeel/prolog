@@ -1129,6 +1129,7 @@ config:verbose(false).
 :- dynamic config:skip_atom/1.
 :- dynamic config:usepkg_exclude_atom/1.
 :- dynamic config:usepkg_include_atom/1.
+:- dynamic config:cli_prefix/1.
 :- dynamic config:dep_favour/1.
 :- dynamic config:dep_avoid/1.
 :- dynamic config:dep_preset/1.

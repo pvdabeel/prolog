@@ -152,6 +152,62 @@ target:is_excluded_cn(C, N) :-
   !.
 
 
+%! target:cn_installed(+RepoEntry) is semidet.
+%
+% Some version of the entry's category/name is installed
+% (`--update-if-installed`).
+
+target:cn_installed(Repository://Entry) :-
+  query:search([category(C),name(N)], Repository://Entry),
+  knowledgebase:vdb_repository(VdbRepo),
+  query:search([name(N),category(C),installed(true)], VdbRepo://_),
+  !.
+
+
+%! target:query_installed(+Q) is semidet.
+%
+% An installed package satisfies the target query Q -- the atom as the
+% user wrote it, so `dev-libs/libxml2` is satisfied by any installed
+% version and `>=dev-libs/libxml2-2.16` only by one that new
+% (`--noreplace` / `--selective`, emerge's vardb.match(atom)). The query
+% is re-aimed at the VDB repository: Q's own repository slot may already
+% be bound to the tree by target:resolve_candidate/2.
+
+target:query_installed(Q) :-
+  copy_term(Q, qualified_target(Op, _, C, N, V, F)),
+  knowledgebase:vdb_repository(VdbRepo),
+  kb:query(qualified_target(Op, VdbRepo, C, N, V, F), VdbRepo://_),
+  !.
+
+
+%! target:target_context(+Context0, -Context) is det.
+%
+% The proof context of a requested target's run literal: Context0 plus
+% the `with_test_deps` marker under `--with-test-deps`. The marker is
+% consumed by with_test_deps_model/3 (the target's own dependency walk)
+% and never reaches the dependency literals, so only "packages matched by
+% arguments" pull their `test?` groups, as in Portage.
+
+target:target_context(Context0, Context) :-
+  ( preference:flag(withtestdeps)
+  -> Context = [with_test_deps|Context0]
+  ;  Context = Context0
+  ).
+
+
+%! target:with_test_deps_model(+Context, +ModelExt0, -ModelExt) is det.
+%
+% Carries the `with_test_deps` marker of a target literal's Context into
+% the use-model context of its dependency walk, where
+% candidate:eligible/1 activates the `test?` conditional groups.
+
+target:with_test_deps_model(Context, ModelExt0, ModelExt) :-
+  ( memberchk(with_test_deps, Context)
+  -> ModelExt = [with_test_deps|ModelExt0]
+  ;  ModelExt = ModelExt0
+  ).
+
+
 %! target:rebuild_if_newer_available(+InstalledEntry) is semidet.
 %
 % True if --rebuild-if-new-rev or --rebuild-if-new-ver is active and
@@ -181,13 +237,20 @@ target:rebuild_if_newer_available(VdbRepo://InstalledEntry) :-
 % For each such package, generates a transactional update goal annotated with
 % `replaces(OldRepo://OldEntry)`. Only packages from the VDB (`pkg`) are
 % considered. The parent entry (Self) is excluded to prevent self-update loops.
+% Under `--with-bdeps=n`, BDEPEND-only dependencies are left alone
+% (bdepend_only_dep/1).
 
 target:deep_update_goals(Self, MergedDeps, DeepUpdates) :-
   ( preference:accept_keywords(K)
     -> KeywordQ = [keywords(K)]
     ;  KeywordQ = []
   ),
-  findall(C-N, (member(Dep, MergedDeps), dep_cn(Dep, C, N)), CN0),
+  findall(C-N,
+          ( member(Dep, MergedDeps),
+            \+ target:bdepend_only_dep(Dep),
+            dep_cn(Dep, C, N)
+          ),
+          CN0),
   sort(CN0, CN),
   knowledgebase:vdb_repository(VdbRepo),
   findall(NewRepo://NewEntry:update?{[replaces(OldRepo://OldEntry)]},
@@ -211,6 +274,23 @@ target:deep_update_goals(Self, MergedDeps, DeepUpdates) :-
           ),
           Updates0),
   sort(Updates0, DeepUpdates).
+
+
+%! target:bdepend_only_dep(+DepLiteral) is semidet.
+%
+% Under `--with-bdeps=n`, a grouped dependency declared only in BDEPEND:
+% a build-time dependency that is not strictly required by the running
+% system, so `--deep` does not pull in its update. Never true otherwise.
+
+target:bdepend_only_dep(Dep) :-
+  preference:flag(nobdeps),
+  ( Dep = grouped_package_dependency(_, _, _, PackageDeps):_?{_}
+  ; Dep = grouped_package_dependency(_, _, _, PackageDeps):_
+  ),
+  PackageDeps \== [],
+  forall(member(package_dependency(Kind, _, _, _, _, _, _, _), PackageDeps),
+         Kind == bdepend),
+  !.
 
 
 % -----------------------------------------------------------------------------
@@ -786,7 +866,7 @@ candidate:resolve(Repository://Ebuild:install?{Context}, Conditions) :-
   Selected = constraint(selected_cn(C,N):{ordset([selected(Repository,Ebuild,install,Ver,S)])}),
   candidate:resolve_required_use(install, C, N, Repository://Ebuild, Context1, R, BResolved, Model),
   ( candidate:install_dep_model(Repository://Ebuild, Model, AfterForDeps, install,
-                             Selected, C, N, S, R, BResolved, After, Conditions)
+                             Selected, C, N, S, R, BResolved, After, Context1, Conditions)
   ; feature_unification:unify([issue_with_model(explanation)], Context1, Ctx1),
     Conditions = [assumed(Repository://Ebuild:install?{Ctx1})]
   ).
@@ -819,14 +899,17 @@ candidate:resolve(Repository://Ebuild:run?{Context}, Conditions) :-
 %  Install: dependency model helper
 % -----------------------------------------------------------------------------
 
-%! candidate:install_dep_model(+Entry, +Model, +AfterForDeps, +Phase, +Selected, +C, +N, +S, +R, +BResolved, +After, -Conditions) is semidet.
+%! candidate:install_dep_model(+Entry, +Model, +AfterForDeps, +Phase, +Selected, +C, +N, +S, +R, +BResolved, +After, +Context, -Conditions) is semidet.
 %
 % Computes and assembles the dependency model for the :install proof.
 % The model-fallback assumption in resolve_install only wraps this step.
+% Context is the literal's proof context (after the ordering markers were
+% taken out); its `with_test_deps` marker widens the walk to `test?` groups.
 
 candidate:install_dep_model(Repository://Ebuild, Model, AfterForDeps, install,
-                         Selected, C, N, S, R, BResolved, After, Conditions) :-
-  use:dep_walk_context(R, BResolved, Model, ModelExt),
+                         Selected, C, N, S, R, BResolved, After, Context, Conditions) :-
+  use:dep_walk_context(R, BResolved, Model, ModelExt0),
+  target:with_test_deps_model(Context, ModelExt0, ModelExt),
   query:search(model(dependency(MergedDeps0,install)):config?{ModelExt}, Repository://Ebuild),
   dependency:add_self_to_dep_contexts(Repository://Ebuild, MergedDeps0, MergedDeps),
   featureterm:add_after_to_dep_contexts(AfterForDeps, MergedDeps, MergedDepsAfter),
@@ -862,8 +945,9 @@ candidate:install_dep_model(Repository://Ebuild, Model, AfterForDeps, install,
 % The model-fallback assumption in resolve_run only wraps this step.
 
 candidate:run_dep_model(Repository://Ebuild, Model, AfterForDeps, run,
-                     Selected, C, N, S, R, BResolved, After, _Context1, Conditions) :-
-  use:dep_walk_context(R, BResolved, Model, ModelExt),
+                     Selected, C, N, S, R, BResolved, After, Context1, Conditions) :-
+  use:dep_walk_context(R, BResolved, Model, ModelExt0),
+  target:with_test_deps_model(Context1, ModelExt0, ModelExt),
   query:search(model(dependency(MergedDeps0,run)):config?{ModelExt}, Repository://Ebuild),
   dependency:add_self_to_dep_contexts(Repository://Ebuild, MergedDeps0, MergedDeps),
   featureterm:add_after_to_dep_contexts(AfterForDeps, MergedDeps, MergedDepsAfter),
@@ -876,7 +960,8 @@ candidate:run_dep_model(Repository://Ebuild, Model, AfterForDeps, run,
   ranking:seed_bwu_memo_from_dep_tree(MergedDepsAfter),
   ranking:order_deps_for_proof(run, MergedDepsAfter, MergedDepsOrdered),
   target:run_install_action(Repository://Ebuild, C, N, R, BResolved, InstallAction, InstallCtx0),
-  target:run_tag_suggestions(Repository://Ebuild, BResolved, R, InstallCtx0, InstallCtx),
+  target:run_tag_suggestions(Repository://Ebuild, BResolved, R, InstallCtx0, InstallCtx1),
+  target:with_test_deps_model(Context1, InstallCtx1, InstallCtx),
   InstallOrUpdate = Repository://Ebuild:InstallAction?{InstallCtx},
   Prefix0 = [Selected,
              constraint(use(Repository://Ebuild):{R}),

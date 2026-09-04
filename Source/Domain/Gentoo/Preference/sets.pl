@@ -305,17 +305,37 @@ sets:rebuilt_binaries_set(Targets) :-
   ( sets:binpkg_available ->
       knowledgebase:vdb_repository(VdbRepo),
       findall(Atom,
-              ( cache:ordered_entry(binpkg, BinEntry, C, N, V),
-                cache:entry_metadata(binpkg, BinEntry, build_time, BinBuildTime),
+              ( cache:ordered_entry(binpkg, _, C, N, V),
                 cache:ordered_entry(VdbRepo, InstalledEntry, C, N, V),
-                sets:installed_build_time(VdbRepo://InstalledEntry, InstalledBuildTime),
-                \+ sets:same_build_time(BinBuildTime, InstalledBuildTime),
+                sets:rebuilt_binary_for(VdbRepo://InstalledEntry, C, N, V),
                 atom_concat('=', InstalledEntry, Atom)
               ),
               Targets0),
       sort(Targets0, Targets)
   ; Targets = []
   ).
+
+
+%! sets:entry_has_rebuilt_binary(+VdbEntry) is semidet.
+%
+% A binary package of the installed entry's exact version exists whose
+% BUILD_TIME differs from the installed copy's. Used by
+% `--rebuilt-binaries` (candidate.pl) to replace the installed copy.
+
+sets:entry_has_rebuilt_binary(VdbRepo://Entry) :-
+  cache:ordered_entry(VdbRepo, Entry, C, N, V),
+  sets:binpkg_available,
+  sets:rebuilt_binary_for(VdbRepo://Entry, C, N, V).
+
+
+%! sets:rebuilt_binary_for(+VdbEntry, +C, +N, +V) is semidet.
+
+sets:rebuilt_binary_for(VdbRepo://Entry, C, N, V) :-
+  sets:installed_build_time(VdbRepo://Entry, InstalledBuildTime),
+  cache:ordered_entry(binpkg, BinEntry, C, N, V),
+  cache:entry_metadata(binpkg, BinEntry, build_time, BinBuildTime),
+  \+ sets:same_build_time(BinBuildTime, InstalledBuildTime),
+  !.
 
 
 %! sets:installed_build_time(+Repo://+Entry, -BuildTime) is semidet.
@@ -333,12 +353,17 @@ sets:installed_build_time(VdbRepo://Entry, BuildTime) :-
 
 %! sets:binpkg_available is semidet.
 %
-% True when binpkg consumption is enabled and a binpkg repository is
-% registered.  Refreshes the on-disk index first so externally produced
-% binpkgs are visible.
+% True when binpkg consumption is enabled (binpkg_exec:consumption_enabled/0:
+% the config default or a --usepkg family flag; the config alone where
+% binpkg_exec is not loaded) and a binpkg repository is registered.
+% Refreshes the on-disk index first so externally produced binpkgs are
+% visible.
 
 sets:binpkg_available :-
-  config:use_binpkg(true),
+  ( current_predicate(binpkg_exec:consumption_enabled/0)
+    -> binpkg_exec:consumption_enabled
+    ;  config:use_binpkg(true)
+  ),
   ( current_predicate(binpkg_exec:ensure_index_fresh/0)
     -> catch(binpkg_exec:ensure_index_fresh, _, true)
     ;  true
@@ -598,14 +623,43 @@ sets:entry_deps_outdated(VdbRepo://Entry) :-
 sets:entry_deps_outdated(VdbRepo://Entry, TreeRepo://TreeEntry) :-
   findall(U, query:search(use(U), VdbRepo://Entry), Use),
   sets:vdb_runtime_deps(Entry, VdbDeps0),
-  sets:use_reduce_deps(VdbDeps0, Use, VdbDeps1),
-  sets:canonicalize_deps(VdbDeps1, VdbDeps),
+  sets:runtime_deps_differ(VdbDeps0, Use, TreeRepo://TreeEntry).
+
+
+%! sets:entry_slot_changed(+VdbEntry) is semidet.
+%
+% True when the installed entry has a same-version tree ebuild whose
+% SLOT or sub-slot differs from the installed copy's. Used by
+% `--changed-slot` (candidate.pl).
+
+sets:entry_slot_changed(VdbRepo://Entry) :-
+  query:search([category(C), name(N), version(Ver)], VdbRepo://Entry),
+  Ver \== version_none,
+  sets:tree_same_version(C, N, Ver, TreeRepo, TreeEntry),
+  slotmeta:entry_slot_default(VdbRepo, Entry, InstalledSlot),
+  slotmeta:entry_slot_default(TreeRepo, TreeEntry, TreeSlot),
+  sets:entry_subslot(VdbRepo://Entry, InstalledSub),
+  sets:entry_subslot(TreeRepo://TreeEntry, TreeSub),
+  InstalledSlot/InstalledSub \== TreeSlot/TreeSub.
+
+
+%! sets:runtime_deps_differ(+RecordedDeps, +Use, +TreeEntry) is semidet.
+%
+% True when a built package's recorded RDEPEND+PDEPEND (parsed EAPI
+% dependency terms, from the VDB or a binpkg index record), use-reduced
+% under the USE it was built with, no longer match the tree ebuild's
+% RDEPEND+PDEPEND under the same USE. Shared by `@changed-deps`,
+% `--changed-deps` and binpkg_exec's `--binpkg-changed-deps` filter.
+
+sets:runtime_deps_differ(RecordedDeps0, Use, TreeRepo://TreeEntry) :-
+  sets:use_reduce_deps(RecordedDeps0, Use, RecordedDeps1),
+  sets:canonicalize_deps(RecordedDeps1, RecordedDeps),
   findall(D, cache:entry_metadata(TreeRepo, TreeEntry, rdepend, D), TreeRd),
   findall(D, cache:entry_metadata(TreeRepo, TreeEntry, pdepend, D), TreePd),
   append(TreeRd, TreePd, TreeDeps0),
   sets:use_reduce_deps(TreeDeps0, Use, TreeDeps1),
   sets:canonicalize_deps(TreeDeps1, TreeDeps),
-  VdbDeps \== TreeDeps.
+  RecordedDeps \== TreeDeps.
 
 
 %! sets:tree_same_version(+C, +N, +Ver, -TreeRepo, -TreeEntry) is semidet.

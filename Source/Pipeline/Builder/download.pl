@@ -418,12 +418,14 @@ download:fetch_distfiles(Repository, Entry, _Context, Failures) :-
 %! download:collect_distfile_specs(+Repository, +Entry, -Specs) is det.
 %
 % Collect distfile specs with checksums for a given entry. Uses the
-% preference-scoped manifest query so only distfiles reachable under
-% the current USE flag settings are included (matching the plan display).
+% manifest scope of ebuild:distfile_scope/1 -- the distfiles reachable
+% under the current USE flags, or every SRC_URI under --fetch-all-uri --
+% matching the plan display.
 
 download:collect_distfile_specs(Repository, Entry, Specs) :-
+  ebuild:distfile_scope(Scope),
   findall(dist(Filename, Size, Pairs),
-    ( query:search(manifest(preference, dist, Filename, Size), Repository://Entry),
+    ( query:search(manifest(Scope, dist, Filename, Size), Repository://Entry),
       download:lookup_checksums(Repository, Entry, Filename, Pairs)
     ),
     Specs0),

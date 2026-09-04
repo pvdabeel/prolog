@@ -24,6 +24,43 @@ working-directory init)
 % Translates boolean CLI flags into runtime preference assertions
 % (e.g. --deep asserts preference:local_flag(deep)) and sets
 % config overrides for verbose mode and printing style.
+%
+% Every flag asserted here has a reader (preference:flag/1 lookups unless
+% noted); the table is the contract, keep it current when adding a flag:
+%
+% | local_flag / config fact  | read by                                            |
+% |---------------------------|----------------------------------------------------|
+% | deep                      | target:deep_update_goals/3 (candidate:resolve :update) |
+% | emptytree                 | resolving rules (install/run/reinstall), abirebuild:active |
+% | depclean                  | depclean / unmerging rule set                       |
+% | newuse, changeduse        | candidate keep-installed check + grouped_dep_update_reason |
+% | changeddeps               | candidate (sets:entry_deps_outdated/1)              |
+% | changedslot               | candidate (sets:entry_slot_changed/1)               |
+% | rebuiltbinaries           | candidate (sets:entry_has_rebuilt_binary/1)         |
+% | selective, noreplace      | rule(target(_,_):run): installed target -> world registration only |
+% | updateifinstalled         | rule(target(_,_):run): not-installed target -> skipped |
+% | nodeps, onlydeps          | rule(target(_,_):run), rule(_:install)              |
+% | nodynamicdeps             | depclean:direct_deps_installed/2 (VDB-recorded deps) |
+% | rebuildnewrev, rebuildnewver | target:rebuild_if_newer_available/1              |
+% | rebuildnewslot            | abirebuild:enabled (forces sub-slot rebuilds on)    |
+% | rebuildunbuilt            | abirebuild:build_consumers/3                        |
+% | nobdeps (--with-bdeps=n)  | target:bdepend_only_dep/1 (--deep skips BDEPEND-only deps) |
+% | withtestdeps              | target:target_context/2 -> candidate:eligible `test?` groups |
+% | oneshot                   | rule(target(_,_):run / :uninstall), upgrade action  |
+% | pretend                   | action:process_action/3 reads pretend(true) from Options |
+% | buildpkg, buildpkgonly    | ebuild_exec:action_phases/3, maybe_inject_built/5   |
+% | usepkg, getbinpkg         | binpkg_exec:consumption_enabled/0                   |
+% | usepkgonly, getbinpkgonly | binpkg_exec:consumption_enabled/0, binary_only/0    |
+% | usepkgexcludelive         | binpkg_exec:entry_allowed/2                         |
+% | binpkgchangeddeps         | binpkg_exec:changed_deps_policy/1                   |
+% | binpkgrespectuse          | binpkg_exec:respect_use_policy/1                    |
+% | fetchall                  | interface:request_handler(fetchall) + ebuild:distfile_scope/1 |
+% | failclean                 | ebuild_exec:maybe_fail_clean/4                      |
+% | readnews, ask, alert      | builder (pre-build prompt / bell)                   |
+% | quiet                     | message:scroll expansion                            |
+% | permitdowngrade           | ranking:dep_no_downgrade_value/3 (neutralises downgrade demotion) |
+% | config:cli_prefix/1       | ebuild_exec:prefix_env/1 (EPREFIX for the ebuild run) |
+% | config:usepkg_{in,ex}clude_atom/1 | binpkg_exec:entry_allowed/2                 |
 
 interface:process_flags :-
   interface:argv(Options, _),
@@ -79,6 +116,7 @@ interface:process_flags :-
   ((lists:memberchk(jobs(J),                Options), J > 0) -> asserta(config:cli_jobs(J)) ; true),
   ((lists:memberchk(loadavg(L),             Options), L > 0.0) -> asserta(config:cli_load_average(L)) ; true),
   (lists:memberchk(permitdowngrade(true),   Options) -> asserta(preference:local_flag(permitdowngrade)) ; true),
+  ((lists:memberchk(prefix(P),              Options), P \== '/') -> asserta(config:cli_prefix(P)) ; true),
   (lists:memberchk(color(n),                Options) -> retractall(config:color_output) ; true),
   (lists:memberchk(showdescriptions(SD),    Options), SD \== none
                                                      -> asserta(config:show_use_descriptions(SD)) ; true),

@@ -739,8 +739,13 @@ ranking:dep_slot_value(Atoms, Slot) :-
 %
 % `no` when the arm's newest admitted version is strictly below the
 % highest installed or snap-selected version for that CN (emerge
-% downgrade demotion), `yes` otherwise.
+% downgrade demotion), `yes` otherwise. Under `--permit-downgrade` the
+% criterion is neutral (`yes` for every arm): an older version is as
+% acceptable as the installed one.
 
+ranking:dep_no_downgrade_value(_Dep, _BestVer, yes) :-
+  preference:flag(permitdowngrade),
+  !.
 ranking:dep_no_downgrade_value(Dep, BestVer, NoDowngrade) :-
   BestVer \== version_none,
   compound(BestVer),

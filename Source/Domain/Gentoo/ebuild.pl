@@ -175,7 +175,20 @@ ebuild:coprocess_invoke(Location, Entry, Contents) :-
 % from the printer/builder per-ebuild loops, which only run where the KB is
 % local (standalone, or server-side in client mode).
 
-%! ebuild:download_size(+Repository://+Entry,-T)
+%! ebuild:distfile_scope(-Scope)
+%
+% The manifest scope of the distfiles a run fetches and displays:
+% `preference` (the SRC_URI reachable under the active USE flags), or
+% `all` under `--fetch-all-uri`.
+
+ebuild:distfile_scope(Scope) :-
+  ( preference:flag(fetchall)
+  -> Scope = all
+  ;  Scope = preference
+  ).
+
+
+%! ebuild:download_size(+Scope,+Repository://+Entry,-T)
 %
 % Retrieve total download size for all files corresponding to a given Entry
 

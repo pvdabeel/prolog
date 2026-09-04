@@ -255,17 +255,35 @@ rule(target(Q, Arg):uninstall?{Context}, Conditions) :-
 % - then register the original atom in @world (unless --oneshot)
 %
 % Cases to consider: 
-% --exclude:  skip atoms matching config:excluded_atom/1.
-% --nodeps:   resolve target without proving dependencies.
-% --onlydeps: prove deps only, exclude the target from the plan.
-% --oneshot:  prove the run action, but do not register the original atom in @world.
+% --exclude:              skip atoms matching config:excluded_atom/1.
+% --update-if-installed:  skip targets of which no version is installed.
+% --noreplace/--selective: skip targets an installed package already
+%                         satisfies (the @world registration still happens).
+% --nodeps:               resolve target without proving dependencies.
+% --onlydeps:             prove deps only, exclude the target from the plan.
+% --oneshot:              prove the run action, but do not register the
+%                         original atom in @world.
+% --with-test-deps:       the target's `test?` dependency groups are pulled
+%                         in (target:target_context/2 marks the literal).
 
-rule(target(Q, Arg):run?{Context}, Conditions) :-
+rule(target(Q, Arg):run?{Context0}, Conditions) :-
   !,
   target:resolve_candidate(Q, Repository://Ebuild),
+  target:target_context(Context0, Context),
 
   ( target:is_excluded(Repository://Ebuild) ->
       Conditions = []
+
+  ; preference:flag(updateifinstalled),
+    \+ target:cn_installed(Repository://Ebuild) ->
+      Conditions = []
+
+  ; ( preference:flag(noreplace) ; preference:flag(selective) ),
+    target:query_installed(Q) ->
+      ( preference:flag(oneshot) ->
+          Conditions = []
+      ;   Conditions = [world(Arg):register?{[]}]
+      )
 
   ; preference:flag(nodeps) ->
       Conditions = [Repository://Ebuild:install?{Context}]

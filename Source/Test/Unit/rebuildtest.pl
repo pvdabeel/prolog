@@ -67,7 +67,7 @@ test(consumer_goal_shape,
      [true(Goal == portage://'dev-x/c-1':update?{[replaces(pkg://'dev-x/c-1'),
               rebuild_reason(subslot_change('dev-x'/p, '0', '1'))]})]) :-
   abirebuild:consumer_goal(
-      c('dev-x/c-1', portage, 'dev-x'/p, '0', '1'), Goal).
+      c('dev-x/c-1', portage, subslot_change('dev-x'/p, '0', '1')), Goal).
 
 % Eligible rebuild goals gain a rebuild_after(Anchor) ordering marker, which
 % rule expansion turns into a constraint(schedule_after(Anchor)) body literal

@@ -231,13 +231,67 @@ depclean:retained_claims(OrdProof, Retained) :-
 
 %! depclean:direct_deps_installed(+InstalledRef, -DepsInstalled)
 %
-% Sorted list of direct installed runtime dependencies of a VDB entry,
-% computed via the repo metadata's dependency model.
+% Sorted list of direct installed runtime dependencies of a VDB entry.
+% Computed from the same-version tree ebuild's dependency model (Portage's
+% dynamic deps, the default), or -- under `--dynamic-deps=n` -- from the
+% RDEPEND/PDEPEND/IDEPEND the VDB recorded when the package was built.
 
+depclean:direct_deps_installed(VdbRepo://InstalledEntry, DepsInstalled) :-
+  preference:flag(nodynamicdeps),
+  !,
+  depclean:direct_deps_from_vdb_record(VdbRepo://InstalledEntry, DepsInstalled).
 depclean:direct_deps_installed(VdbRepo://InstalledEntry, DepsInstalled) :-
   depclean:installed_to_repo_entry(VdbRepo://InstalledEntry, RepoEntry),
   depclean:direct_deps_from_repo_entry(RepoEntry, DepsInstalled),
   !.
+
+
+%! depclean:direct_deps_from_vdb_record(+InstalledRef, -DepsInstalled)
+%
+% The installed packages satisfying the runtime dependencies the VDB
+% recorded for the entry: the on-disk RDEPEND, PDEPEND and IDEPEND
+% strings, use-reduced under the recorded USE. Every alternative of an
+% any-of group counts (a conservative claim: an installed alternative is
+% never removed from under a consumer that may be using it); blockers
+% claim nothing.
+
+depclean:direct_deps_from_vdb_record(VdbRepo://Entry, DepsInstalled) :-
+  findall(U, query:search(use(U), VdbRepo://Entry), Use),
+  findall(D,
+          ( member(Key, ['RDEPEND', 'PDEPEND', 'IDEPEND']),
+            vdb:read_metadata_file(Entry, Key, Str),
+            sets:parse_rdepend_string(Str, Ds),
+            member(D, Ds)
+          ),
+          Recorded0),
+  sets:use_reduce_deps(Recorded0, Use, Recorded),
+  depclean:recorded_dep_leaves(Recorded, Leaves),
+  findall(VdbRepo://DepInstalled,
+          ( member(package_dependency(Phase, no, C, N, O, V, S, Us), Leaves),
+            Grouped = grouped_package_dependency(no, C, N,
+                        [package_dependency(Phase, no, C, N, O, V, S, Us)]):run,
+            depclean:dep_literal_installed_dep(VdbRepo, [Grouped], DepInstalled)
+          ),
+          Deps0),
+  sort(Deps0, DepsInstalled).
+
+
+%! depclean:recorded_dep_leaves(+Deps, -Leaves)
+%
+% The package_dependency/8 leaves of a use-reduced dependency list,
+% flattening the remaining group constructors.
+
+depclean:recorded_dep_leaves([], []) :- !.
+depclean:recorded_dep_leaves([D|Ds], Leaves) :-
+  ( D = package_dependency(_, _, _, _, _, _, _, _)
+  -> Leaves = [D|Rest]
+  ;  D =.. [_Group, Inner],
+     is_list(Inner)
+  -> depclean:recorded_dep_leaves(Inner, InnerLeaves),
+     append(InnerLeaves, Rest, Leaves)
+  ;  Leaves = Rest
+  ),
+  depclean:recorded_dep_leaves(Ds, Rest).
 
 
 %! depclean:direct_deps_from_repo_entry(+RepoEntry, -DepsInstalled)

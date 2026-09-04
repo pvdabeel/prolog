@@ -151,10 +151,30 @@ plan:print_newuse_note_if_any(update, Context) :-
   message:print(' (changed-use)'),
   message:color(normal).
 plan:print_newuse_note_if_any(update, Context) :-
+  memberchk(rebuild_reason(changedslot), Context),
+  !,
+  message:color(orange),
+  message:print(' (changed-slot)'),
+  message:color(normal).
+plan:print_newuse_note_if_any(update, Context) :-
+  memberchk(rebuild_reason(rebuilt_binary), Context),
+  !,
+  message:color(orange),
+  message:print(' (rebuilt-binary)'),
+  message:color(normal).
+plan:print_newuse_note_if_any(update, Context) :-
   memberchk(rebuild_reason(subslot_change(Provider, _Old, _New)), Context),
   !,
   message:color(orange),
   message:print(' (abi-rebuild: '),
+  plan:format_blocker_origin(Provider),
+  message:print(')'),
+  message:color(normal).
+plan:print_newuse_note_if_any(update, Context) :-
+  memberchk(rebuild_reason(rebuild_if_unbuilt(Provider)), Context),
+  !,
+  message:color(orange),
+  message:print(' (rebuild-if-unbuilt: '),
   plan:format_blocker_origin(Provider),
   message:print(')'),
   message:color(normal).
@@ -1125,7 +1145,8 @@ plan:footer_stats_from_rule(_Other, S, S).
 
 plan:footer_stats_from_head(R://E:download, S0, S) :-
   !,
-  ( ebuild:download_size(preference, R://E, Bytes) -> true ; Bytes = 0 ),
+  ebuild:distfile_scope(Scope),
+  ( ebuild:download_size(Scope, R://E, Bytes) -> true ; Bytes = 0 ),
   plan:already_downloaded_size(R, E, AlreadyBytes),
   NewDownloads is S0.downloads + 1,
   NewTotalDl is S0.total_dl + Bytes,
@@ -1166,8 +1187,9 @@ plan:footer_stats_from_head(_Other, S, S).
 % in the local distfiles directory.
 
 plan:already_downloaded_size(Repository, Entry, Bytes) :-
+  ebuild:distfile_scope(Scope),
   aggregate_all(sum(Size), File,
-    ( query:search(manifest(preference, _, File, Size), Repository://Entry),
+    ( query:search(manifest(Scope, _, File, Size), Repository://Entry),
       distfiles:present(File)
     ),
     Bytes), !.

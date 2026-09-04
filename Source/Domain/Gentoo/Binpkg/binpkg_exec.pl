@@ -43,12 +43,24 @@ acceptable in lieu of a source build.
       6. Bind Outcome to `done` on success, `failed(qmerge_exit(N))` on
          non-zero exit, or `failed(Reason)` for setup errors.
 
-# Configuration knobs (all in `Source/config.pl`)
+# Configuration knobs (all in `Source/config.pl`) and their CLI overrides
 
-  - `config:use_binpkg(true|false)`         -- master switch
-  - `config:binpkg_respect_use(strict|relaxed)` -- USE matching mode
-  - `config:binpkg_changed_deps(skip|warn)`     -- RDEPEND-drift policy
+  - `config:use_binpkg(true|false)`         -- master switch; any of
+    `--usepkg` / `--usepkg-only` / `--getbinpkg` / `--getbinpkg-only`
+    turns consumption on for the run (`consumption_enabled/0`)
+  - `--usepkg-only` / `--getbinpkg-only`   -- no source fallback
+    (`binary_only/0`, honoured by ebuild_exec's dispatch)
+  - `--usepkg-include` / `--usepkg-exclude` / `--usepkg-exclude-live`
+    -- per-package allow / deny lists (`entry_allowed/2`)
+  - `config:binpkg_respect_use(strict|relaxed)` -- USE matching mode;
+    `--binpkg-respect-use` forces strict (`respect_use_policy/1`)
+  - `config:binpkg_changed_deps(skip|warn)`     -- RDEPEND-drift policy;
+    `--binpkg-changed-deps` forces skip (`changed_deps_policy/1`)
   - `config:binpkg_refresh(manual|mtime)`       -- index refresh policy
+
+  The binpkg repository is a local `Packages` index: there is no BINHOST
+  to download from, so `--getbinpkg` / `--getbinpkg-only` behave as
+  `--usepkg` / `--usepkg-only`.
 
 # What this module does NOT do
 
@@ -74,6 +86,92 @@ linkages.
 % =============================================================================
 
 % -----------------------------------------------------------------------------
+%  Run-time policy: CLI flags over config defaults
+% -----------------------------------------------------------------------------
+
+%! binpkg_exec:consumption_enabled is semidet.
+%
+% Binary packages may be consumed in this run: `config:use_binpkg(true)`
+% is the host default, and any of `--usepkg`, `--usepkg-only`,
+% `--getbinpkg`, `--getbinpkg-only` turns consumption on for the run.
+
+binpkg_exec:consumption_enabled :-
+  ( preference:flag(usepkg)
+  ; preference:flag(usepkgonly)
+  ; preference:flag(getbinpkg)
+  ; preference:flag(getbinpkgonly)
+  ; config:use_binpkg(true)
+  ),
+  !.
+
+
+%! binpkg_exec:binary_only is semidet.
+%
+% `--usepkg-only` / `--getbinpkg-only`: a merge step without a usable
+% binpkg fails instead of falling back to a source build.
+
+binpkg_exec:binary_only :-
+  ( preference:flag(usepkgonly)
+  ; preference:flag(getbinpkgonly)
+  ),
+  !.
+
+
+%! binpkg_exec:entry_allowed(+SrcRepo, +SrcEntry) is semidet.
+%
+% Binary packages may be used for this source entry: a `--usepkg-include`
+% atom forces consumption for its packages; otherwise consumption must be
+% enabled and the package must not match a `--usepkg-exclude` atom nor, under
+% `--usepkg-exclude-live`, carry PROPERTIES=live. Atoms are `cat/name` or
+% `name` (the same shapes as `--exclude`).
+
+binpkg_exec:entry_allowed(SrcRepo, SrcEntry) :-
+  cache:ordered_entry(SrcRepo, SrcEntry, C, N, _),
+  ( config:usepkg_include_atom(Pattern),
+    binpkg_exec:cn_matches_atom(C, N, Pattern)
+  -> true
+  ;  binpkg_exec:consumption_enabled,
+     \+ ( config:usepkg_exclude_atom(Pattern),
+          binpkg_exec:cn_matches_atom(C, N, Pattern) ),
+     \+ ( preference:flag(usepkgexcludelive),
+          ebuild:is_live(SrcRepo://SrcEntry) )
+  ).
+
+
+%! binpkg_exec:cn_matches_atom(+C, +N, +Pattern) is semidet.
+
+binpkg_exec:cn_matches_atom(C, N, Pattern) :-
+  ( N == Pattern
+  ; atomic_list_concat([C, N], '/', Pattern)
+  ),
+  !.
+
+
+%! binpkg_exec:respect_use_policy(-Mode) is det.
+%
+% USE matching mode for use_compatible/4: `--binpkg-respect-use` forces
+% `strict`, otherwise `config:binpkg_respect_use/1` (default strict).
+
+binpkg_exec:respect_use_policy(Mode) :-
+  ( preference:flag(binpkgrespectuse) -> Mode = strict
+  ; config:binpkg_respect_use(Mode0)  -> Mode = Mode0
+  ; Mode = strict
+  ).
+
+
+%! binpkg_exec:changed_deps_policy(-Mode) is det.
+%
+% RDEPEND-drift policy for rdepend_acceptable/3: `--binpkg-changed-deps`
+% forces `skip`, otherwise `config:binpkg_changed_deps/1` (default warn).
+
+binpkg_exec:changed_deps_policy(Mode) :-
+  ( preference:flag(binpkgchangeddeps) -> Mode = skip
+  ; config:binpkg_changed_deps(Mode0)  -> Mode = Mode0
+  ; Mode = warn
+  ).
+
+
+% -----------------------------------------------------------------------------
 %  Dispatch probe: is there a USE-compatible binpkg for SrcRepo://SrcEntry?
 % -----------------------------------------------------------------------------
 
@@ -82,7 +180,7 @@ linkages.
 % Master entry point used by `ebuild_exec:execute/5`'s dispatch hook to
 % decide whether to short-circuit a source build with a binary merge.
 % Fails silently and cheaply if any of the following holds:
-%   - `config:use_binpkg(false)`
+%   - binpkg consumption is off for this entry (entry_allowed/2)
 %   - the `binpkg` repository isn't registered (`cache:repository(binpkg)` absent)
 %   - the source entry's category/name/version can't be derived
 %   - no binpkg variant of the same (cat, name, version) exists
@@ -93,7 +191,7 @@ linkages.
 % candidates pass is "highest BUILD_ID wins".
 
 binpkg_exec:available_for(SrcRepo, SrcEntry, Ctx, BinpkgEntryId) :-
-  config:use_binpkg(true),
+  binpkg_exec:entry_allowed(SrcRepo, SrcEntry),
   cache:repository(binpkg),
   % Hold the binpkg index lock across BOTH the (possibly index-rewriting)
   % refresh AND the candidate scan. A concurrent `sync(kb)` swap takes the
@@ -171,7 +269,7 @@ binpkg_exec:diagnose_candidate(SrcRepo, SrcEntry, Eid, Ctx) :-
   ; \+ binpkg_exec:keywords_acceptable(Eid)
   -> binpkg_exec:log_binpkg_debug("reject ~w: KEYWORDS unacceptable for host arch", [Eid])
   ; \+ binpkg_exec:use_compatible(SrcRepo, SrcEntry, Eid, Ctx)
-  -> ( config:binpkg_respect_use(Mode) -> true ; Mode = strict ),
+  -> binpkg_exec:respect_use_policy(Mode),
      binpkg_exec:log_binpkg_debug("reject ~w: USE incompatible (binpkg_respect_use=~w)",
                                   [Eid, Mode])
   ; \+ binpkg_exec:subslot_pins_compatible(Eid)
@@ -269,7 +367,7 @@ binpkg_exec:apply_refresh_policy(_).
 % Always succeeds.
 
 binpkg_exec:ensure_index_fresh :-
-  ( config:use_binpkg(true),
+  ( binpkg_exec:consumption_enabled,
     cache:repository(binpkg)
   -> with_mutex(binpkg_index_lock,
                 binpkg_exec:refresh_if_stale(binpkg))
@@ -344,7 +442,7 @@ binpkg_exec:refresh_if_stale(_).
 
 binpkg_exec:inject_built_binpkg(SrcRepo, SrcEntry, Ctx) :-
   ( config:binpkg_self_inject(true),
-    config:use_binpkg(true),
+    binpkg_exec:consumption_enabled,
     cache:repository(binpkg)
   -> catch(binpkg_exec:do_inject_built_binpkg(SrcRepo, SrcEntry, Ctx), _, true)
   ;  true
@@ -522,9 +620,9 @@ binpkg_exec:pick_best_candidate(Candidates, BestEid) :-
 %   1. On-disk gpkg archive present (index entry may be stale)
 %   2. SLOT compatibility
 %   3. KEYWORDS acceptability for the host ARCH
-%   4. USE compatibility (modulated by `config:binpkg_respect_use/1`)
+%   4. USE compatibility (modulated by respect_use_policy/1)
 %   5. Subslot-pin (`:slot/subslot=`) compatibility against the live VDB
-%   6. RDEPEND drift (modulated by `config:binpkg_changed_deps/1`)
+%   6. RDEPEND drift (modulated by changed_deps_policy/1)
 %
 % Each check is a separate predicate so individual policies stay
 % testable in isolation.
@@ -641,7 +739,7 @@ binpkg_exec:host_arch(Arch) :-
 % flags (abi_x86_64, elibc_glibc, kernel_linux, ...) don't pollute the
 % comparison.
 %
-% Modes (see `config:binpkg_respect_use/1`):
+% Modes (see respect_use_policy/1):
 %   strict  : sets must be exactly equal (intersected with IUSE)
 %   relaxed : binpkg's positive set must be a superset of the resolver's
 %             positive set (i.e. the binpkg has at least all flags the
@@ -661,7 +759,7 @@ binpkg_exec:use_compatible(SrcRepo, SrcEntry, BinpkgEid, Ctx) :-
   -> true
   ;  intersection(BinpkgUseSet, IuseSet, BinpkgIuse),
      intersection(ResolverSet,   IuseSet, ResolverIuse),
-     config:binpkg_respect_use(Mode),
+     binpkg_exec:respect_use_policy(Mode),
      binpkg_exec:use_sets_match(Mode, BinpkgIuse, ResolverIuse)
   ).
 
@@ -992,17 +1090,50 @@ binpkg_exec:find_live_install_for_slot(Cat, Name, RecSlot, VdbRepo://Entry) :-
 
 %! binpkg_exec:rdepend_acceptable(+SrcRepo, +SrcEntry, +BinpkgEid) is semidet.
 %
-% Checks whether the binpkg's recorded RDEPEND matches the current
-% ebuild's RDEPEND. Mirrors emerge's `--binpkg-changed-deps`. Modes:
-%   skip : refuse the binpkg on RDEPEND drift
-%   warn : accept but log
-%
-% This is a defensive check for cache-rot scenarios (ebuild updated
-% post-binpkg-build). For the initial cut we always accept (warn-only
-% behaviour); a stricter implementation requires DEPEND atom parsing
-% which is out of scope for phase 4.
+% Checks whether the binpkg's recorded RDEPEND+PDEPEND (index fields,
+% use-reduced under the binpkg's own USE) still match the current
+% ebuild's. Mirrors emerge's `--binpkg-changed-deps`; the mode comes from
+% changed_deps_policy/1:
+%   skip : refuse the binpkg on drift
+%   warn : accept the binpkg and warn
 
-binpkg_exec:rdepend_acceptable(_SrcRepo, _SrcEntry, _BinpkgEid).
+binpkg_exec:rdepend_acceptable(SrcRepo, SrcEntry, BinpkgEid) :-
+  ( binpkg_exec:rdepend_drift(SrcRepo, SrcEntry, BinpkgEid)
+  -> binpkg_exec:changed_deps_policy(Mode),
+     Mode \== skip,
+     message:warning(['binpkg ', BinpkgEid,
+                      ': runtime dependencies changed since it was built (using it anyway)'])
+  ;  true
+  ).
+
+
+%! binpkg_exec:rdepend_drift(+SrcRepo, +SrcEntry, +BinpkgEid) is semidet.
+%
+% The binpkg's recorded runtime dependencies differ from the source
+% ebuild's (sets:runtime_deps_differ/3). A binpkg without `rdepend` /
+% `pdepend` index fields recorded none.
+
+binpkg_exec:rdepend_drift(SrcRepo, SrcEntry, BinpkgEid) :-
+  binpkg_exec:index_dep_terms(BinpkgEid, rdepend, Rd),
+  binpkg_exec:index_dep_terms(BinpkgEid, pdepend, Pd),
+  append(Rd, Pd, Recorded),
+  ( cache:entry_metadata(binpkg, BinpkgEid, use, UseAtom)
+  -> binpkg_exec:tokenize_use(UseAtom, Use)
+  ;  Use = []
+  ),
+  sets:runtime_deps_differ(Recorded, Use, SrcRepo://SrcEntry).
+
+
+%! binpkg_exec:index_dep_terms(+BinpkgEid, +Key, -Deps) is det.
+%
+% The parsed EAPI dependency terms of a binpkg index field ([] when the
+% field is absent, which Portage does for empty values).
+
+binpkg_exec:index_dep_terms(BinpkgEid, Key, Deps) :-
+  ( cache:entry_metadata(binpkg, BinpkgEid, Key, Raw)
+  -> sets:parse_rdepend_string(Raw, Deps)
+  ;  Deps = []
+  ).
 
 
 % -----------------------------------------------------------------------------
