@@ -224,6 +224,16 @@ builder:build_resume :-
 %
 % snapshot:finalize only clears snapshot:active_id/1 and is a no-op
 % when --snapshot is not active (always the case on the resume path).
+%
+% Exception safety: the worker pool and the snapshot marker are torn
+% down in the cleanup of a setup_call_cleanup/3 around execute_plan/9,
+% so an exception escaping a step (a display or resume-state error, a
+% user abort, ...) can never leave `build_worker_N` threads alive
+% (which would make the next jobserver:init/2 in the replan loop or a
+% later --resume fail on the thread alias) or a stale
+% snapshot:active_id/1 behind. The exception itself still propagates
+% to the caller; on that path the resume state is deliberately kept so
+% the user can --resume, and last_build_status/3 is left untouched.
 
 builder:run_plan(Plan, StartStep, Opts, Completed, Failed, Stubs) :-
   ( memberchk(pre_actions(PreActions), Opts) -> true ; PreActions = [] ),
@@ -240,10 +250,12 @@ builder:run_plan(Plan, StartStep, Opts, Completed, Failed, Stubs) :-
   display:print_pre_action_step(PreActions, PreSteps),
   builder:apply_kernel_config_pre_actions(PreActions),
   builder:num_workers(NumWorkers),
-  jobserver:init(NumWorkers, builder:execute_build_job),
-  builder:execute_plan(Plan, StartStep, NumSteps, 0, 0, 0, Completed, Failed0, Stubs),
-  jobserver:shutdown(NumWorkers),
-  snapshot:finalize,
+  setup_call_cleanup(
+    jobserver:init(NumWorkers, builder:execute_build_job),
+    once(builder:execute_plan(Plan, StartStep, NumSteps, 0, 0, 0, Completed, Failed0, Stubs)),
+    ( jobserver:shutdown(NumWorkers),
+      snapshot:finalize
+    )),
   builder:apply_vdb_reconciliation(Plan, Failed0, Failed, _Missing),
   ( Failed =:= 0
   -> resume:clear_state
@@ -600,6 +612,13 @@ builder:skip_remaining([Step|Rest], PlanStep, NumSteps, C0, F0, S0, C, F, S) :-
 %   4. Submit all jobs to the jobserver
 %   5. Collect results, updating slots in-place
 %   6. Tally outcomes, clean up
+%
+% Steps 2-6 run under setup_call_cleanup/3 so clear_step_state/0 also
+% runs when a result handler or the tally throws: the slot registry,
+% recorded slot outcomes, speed snapshots and exec phase states are
+% per-step and must never leak into the next step or the next run.
+% Stale jobs/results left in the jobserver queues by such an exception
+% are drained by jobserver:shutdown/1 in run_plan/6's cleanup.
 
 builder:execute_step(Step, PlanStep, NumSteps, C0, F0, S0, C, F, S, HasJobs) :-
   plan:sort_by_display_order(Step, Sorted),
@@ -608,13 +627,15 @@ builder:execute_step(Step, PlanStep, NumSteps, C0, F0, S0, C, F, S, HasJobs) :-
   ( NumJobs > 0
   -> HasJobs = true,
      display:assign_slots(Executable, PlanStep, NumSteps, SlottedJobs, TotalLines),
-     display:register_slot_info(SlottedJobs),
-     build:print_job_slots(SlottedJobs, NumSteps),
-     jobserver:submit(SlottedJobs),
-     jobserver:collect(NumJobs, builder:handle_result(TotalLines)),
-     nl,
-     builder:tally_outcomes(C0, F0, S0, C, F, S),
-     builder:clear_step_state
+     setup_call_cleanup(
+       display:register_slot_info(SlottedJobs),
+       once(( build:print_job_slots(SlottedJobs, NumSteps),
+              jobserver:submit(SlottedJobs),
+              jobserver:collect(NumJobs, builder:handle_result(TotalLines)),
+              nl,
+              builder:tally_outcomes(C0, F0, S0, C, F, S)
+            )),
+       builder:clear_step_state)
   ;  HasJobs = false,
      C = C0, F = F0, S = S0
   ).
@@ -721,12 +742,23 @@ builder:run_action(_Action, Repo, _Entry, _Ctx, Outcome) :-
   Type \= eapi,
   !,
   Repo:get_location(Location),
-  ( script:exec(build, [Type, Location])
-  -> Outcome = ok
-  ;  Outcome = failed
-  ).
+  builder:run_script_action(Type, Location, Outcome).
 
 builder:run_action(_Action, _Repo, _Entry, _Ctx, stub).
+
+
+%! builder:run_script_action(+Type, +Location, -Outcome) is det.
+%
+% Run the `build` script for a non-eapi repository. Success is reported
+% as `done` — the same outcome vocabulary ebuild_exec, binpkg_exec and
+% fetch use — so outcome_to_status/2 and tally_outcomes/6 count it as a
+% completed step rather than an unknown failure.
+
+builder:run_script_action(Type, Location, Outcome) :-
+  ( script:exec(build, [Type, Location])
+  -> Outcome = done
+  ;  Outcome = failed
+  ).
 
 
 %! builder:run_binpkg_action(+Action, +BinpkgEntry, +Ctx, -Outcome) is det.
@@ -780,10 +812,7 @@ builder:run_action_with_phases(Action, Repo, Entry, _Ctx,
   Type \= eapi,
   !,
   Repo:get_location(Location),
-  ( script:exec(build, [Type, Location])
-  -> Outcome = ok
-  ;  Outcome = failed
-  ),
+  builder:run_script_action(Type, Location, Outcome),
   builder:outcome_to_status(Outcome, FinalStatus),
   with_mutex(build_display,
     build:update_slot(LineOff, TotalLines, FinalStatus, PlanStep, NumSteps, ActionIdx, Action, Repo://Entry)).

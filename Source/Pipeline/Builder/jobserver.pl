@@ -89,12 +89,31 @@ jobserver:init(NumWorkers, Executor) :-
 
 
 %! jobserver:spawn_workers(+N, +Executor) is det.
+%
+% Before creating `build_worker_I`, reaps a thread of that alias that
+% already terminated but was never joined, so a pool torn down
+% abnormally in this process does not make thread_create/3 fail with a
+% permission error on the alias. A still-running thread of that alias is
+% a genuine bug and is left for thread_create/3 to report.
 
 jobserver:spawn_workers(N, Executor) :-
   forall(between(1, N, I),
     ( atom_concat(build_worker_, I, Alias),
+      jobserver:reap_stale_worker(Alias),
       thread_create(jobserver:worker_loop(I, Executor), _, [alias(Alias)])
     )).
+
+
+%! jobserver:reap_stale_worker(+Alias) is det.
+%
+% Joins a terminated, not yet joined thread named Alias; no-op otherwise.
+
+jobserver:reap_stale_worker(Alias) :-
+  ( catch(thread_property(Alias, status(Status)), _, fail),
+    Status \== running
+  -> catch(thread_join(Alias, _), _, true)
+  ;  true
+  ).
 
 
 %! jobserver:worker_loop(+Slot, +Executor) is det.
@@ -182,13 +201,34 @@ jobserver:wait_until_load_below(Limit) :-
 %! jobserver:shutdown(+NumWorkers) is det.
 %
 % Send a 'done' sentinel for each worker, then join all worker threads.
+%
+% Also safe to call from an exception cleanup path (builder:run_plan/6)
+% where a step was abandoned midway: jobs still queued are discarded
+% first so no worker starts new work, workers already executing a job
+% finish it (the join waits for them, exactly as the normal collect
+% would), and results nobody collected are drained afterwards so they
+% cannot be mistaken for the next run's results. On the normal path
+% both queues are already empty and the drains are no-ops.
 
 jobserver:shutdown(NumWorkers) :-
+  jobserver:drain_queue(build_jobs),
   forall(between(1, NumWorkers, _), jobserver:post_job(done)),
   forall(between(1, NumWorkers, I),
     ( atom_concat(build_worker_, I, Alias),
       ( catch(thread_join(Alias, _), _, true) -> true ; true )
-    )).
+    )),
+  jobserver:drain_queue(build_results).
+
+
+%! jobserver:drain_queue(+Queue) is det.
+%
+% Discard every message currently in Queue without blocking.
+
+jobserver:drain_queue(Queue) :-
+  ( catch(thread_get_message(Queue, _, [timeout(0)]), _, fail)
+  -> jobserver:drain_queue(Queue)
+  ;  true
+  ).
 
 
 % =============================================================================
