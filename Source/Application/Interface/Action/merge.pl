@@ -103,8 +103,8 @@ action:handle_empty_proposal(ArgsSets, Args, Options) :-
 action:dispatch_proposal(client, Host, Port, Proposal, _Options, _PretendMode) :-
   !,
   client:rpc_execute(Host, Port,
-    ( pipeline:prove_plan_with_fallback(Proposal, ProofAVL, ModelAVL, Plan, Triggers, SCCs, _FallbackUsed),
-      printer:print(Proposal, ModelAVL, ProofAVL, Plan, Triggers, SCCs)
+    ( pipeline:prove_plan_with_fallback(Proposal, ProofAVL, ModelAVL, Plan, Triggers, _FallbackUsed),
+      printer:print(Proposal, ModelAVL, ProofAVL, Plan, Triggers)
     ),
     Output),
   writeln(Output).
@@ -141,11 +141,11 @@ action:run_local_proposal(Proposal, Options, PretendMode) :-
 
 action:prove_print_proposal(Proposal, Options, PretendMode,
                             ProofAVL, ModelAVL, Plan, FallbackUsed) :-
-  ( pipeline:prove_plan_with_fallback(Proposal, ProofAVL, ModelAVL, Plan, Triggers, SCCs, FallbackUsed) ->
+  ( pipeline:prove_plan_with_fallback(Proposal, ProofAVL, ModelAVL, Plan, Triggers, FallbackUsed) ->
       true
   ; action:halt_with_error(' Proof/planning failed. Check that the target is valid and all dependencies exist.')
   ),
-  printer:print(Proposal, ModelAVL, ProofAVL, Plan, Triggers, SCCs),
+  printer:print(Proposal, ModelAVL, ProofAVL, Plan, Triggers),
   action:maybe_run_variants(Options, PretendMode, Proposal, ProofAVL, Plan, Triggers),
   action:maybe_run_explain(Options, PretendMode, Proposal, ProofAVL, ModelAVL, Plan, Triggers),
   choicelog:maybe_dump.

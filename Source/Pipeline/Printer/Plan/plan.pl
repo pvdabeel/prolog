@@ -13,8 +13,7 @@ Build plan rendering.
 
 Handles terminal output for merge/fetchonly plans: element classification,
 step-numbered wave display, colored action tags, pre-action sections
-(unmask/keyword/USE-change), footer statistics, SCC decomposition display,
-and variant diff display.
+(unmask/keyword/USE-change), footer statistics, and variant diff display.
 
 USE flag / config block rendering lives in useflags.pl; depclean removal
 rendering lives in removal.pl.
@@ -30,18 +29,21 @@ rendering lives in removal.pl.
 %  Main entry points
 % -----------------------------------------------------------------------------
 
-%! plan:print(+Target, +ModelAVL, +ProofAVL, +Plan, +TriggersAVL, +SCCs)
+%! plan:print(+Target, +ModelAVL, +ProofAVL, +Plan, +TriggersAVL)
 %
 % Prints a plan. Triggers are required so the printer can explain assumptions
-% (e.g. dependency cycles) when present. SCCs is retained in the signature
-% for compatibility; the ordering engine always passes [].
+% (e.g. dependency cycles) when present.
 
-plan:print(Target, ModelAVL, ProofAVL, Plan, TriggersAVL, SCCs) :-
-  plan:print(Target, ModelAVL, ProofAVL, Plan, plan:dry_run, TriggersAVL, SCCs).
+plan:print(Target, ModelAVL, ProofAVL, Plan, TriggersAVL) :-
+  plan:print(Target, ModelAVL, ProofAVL, Plan, plan:dry_run, TriggersAVL).
 
-%! plan:print(+Target, +ModelAVL, +ProofAVL, +Plan, +Call, +TriggersAVL, +SCCs)
 
-plan:print(Target, ModelAVL, ProofAVL, Plan, Call, TriggersAVL, _SCCs) :-
+%! plan:print(+Target, +ModelAVL, +ProofAVL, +Plan, +Call, +TriggersAVL)
+%
+% As plan:print/5, with Call the per-step action goal (plan:dry_run for
+% --pretend output).
+
+plan:print(Target, ModelAVL, ProofAVL, Plan, Call, TriggersAVL) :-
   annotation:collect(ProofAVL, Annotations),
   annotation:blocker_notes(Annotations, BlockerNotes),
   plan:resolve_print_target(Target, ProofAVL, TargetPrint, TargetHeader),

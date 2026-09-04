@@ -111,9 +111,9 @@
 <!-- cycle_out -->
 <g id="node9" class="node">
 <title>cycle_out</title>
-<polygon fill="#fff3cd" stroke="black" points="305.27,-36 189.62,-36 189.62,0 305.27,0 305.27,-36"/>
+<polygon fill="#fff3cd" stroke="black" points="313.15,-36 181.75,-36 181.75,0 313.15,0 313.15,-36"/>
 <text text-anchor="middle" x="247.45" y="-20.7" font-family="Helvetica Neue" font-size="9.00">Exit code: 1</text>
-<text text-anchor="middle" x="247.45" y="-9.45" font-family="Helvetica Neue" font-size="9.00">Printed: SCC / merge&#45;set</text>
+<text text-anchor="middle" x="247.45" y="-9.45" font-family="Helvetica Neue" font-size="9.00">Printed: Cycle breaks (prover)</text>
 </g>
 <!-- cycle_info&#45;&gt;cycle_out -->
 <g id="edge8" class="edge">

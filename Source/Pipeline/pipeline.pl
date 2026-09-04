@@ -39,7 +39,7 @@ Pipeline stages (both are thin wrappers handing the generic prover
 their rule set — `resolving` and `ordering` respectively):
 1. resolver:resolve/9 — pass 1: inductive proof search, builds
                         ProofAVL + ModelAVL (what — versions, USE, slots)
-2. orderer:order/5    — pass 2: prove over the planning laws, project
+2. orderer:order/4    — pass 2: prove over the planning laws, project
                         the availability proofs to the wave plan (when)
 
 Each stage is timed via sampler:phase_walltime and recorded via
@@ -72,18 +72,7 @@ experimentation but not currently used in the default path.
 
 pipeline:prove_plan(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL) :-
   memo:clear_caches,
-  pipeline:prove_plan_basic(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, _SCCs).
-
-
-%! pipeline:prove_plan(+Goals, -ProofAVL, -ModelAVL, -Plan, -TriggersAVL, -SCCs)
-%
-% Same as prove_plan/5 but also returns the SCCs argument the printer's
-% signature expects (always [] — the ordering engine builds no
-% condensation).
-
-pipeline:prove_plan(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, SCCs) :-
-  memo:clear_caches,
-  pipeline:prove_plan_basic(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, SCCs).
+  pipeline:prove_plan_basic(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL).
 
 
 % -----------------------------------------------------------------------------
@@ -170,7 +159,7 @@ pipeline:prove_with_fallback(Goals, ProofAVL, ModelAVL, TriggersAVL) :-
 % paths so the fallback chain is consistent.
 
 pipeline:prove_plan_with_fallback(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL) :-
-  pipeline:prove_plan_with_fallback(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, _SCCs, _FallbackUsed).
+  pipeline:prove_plan_with_fallback(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, _FallbackUsed).
 
 
 %! pipeline:prove_plan_with_fallback(+Goals, -Proof, -Model, -Plan, -Triggers, -FallbackUsed)
@@ -180,36 +169,25 @@ pipeline:prove_plan_with_fallback(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL) 
 % keyword_unmask.  Fails deterministically when all tiers fail.
 
 pipeline:prove_plan_with_fallback(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, FallbackUsed) :-
-  pipeline:prove_plan_with_fallback(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, _SCCs, FallbackUsed).
-
-
-%! pipeline:prove_plan_with_fallback(+Goals, -Proof, -Model, -Plan, -Triggers, -SCCs, -FallbackUsed)
-%
-% Same as prove_plan_with_fallback/6 but additionally returns the SCCs
-% argument plan-printing callers pass through to printer:print. Always
-% [] — the ordering engine builds no condensation; the argument is
-% retained for the printer's signature.
-
-pipeline:prove_plan_with_fallback(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, SCCs, FallbackUsed) :-
   % Clear once for the whole ladder. Dep-model cache keys already encode
   % prover:assuming bits (query.pl), so sharing across tiers is sound and
   % avoids a cold re-resolve per tier (portage-ng#118).
   memo:clear_caches,
   pipeline:with_fallback(
-    pipeline:prove_plan_basic(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, SCCs),
+    pipeline:prove_plan_basic(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL),
     FallbackUsed).
 
 
-%! pipeline:prove_plan_basic(+Goals, -ProofAVL, -ModelAVL, -Plan, -TriggersAVL, -SCCs)
+%! pipeline:prove_plan_basic(+Goals, -ProofAVL, -ModelAVL, -Plan, -TriggersAVL)
 %
 % Single-pass pipeline with per-stage wall-time instrumentation.
 % Pre-injects selected_cn_allow_multislot constraints when the goal
 % list contains multiple targets for the same Category-Name (different
-% versions/slots). SCCs is always [] (retained printer argument).
+% versions/slots).
 % Does not clear memo caches; callers that need a fresh cache
-% (prove_plan/5,6 and prove_plan_with_fallback/7) clear once themselves.
+% (prove_plan/5 and prove_plan_with_fallback/6) clear once themselves.
 
-pipeline:prove_plan_basic(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, SCCs) :-
+pipeline:prove_plan_basic(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL) :-
   sampler:phase_walltime(T0),
   pipeline:multislot_initial_constraints(Goals, InitCons),
   resolver:resolve(Goals, t, ProofAVL0, t, ModelAVL, InitCons, _Constraints, t, TriggersAVL),
@@ -217,7 +195,7 @@ pipeline:prove_plan_basic(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, SCCs) :-
   % Ordering pass: a second prover run over the generic planning laws.
   % ProofAVL gains the pass-2 unreachable/2 assumptions so the printer
   % reports them through the standard domain-assumption machinery.
-  orderer:order(ProofAVL0, TriggersAVL, ProofAVL, Plan, SCCs),
+  orderer:order(ProofAVL0, TriggersAVL, ProofAVL, Plan),
   sampler:phase_walltime(T2),
   sampler:phase_record(T0, T1, T2).
 
@@ -273,11 +251,11 @@ pipeline:test_stats_run(Repository, Style) :-
               'Pipeline',
               Repository://Entry,
               (Repository:entry(Entry)),
-              ( pipeline:prove_plan_with_fallback([Repository://Entry:Action?{[]}],ProofAVL,ModelAVL,Plan,Triggers,SCCs,_FallbackUsed)
+              ( pipeline:prove_plan_with_fallback([Repository://Entry:Action?{[]}],ProofAVL,ModelAVL,Plan,Triggers,_FallbackUsed)
               ),
               ( sampler:record(entry(Repository://Entry, ModelAVL, ProofAVL, Triggers, false)),
                 sampler:set_current_entry(Repository://Entry),
-                printer:print([Repository://Entry:Action?{[]}],ModelAVL,ProofAVL,Plan,Triggers,SCCs),
+                printer:print([Repository://Entry:Action?{[]}],ModelAVL,ProofAVL,Plan,Triggers),
                 sampler:clear_current_entry
               ),
               false),
@@ -362,7 +340,7 @@ pipeline:build_multislot_avl([C-N|Rest], AVL0, AVL) :-
 pipeline:prove_plan_with_pdepend(Goals0, ProofAVL, ModelAVL, Plan, TriggersAVL) :-
   memo:clear_caches,
   statistics(walltime, [T0,_]),
-  pipeline:prove_plan_basic(Goals0, Proof0, Model0, Plan0, Trig0, _SCCs0),
+  pipeline:prove_plan_basic(Goals0, Proof0, Model0, Plan0, Trig0),
   statistics(walltime, [T1,_]),
   Pass1Ms is T1 - T0,
   statistics(walltime, [T2,_]),
@@ -381,7 +359,7 @@ pipeline:prove_plan_with_pdepend(Goals0, ProofAVL, ModelAVL, Plan, TriggersAVL) 
         ProofAVL = Proof0, ModelAVL = Model0, Plan = Plan0, TriggersAVL = Trig0
     ; append(Goals0, NewGoals, Goals1),
       statistics(walltime, [T4,_]),
-      pipeline:prove_plan_basic(Goals1, ProofAVL, ModelAVL, Plan, TriggersAVL, _SCCs1),
+      pipeline:prove_plan_basic(Goals1, ProofAVL, ModelAVL, Plan, TriggersAVL),
       statistics(walltime, [T5,_]),
       Pass2Ms is T5 - T4,
       sampler:pdepend_perf_add(Pass1Ms, ExtractMs, Pass2Ms, 1, NewGoalsCount)

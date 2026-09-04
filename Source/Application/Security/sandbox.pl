@@ -248,7 +248,7 @@ sandbox:safe_primitive(unmerging:rule(_,_)).
 %  Orderer
 % -----------------------------------------------------------------------------
 
-sandbox:safe_primitive(orderer:order(_,_,_,_,_)).
+sandbox:safe_primitive(orderer:order(_,_,_,_)).
 sandbox:safe_primitive(orderer:test(_)).
 sandbox:safe_primitive(orderer:test(_,_)).
 sandbox:safe_primitive(orderer:test_latest(_)).
@@ -264,11 +264,9 @@ sandbox:safe_primitive(pipeline:test(_)).
 sandbox:safe_primitive(pipeline:test_stats(_)).
 sandbox:safe_primitive(pipeline:test_stats(_,_)).
 sandbox:safe_primitive(pipeline:prove_plan(_,_,_,_,_)).
-sandbox:safe_primitive(pipeline:prove_plan(_,_,_,_,_,_)).
 sandbox:safe_primitive(pipeline:prove_with_fallback(_,_,_,_)).
 sandbox:safe_primitive(pipeline:prove_plan_with_fallback(_,_,_,_,_)).
 sandbox:safe_primitive(pipeline:prove_plan_with_fallback(_,_,_,_,_,_)).
-sandbox:safe_primitive(pipeline:prove_plan_with_fallback(_,_,_,_,_,_,_)).
 
 % -----------------------------------------------------------------------------
 %  Message

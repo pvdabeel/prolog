@@ -39,7 +39,7 @@
 <g id="node3" class="node">
 <title>order</title>
 <polygon fill="#cce5ff" stroke="black" points="650.88,-133.72 435.03,-133.72 435.03,-78.82 650.88,-78.82 650.88,-133.72"/>
-<text text-anchor="middle" x="542.95" y="-116.07" font-family="Helvetica Neue" font-size="11.00">orderer:order/5</text>
+<text text-anchor="middle" x="542.95" y="-116.07" font-family="Helvetica Neue" font-size="11.00">orderer:order/4</text>
 <text text-anchor="middle" x="542.95" y="-102.57" font-family="Helvetica Neue" font-size="11.00">prover:prove_once(ordering, ...)</text>
 <text text-anchor="middle" x="542.95" y="-89.07" font-family="Helvetica Neue" font-size="11.00">second proving pass over planning laws</text>
 </g>

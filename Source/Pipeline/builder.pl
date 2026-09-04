@@ -70,8 +70,8 @@ builder:build(Goals) :-
 % the learned store grew.
 
 builder:build_loop(Goals, Attempt) :-
-  pipeline:prove_plan_with_fallback(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, SCCs, FallbackUsed),
-  printer:print(Goals, ModelAVL, ProofAVL, Plan, TriggersAVL, SCCs),
+  pipeline:prove_plan_with_fallback(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, FallbackUsed),
+  printer:print(Goals, ModelAVL, ProofAVL, Plan, TriggersAVL),
   nl,
   ( Attempt =:= 0
   -> ( builder:ask_confirmation

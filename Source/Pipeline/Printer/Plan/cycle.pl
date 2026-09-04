@@ -55,11 +55,7 @@ cycle:print_cycle_explanation(StartKey, ProofAVL, TriggersAVL) :-
     message:print('  Reason : Dependency cycle :'), nl,
     message:color(normal),
     nl,
-    ( catch(call_with_time_limit(0.25, cycle:cycle_edge_guard_map(CyclePath0, GuardMap0)),
-           time_limit_exceeded,
-           GuardMap0 = _),
-      ( is_assoc(GuardMap0) -> GuardMap = GuardMap0 ; empty_assoc(GuardMap) )
-    ),
+    cycle:cycle_edge_guard_map(CyclePath0, GuardMap),
     cycle:print_cycle_tree(CyclePath, GuardMap)
   ;
     message:color(darkgray),
@@ -97,6 +93,16 @@ cycle:cycle_start_pkg_key(StartKey, TriggersAVL, StartPkg) :-
 % -----------------------------------------------------------------------------
 %  On-demand USE-guard extraction for cycle edges
 % -----------------------------------------------------------------------------
+%
+% The resolver flattens USE conditionals when it builds an ebuild's
+% dependency model (query.pl `model(dependency(...))`), so neither the
+% ProofAVL nor the ModelAVL retains `use_conditional_group/4` nodes: a
+% proof edge runs straight from the ebuild to the grouped dependency it
+% enabled.  The guard that enabled the edge therefore has to be read back
+% from the ebuild's dependency metadata.  That metadata is a handful of
+% indexed cache facts (`depend/bdepend/rdepend/pdepend`), and the walk
+% below visits each of those trees exactly once per cycle edge, so the
+% lookup is bounded by the size of the ebuild's own DEPEND strings.
 
 % Build a map ToPkgKey -> GuardText (e.g. "-expat +python") for the cycle edges
 % found in the raw trigger cycle path. This is computed on-demand at print time
@@ -190,66 +196,79 @@ cycle:metadata_dep_trees(Repo://Entry, Trees) :-
   findall(T, query:search(bdepend(T), Repo://Entry), T2),
   findall(T, query:search(rdepend(T), Repo://Entry), T3),
   findall(T, query:search(pdepend(T), Repo://Entry), T4),
-  append([T1,T2,T3,T4], Trees0),
-  Trees = Trees0.
+  append([T1,T2,T3,T4], Trees).
 
-% Find a minimal guard list by iterative deepening on the number of USE guards.
+
+%! cycle:max_guard_depth(-Max) is det.
+%
+% Guard chains deeper than this are not reported (they would not fit a
+% one-line annotation anyway).
+
+cycle:max_guard_depth(6).
+
+
+%! cycle:metadata_use_guards_for_leaf(+RepoEntry, +LeafDep, -Guards) is det.
+%
+% The shortest USE-guard chain under which LeafDep (a package_dependency
+% on some C/N) occurs in the dependency metadata of RepoEntry, or [] when
+% the leaf is unconditional or not found.  Every tree is walked once; all
+% occurrences of the leaf are collected with their guard chain and the
+% shortest wins.  keysort/2 is stable, so among equally short chains the
+% first one in metadata order is kept.
+
 cycle:metadata_use_guards_for_leaf(Repo://Entry, LeafDep, Guards) :-
   cycle:metadata_dep_trees(Repo://Entry, Trees),
-  between(0, 6, MaxGuards),
-  once((
-    member(Tree, Trees),
-    cycle:metadata_find_leaf_guards(Tree, LeafDep, [], Rev, MaxGuards)
-  )),
-  !,
-  reverse(Rev, Guards).
-cycle:metadata_use_guards_for_leaf(_Repo://_Entry, _LeafDep, []).
-
-% Walk only the metadata dependency tree; this is not a dependency-graph DFS and
-% cannot loop back into itself unless the term is cyclic (which would be unusual).
-% The MaxGuards bound keeps this search minimal and fast.
-% Unwrap context/action decorations like X:install?{...} or X:config, so we can
-% match against the underlying metadata terms.
-cycle:metadata_find_leaf_guards(Full, Leaf, Acc, Out, Max) :-
-  Full = (Inner ? {_Ctx}),
-  !,
-  cycle:metadata_find_leaf_guards(Inner, Leaf, Acc, Out, Max).
-cycle:metadata_find_leaf_guards(Full, Leaf, Acc, Out, Max) :-
-  Full = (Inner : _Action),
-  !,
-  cycle:metadata_find_leaf_guards(Inner, Leaf, Acc, Out, Max).
-
-cycle:metadata_find_leaf_guards(use_conditional_group(Type,Use,_Id,Values), Leaf, Acc, Out, Max) :-
-  ( Type == positive -> G = guard(positive,Use) ; G = guard(negative,Use) ),
-  length(Acc, L),
-  L1 is L + 1,
-  L1 =< Max,
-  !,
-  cycle:metadata_find_leaf_guards_list(Values, Leaf, [G|Acc], Out, Max).
-cycle:metadata_find_leaf_guards(any_of_group(Vals), Leaf, Acc, Out, Max) :-
-  !, cycle:metadata_find_leaf_guards_list(Vals, Leaf, Acc, Out, Max).
-cycle:metadata_find_leaf_guards(all_of_group(Vals), Leaf, Acc, Out, Max) :-
-  !, cycle:metadata_find_leaf_guards_list(Vals, Leaf, Acc, Out, Max).
-cycle:metadata_find_leaf_guards(exactly_one_of_group(Vals), Leaf, Acc, Out, Max) :-
-  !, cycle:metadata_find_leaf_guards_list(Vals, Leaf, Acc, Out, Max).
-cycle:metadata_find_leaf_guards(at_most_one_of_group(Vals), Leaf, Acc, Out, Max) :-
-  !, cycle:metadata_find_leaf_guards_list(Vals, Leaf, Acc, Out, Max).
-cycle:metadata_find_leaf_guards(grouped_package_dependency(_C,_N,List), Leaf, Acc, Out, Max) :-
-  !, cycle:metadata_find_leaf_guards_list(List, Leaf, Acc, Out, Max).
-cycle:metadata_find_leaf_guards(grouped_package_dependency(_X,_C,_N,List), Leaf, Acc, Out, Max) :-
-  !, cycle:metadata_find_leaf_guards_list(List, Leaf, Acc, Out, Max).
-cycle:metadata_find_leaf_guards(package_dependency(_A,_B,C,N,_O,_V,_S,_U),
-                                 package_dependency(_A2,_B2,C2,N2,_O2,_V2,_S2,_U2),
-                                 Acc, Acc, _Max) :-
-  C == C2, N == N2,
-  !.
-cycle:metadata_find_leaf_guards(_Other, _Leaf, _Acc, _Out, _Max) :-
-  fail.
-
-cycle:metadata_find_leaf_guards_list([X|Xs], Leaf, Acc, Out, Max) :-
-  ( cycle:metadata_find_leaf_guards(X, Leaf, Acc, Out, Max)
-  ; cycle:metadata_find_leaf_guards_list(Xs, Leaf, Acc, Out, Max)
+  cycle:max_guard_depth(Max),
+  findall(Len-Chain,
+          ( member(Tree, Trees),
+            cycle:metadata_leaf_guard_chain(Tree, LeafDep, [], Rev),
+            length(Rev, Len),
+            Len =< Max,
+            reverse(Rev, Chain)
+          ),
+          Chains),
+  ( Chains == [] ->
+      Guards = []
+  ; keysort(Chains, [_-Guards|_])
   ).
+
+
+%! cycle:metadata_leaf_guard_chain(+Tree, +Leaf, +Acc, -Rev) is nondet.
+%
+% Enumerates, in metadata order, every occurrence of Leaf inside Tree.
+% Rev is the reversed list of guard(Polarity, Use) terms on the path from
+% the root of Tree to that occurrence.  Context/action decorations such as
+% X:install?{...} or X:config are unwrapped so the match is against the
+% underlying metadata terms.  This walks a finite metadata term, not the
+% dependency graph, so it cannot loop.
+
+cycle:metadata_leaf_guard_chain(Inner ? {_Ctx}, Leaf, Acc, Rev) :-
+  !,
+  cycle:metadata_leaf_guard_chain(Inner, Leaf, Acc, Rev).
+cycle:metadata_leaf_guard_chain(Inner : _Action, Leaf, Acc, Rev) :-
+  !,
+  cycle:metadata_leaf_guard_chain(Inner, Leaf, Acc, Rev).
+cycle:metadata_leaf_guard_chain(use_conditional_group(Type,Use,_Id,Values), Leaf, Acc, Rev) :-
+  !,
+  ( Type == positive -> G = guard(positive,Use) ; G = guard(negative,Use) ),
+  member(X, Values),
+  cycle:metadata_leaf_guard_chain(X, Leaf, [G|Acc], Rev).
+cycle:metadata_leaf_guard_chain(any_of_group(Vals), Leaf, Acc, Rev) :-
+  !, member(X, Vals), cycle:metadata_leaf_guard_chain(X, Leaf, Acc, Rev).
+cycle:metadata_leaf_guard_chain(all_of_group(Vals), Leaf, Acc, Rev) :-
+  !, member(X, Vals), cycle:metadata_leaf_guard_chain(X, Leaf, Acc, Rev).
+cycle:metadata_leaf_guard_chain(exactly_one_of_group(Vals), Leaf, Acc, Rev) :-
+  !, member(X, Vals), cycle:metadata_leaf_guard_chain(X, Leaf, Acc, Rev).
+cycle:metadata_leaf_guard_chain(at_most_one_of_group(Vals), Leaf, Acc, Rev) :-
+  !, member(X, Vals), cycle:metadata_leaf_guard_chain(X, Leaf, Acc, Rev).
+cycle:metadata_leaf_guard_chain(grouped_package_dependency(_C,_N,List), Leaf, Acc, Rev) :-
+  !, member(X, List), cycle:metadata_leaf_guard_chain(X, Leaf, Acc, Rev).
+cycle:metadata_leaf_guard_chain(grouped_package_dependency(_X,_C,_N,List), Leaf, Acc, Rev) :-
+  !, member(X, List), cycle:metadata_leaf_guard_chain(X, Leaf, Acc, Rev).
+cycle:metadata_leaf_guard_chain(package_dependency(_A,_B,C,N,_O,_V,_S,_U),
+                                package_dependency(_A2,_B2,C2,N2,_O2,_V2,_S2,_U2),
+                                Acc, Acc) :-
+  C == C2, N == N2.
 
 cycle:guards_to_text([], '') :- !.
 cycle:guards_to_text(Guards, Text) :-

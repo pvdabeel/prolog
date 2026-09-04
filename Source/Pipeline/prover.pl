@@ -971,7 +971,7 @@ prover:prove_recursive(Full, Proof, NewProof, Model, NewModel, Constraints, NewC
               % This is distinct from domain-level assumptions introduced by
               % rules via `rule(assumed(X), [])`.
               % Store the *current* body of the in-progress rule so downstream
-              % planning/SCC logic can still see the cycle edges.  Mark the
+              % planning logic can still see the cycle edges.  Mark the
               % depcount as -1 to indicate "deferred / cyclic".
               ( get_assoc(rule(Lit), Proof, dep(_OldCount, OldBody)?_OldCtx)
                 -> BodyForPlanning = OldBody

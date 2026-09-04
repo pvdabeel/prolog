@@ -41,18 +41,20 @@ The prove+plan+schedule pipeline lives in Source/Pipeline/pipeline.pl.
 % =============================================================================
 
 
-%! printer:print(+Target, +ModelAVL, +ProofAVL, +Plan, +TriggersAVL, +SCCs)
+%! printer:print(+Target, +ModelAVL, +ProofAVL, +Plan, +TriggersAVL)
 %
-% Thin wrapper — delegates to plan:print/6. SCCs is retained in the
-% signature for compatibility; the ordering engine always passes [].
+% Thin wrapper — delegates to plan:print/5.
 
-printer:print(Target, ModelAVL, ProofAVL, Plan, TriggersAVL, SCCs) :-
-  plan:print(Target, ModelAVL, ProofAVL, Plan, TriggersAVL, SCCs).
+printer:print(Target, ModelAVL, ProofAVL, Plan, TriggersAVL) :-
+  plan:print(Target, ModelAVL, ProofAVL, Plan, TriggersAVL).
 
-%! printer:print(+Target, +ModelAVL, +ProofAVL, +Plan, +Call, +TriggersAVL, +SCCs)
 
-printer:print(Target, ModelAVL, ProofAVL, Plan, Call, TriggersAVL, SCCs) :-
-  plan:print(Target, ModelAVL, ProofAVL, Plan, Call, TriggersAVL, SCCs).
+%! printer:print(+Target, +ModelAVL, +ProofAVL, +Plan, +Call, +TriggersAVL)
+%
+% Thin wrapper — delegates to plan:print/6.
+
+printer:print(Target, ModelAVL, ProofAVL, Plan, Call, TriggersAVL) :-
+  plan:print(Target, ModelAVL, ProofAVL, Plan, Call, TriggersAVL).
 
 
 % -----------------------------------------------------------------------------
@@ -87,11 +89,11 @@ printer:test(Repository,Style) :-
               Repository://Entry,
               (Repository:entry(Entry)),
               ( resolver:resolve(Repository://Entry:Action?{[]},t,ProofAVL0,t,ModelAVL,t,_Constraint,t,Triggers),
-                orderer:order(ProofAVL0,Triggers,ProofAVL,Plan,SCCs)
+                orderer:order(ProofAVL0,Triggers,ProofAVL,Plan)
               ),
               ( sampler:record(entry(Repository://Entry, ModelAVL, ProofAVL, Triggers, false)),
                 sampler:set_current_entry(Repository://Entry),
-              printer:print([Repository://Entry:Action?{[]}],ModelAVL,ProofAVL,Plan,Triggers,SCCs),
+                printer:print([Repository://Entry:Action?{[]}],ModelAVL,ProofAVL,Plan,Triggers),
                 sampler:clear_current_entry
               ),
               false),
@@ -119,11 +121,11 @@ printer:test_latest(Repository,Style) :-
               Repository://Entry,
               (Repository:package(C,N),once(Repository:ebuild(Entry,C,N,_))),
               ( resolver:resolve(Repository://Entry:Action?{[]},t,ProofAVL0,t,ModelAVL,t,_Constraint,t,Triggers),
-                orderer:order(ProofAVL0,Triggers,ProofAVL,Plan,SCCs)
+                orderer:order(ProofAVL0,Triggers,ProofAVL,Plan)
               ),
               ( sampler:record(entry(Repository://Entry, ModelAVL, ProofAVL, Triggers, false)),
                 sampler:set_current_entry(Repository://Entry),
-                printer:print([Repository://Entry:Action?{[]}],ModelAVL,ProofAVL,Plan,Triggers,SCCs),
+                printer:print([Repository://Entry:Action?{[]}],ModelAVL,ProofAVL,Plan,Triggers),
                 sampler:clear_current_entry
               ),
               false),

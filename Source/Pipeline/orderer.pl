@@ -83,7 +83,7 @@ with_ordering_pass(Pass1Proof, Goal) :-
 % Pass-2 driver
 % -----------------------------------------------------------------------------
 
-%! orderer:order(+Pass1Proof, +TriggersAVL, -ProofOut, -Plan, -SCCs)
+%! orderer:order(+Pass1Proof, +TriggersAVL, -ProofOut, -Plan)
 %
 % The pass-2 entry point, called from the pipeline after the pass-1
 % prove.
@@ -91,11 +91,9 @@ with_ordering_pass(Pass1Proof, Goal) :-
 % Proves scheduled(H) for every pass-1 proof step, projects the
 % availability proofs to the wave-list Plan structure, and merges
 % any unreachable/2 assumptions into ProofOut so the printer's assumption
-% machinery (which reads the proof) reports them. SCCs is [] — the rules
-% engine never builds a condensation (the argument is retained for the
-% printer's signature).
+% machinery (which reads the proof) reports them.
 
-order(Pass1Proof, TriggersAVL, ProofOut, Plan, []) :-
+order(Pass1Proof, TriggersAVL, ProofOut, Plan) :-
   orderer:steps_of_proof(Pass1Proof, Steps),
   findall(scheduled(H), member(H, Steps), Goals),
   orderer:with_ordering_pass(Pass1Proof,
@@ -410,7 +408,7 @@ test(Repository, Style) :-
   tester:test_action(Action0, Action),
   tester:test(Style, 'Ordering', Repository://Entry, (Repository:entry(Entry)),
     ( pipeline:prove_with_fallback([Repository://Entry:Action?{[]}],ProofAVL,_ModelAVL,TriggersAVL),
-      orderer:order(ProofAVL,TriggersAVL,_ProofOut,_Plan,_SCCs)
+      orderer:order(ProofAVL,TriggersAVL,_ProofOut,_Plan)
     )),
   nl.
 
@@ -430,7 +428,7 @@ test_latest(Repository, Style) :-
   tester:test(Style, 'Ordering latest', Repository://Entry,
               (Repository:package(C,N),once(Repository:ebuild(Entry,C,N,_))),
               ( pipeline:prove_with_fallback([Repository://Entry:Action?{[]}],ProofAVL,_ModelAVL,TriggersAVL),
-                orderer:order(ProofAVL,TriggersAVL,_ProofOut,_Plan,_SCCs)
+                orderer:order(ProofAVL,TriggersAVL,_ProofOut,_Plan)
               )),
   nl.
 
@@ -456,7 +454,7 @@ test_stats(Repository, Style) :-
               Repository://Entry,
               (Repository:entry(Entry)),
               ( pipeline:prove_with_fallback([Repository://Entry:Action?{[]}],ProofAVL,ModelAVL,TriggersAVL),
-                orderer:order(ProofAVL,TriggersAVL,_ProofOut,_Plan,_SCCs),
+                orderer:order(ProofAVL,TriggersAVL,_ProofOut,_Plan),
                 sampler:record(entry(Repository://Entry, ModelAVL, ProofAVL, TriggersAVL, true))
               )),
   stats:test_stats_print.

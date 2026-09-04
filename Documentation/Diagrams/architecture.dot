@@ -116,7 +116,7 @@ digraph portage_ng_architecture {
     resolver [fillcolor="#ddffee", shape=box,
               label="resolver.pl  (pass 1: what)\nresolver:resolve/9"];
     orderer  [fillcolor="#ddffee", shape=box,
-              label="orderer.pl  (pass 2: when)\norderer:order/5\nwave projection + preferences"];
+              label="orderer.pl  (pass 2: when)\norderer:order/4\nwave projection + preferences"];
     prover   [fillcolor="#ffeedd", shape=box, style="filled,bold", ordering=out,
               label="prover.pl — generic engine\nprover:prove(Rules, ...)\nProof · Model · Constraints · Triggers\nreprove + learned constraints"];
   }

@@ -3027,7 +3027,7 @@ test(plan_orders_bwu_dep_before_rebuild,
   !,
   Goal = portage://RepoE:run?{[build_with_use:use_state([nftables],[])]},
   pipeline:prove_with_fallback([Goal], Proof, _Model, Triggers),
-  orderer:order(Proof, Triggers, _ProofOut, Plan, _SCCs),
+  orderer:order(Proof, Triggers, _ProofOut, Plan),
   % Find the wave index of any libnftnl literal vs any iptables-VVV:update.
   nth1(WLib, Plan, WaveLib),
     member(RLib, WaveLib),
@@ -3804,7 +3804,7 @@ test(issue59_eligible_install_uses_masked_macro) :-
 % exposes a synthetic rule store (resolving:enable_test_rules/0,
 % resolving:test_rule/2): while active, resolving:rule/2 resolves
 % EXCLUSIVELY against hand-built test_rule/2 clauses, so
-% resolver:resolve/9, orderer:order/5 and the prove_with_fallback tier
+% resolver:resolve/9, orderer:order/4 and the prove_with_fallback tier
 % chain can be exercised over tiny rule sets without a knowledge base.
 %
 % Goals are passed as BARE literals (no ?{[]} proof-context wrapper):
@@ -3946,7 +3946,7 @@ test(constraint_routed_to_store) :-
 % order the proof with the rule-based engine (pass 2).
 ordering_engine_plan(Goals, ProofOut, Plan) :-
   resolver:resolve(Goals, t, Proof, t, _Model, t, _Cons, t, Triggers),
-  orderer:order(Proof, Triggers, ProofOut, Plan, _SCCs).
+  orderer:order(Proof, Triggers, ProofOut, Plan).
 
 % Unreachable assumptions merged into the output proof, as full keys.
 ordering_engine_unreachables(ProofOut, Unreachables) :-

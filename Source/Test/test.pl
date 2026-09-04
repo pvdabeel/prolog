@@ -295,12 +295,12 @@ test:case_output_file(Repo://Id:Action?{_Context},FilePath) :-
 % full proof/model/trigger/plan dump to Stream. Proving goes through
 % the canonical pipeline entry point (prove_plan_with_fallback) so the
 % suite exercises the same 5-tier fallback semantics as --pretend and
-% .merge generation. Result is success(Proof,Model,Plan,Triggers,SCCs) or
+% .merge generation. Result is success(Proof,Model,Plan,Triggers) or
 % failure; never fails or throws on a failing case (the red 'false'
 % marker is written to Stream).
 
 test:run_case(Repo://Id:Action?{Context},Stream,Result) :-
-  ( pipeline:prove_plan_with_fallback([Repo://Id:Action?{Context}],Proof,Model,Plan,Triggers,SCCs,_FallbackUsed)
+  ( pipeline:prove_plan_with_fallback([Repo://Id:Action?{Context}],Proof,Model,Plan,Triggers,_FallbackUsed)
     -> once(with_output_to(Stream,
          ( ( writeln(Repo://Id:Action?{Context}),
              nl,
@@ -324,10 +324,10 @@ test:run_case(Repo://Id:Action?{Context},Stream,Result) :-
              message:color(normal),
              write_plan(Plan),
              nl,
-             printer:print([Repo://Id:Action?{Context}],Model,Proof,Plan,Triggers,SCCs),
+             printer:print([Repo://Id:Action?{Context}],Model,Proof,Plan,Triggers),
              test:validate(Repo://Id:Action?{Context},Proof,Plan,Model,Triggers)
            )
-           -> Result = success(Proof,Model,Plan,Triggers,SCCs)
+           -> Result = success(Proof,Model,Plan,Triggers)
            ;  ( Result = failure,
                 message:color(red),
                 message:style(bold),
@@ -361,7 +361,7 @@ test:run_case_to_file(Target,FilePath,Result) :-
 test:run_single_case_batch(Target) :-
   test:case_output_file(Target,FilePath),
   test:run_case_to_file(Target,FilePath,Result),
-  Result = success(_,_,_,_,_).
+  Result = success(_,_,_,_).
 
 
 %! test:run_single_case(+Target)
@@ -383,7 +383,7 @@ test:run_single_case(Repo://Id:Action?{Context}) :-
   atomic_list_concat([Dir,'/Documentation/Tests/',Category,'/',Category,'-emerge.log'],EmergeLog),
   test:case_output_file(Repo://Id:Action?{Context},FilePath),
   test:run_case_to_file(Repo://Id:Action?{Context},FilePath,Result),
-  (Result = success(Proof,Model,Plan,Triggers,SCCs)
+  (Result = success(Proof,Model,Plan,Triggers)
    -> (
        message:header('Description :'),
        nl,
@@ -392,7 +392,7 @@ test:run_single_case(Repo://Id:Action?{Context}) :-
         ;  true),
        message:style(normal),
        nl,
-       printer:print([Repo://Id:Action?{Context}],Model,Proof,Plan,Triggers,SCCs),
+       printer:print([Repo://Id:Action?{Context}],Model,Proof,Plan,Triggers),
        message:header('Legacy emerge output :'),
        (exists_file(EmergeLog)
         -> test:write_description(EmergeLog)

@@ -250,12 +250,15 @@ annotation:blocker_effective(PlannedIdx, blk(_Content, _Strength, _Phase, C, N, 
 %! annotation:blocker_matches_entry(+Repo, +Entry, +O, +V, +SlotReq) is semidet.
 %
 % True when the blocker atom (O, V, SlotReq) matches the version and slot
-% metadata of Repo://Entry.
+% metadata of Repo://Entry.  Errors are deliberately NOT caught here: this
+% predicate decides whether a soft blocker counts as a domain assumption
+% (exit code 2), so a defect in the matcher must surface rather than
+% silently turn into "blocker not effective".
 
 annotation:blocker_matches_entry(R, E, O, V, SlotReq) :-
   cache:ordered_entry(R, E, _, _, Ver),
-  catch(query:search(select(slot, constraint([]), SlotMeta), R://E), _, fail),
-  catch(candidate:blocker_spec_matches_selected(Ver, SlotMeta, R, E, O, V, SlotReq), _, fail),
+  query:search(select(slot, constraint([]), SlotMeta), R://E),
+  candidate:blocker_spec_matches_selected(Ver, SlotMeta, R, E, O, V, SlotReq),
   !.
 
 

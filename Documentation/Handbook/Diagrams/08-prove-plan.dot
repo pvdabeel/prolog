@@ -15,7 +15,7 @@ digraph prove_plan {
 
     // Stages
     prove [label="resolver:resolve/9\nprover:prove(resolving, ...)\nbackward chaining, cycle handling", fillcolor="#cce5ff"];
-    order [label="orderer:order/5\nprover:prove_once(ordering, ...)\nsecond proving pass over planning laws", fillcolor="#cce5ff"];
+    order [label="orderer:order/4\nprover:prove_once(ordering, ...)\nsecond proving pass over planning laws", fillcolor="#cce5ff"];
 
     // Outputs
     proof_model [label="Proof, Model\nConstraints, Triggers", shape=ellipse, fillcolor="#d4edda"];

@@ -29,7 +29,7 @@ different questions by loading a different rule module:
 | **Question** | **Rule module** | **Stage wrapper** |
 | :--- | :--- | :--- |
 | What configuration satisfies the request? | `resolving` | `resolver:resolve/9` |
-| When can each action run? | `ordering` | `orderer:order/5` |
+| When can each action run? | `ordering` | `orderer:order/4` |
 | In what order may packages be removed? | `unmerging` | depclean / unmerge pass |
 
 Callers outside a proving pass (for example query-side model
@@ -66,7 +66,7 @@ The pipeline chains two proving passes over one goal set
    to `prover:prove/10`.  Choice lives here: versions, slots, USE
    flags, OR-group arms.  The output is a Proof / Model / Constraints /
    Triggers quadruple — a justified configuration.
-2. **Pass 2 — plan.** `orderer:order/5` hands `ordering` to
+2. **Pass 2 — plan.** `orderer:order/4` hands `ordering` to
    `prover:prove_once/…` over generic planning laws plus Gentoo
    bindings.  The output is a second proof object; wave projection
    reads it into a parallel plan.

@@ -302,7 +302,7 @@ llmknowledge:topic_text(architecture, Text) :-
       'printer -> plan + assumptions',
       'builder -> ebuild phases; fixup + feedback may replan',
       '',
-      'Entry points: pipeline:prove_plan_with_fallback/5..7 (full),',
+      'Entry points: pipeline:prove_plan_with_fallback/5,6 (full),',
       'pipeline:prove_with_fallback/4 (prover only). Fallback tiers:',
       'strict, keyword_acceptance, blockers, unmask, keyword_unmask.',
       '',

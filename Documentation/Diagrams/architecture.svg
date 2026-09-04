@@ -332,7 +332,7 @@
 <title>orderer</title>
 <polygon fill="#ddffee" stroke="black" points="1131.14,-377.88 976.86,-377.88 976.86,-331.17 1131.14,-331.17 1131.14,-377.88"/>
 <text text-anchor="middle" x="1054" y="-361.9" font-family="Helvetica,sans-Serif" font-size="10.00">orderer.pl &#160;(pass 2: when)</text>
-<text text-anchor="middle" x="1054" y="-350.65" font-family="Helvetica,sans-Serif" font-size="10.00">orderer:order/5</text>
+<text text-anchor="middle" x="1054" y="-350.65" font-family="Helvetica,sans-Serif" font-size="10.00">orderer:order/4</text>
 <text text-anchor="middle" x="1054" y="-339.4" font-family="Helvetica,sans-Serif" font-size="10.00">wave projection + preferences</text>
 </g>
 <!-- pipeline&#45;&gt;orderer -->

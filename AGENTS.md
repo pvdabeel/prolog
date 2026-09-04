@@ -63,8 +63,8 @@ own md5-cache) is the substitute for a real tree:
   ./Source/Application/Wrapper/portage-ng-dev --mode standalone --shell --timeout 120 <<'PL'
   test:ensure_overlay,
   Target = overlay://'test47/api-docs-1.0':run?{[]},
-  pipeline:prove_plan_with_fallback([Target],Proof,Model,Plan,Triggers,SCCs,_),
-  printer:print([Target],Model,Proof,Plan,Triggers,SCCs),
+  pipeline:prove_plan_with_fallback([Target],Proof,Model,Plan,Triggers,_),
+  printer:print([Target],Model,Proof,Plan,Triggers),
   halt.
   PL
   ```

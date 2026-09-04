@@ -324,16 +324,15 @@ keyword_acceptance, blockers, unmask, keyword_unmask):
   tests (`resolver:test`, `orderer:test`) and
   `--bugs`.  Each test layer adds its own stages on top.
 
-Underneath, `prove_plan_basic/6` chains two stages (the trailing SCCs
-argument is always `[]` — the rule-based orderer leaves no remainder):
+Underneath, `prove_plan_basic/5` chains two stages:
 
 ```prolog
-pipeline:prove_plan_basic(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL, SCCs)
+pipeline:prove_plan_basic(Goals, ProofAVL, ModelAVL, Plan, TriggersAVL)
 ```
 
 1. `resolver:resolve/9` — hands the `resolving` rule set to
    `prover:prove/10`; constructs Proof, Model, Constraints, and Triggers
-2. `orderer:order/5` — hands the `ordering` rule set to the same prover
+2. `orderer:order/4` — hands the `ordering` rule set to the same prover
    for a second proving pass; projects the wave-list plan (Chapter 13)
 
 The prover is wrapped in `with_reprove_state` which saves and restores the

@@ -45,7 +45,7 @@ writer:write_merge_file(Directory,Repository://Entry) :-
   Extension = '.merge',
   Goals = [Repository://Entry:Action?{[]}],
   get_time(T0),
-  ( pipeline:prove_plan_with_fallback(Goals, Proof, Model, Plan, Triggers, SCCs, _FallbackUsed),
+  ( pipeline:prove_plan_with_fallback(Goals, Proof, Model, Plan, Triggers, _FallbackUsed),
     atomic_list_concat([Directory,'/',Entry,Extension],File)
   ),
   atomic_list_concat([File,'.tmp'], TmpFile),
@@ -54,7 +54,7 @@ writer:write_merge_file(Directory,Repository://Entry) :-
         tell(TmpFile),
         ( set_stream(current_output,tty(true)),
           timing:print_timing_header('merge', T0),
-          printer:print(Goals,Model,Proof,Plan,Triggers,SCCs),
+          printer:print(Goals,Model,Proof,Plan,Triggers),
           timing:print_timing_footer('merge', T0)
         ),
         told
@@ -80,7 +80,7 @@ writer:write_fetchonly_file(Directory,Repository://Entry) :-
   Extension = '.fetchonly',
   Goals = [Repository://Entry:Action?{[]}],
   get_time(T0),
-  ( pipeline:prove_plan_with_fallback(Goals, Proof, Model, Plan, Triggers, SCCs, _FallbackUsed),
+  ( pipeline:prove_plan_with_fallback(Goals, Proof, Model, Plan, Triggers, _FallbackUsed),
     atomic_list_concat([Directory,'/',Entry,Extension],File)
   ),
   atomic_list_concat([File,'.tmp'], TmpFile),
@@ -89,7 +89,7 @@ writer:write_fetchonly_file(Directory,Repository://Entry) :-
         tell(TmpFile),
         ( set_stream(current_output,tty(true)),
           timing:print_timing_header('fetchonly', T0),
-          printer:print(Goals,Model,Proof,Plan,Triggers,SCCs),
+          printer:print(Goals,Model,Proof,Plan,Triggers),
           timing:print_timing_footer('fetchonly', T0)
         ),
         told

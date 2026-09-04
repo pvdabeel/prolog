@@ -122,11 +122,16 @@ warning:print_warnings(ModelAVL, Annotations, ProofAVL, TriggersAVL) :-
              ( ( config:print_prover_cycles_style(detailed),
                  plan:is_run_cycle_break(Content) ->
                      message:color(darkgray),
-                     message:print('  (runtime SCC candidate)'), nl,
+                     message:print('  (runtime-only cycle)'), nl,
                      message:color(normal)
                  ; true
                ),
                plan:print_cycle_break_detail(Content),
+               % The cycle witness search is a depth-bounded DFS/BFS over
+               % the triggers graph (config:print_prover_cycles_max_depth)
+               % whose worst case is exponential in the branching factor;
+               % the time limit caps that search, nothing else in the
+               % explanation is unbounded.
                ( config:print_prover_cycles(true) ->
                    catch(call_with_time_limit(2.0, cycle:print_cycle_explanation(Content, ProofAVL, TriggersAVL)),
                          time_limit_exceeded,
@@ -822,20 +827,41 @@ warning:print_bugreport_constraint(O, C, N, V, S) :-
   write(C), write('/'), write(N), write('-'), write(V),
   info:print_slot_restriction(S).
 
-%! warning:available_versions(+C, +N, -Sample)
+%! warning:available_version_terms(+C, +N, -Versions) is det.
 %
-% Returns up to 8 available version atoms for C/N across all repositories.
+% All distinct version terms of C/N across the repositories, in version
+% order.  Versions are version/7 terms whose standard order IS the PMS
+% version order, so sort/2 both deduplicates and orders them.  Bug-report
+% drafts deliberately list every version in the tree (not the resolver's
+% mask/keyword-filtered candidate set), which is why this reads the
+% cache directly instead of the proof.
+
+warning:available_version_terms(C, N, Versions) :-
+  findall(Ver, cache:ordered_entry(_Repo, _Id, C, N, Ver), Vers0),
+  sort(Vers0, Versions).
+
+
+%! warning:available_versions_sample_size(-N) is det.
+%
+% How many versions a bug-report draft lists before eliding the rest.
+
+warning:available_versions_sample_size(8).
+
+
+%! warning:available_versions(+C, +N, -Sample) is det.
+%
+% Up to available_versions_sample_size/1 version atoms for C/N, sorted as
+% atoms (the historical draft layout).
 
 warning:available_versions(C, N, Sample) :-
-  findall(V,
-          ( cache:ordered_entry(_Repo, _Id, C, N, Ver),
-            warning:version_atom(Ver, V)
-          ),
-          Vs0),
-  sort(Vs0, Vs),
-  % Take up to 8 to keep output short.
-  warning:take_first_n(Vs, 8, Sample).
-warning:available_versions(_C, _N, []).
+  warning:available_version_terms(C, N, Versions),
+  findall(A, ( member(Ver, Versions), warning:version_atom(Ver, A) ), Atoms0),
+  sort(Atoms0, Atoms),
+  warning:available_versions_sample_size(Max),
+  length(Atoms, Len),
+  Take is min(Len, Max),
+  length(Sample, Take),
+  append(Sample, _, Atoms).
 
 %! warning:bugreport_potential_fix(+Reason, +C, +N, +Constraints, +RequiredBy)
 %
@@ -866,50 +892,27 @@ warning:bugreport_potential_fix(Reason, C, N, Constraints, RequiredBy) :-
   ; format('  Review dependency metadata in ~w; constraint set: ~w.~n', [RequiredBy, Constraints])
   ).
 
-%! warning:available_version_range(+C, +N, -MinAtom, -MaxAtom, -Count)
+%! warning:available_version_range(+C, +N, -MinAtom, -MaxAtom, -Count) is semidet.
 %
-% Computes a human-readable (min..max) version range for C/N across repositories.
+% Human-readable (min..max) version range for C/N across repositories.
+% Fails when the tree has no version of C/N at all.
 
 warning:available_version_range(C, N, MinAtom, MaxAtom, Count) :-
-  findall(Ver, cache:ordered_entry(_Repo, _Id, C, N, Ver), Vers0Raw),
-  Vers0Raw \= [],
-  sort(Vers0Raw, Vers0), % unique (may include multiple repos, but dedup by term)
-  length(Vers0, Count),
-  predsort(warning:compare_versions, Vers0, VersSorted),
-  VersSorted = [Min|_],
-  last(VersSorted, Max),
+  warning:available_version_terms(C, N, Versions),
+  Versions = [Min|_],
+  last(Versions, Max),
+  length(Versions, Count),
   warning:version_atom(Min, MinAtom),
   warning:version_atom(Max, MaxAtom).
 
-%! warning:available_version_count_unique(+C, +N, -Count)
+
+%! warning:available_version_count_unique(+C, +N, -Count) is det.
 %
-% Counts the number of unique versions available for C/N.
+% Number of distinct versions of C/N in the tree.
 
 warning:available_version_count_unique(C, N, Count) :-
-  findall(Ver, cache:ordered_entry(_Repo, _Id, C, N, Ver), Vers0Raw),
-  sort(Vers0Raw, Vers0),
-  length(Vers0, Count).
-
-%! warning:compare_versions(-Delta, +A, +B)
-%
-% Version comparison callback for predsort/3.
-
-warning:compare_versions(Delta, A, B) :-
-  ( system:compare(<, A, B) -> Delta = (<)
-  ; system:compare(>, A, B) -> Delta = (>)
-  ; Delta = (=)
-  ).
-
-%! warning:take_first_n(+List, +N, -Prefix)
-%
-% Takes the first N elements from List, or all if fewer than N.
-
-warning:take_first_n(_, 0, []) :- !.
-warning:take_first_n([], _N, []) :- !.
-warning:take_first_n([X|Xs], N, [X|Ys]) :-
-  N > 0,
-  N1 is N - 1,
-  warning:take_first_n(Xs, N1, Ys).
+  warning:available_version_terms(C, N, Versions),
+  length(Versions, Count).
 
 
 %! warning:bugreport_constraint_short(+Op, +Ver, -Short)
