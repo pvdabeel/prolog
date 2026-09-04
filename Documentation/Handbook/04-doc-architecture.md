@@ -101,7 +101,9 @@ See [Chapter 15: Command-Line Interface](15-doc-cli.md) for the full mode refere
 Each mode loads only the modules it needs.  This keeps startup time, memory footprint, and failure modes appropriate to the deployment:
 
 The load order is defined in `Source/loader.pl`.  `load_modules/1`
-selects a mode's groups from `loader:mode/3`:
+selects a mode's groups from `loader:mode/2`; a group may carry a
+`loader:optional/2` guard (the LLM groups are gated by
+`config:load_llm_modules/1`) and is skipped when the guard fails:
 
 ```
 load_modules(common)       — SWI-Prolog libraries, OO context, config, OS,

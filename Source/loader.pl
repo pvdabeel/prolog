@@ -11,12 +11,13 @@
 /** <module> LOADER
 Per-mode module loading.
 
-Module groups are declared as loader:group/2 facts. Operating modes
-are declared as loader:mode/3 facts (ordered group list plus whether
-to load LLM backends). load_modules/1 is the single entry point. A
-module needed by several modes lives in exactly one shared group, so
-additions propagate automatically and the delta between modes
-(e.g. standalone vs worker) stays explicit and reviewable.
+Module groups are declared as loader:group/2 facts; a group whose load
+depends on configuration carries a loader:optional/2 guard. Operating
+modes are declared as loader:mode/2 facts (an ordered group list).
+load_modules/1 is the single entry point. A module needed by several
+modes lives in exactly one shared group, so additions propagate
+automatically and the delta between modes (e.g. standalone vs worker)
+stays explicit and reviewable.
 */
 
 % =============================================================================
@@ -252,8 +253,6 @@ loader:group(server_libraries,
     library('streams'),
     library('pengines')]).
 
-% server.pl must precede sandbox.pl: the sandbox library validates
-% safe_primitive declarations against already-defined predicates.
 loader:group(server_modules,
    [portage('Source/Application/Mode/server.pl'),
     portage('Source/Application/Security/sandbox.pl')]).
@@ -280,31 +279,50 @@ loader:group(llm_modules,
 
 
 % -----------------------------------------------------------------------------
+%  Optional groups
+% -----------------------------------------------------------------------------
+
+%! loader:optional(?Group, :Condition) is nondet.
+%
+% Declares that Group is loaded only when Condition holds at load time.
+% A group without a guard is always loaded. Guards run under catch/3, so
+% an absent config predicate counts as false and the group is skipped.
+%
+% The Generative AI groups are gated by config:load_llm_modules/1: when
+% false the builder / CLI continue without LLM backends, and call sites
+% must tolerate that (stubs + soft call_llm).
+
+loader:optional(llm_libraries, config:load_llm_modules(true)).
+loader:optional(llm_modules,   config:load_llm_modules(true)).
+
+
+% -----------------------------------------------------------------------------
 %  Mode table
 % -----------------------------------------------------------------------------
 
-%! loader:mode(?Mode, ?Groups, ?Llm) is nondet.
+%! loader:mode(?Mode, ?Groups) is nondet.
 %
-% Declares the module groups and optional LLM load for an operating
-% mode. Groups is an ordered list of loader:group/2 names. Llm is
-% `llm` when the mode should load Generative AI backends (subject to
-% config:load_llm_modules/1), or `none`.
+% Declares the module groups of an operating mode. Groups is an ordered
+% list of loader:group/2 names; optional groups (loader:optional/2) are
+% listed like any other and skipped at load time when their guard fails.
 %
 % common is a prerequisite loaded before mode dispatch. daemon and
 % server extend standalone so pipeline additions propagate.
 
 loader:mode(common,
    [common_libraries,
-    common_modules], none).
+    common_modules]).
 
 loader:mode(ipc,
-   [ipc_modules], none).
+   [ipc_modules]).
 
 loader:mode(client,
    [client_libraries,
     client_core_modules,
     printer_modules,
-    client_modules], llm).
+    client_modules,
+    llm_libraries,
+    llm_modules]).
 
 loader:mode(standalone,
    [pipeline_libraries,
@@ -313,7 +331,9 @@ loader:mode(standalone,
     domain_modules,
     pipeline_modules,
     printer_modules,
-    standalone_modules], llm).
+    standalone_modules,
+    llm_libraries,
+    llm_modules]).
 
 loader:mode(worker,
    [pipeline_libraries,
@@ -322,13 +342,15 @@ loader:mode(worker,
     domain_modules,
     pipeline_modules,
     printer_modules,
-    worker_modules], llm).
+    worker_modules,
+    llm_libraries,
+    llm_modules]).
 
-loader:mode(daemon, [daemon_modules|Groups], Llm) :-
-   loader:mode(standalone, Groups, Llm).
+loader:mode(daemon, [daemon_modules|Groups]) :-
+   loader:mode(standalone, Groups).
 
-loader:mode(server, Groups, Llm) :-
-   loader:mode(standalone, Standalone, Llm),
+loader:mode(server, Groups) :-
+   loader:mode(standalone, Standalone),
    append(Standalone, [server_libraries, server_modules], Groups).
 
 
@@ -338,9 +360,15 @@ loader:mode(server, Groups, Llm) :-
 
 %! loader:load_group(+Group) is det.
 %
-% Loads every file spec in a module group, in declaration order. Files are
-% loaded into the user module, matching the load context of load_modules/1.
+% Loads every file spec in a module group, in declaration order, unless
+% the group is optional and its guard fails. Files are loaded into the
+% user module, matching the load context of load_modules/1.
 
+loader:load_group(Group) :-
+   loader:optional(Group, Condition),
+   \+ catch(Condition, _, fail), !,
+   format(atom(Msg), 'Skipping ~w (~w does not hold).', [Group, Condition]),
+   message:log(Msg).
 loader:load_group(Group) :-
    loader:group(Group, Specs),
    forall(member(Spec, Specs), user:ensure_loaded(Spec)).
@@ -360,29 +388,10 @@ loader:load_groups(Groups) :-
 
 %! load_modules(+Mode) is det.
 %
-% Loads every module group declared for Mode, then the LLM backends
-% when the mode table says llm and config:load_llm_modules(true).
+% Loads every module group declared for Mode, in order.
 
 load_modules(Mode) :-
-   loader:mode(Mode, Groups, Llm),
+   loader:mode(Mode, Groups),
    loader:load_groups(Groups),
    format(atom(Msg), 'Loaded ~w modules...', [Mode]),
-   message:log(Msg),
-   loader:maybe_load_llm(Llm).
-
-
-%! loader:maybe_load_llm(+Llm) is det.
-%
-% Loads the Generative AI / LLM integration modules when Llm is `llm`
-% and config:load_llm_modules(true). When false (or the config
-% predicate is absent), skips loading so builder/CLI continue without
-% LLM backends; call sites must tolerate that (stubs + soft call_llm).
-
-loader:maybe_load_llm(none).
-loader:maybe_load_llm(llm) :-
-  ( catch(config:load_llm_modules(true), _, fail)
-  -> loader:load_groups([llm_libraries,
-                         llm_modules]),
-     message:log('Loaded Generative AI modules...')
-  ;  message:log('Skipping Generative AI modules (config:load_llm_modules(false)).')
-  ).
+   message:log(Msg).
