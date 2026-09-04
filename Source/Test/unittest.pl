@@ -2452,22 +2452,22 @@ test(choice_sig_reflects_snapshot_presence,
               retractall(memo:dep_model_choice_cns_(_, _, _)),
               assertz(memo:dep_model_choice_cns_(testrepo, 'x/y-1', ['dev-lang'-'python'])) )),
       cleanup(retractall(memo:dep_model_choice_cns_(_, _, _)))]) :-
-  query:dep_model_choice_sig(testrepo, 'x/y-1', [0]),
+  query:dep_model_selected_choice_cns(testrepo, 'x/y-1', []),
   cnselect:record_selected_cn_snapshot('dev-lang', 'python', [selected(portage,'dev-lang/python-3.13',run,v,'3.13')]),
-  query:dep_model_choice_sig(testrepo, 'x/y-1', [1]).
+  query:dep_model_selected_choice_cns(testrepo, 'x/y-1', ['dev-lang'-'python']).
 
 test(choice_sig_zero_without_choice_groups,
      [setup(( retractall(memo:dep_model_choice_cns_(_, _, _)),
               assertz(memo:dep_model_choice_cns_(testrepo, 'x/z-1', [])) )),
       cleanup(retractall(memo:dep_model_choice_cns_(_, _, _)))]) :-
-  query:dep_model_choice_sig(testrepo, 'x/z-1', 0).
+  query:dep_model_selected_choice_cns(testrepo, 'x/z-1', []).
 
 test(assuming_bits_reflect_prover_scopes) :-
-  query:dep_model_assuming_bits(bits(0, 0, 0, 0)),
-  prover:assuming(conflicts, query:dep_model_assuming_bits(bits(0, 0, 1, 0))),
+  query:dep_model_assuming([]),
+  prover:assuming(conflicts, query:dep_model_assuming([conflicts])),
   prover:assuming(keyword_acceptance,
-    prover:assuming(blockers, query:dep_model_assuming_bits(bits(1, 0, 0, 1)))),
-  query:dep_model_assuming_bits(bits(0, 0, 0, 0)).
+    prover:assuming(blockers, query:dep_model_assuming([keyword_acceptance, blockers]))),
+  query:dep_model_assuming([]).
 
 test(key_none_for_nonground_context) :-
   query:dep_model_key(testrepo, 'x/y-1', [build_with_use:use_state([_Var], [])], none).
@@ -2483,9 +2483,9 @@ test(key_encodes_context_bits_and_sig,
               assertz(memo:dep_model_choice_cns_(testrepo, 'x/y-1', ['dev-lang'-'python'])) )),
       cleanup(retractall(memo:dep_model_choice_cns_(_, _, _)))]) :-
   Ctx = [build_with_use:use_state([icu], [])],
-  query:dep_model_key(testrepo, 'x/y-1', Ctx, key(Ctx, bits(0,0,0,0), [0])),
+  query:dep_model_key(testrepo, 'x/y-1', Ctx, key(Ctx, [], [])),
   prover:assuming(unmask,
-    query:dep_model_key(testrepo, 'x/y-1', Ctx, key(Ctx, bits(0,1,0,0), [0]))).
+    query:dep_model_key(testrepo, 'x/y-1', Ctx, key(Ctx, [unmask], []))).
 
 :- end_tests(dep_model_cache).
 

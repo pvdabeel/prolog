@@ -103,7 +103,7 @@ pipeline:tier_goal(keyword_acceptance, Goal, prover:assuming(keyword_acceptance,
 pipeline:tier_goal(blockers,           Goal, prover:assuming(blockers, Goal)).
 pipeline:tier_goal(unmask,             Goal, prover:assuming(unmask, Goal)).
 pipeline:tier_goal(keyword_unmask,     Goal, prover:assuming(keyword_acceptance,
-                                               prover:assuming(unmask, Goal))).
+                                             prover:assuming(unmask, Goal))).
 
 
 %! pipeline:with_fallback(+Goal, -FallbackUsed) is semidet

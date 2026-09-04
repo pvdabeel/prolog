@@ -870,7 +870,8 @@ compile_query_compound(all(dependency(D,fetchonly)):A?{C}, Repo://Id,
 %      (conflicts) / assuming(blockers) — nb_setval flags that change between
 %      fallback tiers.  any_of_config_dep_ok calls
 %      acceptance:accepted_keyword_candidate, which checks these flags.
-%      -> encoded as a 4-bit term in the key (dep_model_assuming_bits/1).
+%      -> the list of active flags among dep_model_assuming_hazards/1 is
+%      part of the key (dep_model_assuming/1).
 %
 %   3. memo_selected_cn_snap — evolves during a single proof attempt as
 %      packages are selected.  any_of_group:config calls
@@ -878,9 +879,10 @@ compile_query_compound(all(dependency(D,fetchonly)):A?{C}, Repo://Id,
 %      criterion), so the snapshot
 %      can reorder OR branches and lock a different choice into the model.
 %      -> per-entry choice-group C/N pairs are extracted once from the dep
-%      metadata (memo:dep_model_choice_cns_/3) and their snapshot presence
-%      bits form a signature in the key (dep_model_choice_sig/3).  Entries
-%      without choice groups get signature 0 and are immune to this hazard.
+%      metadata (memo:dep_model_choice_cns_/3); those currently present in
+%      the snapshot are part of the key (dep_model_selected_choice_cns/3).
+%      Entries without choice groups contribute [] and are immune to this
+%      hazard.
 %
 %   4. variant:use_override/2 and variant:branch_prefer/1 — thread_local state
 %      active only during variant exploration; affects effective_use_for_entry
@@ -914,9 +916,9 @@ query:dep_model_key(Repo, Id, Context, Key) :-
     \+ query:dep_model_variant_active,
     ground(Context)
   ->
-    query:dep_model_assuming_bits(Bits),
-    query:dep_model_choice_sig(Repo, Id, Sig),
-    Key = key(Context, Bits, Sig)
+    query:dep_model_assuming(Assuming),
+    query:dep_model_selected_choice_cns(Repo, Id, Selected),
+    Key = key(Context, Assuming, Selected)
   ; Key = none
   ).
 
@@ -944,35 +946,40 @@ query:dep_model_variant_active :-
   !.
 
 
-%! query:dep_model_assuming_bits(-Bits) is det
+%! query:dep_model_assuming_hazards(-Flags) is det
 %
-% Snapshot of the prover:assuming flags that influence config-phase
-% model construction (hazard 2), as a compact key component.
+% The prover:assuming/1 flags that influence config-phase model
+% construction (hazard 2).
 
-query:dep_model_assuming_bits(bits(K, U, C, B)) :-
-  ( prover:assuming(keyword_acceptance) -> K = 1 ; K = 0 ),
-  ( prover:assuming(unmask)             -> U = 1 ; U = 0 ),
-  ( prover:assuming(conflicts)          -> C = 1 ; C = 0 ),
-  ( prover:assuming(blockers)           -> B = 1 ; B = 0 ).
+query:dep_model_assuming_hazards([keyword_acceptance, unmask, conflicts, blockers]).
 
 
-%! query:dep_model_choice_sig(+Repo, +Id, -Sig) is det
+%! query:dep_model_assuming(-Active) is det
 %
-% Snapshot-presence signature over the entry's choice-group member C/N
-% pairs (hazard 3).  0 when the entry's dep metadata contains no choice
-% groups (the common case); otherwise the list of selected_cn snapshot
-% presence bits in the (sorted, static) order of the pairs.
+% The currently active flags among dep_model_assuming_hazards/1, in
+% declaration order.
 
-query:dep_model_choice_sig(Repo, Id, Sig) :-
+query:dep_model_assuming(Active) :-
+  query:dep_model_assuming_hazards(Flags),
+  include(prover:assuming, Flags, Active).
+
+
+%! query:dep_model_selected_choice_cns(+Repo, +Id, -Selected) is det
+%
+% The entry's choice-group member C/N pairs that currently have a
+% selected_cn snapshot (hazard 3), in the (sorted, static) order of
+% dep_model_choice_cns/3.  [] when the entry's dep metadata contains no
+% choice groups (the common case).
+
+query:dep_model_selected_choice_cns(Repo, Id, Selected) :-
   query:dep_model_choice_cns(Repo, Id, CNs),
-  ( CNs == [] ->
-      Sig = 0
-  ; findall(Bit,
-            ( member(C-N, CNs),
-              ( cnselect:snapshot_selected_cn_candidates(C, N, _) -> Bit = 1 ; Bit = 0 )
-            ),
-            Sig)
-  ).
+  include(query:dep_model_cn_selected, CNs, Selected).
+
+
+%! query:dep_model_cn_selected(+CN) is semidet
+
+query:dep_model_cn_selected(C-N) :-
+  cnselect:snapshot_selected_cn_candidates(C, N, _), !.
 
 
 %! query:dep_model_choice_cns(+Repo, +Id, -CNs) is det
@@ -1620,27 +1627,40 @@ search(Q,R://I) :-
   select(Key,equal,Value,R://I).
   %cache:entry_metadata(R,I,Key,Value).
 
-query:iuse_effective_state_(States, State, Reason) :-
-  findall(P-State0-Reason0,
-          ( member(State0:Reason0, States),
-            query:iuse_state_priority_(State0, Reason0, P)
-          ),
-          Ranked0),
-  keysort(Ranked0, RankedAsc),
-  reverse(RankedAsc, [_BestP-State-Reason|_]),
-  !.
+%! query:iuse_state_precedence(-Patterns) is det.
+%
+% USE flag state readings, strongest first. A flag that IUSE lists more
+% than once (e.g. `+foo` and `foo`) yields one State:Reason reading per
+% occurrence; the effective reading is the one matching the earliest
+% pattern here. Profile force/mask are hard; package.use and make.conf
+% preferences are soft overrides; then the ebuild default, then the
+% implicit default. The last two patterns catch any other reason.
 
-query:iuse_state_priority_(positive, profile_package_use_force, 1000) :- !.
-query:iuse_state_priority_(negative, profile_package_use_mask, 1000) :- !.
-query:iuse_state_priority_(positive, profile_use_force, 1000) :- !.
-query:iuse_state_priority_(negative, profile_use_mask, 1000) :- !.
-query:iuse_state_priority_(_, package_use, 900) :- !.
-query:iuse_state_priority_(_, preference, 800) :- !.
-query:iuse_state_priority_(positive, ebuild, 700) :- !.
-query:iuse_state_priority_(negative, ebuild, 650) :- !.
-query:iuse_state_priority_(_, default, 600) :- !.
-query:iuse_state_priority_(positive, _, 500) :- !.
-query:iuse_state_priority_(negative, _, 400) :- !.
+query:iuse_state_precedence(
+  [ positive:profile_package_use_force,
+    negative:profile_package_use_mask,
+    positive:profile_use_force,
+    negative:profile_use_mask,
+    _:package_use,
+    _:preference,
+    positive:ebuild,
+    negative:ebuild,
+    _:default,
+    positive:_,
+    negative:_ ]).
+
+
+%! query:iuse_effective_state_(+Readings, -State, -Reason) is semidet.
+%
+% The State:Reason reading of Readings that matches the earliest
+% iuse_state_precedence/1 pattern.
+
+query:iuse_effective_state_(Readings, State, Reason) :-
+  query:iuse_state_precedence(Patterns),
+  member(Pattern, Patterns),
+  member(State:Reason, Readings),
+  subsumes_term(Pattern, State:Reason),
+  !.
 
 
 % -----------------------------------------------------------------------------
