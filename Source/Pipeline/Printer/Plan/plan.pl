@@ -1205,7 +1205,7 @@ plan:print_variant_diff(diff(Added, Removed, Changed)) :-
      -> message:color(green),
         format('~n  Added (~w):~n', [NA]),
         forall(member(entry(C, N, Ver, _), Added),
-          ( plan:version_string(Ver, VS),
+          ( version_domain:display_atom(Ver, VS),
             format('    + ~w/~w-~w~n', [C, N, VS]) )),
         message:color(normal)
      ;  true
@@ -1214,7 +1214,7 @@ plan:print_variant_diff(diff(Added, Removed, Changed)) :-
      -> message:color(red),
         format('~n  Removed (~w):~n', [NR]),
         forall(member(entry(C, N, Ver, _), Removed),
-          ( plan:version_string(Ver, VS),
+          ( version_domain:display_atom(Ver, VS),
             format('    - ~w/~w-~w~n', [C, N, VS]) )),
         message:color(normal)
      ;  true
@@ -1223,20 +1223,11 @@ plan:print_variant_diff(diff(Added, Removed, Changed)) :-
      -> message:color(orange),
         format('~n  Version changed (~w):~n', [NC]),
         forall(member(changed(C, N, BaseVer, VarVer), Changed),
-          ( plan:version_string(BaseVer, BVS),
-            plan:version_string(VarVer, VVS),
+          ( version_domain:display_atom(BaseVer, BVS),
+            version_domain:display_atom(VarVer, VVS),
             format('    ~~ ~w/~w  ~w -> ~w~n', [C, N, BVS, VVS]) )),
         message:color(normal)
      ;  true
      ),
      format('~n  Summary: +~w -~w ~~~w~n', [NA, NR, NC])
   ).
-
-
-%! plan:version_string(+VersionTerm, -String) is det.
-%
-% Extracts the human-readable version string from a version/7 compound.
-
-plan:version_string(version(_,_,_,_,_,_,Full), Full) :- !.
-plan:version_string(version_none, '') :- !.
-plan:version_string(V, S) :- format(atom(S), '~w', [V]).

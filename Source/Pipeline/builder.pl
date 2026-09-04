@@ -1144,22 +1144,9 @@ builder:auto_confdir(Dir) :-
 builder:atom_for_entry(Repo, Entry, Atom) :-
   cache:ordered_entry(Repo, Entry, Cat, Name, Version),
   atom(Cat), atom(Name),
-  builder:version_atom(Version, VAtom),
+  version_domain:display_atom(Version, VAtom),
   VAtom \== '',
   atomic_list_concat(['=', Cat, '/', Name, '-', VAtom], Atom).
-
-
-%! builder:version_atom(+Version, -Atom) is det.
-%
-% Project a version representation (`version/7` compound, atom, or
-% `version_none`) onto the canonical version string used in Portage
-% atoms. Mirrors plan:version_string/2.
-
-builder:version_atom(version(_,_,_,_,_,_,Full), Atom) :- !,
-  ( atom(Full) -> Atom = Full ; format(atom(Atom), '~w', [Full]) ).
-builder:version_atom(version_none, '') :- !.
-builder:version_atom(V, V) :- atom(V), !.
-builder:version_atom(V, A) :- format(atom(A), '~w', [V]).
 
 
 %! builder:format_use_changes(+Changes, -Atom) is det.

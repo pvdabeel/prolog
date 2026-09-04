@@ -300,7 +300,7 @@ fetch:poll_all_jobs([], _, _, _, [], 0).
 
 fetch:poll_all_jobs([Job|Rest], TotalLines, FileStartLine, Distdir, StillActive, Fails) :-
   Job = dl_job(Pid, FileIdx, Filename, ExpSize, Pairs, DestPath, Repo, Entry),
-  ( download:check_process_done(Pid, ExitCode)
+  ( subprocess:poll_exit(Pid, ExitCode)
   -> fetch:finalize_download(ExitCode, FileIdx, Filename, ExpSize, Pairs, DestPath, Repo, Entry,
                              TotalLines, FileStartLine, Distdir, OK),
      fetch:poll_all_jobs(Rest, TotalLines, FileStartLine, Distdir, StillActive, RestFails),

@@ -55,40 +55,15 @@ gitlock:retry_phase(unpack).
 %! gitlock:phase_error(+LogPath, +SizeBefore) is semidet.
 %
 % True when the log segment written by the failed phase carries the
-% git-r3 HEAD.lock / Unable to update HEAD signature.
+% git-r3 HEAD.lock / Unable to update HEAD signature. The message is
+% emitted right at the die, so the trailing 64KB is enough.
 
 gitlock:phase_error(LogPath, SizeBefore) :-
-  catch(
-    ( exists_file(LogPath),
-      size_file(LogPath, Size),
-      Size > SizeBefore,
-      Start is max(SizeBefore, Size - 65536),
-      Len is Size - Start,
-      setup_call_cleanup(
-        open(LogPath, read, S, [type(binary)]),
-        ( seek(S, Start, bof, _),
-          read_string(S, Len, Tail)
-        ),
-        close(S))
-    ),
-    _, fail),
+  fixup:log_tail(LogPath, SizeBefore, 65536, Tail),
   ( sub_string(Tail, _, _, _, "HEAD.lock")
   ; sub_string(Tail, _, _, _, "Unable to update HEAD")
   ),
   !.
-
-
-%! gitlock:log_retry(+LogPath, +Phase, +Attempt, +ExitCode) is det.
-%
-% Writes a marker line to the build log so the retry is visible.
-
-gitlock:log_retry(LogPath, Phase, Attempt, ExitCode) :-
-  catch(
-    ( open(LogPath, append, S),
-      format(S, '~n=== ~w failed (exit ~w) with git-r3 HEAD.lock; retry ~w/5 ===~n',
-             [Phase, ExitCode, Attempt]),
-      close(S)
-    ), _, true).
 
 
 % -----------------------------------------------------------------------------
@@ -123,7 +98,8 @@ gitlock:retry(_EbuildPath, _Entry, _Phase, _LogPath, _UseString, _Callback, Exit
 gitlock:retry(EbuildPath, Entry, Phase, LogPath, UseString, Callback, ExitCode0, Attempt, ExitCode) :-
   Delay is 2.0 * Attempt,
   sleep(Delay),
-  gitlock:log_retry(LogPath, Phase, Attempt, ExitCode0),
+  fixup:log_marker(LogPath, '~w failed (exit ~w) with git-r3 HEAD.lock; retry ~w/5',
+                   [Phase, ExitCode0, Attempt]),
   size_file(LogPath, SizeBefore),
   ebuild_exec:start_phase_async(EbuildPath, Phase, LogPath, UseString, Pid),
   ebuild_exec:poll_phase_spinning(Pid, Phase, Callback, ExitCode1),
@@ -144,6 +120,6 @@ gitlock:retry(EbuildPath, Entry, Phase, LogPath, UseString, Callback, ExitCode0,
 %! fixup:mechanism_note(+gitlock, +Count, -Lines) is semidet.
 
 fixup:mechanism_note(gitlock, N, [Line1, Line2]) :-
-  ( N =:= 1 -> Word = 'package' ; Word = 'packages' ),
+  fixup:packages_word(N, Word),
   format(atom(Line1), 'Git cache: unpack retried after a shared git3-src HEAD.lock for ~d ~w', [N, Word]),
   Line2 = '           (parallel live clones racing on the same bare repo):'.

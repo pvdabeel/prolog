@@ -89,28 +89,13 @@ ocamlabi:retry_phase(compile).
 
 %! ocamlabi:phase_error(+LogPath, +SizeBefore, -Tail) is semidet.
 %
-% True when the log content appended after byte offset SizeBefore (i.e. by
-% the phase that just failed) carries an OCaml stale-ABI signature. Tail is
-% the examined log segment, kept for stale-unit extraction. Only the
-% trailing 256KB of the segment is examined (the compiler error is emitted
-% at the point of the die). All four signatures are OCaml-specific
+% True when the log segment the failed phase wrote (fixup:log_tail/3)
+% carries an OCaml stale-ABI signature. Tail is the examined log segment,
+% kept for stale-unit extraction. All four signatures are OCaml-specific
 % compiler/ocamlfind output, so a non-OCaml build can never match.
 
 ocamlabi:phase_error(LogPath, SizeBefore, Tail) :-
-  catch(
-    ( exists_file(LogPath),
-      size_file(LogPath, Size),
-      Size > SizeBefore,
-      Start is max(SizeBefore, Size - 262144),
-      Len is Size - Start,
-      setup_call_cleanup(
-        open(LogPath, read, S, [type(binary)]),
-        ( seek(S, Start, bof, _),
-          read_string(S, Len, Tail)
-        ),
-        close(S))
-    ),
-    _, fail),
+  fixup:log_tail(LogPath, SizeBefore, Tail),
   ( sub_string(Tail, _, _, _, "make inconsistent assumptions over inter")
   ; sub_string(Tail, _, _, _, "is not a compiled interface")
   ; sub_string(Tail, _, _, _, "Error: Unbound module")
@@ -326,20 +311,6 @@ ocamlabi:repair_pass([Entry|Rest], Failed) :-
   ocamlabi:repair_pass(Rest, MoreFailed).
 
 
-%! ocamlabi:log_retry(+LogPath, +Phase, +ExitCode, +Owners) is det.
-%
-% Writes a marker line to the failing consumer's build log so the repair
-% is visible when inspecting the build.
-
-ocamlabi:log_retry(LogPath, Phase, ExitCode, Owners) :-
-  catch(
-    ( open(LogPath, append, S),
-      format(S, '~n=== ~w failed (exit ~w) with stale OCaml compiled units owned by ~w; rebuilding and retrying (portage-ng#99 ocaml-abi repair) ===~n',
-             [Phase, ExitCode, Owners]),
-      close(S)
-    ), _, true).
-
-
 % -----------------------------------------------------------------------------
 %  Per-phase retry hook
 % -----------------------------------------------------------------------------
@@ -374,7 +345,9 @@ ocamlabi:retry_loop(RoundsLeft, EbuildPath, Entry, Phase, LogPath, UseString, Ca
     Owners \== [],
     ocamlabi:repair_owners(Owners, Repaired),
     Repaired > 0
-  -> ocamlabi:log_retry(LogPath, Phase, ExitCode0, Owners),
+  -> fixup:log_marker(LogPath,
+       '~w failed (exit ~w) with stale OCaml compiled units owned by ~w; rebuilding and retrying (portage-ng#99 ocaml-abi repair)',
+       [Phase, ExitCode0, Owners]),
      ebuild_exec:log_file_size(LogPath, SizeBefore1),
      ebuild_exec:start_phase_async(EbuildPath, Phase, LogPath, UseString, Pid),
      ebuild_exec:poll_phase_spinning(Pid, Phase, Callback, ExitCode1),
@@ -394,6 +367,6 @@ ocamlabi:retry_loop(RoundsLeft, EbuildPath, Entry, Phase, LogPath, UseString, Ca
 %! fixup:mechanism_note(+ocamlabi, +Count, -Lines) is semidet.
 
 fixup:mechanism_note(ocamlabi, N, [Line1, Line2]) :-
-  ( N =:= 1 -> Word = 'package' ; Word = 'packages' ),
+  fixup:packages_word(N, Word),
   format(atom(Line1), 'OCaml ABI repair: ~d stale ~w rebuilt in-transaction after a', [N, Word]),
   Line2 = '                  compiler/findlib ABI change (portage-ng#99):'.

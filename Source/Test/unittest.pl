@@ -119,86 +119,80 @@ test(version_none_on_empty, [true(V == version_none)]) :-
 %  EAPI version comparison tests
 % -----------------------------------------------------------------------------
 
+%! pms_version(+Atom, -Version) is det.
+%
+% Parses a PMS version atom into its version/7 term. Shared fixture for the
+% version comparison units below.
+
+pms_version(Atom, V) :-
+  atom_codes(Atom, Codes),
+  phrase(eapi:version(V), Codes, []),
+  !.
+
+
+%! pms_compare(+Op, +AtomA, +AtomB) is semidet.
+%
+% eapi:version_compare/3 on two PMS version atoms.
+
+pms_compare(Op, A, B) :-
+  pms_version(A, VA),
+  pms_version(B, VB),
+  eapi:version_compare(Op, VA, VB).
+
+
 :- begin_tests(eapi_version_compare).
 
-test(equal_versions, [nondet]) :-
-  atom_codes('1.0', C1), phrase(eapi:version(V1), C1, []),
-  atom_codes('1.0', C2), phrase(eapi:version(V2), C2, []),
-  eapi:version_compare(=, V1, V2).
+test(equal_versions) :-
+  pms_compare(=, '1.0', '1.0').
 
-test(less_than, [nondet]) :-
-  atom_codes('1.0', C1), phrase(eapi:version(V1), C1, []),
-  atom_codes('2.0', C2), phrase(eapi:version(V2), C2, []),
-  eapi:version_compare(<, V1, V2).
+test(less_than) :-
+  pms_compare(<, '1.0', '2.0').
 
-test(greater_than, [nondet]) :-
-  atom_codes('3.0', C1), phrase(eapi:version(V1), C1, []),
-  atom_codes('2.0', C2), phrase(eapi:version(V2), C2, []),
-  eapi:version_compare(>, V1, V2).
+test(greater_than) :-
+  pms_compare(>, '3.0', '2.0').
 
-test(revision_ordering, [nondet]) :-
-  atom_codes('1.0-r1', C1), phrase(eapi:version(V1), C1, []),
-  atom_codes('1.0-r2', C2), phrase(eapi:version(V2), C2, []),
-  eapi:version_compare(<, V1, V2).
+test(revision_ordering) :-
+  pms_compare(<, '1.0-r1', '1.0-r2').
 
-test(suffix_ordering_alpha_before_beta, [nondet]) :-
-  atom_codes('1.0_alpha1', C1), phrase(eapi:version(V1), C1, []),
-  atom_codes('1.0_beta1', C2), phrase(eapi:version(V2), C2, []),
-  eapi:version_compare(<, V1, V2).
+test(suffix_ordering_alpha_before_beta) :-
+  pms_compare(<, '1.0_alpha1', '1.0_beta1').
 
-test(suffix_ordering_rc_before_release, [nondet]) :-
-  atom_codes('1.0_rc1', C1), phrase(eapi:version(V1), C1, []),
-  atom_codes('1.0', C2), phrase(eapi:version(V2), C2, []),
-  eapi:version_compare(<, V1, V2).
+test(suffix_ordering_rc_before_release) :-
+  pms_compare(<, '1.0_rc1', '1.0').
 
-test(suffix_ordering_release_before_p, [nondet]) :-
-  atom_codes('1.0', C1), phrase(eapi:version(V1), C1, []),
-  atom_codes('1.0_p1', C2), phrase(eapi:version(V2), C2, []),
-  eapi:version_compare(<, V1, V2).
+test(suffix_ordering_release_before_p) :-
+  pms_compare(<, '1.0', '1.0_p1').
 
-test(pms_suffix_chain, [true(Order == [VA,VB,VC,VD,VE,VF]), nondet]) :-
-  atom_codes('1.0_alpha1', CA), phrase(eapi:version(VA), CA, []),
-  atom_codes('1.0_beta1', CB), phrase(eapi:version(VB), CB, []),
-  atom_codes('1.0_pre1', CC), phrase(eapi:version(VC), CC, []),
-  atom_codes('1.0_rc1', CD), phrase(eapi:version(VD), CD, []),
-  atom_codes('1.0', CE), phrase(eapi:version(VE), CE, []),
-  atom_codes('1.0_p1', CF), phrase(eapi:version(VF), CF, []),
+test(pms_suffix_chain, [true(Order == Expected)]) :-
+  maplist(pms_version,
+          ['1.0_alpha1', '1.0_beta1', '1.0_pre1', '1.0_rc1', '1.0', '1.0_p1'],
+          Expected),
+  Expected = [VA, VB, VC, VD, VE, VF],
   msort([VF, VD, VB, VE, VC, VA], Order).
 
 % PMS algorithm 3.5/3.6: multi-suffix versions compare pairwise by suffix
 % type then number, not lexicographically on the rest string (issue #30).
-test(multi_suffix_p_beats_pre, [nondet]) :-
-  atom_codes('1.0_rc1_p2', C1), phrase(eapi:version(V1), C1, []),
-  atom_codes('1.0_rc1_pre1', C2), phrase(eapi:version(V2), C2, []),
-  eapi:version_compare(>, V1, V2).
+test(multi_suffix_p_beats_pre) :-
+  pms_compare(>, '1.0_rc1_p2', '1.0_rc1_pre1').
 
-test(multi_suffix_numeric_not_lexicographic, [nondet]) :-
-  atom_codes('1.0_rc1_p10', C1), phrase(eapi:version(V1), C1, []),
-  atom_codes('1.0_rc1_p9', C2), phrase(eapi:version(V2), C2, []),
-  eapi:version_compare(>, V1, V2).
+test(multi_suffix_numeric_not_lexicographic) :-
+  pms_compare(>, '1.0_rc1_p10', '1.0_rc1_p9').
 
-test(multi_suffix_shorter_below_p, [nondet]) :-
-  atom_codes('1.0_rc1', C1), phrase(eapi:version(V1), C1, []),
-  atom_codes('1.0_rc1_p1', C2), phrase(eapi:version(V2), C2, []),
-  eapi:version_compare(<, V1, V2).
+test(multi_suffix_shorter_below_p) :-
+  pms_compare(<, '1.0_rc1', '1.0_rc1_p1').
 
-test(multi_suffix_shorter_above_pre, [nondet]) :-
-  atom_codes('1.0_rc1', C1), phrase(eapi:version(V1), C1, []),
-  atom_codes('1.0_rc1_pre1', C2), phrase(eapi:version(V2), C2, []),
-  eapi:version_compare(>, V1, V2).
+test(multi_suffix_shorter_above_pre) :-
+  pms_compare(>, '1.0_rc1', '1.0_rc1_pre1').
 
-test(multi_suffix_pms_chain, [true(Order == [VA,VB,VC,VD,VE]), nondet]) :-
-  atom_codes('1.0_rc1_pre1', CA), phrase(eapi:version(VA), CA, []),
-  atom_codes('1.0_rc1', CB), phrase(eapi:version(VB), CB, []),
-  atom_codes('1.0_rc1_p2', CC), phrase(eapi:version(VC), CC, []),
-  atom_codes('1.0_rc1_p10', CD), phrase(eapi:version(VD), CD, []),
-  atom_codes('1.0', CE), phrase(eapi:version(VE), CE, []),
+test(multi_suffix_pms_chain, [true(Order == Expected)]) :-
+  maplist(pms_version,
+          ['1.0_rc1_pre1', '1.0_rc1', '1.0_rc1_p2', '1.0_rc1_p10', '1.0'],
+          Expected),
+  Expected = [VA, VB, VC, VD, VE],
   msort([VE, VC, VA, VD, VB], Order).
 
-test(multi_suffix_equal_versions, [nondet]) :-
-  atom_codes('1.0_rc1_p2', C1), phrase(eapi:version(V1), C1, []),
-  atom_codes('1.0_rc1_p2', C2), phrase(eapi:version(V2), C2, []),
-  eapi:version_compare(=, V1, V2).
+test(multi_suffix_equal_versions) :-
+  pms_compare(=, '1.0_rc1_p2', '1.0_rc1_p2').
 
 :- end_tests(eapi_version_compare).
 
@@ -212,11 +206,6 @@ test(multi_suffix_equal_versions, [nondet]) :-
 
 :- begin_tests(eapi_version_pms_vectors).
 
-pms_version(Atom, V) :-
-  atom_codes(Atom, Codes),
-  phrase(eapi:version(V), Codes, []),
-  !.
-
 % Each vector is A-Op-B, asserting eapi:version_compare(Op, A, B).
 pms_order_vector('1'    < '1.0').     % more numeric components wins
 pms_order_vector('1.0'  < '1.0.0').
@@ -228,10 +217,8 @@ pms_order_vector('1.99' < '2.0').
 
 test(pms_numeric_order_vectors) :-
   forall(pms_order_vector(A < B),
-         ( pms_version(A, VA),
-           pms_version(B, VB),
-           eapi:version_compare(<, VA, VB),
-           eapi:version_compare(>, VB, VA)
+         ( pms_compare(<, A, B),
+           pms_compare(>, B, A)
          )).
 
 % Numeric padding (PMS 3.3): trailing zeros in a padded component must not
@@ -245,9 +232,7 @@ test(pms_padding_same_numeric_key) :-
   N1 == N2, A1 == A2, R1 == R2, S1 == S2, T1 == T2, Rev1 == Rev2.
 
 test(pms_padding_not_smaller_than_unpadded, [fail]) :-
-  pms_version('1.00', VA),
-  pms_version('1.0',  VB),
-  eapi:version_compare(<, VA, VB).
+  pms_compare(<, '1.00', '1.0').
 
 :- end_tests(eapi_version_pms_vectors).
 
@@ -1657,12 +1642,46 @@ test(all_masked_falls_back_to_full_list,
 :- end_tests(rules_required_use_choice_seed).
 
 
+% Synthetic qtest entry fixtures shared by the USE rule units below. All
+% are KB-independent: CI has no Portage tree, so no live metadata may be
+% required.
+
+%! use_entry_memo_reset(+Repo://Id) is det.
+%
+% Drops every per-entry USE memo so a unit starts from cold caches.
+
+use_entry_memo_reset(Repo://Id) :-
+  retractall(memo:eff_use_cache_(Repo, Id, _, _)),
+  retractall(memo:iuse_default_cache_(Repo, Id, _)),
+  retractall(memo:self_use_cache_(Repo, Id, _, _)).
+
+
+%! use_entry_setup(+Repo://Id, +Category, +Name, +Flag) is det.
+%
+% Registers Repo://Id as version 0 of Category/Name with Flag declared in
+% IUSE (default off), on cold USE memos.
+
+use_entry_setup(Repo://Id, Category, Name, Flag) :-
+  use_entry_cleanup(Repo://Id),
+  assertz(cache:ordered_entry(Repo, Id, Category, Name,
+                              version([0],'',4,0,[],0,'0'))),
+  empty_assoc(Empty),
+  put_assoc(Flag, Empty, negative, Map),
+  assertz(memo:iuse_default_cache_(Repo, Id, Map)).
+
+
+%! use_entry_cleanup(+Repo://Id) is det.
+
+use_entry_cleanup(Repo://Id) :-
+  retractall(cache:ordered_entry(Repo, Id, _, _, _)),
+  use_entry_memo_reset(Repo://Id).
+
+
 % Joint USE-dep / REQUIRED_USE / profile-hard fail-closed checks
 % (portage-ng#109/#111 — emerge use_dep_unsat class).
 %
-% KB-independent: synthetic qtest entry + memo:eff_use_cache_/4 (same pattern
-% as builder_base_use_state). CI has no Portage tree, so live acct-user/git
-% metadata must not be required.
+% Synthetic qtest entry + memo:eff_use_cache_/4 (same pattern as
+% builder_base_use_state).
 :- begin_tests(rules_use_dep_unsat).
 
 ude_entry(qtest://'acct-user/git-0').
@@ -1670,9 +1689,9 @@ ude_requse(exactly_one_of_group([required(git), required(gitea),
                                  required(gitolite)])).
 
 ude_setup :-
-  ude_entry(Repo://Id),
-  retractall(memo:eff_use_cache_(Repo, Id, _, _)),
-  retractall(cache:entry_metadata(Repo, Id, required_use, _)),
+  ude_entry(E),
+  ude_cleanup,
+  E = Repo://Id,
   ude_requse(RU),
   assertz(cache:entry_metadata(Repo, Id, required_use, RU)),
   % Profile/default-on sibling (not HARD atom): positive via eff-use memo.
@@ -1680,7 +1699,7 @@ ude_setup :-
 
 ude_cleanup :-
   ude_entry(Repo://Id),
-  retractall(memo:eff_use_cache_(Repo, Id, _, _)),
+  use_entry_memo_reset(Repo://Id),
   retractall(cache:entry_metadata(Repo, Id, required_use, _)).
 
 % Exactly-one-of with two positives: disable the non-HARD sibling.
@@ -1728,35 +1747,20 @@ test(use_dep_atom_sat_after_disable_sibling,
 :- begin_tests(rules_use_mask_beats_soft).
 
 ums_entry(qtest://'llvm-runtimes/clang-runtime-0').
-ums_ver(version([0],'',4,0,[],0,'0')).
 
 ums_setup :-
-  ums_entry(R://Id),
-  ums_ver(V),
-  retractall(cache:ordered_entry(qtest, Id, _, _, _)),
-  retractall(memo:eff_use_cache_(qtest, Id, _, _)),
-  retractall(memo:iuse_default_cache_(qtest, Id, _)),
-  retractall(memo:self_use_cache_(qtest, Id, _, _)),
-  retractall(preference:local_profile_masked_use_flag(abi_x86_32)),
-  retractall(preference:local_profile_use_soft(simple('llvm-runtimes',
-                                                     'clang-runtime', _),
-                                              abi_x86_32, _)),
-  assertz(cache:ordered_entry(R, Id, 'llvm-runtimes', 'clang-runtime', V)),
+  ums_entry(E),
+  ums_cleanup,
+  % Flag declared in IUSE default-off so soft/mask apply.
+  use_entry_setup(E, 'llvm-runtimes', 'clang-runtime', abi_x86_32),
   assertz(preference:local_profile_masked_use_flag(abi_x86_32)),
   assertz(preference:local_profile_use_soft(
             simple('llvm-runtimes', 'clang-runtime', []),
-            abi_x86_32, positive)),
-  % Declare the flag in IUSE with default-off so soft/mask apply.
-  empty_assoc(Empty),
-  put_assoc(abi_x86_32, Empty, negative, Map),
-  assertz(memo:iuse_default_cache_(R, Id, Map)).
+            abi_x86_32, positive)).
 
 ums_cleanup :-
-  ums_entry(_://Id),
-  retractall(cache:ordered_entry(qtest, Id, _, _, _)),
-  retractall(memo:eff_use_cache_(qtest, Id, _, _)),
-  retractall(memo:iuse_default_cache_(qtest, Id, _)),
-  retractall(memo:self_use_cache_(qtest, Id, _, _)),
+  ums_entry(E),
+  use_entry_cleanup(E),
   retractall(preference:local_profile_masked_use_flag(abi_x86_32)),
   retractall(preference:local_profile_use_soft(simple('llvm-runtimes',
                                                      'clang-runtime', _),
@@ -1784,28 +1788,17 @@ test(optenable_skips_globally_masked_flag,
 :- begin_tests(rules_use_mask_beats_force).
 
 umf_entry(qtest://'dev-lang/ghc-0').
-umf_ver(version([0],'',4,0,[],0,'0')).
 
 umf_setup :-
-  umf_entry(R://Id),
-  umf_ver(V),
-  retractall(cache:ordered_entry(qtest, Id, _, _, _)),
-  retractall(memo:eff_use_cache_(qtest, Id, _, _)),
-  retractall(memo:iuse_default_cache_(qtest, Id, _)),
-  retractall(preference:local_profile_masked_use_flag('big-endian')),
-  retractall(preference:local_profile_forced_use_flag('big-endian')),
-  assertz(cache:ordered_entry(R, Id, 'dev-lang', ghc, V)),
+  umf_entry(E),
+  umf_cleanup,
+  use_entry_setup(E, 'dev-lang', ghc, 'big-endian'),
   assertz(preference:local_profile_masked_use_flag('big-endian')),
-  assertz(preference:local_profile_forced_use_flag('big-endian')),
-  empty_assoc(Empty),
-  put_assoc('big-endian', Empty, negative, Map),
-  assertz(memo:iuse_default_cache_(R, Id, Map)).
+  assertz(preference:local_profile_forced_use_flag('big-endian')).
 
 umf_cleanup :-
-  umf_entry(_://Id),
-  retractall(cache:ordered_entry(qtest, Id, _, _, _)),
-  retractall(memo:eff_use_cache_(qtest, Id, _, _)),
-  retractall(memo:iuse_default_cache_(qtest, Id, _)),
+  umf_entry(E),
+  use_entry_cleanup(E),
   retractall(preference:local_profile_masked_use_flag('big-endian')),
   retractall(preference:local_profile_forced_use_flag('big-endian')).
 
@@ -1830,12 +1823,12 @@ test(categorize_use_mask_beats_force,
 :- end_tests(rules_use_mask_beats_force).
 
 
-% ||-branch ranking prefers the arm that admits the newest tree version
-% (portage-ng#112 — cabal's text 1.2 vs 2.x OR).
-:- begin_tests(ranking_any_of_version_branch).
+% dev-haskell/text 1.2 vs 2.x fixture shared by the ||-branch ranking units
+% (portage-ng#112 — cabal's text OR): two tree versions and the two
+% version-bounded arms that select them.
 
-rao_setup :-
-  retractall(cache:ordered_entry(qtest, _, 'dev-haskell', text, _)),
+text_tree_setup :-
+  text_tree_cleanup,
   assertz(cache:ordered_entry(qtest, 'dev-haskell/text-1.2.5.0-r1',
                               'dev-haskell', text,
                               version([1,2,5,0],'',4,0,[],1,'1.2.5.0-r1'))),
@@ -1843,30 +1836,34 @@ rao_setup :-
                               'dev-haskell', text,
                               version([2,1,1],'',4,0,[],0,'2.1.1'))).
 
-rao_cleanup :-
+text_tree_cleanup :-
   retractall(cache:ordered_entry(qtest, _, 'dev-haskell', text, _)).
 
-rao_text12(all_of_group([
+text_arm12(all_of_group([
   package_dependency(run,no,'dev-haskell',text,greaterequal,
                      version([1,2,3,0],'',4,0,[],0,'1.2.3.0'),[],[]),
   package_dependency(run,no,'dev-haskell',text,smaller,
                      version([1,3],'',4,0,[],0,'1.3'),[],[])])).
 
-rao_text2(all_of_group([
+text_arm2(all_of_group([
   package_dependency(run,no,'dev-haskell',text,greaterequal,
                      version([2,0],'',4,0,[],0,'2.0'),[],[]),
   package_dependency(run,no,'dev-haskell',text,smaller,
                      version([2,2],'',4,0,[],0,'2.2'),[],[])])).
 
+
+% ||-branch ranking prefers the arm that admits the newest tree version.
+:- begin_tests(ranking_any_of_version_branch).
+
 test(prefers_newer_text_branch_first,
-     [setup(rao_setup), cleanup(rao_cleanup)]) :-
-  rao_text12(B1), rao_text2(B2),
+     [setup(text_tree_setup), cleanup(text_tree_cleanup)]) :-
+  text_arm12(B1), text_arm2(B2),
   ranking:prioritize_deps_keep_all([B1, B2], [], [First|_]),
   First == B2.
 
 test(prefers_newer_even_when_listed_second,
-     [setup(rao_setup), cleanup(rao_cleanup)]) :-
-  rao_text12(B1), rao_text2(B2),
+     [setup(text_tree_setup), cleanup(text_tree_cleanup)]) :-
+  text_arm12(B1), text_arm2(B2),
   ranking:prioritize_deps_keep_all([B2, B1], [], [First|_]),
   First == B2.
 
@@ -1968,14 +1965,10 @@ test(prefers_higher_slot_arm,
   ranking:prioritize_deps_keep_all([S18, S20], [], [First|_]),
   First == S20.
 
+% text_tree_setup/0 plus a selected-cn snapshot already on text 2.1.1, so
+% the 1.2 arm is a downgrade.
 rap_text_setup :-
-  retractall(cache:ordered_entry(qtest, _, 'dev-haskell', text, _)),
-  assertz(cache:ordered_entry(qtest, 'dev-haskell/text-1.2.5.0-r1',
-                              'dev-haskell', text,
-                              version([1,2,5,0],'',4,0,[],1,'1.2.5.0-r1'))),
-  assertz(cache:ordered_entry(qtest, 'dev-haskell/text-2.1.1',
-                              'dev-haskell', text,
-                              version([2,1,1],'',4,0,[],0,'2.1.1'))),
+  text_tree_setup,
   empty_assoc(Empty),
   nb_setval(memo_selected_cn_snap, Empty),
   cnselect:record_selected_cn_snapshot('dev-haskell', text,
@@ -1983,25 +1976,13 @@ rap_text_setup :-
               version([2,1,1],'',4,0,[],0,'2.1.1'), '0')]).
 
 rap_text_cleanup :-
-  retractall(cache:ordered_entry(qtest, _, 'dev-haskell', text, _)),
+  text_tree_cleanup,
   empty_assoc(Empty),
   nb_setval(memo_selected_cn_snap, Empty).
 
-rap_text12(all_of_group([
-  package_dependency(run,no,'dev-haskell',text,greaterequal,
-                     version([1,2,3,0],'',4,0,[],0,'1.2.3.0'),[],[]),
-  package_dependency(run,no,'dev-haskell',text,smaller,
-                     version([1,3],'',4,0,[],0,'1.3'),[],[])])).
-
-rap_text2(all_of_group([
-  package_dependency(run,no,'dev-haskell',text,greaterequal,
-                     version([2,0],'',4,0,[],0,'2.0'),[],[]),
-  package_dependency(run,no,'dev-haskell',text,smaller,
-                     version([2,2],'',4,0,[],0,'2.2'),[],[])])).
-
 test(no_downgrade_demotes_older_arm,
      [setup(rap_text_setup), cleanup(rap_text_cleanup)]) :-
-  rap_text12(B1), rap_text2(B2),
+  text_arm12(B1), text_arm2(B2),
   ranking:analyse_arm([], B1, A1),
   ranking:analyse_arm([], B2, A2),
   ranking:criterion_value(no_downgrade, [], same_cn, A1, ND1),
@@ -2031,7 +2012,7 @@ test(mixed_cn_group_keeps_ebuild_order,
 
 test(same_cn_group_still_version_ranked,
      [setup(rap_text_setup), cleanup(rap_text_cleanup)]) :-
-  rap_text12(B1), rap_text2(B2),
+  text_arm12(B1), text_arm2(B2),
   ranking:prioritize_deps_keep_all([B1, B2], [], [First|_]),
   First == B2.
 

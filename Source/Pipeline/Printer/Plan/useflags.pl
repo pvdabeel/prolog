@@ -28,26 +28,6 @@ worker threads, line-count probes) cannot interfere with each other.
 % =============================================================================
 
 % -----------------------------------------------------------------------------
-%  Right-edge indicator helper
-% -----------------------------------------------------------------------------
-
-%! useflags:right_edge_ok is det.
-%
-% Print a green checkmark at the right edge of the terminal (1 space in).
-
-useflags:right_edge_ok :-
-  \+ config:output_tty, !.
-
-useflags:right_edge_ok :-
-  config:printing_tty_size(_, W),
-  Col is W - 1,
-  format("\e[~dG", [Col]),
-  message:color(green),
-  message:print('\u2713'),
-  message:color(normal).
-
-
-% -----------------------------------------------------------------------------
 %  Config item prefixes
 % -----------------------------------------------------------------------------
 
@@ -442,7 +422,7 @@ useflags:print_config_item('download',File,Size) :-
   message:print(' '),
   message:print(File),
   ( distfiles:present(File)
-  -> useflags:right_edge_ok
+  -> message:right_edge_ok
   ;  true
   ).
 

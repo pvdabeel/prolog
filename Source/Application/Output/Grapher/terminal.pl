@@ -411,13 +411,13 @@ terminal:collect_plain([C | Rest], [C | Plain], After) :-
     collect_plain(Rest, Plain, After).
 
 
+%! terminal:html_escape_codes(+Codes, -Escaped) is det.
+%
+% navtheme:html_escape_codes/2 plus a `pua` span around every Private Use
+% Area character (Nerd Font glyphs), so the page can give them their own
+% font stack.
+
 terminal:html_escape_codes([], []).
-terminal:html_escape_codes([38 | R], [0'&, 0'a, 0'm, 0'p, 0'; | Out]) :- !,
-    html_escape_codes(R, Out).
-terminal:html_escape_codes([60 | R], [0'&, 0'l, 0't, 0'; | Out]) :- !,
-    html_escape_codes(R, Out).
-terminal:html_escape_codes([62 | R], [0'&, 0'g, 0't, 0'; | Out]) :- !,
-    html_escape_codes(R, Out).
 terminal:html_escape_codes([C | R], Out) :-
     C >= 0xE000, C =< 0xF8FF, !,
     atom_codes('<span class="pua">', Open),
@@ -425,7 +425,10 @@ terminal:html_escape_codes([C | R], Out) :-
     append(Open, [C | Mid], Out),
     append(Close, Tail, Mid),
     html_escape_codes(R, Tail).
-terminal:html_escape_codes([C | R], [C | Out]) :- html_escape_codes(R, Out).
+terminal:html_escape_codes([C | R], Out) :-
+    navtheme:html_escape_code(C, Esc),
+    append(Esc, Tail, Out),
+    html_escape_codes(R, Tail).
 
 
 % -----------------------------------------------------------------------------
@@ -503,7 +506,7 @@ terminal:sgr_transition(Old, New, Acc, Result) :-
 terminal:emit_html(Type, Target, HtmlContent, TimingStats) :-
     Target = Repo://Entry,
     cache:ordered_entry(Repo, Entry, Cat, Name, Version),
-    gantt:version_str(Version, Ver),
+    version_domain:display_atom(Version, Ver),
     type_label(Type, Label),
     format(atom(Title), '~w/~w-~w &mdash; ~w', [Cat, Name, Ver, Label]),
     navtheme:emit_doctype,

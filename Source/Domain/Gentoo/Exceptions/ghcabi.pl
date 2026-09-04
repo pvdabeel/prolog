@@ -102,28 +102,13 @@ ghcabi:retry_phase(compile).
 
 %! ghcabi:phase_error(+LogPath, +SizeBefore, -Tokens) is semidet.
 %
-% True when the log content appended after byte offset SizeBefore (i.e. by
-% the phase that just failed) carries the haskell-updater broken-package
-% signature. Tokens is the parsed, deduplicated list of broken `name-ver`
-% atoms from the "Detected broken packages:" line(s). Only the trailing
-% 256KB of the segment is examined (the check output is emitted at the
-% point of the die).
+% True when the log segment the failed phase wrote (fixup:log_tail/3)
+% carries the haskell-updater broken-package signature. Tokens is the
+% parsed, deduplicated list of broken `name-ver` atoms from the "Detected
+% broken packages:" line(s).
 
 ghcabi:phase_error(LogPath, SizeBefore, Tokens) :-
-  catch(
-    ( exists_file(LogPath),
-      size_file(LogPath, Size),
-      Size > SizeBefore,
-      Start is max(SizeBefore, Size - 262144),
-      Len is Size - Start,
-      setup_call_cleanup(
-        open(LogPath, read, S, [type(binary)]),
-        ( seek(S, Start, bof, _),
-          read_string(S, Len, Tail)
-        ),
-        close(S))
-    ),
-    _, fail),
+  fixup:log_tail(LogPath, SizeBefore, Tail),
   sub_string(Tail, _, _, _, "haskell-updater"),
   ghcabi:broken_tokens(Tail, Tokens),
   Tokens \== [],
@@ -242,20 +227,6 @@ ghcabi:repair_pass([Token|Rest], Failed) :-
   ghcabi:repair_pass(Rest, MoreFailed).
 
 
-%! ghcabi:log_retry(+LogPath, +Phase, +ExitCode, +Tokens) is det.
-%
-% Writes a marker line to the failing consumer's build log so the repair
-% is visible when inspecting the build.
-
-ghcabi:log_retry(LogPath, Phase, ExitCode, Tokens) :-
-  catch(
-    ( open(LogPath, append, S),
-      format(S, '~n=== ~w failed (exit ~w) with broken GHC packages ~w; rebuilding and retrying (portage-ng#93 ghc-abi repair) ===~n',
-             [Phase, ExitCode, Tokens]),
-      close(S)
-    ), _, true).
-
-
 % -----------------------------------------------------------------------------
 %  Per-phase retry hook
 % -----------------------------------------------------------------------------
@@ -286,7 +257,9 @@ ghcabi:retry_loop(RoundsLeft, EbuildPath, Entry, Phase, LogPath, UseString, Call
   ( ghcabi:phase_error(LogPath, SizeBefore, Tokens),
     ghcabi:repair_tokens(Tokens, Repaired),
     Repaired > 0
-  -> ghcabi:log_retry(LogPath, Phase, ExitCode0, Tokens),
+  -> fixup:log_marker(LogPath,
+       '~w failed (exit ~w) with broken GHC packages ~w; rebuilding and retrying (portage-ng#93 ghc-abi repair)',
+       [Phase, ExitCode0, Tokens]),
      ghcabi:rerun_phase(RoundsLeft, EbuildPath, Entry, Phase, LogPath, UseString, Callback, ExitCode)
   ; ghcabi:boot_dep_error(LogPath, SizeBefore, BootLibs),
     ghcabi:recache_ghc_pkg(BootLibs)
@@ -347,20 +320,7 @@ ghcabi:rerun_phase(RoundsLeft, EbuildPath, Entry, Phase, LogPath, UseString, Cal
 % (portage-ng#108). BootLibs is the list of matching boot-lib names.
 
 ghcabi:boot_dep_error(LogPath, SizeBefore, BootLibs) :-
-  catch(
-    ( exists_file(LogPath),
-      size_file(LogPath, Size),
-      Size > SizeBefore,
-      Start is max(SizeBefore, Size - 262144),
-      Len is Size - Start,
-      setup_call_cleanup(
-        open(LogPath, read, S, [type(binary)]),
-        ( seek(S, Start, bof, _),
-          read_string(S, Len, Tail)
-        ),
-        close(S))
-    ),
-    _, fail),
+  fixup:log_tail(LogPath, SizeBefore, Tail),
   sub_string(Tail, _, _, _, "Encountered missing or private dependencies"),
   findall(Lib,
           ( ghcabi:boot_lib(Lib),
@@ -550,12 +510,9 @@ ghcabi:recache_ghc_pkg(BootLibs) :-
 %! ghcabi:log_boot_recache(+LogPath, +Phase, +ExitCode, +BootLibs) is det.
 
 ghcabi:log_boot_recache(LogPath, Phase, ExitCode, BootLibs) :-
-  catch(
-    ( open(LogPath, append, S),
-      format(S, '~n=== ~w failed (exit ~w) with missing GHC boot deps ~w; ghc-pkg recache and retry (portage-ng#108) ===~n',
-             [Phase, ExitCode, BootLibs]),
-      close(S)
-    ), _, true).
+  fixup:log_marker(LogPath,
+    '~w failed (exit ~w) with missing GHC boot deps ~w; ghc-pkg recache and retry (portage-ng#108)',
+    [Phase, ExitCode, BootLibs]).
 
 
 % -----------------------------------------------------------------------------
@@ -565,6 +522,6 @@ ghcabi:log_boot_recache(LogPath, Phase, ExitCode, BootLibs) :-
 %! fixup:mechanism_note(+ghcabi, +Count, -Lines) is semidet.
 
 fixup:mechanism_note(ghcabi, N, [Line1, Line2]) :-
-  ( N =:= 1 -> Word = 'package' ; Word = 'packages' ),
+  fixup:packages_word(N, Word),
   format(atom(Line1), 'GHC ABI repair: ~d broken ~w rebuilt in-transaction after a', [N, Word]),
   Line2 = '                dependency ABI-hash change (portage-ng#93, haskell-updater equivalent):'.

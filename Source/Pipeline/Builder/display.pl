@@ -57,16 +57,16 @@ display:print_pre_action_step(PreActions, _PreSteps) :-
 display:print_pre_actions([Action]) :-
   !,
   display:print_pre_action(Action),
-  build:right_edge_ok.
+  message:right_edge_ok.
 
 display:print_pre_actions([Action|Rest]) :-
   display:print_pre_action(Action),
-  build:right_edge_ok,
+  message:right_edge_ok,
   forall(member(A, Rest),
          ( nl,
            write('             \u2502 '),
            display:print_pre_action(A),
-           build:right_edge_ok
+           message:right_edge_ok
          )).
 
 

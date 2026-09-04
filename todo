@@ -3,13 +3,9 @@ Feature exploration
 
 - grapher: make lighter , integrate with portage-ng.ai style, perhaps separate? 
 
-- package selection: get rid of ranking, make more readable / human understandable. 
-
 - create new phase stats (binpkg-less all package tinderbox - pn only)
 
 - consider splitting up knowledge. - lazy loading mechanism to speed up one-liners
-
-- Interface: code layout
 
 - choicelog: do we actually need this
 
@@ -24,5 +20,3 @@ Feature exploration
 - query: use_dep_mode_flag vs iuse_flag_atom vs eapi:strip_use_default — three unwraps of plus/minus/enable/disable wrappers to get the flag atom. Same idea, different functors; fold into one eapi helper (keep polarity when the caller needs enable/disable)
 
 - overall code cleanup
-
-- prefix

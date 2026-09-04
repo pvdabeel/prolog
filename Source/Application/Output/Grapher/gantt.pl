@@ -133,7 +133,7 @@ gantt:add_action(Repo, Entry, StepN, Action, Acc, Acc1) :-
     (   select(Entry-pacc(Id, Repo, Cat, Name, Ver, Acts), Acc, Rest)
     ->  Acc1 = [Entry-pacc(Id, Repo, Cat, Name, Ver, [StepN-Action|Acts])|Rest]
     ;   (   cache:ordered_entry(Repo, Entry, Cat, Name, Version)
-        ->  gantt:version_str(Version, Ver),
+        ->  version_domain:display_atom(Version, Ver),
             gantt:make_id(Name, Id),
             Acc1 = [Entry-pacc(Id, Repo, Cat, Name, Ver, [StepN-Action])|Acc]
         ;   Acc1 = Acc
@@ -495,7 +495,7 @@ gantt:sum_pair(S-C, T0-C0, T1-C1) :-
 gantt:emit_html(Target, Grid, Deps, NumSteps, HasPre) :-
     Target = Repo://Entry,
     cache:ordered_entry(Repo, Entry, Cat, Name, Version),
-    gantt:version_str(Version, Ver),
+    version_domain:display_atom(Version, Ver),
     length(Grid, PkgCount),
     collect_download_totals(Grid, Repo, TotalBytes, CachedBytes),
     (HasPre == true -> MinStep = 0 ; MinStep = 1),
@@ -1001,15 +1001,6 @@ gantt:emit_js_functions :-
 %  Helpers
 % -----------------------------------------------------------------------------
 
-%! gantt:version_str(+Version, -Str)
-%
-% Convert a version/7 term to a display string.
-
-gantt:version_str(version(_, _, _, _, _, _, Full), Full) :- !.
-gantt:version_str(version_none, '') :- !.
-gantt:version_str(V, S) :- format(atom(S), '~w', [V]).
-
-
 %! gantt:make_id(+Name, -Id)
 %
 % Create an HTML-safe identifier from a package name atom.
@@ -1026,24 +1017,3 @@ gantt:make_id(Name, Id) :-
 gantt:safe_id_char(C, C) :- char_type(C, alnum), !.
 gantt:safe_id_char(-, -) :- !.
 gantt:safe_id_char(_, '_').
-
-
-%! gantt:html_escape(+In, -Out)
-%
-% Escape HTML special characters in an atom.
-
-gantt:html_escape(In, Out) :-
-    atom_codes(In, Codes),
-    esc_codes(Codes, OutCodes),
-    atom_codes(Out, OutCodes).
-
-%! gantt:esc_codes(+Codes, -Escaped) is det.
-%
-% Escape HTML special character codes in a code list.
-
-gantt:esc_codes([], []).
-gantt:esc_codes([0'<|T], Out) :- !, append(`&lt;`, R, Out), esc_codes(T, R).
-gantt:esc_codes([0'>|T], Out) :- !, append(`&gt;`, R, Out), esc_codes(T, R).
-gantt:esc_codes([0'&|T], Out) :- !, append(`&amp;`, R, Out), esc_codes(T, R).
-gantt:esc_codes([0'"|T], Out) :- !, append(`&quot;`, R, Out), esc_codes(T, R).
-gantt:esc_codes([H|T], [H|R]) :- esc_codes(T, R).

@@ -131,21 +131,9 @@ dedupe_candidate_pairs_by_entry([Pair|Rest], Seen, Out) :-
 
 constraint_str(none, version_none, '*') :- !.
 constraint_str(Cmpr, Ver, Str) :-
-    cmpr_sym(Cmpr, Sym),
-    ver_str(Ver, VerStr),
+    eapi:comparator_symbol(Cmpr, Sym),
+    version_domain:display_atom(Ver, VerStr),
     atomic_list_concat([Sym, VerStr], Str).
-
-cmpr_sym(none, '') :- !.
-cmpr_sym(greater, '>') :- !.
-cmpr_sym(greaterequal, '>=') :- !.
-cmpr_sym(smaller, '<') :- !.
-cmpr_sym(smallerequal, '<=') :- !.
-cmpr_sym(equal, '=') :- !.
-cmpr_sym(_, '').
-
-ver_str(version_none, '') :- !.
-ver_str(V, Full) :- compound(V), functor(V, version, 7), !, arg(7, V, Full).
-ver_str(V, S) :- term_to_atom(V, S).
 
 
 % -----------------------------------------------------------------------------
@@ -179,7 +167,7 @@ emit_trees_json([Tree|Rest]) :-
 
 emit_tree_json(tree(use_cond(Cond, Flag), Children)) :-
     !,
-    js_escape_atom(Flag, EFlag),
+    navtheme:js_escape_atom(Flag, EFlag),
     format('{type:"use_cond",cond:"~w",flag:"~w",children:[', [Cond, EFlag]),
     emit_trees_json_inline(Children),
     write(']}').
@@ -210,9 +198,9 @@ emit_tree_json(tree(at_most_one_of_group, Children)) :-
 
 emit_tree_json(tree(pkg_dep(Strength, Cat, Name, Constraint), Candidates)) :-
     !,
-    js_escape_atom(Cat, ECat),
-    js_escape_atom(Name, EName),
-    js_escape_atom(Constraint, ECon),
+    navtheme:js_escape_atom(Cat, ECat),
+    navtheme:js_escape_atom(Name, EName),
+    navtheme:js_escape_atom(Constraint, ECon),
     format('{type:"pkg_dep",strength:"~w",cat:"~w",name:"~w",constraint:"~w",candidates:[',
            [Strength, ECat, EName, ECon]),
     emit_candidates_json(Candidates),
@@ -232,11 +220,11 @@ emit_trees_json_inline([Tree|Rest]) :-
 emit_candidates_json([]).
 emit_candidates_json([candidate(Entry, Installed)]) :-
     !,
-    js_escape_atom(Entry, EEntry),
+    navtheme:js_escape_atom(Entry, EEntry),
     (Installed == true -> I = "true" ; I = "false"),
     format('{id:"~w",inst:~w}', [EEntry, I]).
 emit_candidates_json([candidate(Entry, Installed)|Rest]) :-
-    js_escape_atom(Entry, EEntry),
+    navtheme:js_escape_atom(Entry, EEntry),
     (Installed == true -> I = "true" ; I = "false"),
     format('{id:"~w",inst:~w},', [EEntry, I]),
     emit_candidates_json(Rest).
@@ -253,7 +241,7 @@ emit_candidates_json([candidate(Entry, Installed)|Rest]) :-
 emit_html(Target, InstallTree, RunTree, BothTree) :-
     Target = Repo://Entry,
     cache:ordered_entry(Repo, Entry, Cat, Name, Version),
-    gantt:version_str(Version, Ver),
+    version_domain:display_atom(Version, Ver),
     format(atom(Title), '~w/~w-~w &mdash; Detail Graph', [Cat, Name, Ver]),
     navtheme:emit_doctype,
     navtheme:emit_head_open(Title),
@@ -784,24 +772,3 @@ emit_js_init :-
     write('  });'), nl,
     write('  renderTree();'), nl,
     write('})();'), nl.
-
-
-% -----------------------------------------------------------------------------
-%  Helpers
-% -----------------------------------------------------------------------------
-
-%! detail:js_escape_atom(+In, -Out)
-%
-% Escape an atom for safe embedding in a JavaScript string literal.
-
-js_escape_atom(In, Out) :-
-    atom_codes(In, Codes),
-    js_esc_codes(Codes, OutCodes),
-    atom_codes(Out, OutCodes).
-
-js_esc_codes([], []).
-js_esc_codes([0'\\|T], [0'\\, 0'\\ |R]) :- !, js_esc_codes(T, R).
-js_esc_codes([0'"|T],  [0'\\, 0'" |R])  :- !, js_esc_codes(T, R).
-js_esc_codes([0'\n|T], [0'\\, 0'n |R])  :- !, js_esc_codes(T, R).
-js_esc_codes([0'\r|T], [0'\\, 0'r |R])  :- !, js_esc_codes(T, R).
-js_esc_codes([H|T], [H|R]) :- js_esc_codes(T, R).

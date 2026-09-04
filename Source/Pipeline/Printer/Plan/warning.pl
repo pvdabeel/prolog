@@ -236,8 +236,8 @@ warning:blocker_assumption_line(Content, Strength, Phase, BlockAtom, RequiredBy)
 
 warning:blocker_atom(Strength, C, N, O, V0, SlotReq, Atom) :-
   ( Strength == strong -> Bang = '!!' ; Bang = '!' ),
-  once(eapi:comparator_symbol(O, Sym)),
-  ( var(V0) -> V = '' ; warning:version_atom(V0, V) ),
+  eapi:comparator_symbol(O, Sym),
+  ( var(V0) -> V = '' ; version_domain:display_atom(V0, V) ),
   warning:blocker_slot_suffix(SlotReq, SlotSuf),
   ( V == '' ->
       format(atom(Atom), '~w~w~w/~w~w', [Bang, Sym, C, N, SlotSuf])
@@ -595,18 +595,11 @@ warning:merge_bugreport_issues(Issues, group(Reason, RequiredBy, C, N, Constrain
 warning:extract_constraints_from_packagedeps(C, N, PackageDeps, Constraints) :-
   findall(constraint(O,V,S),
           ( member(package_dependency(_Action,no,C,N,O,Ver,S,_U), PackageDeps),
-            warning:version_atom(Ver, V)
+            version_domain:display_atom(Ver, V)
           ),
           Cs0),
   sort(Cs0, Constraints).
 
-%! warning:version_atom(+Version, -Atom)
-%
-% Extracts the human-readable atom from a version/7 term or version_none.
-
-warning:version_atom(version(_,_,_,_,_,_,A), A) :- !.
-warning:version_atom(version_none, '') :- !.
-warning:version_atom(A, A).
 
 %! warning:print_bugreport_group(+Group)
 %
@@ -855,7 +848,7 @@ warning:available_versions_sample_size(8).
 
 warning:available_versions(C, N, Sample) :-
   warning:available_version_terms(C, N, Versions),
-  findall(A, ( member(Ver, Versions), warning:version_atom(Ver, A) ), Atoms0),
+  findall(A, ( member(Ver, Versions), version_domain:display_atom(Ver, A) ), Atoms0),
   sort(Atoms0, Atoms),
   warning:available_versions_sample_size(Max),
   length(Atoms, Len),
@@ -902,8 +895,8 @@ warning:available_version_range(C, N, MinAtom, MaxAtom, Count) :-
   Versions = [Min|_],
   last(Versions, Max),
   length(Versions, Count),
-  warning:version_atom(Min, MinAtom),
-  warning:version_atom(Max, MaxAtom).
+  version_domain:display_atom(Min, MinAtom),
+  version_domain:display_atom(Max, MaxAtom).
 
 
 %! warning:available_version_count_unique(+C, +N, -Count) is det.
@@ -921,7 +914,7 @@ warning:available_version_count_unique(C, N, Count) :-
 
 warning:bugreport_constraint_short(Op, Ver0, Short) :-
   eapi:comparator_symbol(Op, Sym),
-  warning:version_atom(Ver0, Ver),
+  version_domain:display_atom(Ver0, Ver),
   format(atom(Short), '~w~w', [Sym, Ver]).
 
 
@@ -1240,23 +1233,12 @@ warning:print_slot_conflict_detail(_) :-
 
 warning:print_domain_bound(version_domain(_Slots, Bounds)) :- !,
     forall(member(bound(Op, Ver), Bounds),
-           ( warning:version_op_symbol(Op, OpSym),
-             warning:version_full_string(Ver, VerStr),
+           ( eapi:comparator_symbol(Op, OpSym),
+             version_domain:display_atom(Ver, VerStr),
              format('    ~w~w~n', [OpSym, VerStr])
            )).
 warning:print_domain_bound(Domain) :-
     format('    ~w~n', [Domain]).
-
-warning:version_op_symbol(equal, '=') :- !.
-warning:version_op_symbol(greaterequal, '>=') :- !.
-warning:version_op_symbol(greater, '>') :- !.
-warning:version_op_symbol(smallerequal, '<=') :- !.
-warning:version_op_symbol(smaller, '<') :- !.
-warning:version_op_symbol(tilde, '~') :- !.
-warning:version_op_symbol(Op, Op).
-
-warning:version_full_string(version(_, _, _, _, _, _, Full), Full) :- !.
-warning:version_full_string(V, V).
 
 
 %! warning:requse_term_to_text(+ReqUseTerm, -Text)

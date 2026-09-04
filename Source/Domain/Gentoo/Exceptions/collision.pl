@@ -74,45 +74,16 @@ collision:deconflict_mode(Mode) :-
 
 %! collision:phase_error(+LogPath, +SizeBefore) is semidet.
 %
-% True when the log content appended after byte offset SizeBefore (i.e. by
-% the phase that just failed) carries Portage's collision-protect abort
-% signature. Only the trailing 256KB of the segment is examined (the
-% collision report is emitted at the end of pkg_preinst), keeping the check
-% cheap on large logs.
+% True when the log segment the failed phase wrote (fixup:log_tail/3)
+% carries Portage's collision-protect abort signature (the collision
+% report is emitted at the end of pkg_preinst).
 
 collision:phase_error(LogPath, SizeBefore) :-
-  catch(
-    ( exists_file(LogPath),
-      size_file(LogPath, Size),
-      Size > SizeBefore,
-      Start is max(SizeBefore, Size - 262144),
-      Len is Size - Start,
-      setup_call_cleanup(
-        open(LogPath, read, S, [type(binary)]),
-        ( seek(S, Start, bof, _),
-          read_string(S, Len, Tail)
-        ),
-        close(S))
-    ),
-    _, fail),
+  fixup:log_tail(LogPath, SizeBefore, Tail),
   ( sub_string(Tail, _, _, _, "NOT merged due to file collisions")
   ; sub_string(Tail, _, _, _, "Detected file collision(s)")
   ),
   !.
-
-
-%! collision:log_retry(+LogPath, +Phase, +ExitCode) is det.
-%
-% Writes a marker line to the build log so the deconfliction is visible
-% when inspecting the build.
-
-collision:log_retry(LogPath, Phase, ExitCode) :-
-  catch(
-    ( open(LogPath, append, S),
-      format(S, '~n=== ~w failed (exit ~w) with file-collision signature; retrying with FEATURES=-collision-protect -protect-owned (portage-ng#90 deconfliction) ===~n',
-             [Phase, ExitCode]),
-      close(S)
-    ), _, true).
 
 
 % -----------------------------------------------------------------------------
@@ -132,7 +103,9 @@ fixup:phase_retry_hook(collision, EbuildPath, Entry, Phase, LogPath, UseString, 
   ( Phase == merge,
     collision:deconflict_mode(override),
     collision:phase_error(LogPath, SizeBefore)
-  -> collision:log_retry(LogPath, Phase, ExitCode0),
+  -> fixup:log_marker(LogPath,
+       '~w failed (exit ~w) with file-collision signature; retrying with FEATURES=-collision-protect -protect-owned (portage-ng#90 deconfliction)',
+       [Phase, ExitCode0]),
      fixup:record(collision, Entry, collision_protect),
      ebuild_exec:start_phase_async(EbuildPath, Phase, LogPath, UseString,
                                    ['FEATURES'='-collision-protect -protect-owned'], Pid),
@@ -148,6 +121,6 @@ fixup:phase_retry_hook(collision, EbuildPath, Entry, Phase, LogPath, UseString, 
 %! fixup:mechanism_note(+collision, +Count, -Lines) is semidet.
 
 fixup:mechanism_note(collision, N, [Line1, Line2]) :-
-  ( N =:= 1 -> Word = 'package' ; Word = 'packages' ),
+  fixup:packages_word(N, Word),
   format(atom(Line1), 'Deconfliction: collision protection was disabled to merge ~d ~w over', [N, Word]),
   Line2 = '               files owned by other installed packages (portage-ng#90):'.

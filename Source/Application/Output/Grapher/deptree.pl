@@ -119,7 +119,7 @@ dep_choice(Group, _, _, _) :-
 
 make_node(Repo, Entry, node(Entry, Cat, Name, Ver, Slot, Installed)) :-
     (   cache:ordered_entry(Repo, Entry, Cat, Name, Version)
-    ->  gantt:version_str(Version, Ver)
+    ->  version_domain:display_atom(Version, Ver)
     ;   Cat = '', Name = Entry, Ver = ''
     ),
     (   cache:entry_metadata(Repo, Entry, slot, slot(S))
@@ -186,7 +186,7 @@ version_neighbours(_, _, '', '', '', '').
 deptree:emit_html(Target, TypeTrees) :-
     Target = Repo://Entry,
     cache:ordered_entry(Repo, Entry, Cat, Name, Version),
-    gantt:version_str(Version, Ver),
+    version_domain:display_atom(Version, Ver),
     format(atom(Title), '~w/~w-~w &mdash; Dependency Graph', [Cat, Name, Ver]),
     navtheme:emit_doctype,
     navtheme:emit_head_open(Title),
@@ -320,13 +320,13 @@ emit_js_type_entries(Repo, RootEntry, [deptree(Type, Nodes, Edges)|Rest]) :-
 emit_js_nodes(_, []).
 emit_js_nodes(Repo, [node(Entry, Cat, Name, Ver, Slot, Installed)|Rest]) :-
     node_meta(Repo, Entry, Desc, Homepage, UseFlags),
-    js_escape_atom(Entry, EEntry),
-    js_escape_atom(Cat, ECat),
-    js_escape_atom(Name, EName),
-    js_escape_atom(Ver, EVer),
-    js_escape_atom(Slot, ESlot),
-    js_escape_atom(Desc, EDesc),
-    js_escape_atom(Homepage, EHomepage),
+    navtheme:js_escape_atom(Entry, EEntry),
+    navtheme:js_escape_atom(Cat, ECat),
+    navtheme:js_escape_atom(Name, EName),
+    navtheme:js_escape_atom(Ver, EVer),
+    navtheme:js_escape_atom(Slot, ESlot),
+    navtheme:js_escape_atom(Desc, EDesc),
+    navtheme:js_escape_atom(Homepage, EHomepage),
     (Installed == true -> InsStr = "true" ; InsStr = "false"),
     format('      {id:"~w",cat:"~w",name:"~w",ver:"~w",slot:"~w",installed:~w,desc:"~w",homepage:"~w",use:[',
            [EEntry, ECat, EName, EVer, ESlot, InsStr, EDesc, EHomepage]),
@@ -340,7 +340,7 @@ emit_js_nodes(Repo, [node(Entry, Cat, Name, Ver, Slot, Installed)|Rest]) :-
 emit_js_use_flags([]).
 emit_js_use_flags([flag(Name, OnOff)|Rest]) :-
     (OnOff == on -> Prefix = "+" ; Prefix = "-"),
-    js_escape_atom(Name, EName),
+    navtheme:js_escape_atom(Name, EName),
     format('"~w~w"', [Prefix, EName]),
     (Rest \== [] -> write(',') ; true),
     emit_js_use_flags(Rest).
@@ -352,8 +352,8 @@ emit_js_use_flags([flag(Name, OnOff)|Rest]) :-
 
 emit_js_edges([]).
 emit_js_edges([edge(From, To, Strength)|Rest]) :-
-    js_escape_atom(From, EFrom),
-    js_escape_atom(To, ETo),
+    navtheme:js_escape_atom(From, EFrom),
+    navtheme:js_escape_atom(To, ETo),
     format('      {from:"~w",to:"~w",type:"~w"}', [EFrom, ETo, Strength]),
     (   Rest == []
     ->  nl
@@ -699,24 +699,3 @@ emit_js_pan_zoom :-
     write('  svg.setAttribute("viewBox", `${nx} ${ny} ${nw} ${nh}`);'), nl,
     write('  document.getElementById("zoom-level").textContent = Math.round(zoom * 100) + "%";'), nl,
     write('}, {passive: false});'), nl.
-
-
-% -----------------------------------------------------------------------------
-%  Helpers
-% -----------------------------------------------------------------------------
-
-%! deptree:js_escape_atom(+In, -Out)
-%
-% Escape an atom for safe embedding in a JavaScript string literal.
-
-js_escape_atom(In, Out) :-
-    atom_codes(In, Codes),
-    js_esc_codes(Codes, OutCodes),
-    atom_codes(Out, OutCodes).
-
-js_esc_codes([], []).
-js_esc_codes([0'\\|T], [0'\\, 0'\\ |R]) :- !, js_esc_codes(T, R).
-js_esc_codes([0'"|T],  [0'\\, 0'" |R])  :- !, js_esc_codes(T, R).
-js_esc_codes([0'\n|T], [0'\\, 0'n |R])  :- !, js_esc_codes(T, R).
-js_esc_codes([0'\r|T], [0'\\, 0'r |R])  :- !, js_esc_codes(T, R).
-js_esc_codes([H|T], [H|R]) :- js_esc_codes(T, R).

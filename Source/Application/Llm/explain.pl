@@ -192,7 +192,7 @@ explain:collect_plan_rules([Wave|Rest], N, Rules) :-
 explain:format_one_entry(ProofAVL, TriggersAVL, Proposal, step(Step, Rule), Text) :-
   ( explain:extract_rule_info(Rule, Repo, Entry, Action, Ctx)
   -> ( cache:ordered_entry(Repo, Entry, C, N, Ver)
-     -> explain:version_str(Ver, VerStr),
+     -> version_domain:display_atom(Ver, VerStr),
         explain:format_use_flags(Repo, Entry, UseStr),
         explain:format_use_expand(Repo, Entry, UseExpandStr),
         explain:format_ctx_use_info(Ctx, CtxUseStr),
@@ -219,13 +219,6 @@ explain:format_one_entry(ProofAVL, TriggersAVL, Proposal, step(Step, Rule), Text
 explain:extract_rule_info(rule(Repo://Entry:Action?{Ctx}, _Body), Repo, Entry, Action, Ctx).
 explain:extract_rule_info(assumed(rule(Repo://Entry:Action?{Ctx}, _Body)), Repo, Entry, Action, Ctx).
 explain:extract_rule_info(rule(assumed(Repo://Entry:Action?{Ctx}), _Body), Repo, Entry, Action, Ctx).
-
-
-%! explain:version_str(+Ver, -Str) is det.
-
-explain:version_str(version(_,_,_,_,_,_,Full), Full) :- !.
-explain:version_str(version_none, '') :- !.
-explain:version_str(V, S) :- format(atom(S), '~w', [V]).
 
 
 %! explain:format_use_flags(+Repo, +Entry, -Str) is det.
@@ -419,14 +412,14 @@ explain:dep_to_str(Dep, Str) :-
   prover:canon_literal(Dep, Core, _),
   Core = Repo://Entry:Action,
   cache:ordered_entry(Repo, Entry, C, N, Ver),
-  explain:version_str(Ver, VerStr),
+  version_domain:display_atom(Ver, VerStr),
   format(atom(Str), '~w/~w-~w[:~w]', [C, N, VerStr, Action]).
 
 explain:dep_to_str(Dep, Str) :-
   prover:canon_literal(Dep, Core, _),
   Core = Repo://Entry,
   cache:ordered_entry(Repo, Entry, C, N, Ver),
-  explain:version_str(Ver, VerStr),
+  version_domain:display_atom(Ver, VerStr),
   format(atom(Str), '~w/~w-~w', [C, N, VerStr]).
 
 
@@ -483,7 +476,7 @@ explain:format_ctx_info(Ctx, Str) :-
   ( is_list(Ctx)
   -> ( memberchk(replaces(OldRepo://OldEntry), Ctx),
        cache:ordered_entry(OldRepo, OldEntry, OC, ON, OVer),
-       explain:version_str(OVer, OVerStr)
+       version_domain:display_atom(OVer, OVerStr)
      -> format(atom(Str), '    Replaces: ~w/~w-~w~n', [OC, ON, OVerStr])
      ;  Str = ''
      )

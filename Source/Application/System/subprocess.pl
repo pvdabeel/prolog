@@ -93,6 +93,46 @@ subprocess:spawn_failure_reason(Error, Status, _Timeout, Reason) :-
   format(atom(Reason), '~w', [Culprit]).
 
 
+%! subprocess:noninteractive_git_env(-Env) is det.
+%
+% Environment bindings (Name=Value pairs for process_create/3's
+% environment/1 option) that keep any git invoked by a child process from
+% prompting: terminal prompts off, /bin/false as askpass (not /bin/true,
+% so an empty username is not taken as "answered"), and credential
+% helpers disabled via GIT_CONFIG_*.  A 401/404 then fails immediately
+% instead of blocking a build or download on a username prompt.
+
+subprocess:noninteractive_git_env(['GIT_TERMINAL_PROMPT'='0',
+                                   'GIT_ASKPASS'='/bin/false',
+                                   'GIT_CONFIG_COUNT'='2',
+                                   'GIT_CONFIG_KEY_0'='credential.helper',
+                                   'GIT_CONFIG_VALUE_0'='',
+                                   'GIT_CONFIG_KEY_1'='credential.interactive',
+                                   'GIT_CONFIG_VALUE_1'='never']).
+
+
+%! subprocess:poll_exit(+Pid, -ExitCode) is semidet.
+%
+% Non-blocking completion check for a child process.  Succeeds with the
+% exit code once the process has terminated (a signal death is reported
+% shell-style as 128 + signal number, so a killed child is never mistaken
+% for one that is still running); fails while it is still running or
+% when the Pid is no longer waitable.
+
+subprocess:poll_exit(Pid, ExitCode) :-
+  catch(process_wait(Pid, Status, [timeout(0)]), _, fail),
+  Status \== timeout,
+  subprocess:status_exit_code(Status, ExitCode).
+
+
+%! subprocess:status_exit_code(+Status, -ExitCode) is det.
+%
+% Maps a process_wait/2 status term to a shell-style exit code.
+
+subprocess:status_exit_code(exit(Code), Code) :- !.
+subprocess:status_exit_code(killed(Signal), Code) :- Code is 128 + Signal.
+
+
 %! subprocess:spawn_parsed(+Program, +Args, :Parser, -Results)
 %
 % Run an external process, parse each output line with Parser, and

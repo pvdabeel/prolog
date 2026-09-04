@@ -239,3 +239,61 @@ navtheme:emit_theme_script(StorageKey) :-
     write('  }'), nl,
     write('})();'), nl,
     write('</script>'), nl.
+
+
+% -----------------------------------------------------------------------------
+%  Escaping helpers
+% -----------------------------------------------------------------------------
+%
+% Shared by every grapher that embeds package data in generated HTML or
+% inline JavaScript.
+
+%! navtheme:html_escape(+In, -Out) is det.
+%
+% Escape the HTML special characters (< > & ") of an atom.
+
+navtheme:html_escape(In, Out) :-
+    atom_codes(In, Codes),
+    navtheme:html_escape_codes(Codes, OutCodes),
+    atom_codes(Out, OutCodes).
+
+
+%! navtheme:html_escape_codes(+Codes, -Escaped) is det.
+%
+% html_escape/2 on a code list.
+
+navtheme:html_escape_codes([], []).
+navtheme:html_escape_codes([C|T], Out) :-
+    navtheme:html_escape_code(C, Esc),
+    append(Esc, R, Out),
+    navtheme:html_escape_codes(T, R).
+
+
+%! navtheme:html_escape_code(+Code, -Codes) is det.
+%
+% The HTML entity (as a code list) for one character code; the character
+% itself when it needs no escaping.
+
+navtheme:html_escape_code(0'<, `&lt;`)   :- !.
+navtheme:html_escape_code(0'>, `&gt;`)   :- !.
+navtheme:html_escape_code(0'&, `&amp;`)  :- !.
+navtheme:html_escape_code(0'", `&quot;`) :- !.
+navtheme:html_escape_code(C, [C]).
+
+
+%! navtheme:js_escape_atom(+In, -Out) is det.
+%
+% Escape an atom for safe embedding in a double-quoted JavaScript string
+% literal.
+
+navtheme:js_escape_atom(In, Out) :-
+    atom_codes(In, Codes),
+    navtheme:js_escape_codes(Codes, OutCodes),
+    atom_codes(Out, OutCodes).
+
+navtheme:js_escape_codes([], []).
+navtheme:js_escape_codes([0'\\|T], [0'\\, 0'\\ |R]) :- !, navtheme:js_escape_codes(T, R).
+navtheme:js_escape_codes([0'"|T],  [0'\\, 0'" |R])  :- !, navtheme:js_escape_codes(T, R).
+navtheme:js_escape_codes([0'\n|T], [0'\\, 0'n |R])  :- !, navtheme:js_escape_codes(T, R).
+navtheme:js_escape_codes([0'\r|T], [0'\\, 0'r |R])  :- !, navtheme:js_escape_codes(T, R).
+navtheme:js_escape_codes([H|T], [H|R]) :- navtheme:js_escape_codes(T, R).

@@ -588,7 +588,7 @@ download:curl_walk([URL|Rest], BaseArgs, DestPath, ExitCode) :-
 %! download:start_curl_async(+URLOrList, +DestPath, -Pid) is det.
 %
 % Start a curl download without blocking. Returns the process Pid for
-% later polling via check_process_done/2. URLOrList is either a single
+% later polling via subprocess:poll_exit/2. URLOrList is either a single
 % URL atom or a list of URLs; for a list, a small bash trampoline is
 % used to walk the URLs sequentially (curl exits 0 at first success).
 % The same retry/resume flags as download:curl_args/1 are applied to
@@ -621,19 +621,6 @@ download:async_multi_url_curl(URLs, DestPath, Pid) :-
   process_create(path(bash),
                  ['-c', Script, 'curlwalk', DestPath, Proto|URLs],
                  [stdout(null), stderr(null), process(Pid)]).
-
-
-%! download:check_process_done(+Pid, -ExitCode) is semidet.
-%
-% Non-blocking check whether a process has exited. Succeeds with the
-% exit code if done, fails if still running.
-
-download:check_process_done(Pid, ExitCode) :-
-  catch(
-    process_wait(Pid, exit(ExitCode), [timeout(0)]),
-    _,
-    fail
-  ).
 
 
 %! download:verify_size(+Path, +ExpectedSize) is semidet.
@@ -886,14 +873,9 @@ download:git_no_cred_args(['-c', 'credential.helper=',
 % askpass so git does not treat an empty username as "answered".
 
 download:git_spawn_opts(Out, Err, Pid, Opts) :-
+  subprocess:noninteractive_git_env(Env),
   Opts = [stdin(null), stdout(pipe(Out)), stderr(pipe(Err)), process(Pid),
-          environment(['GIT_TERMINAL_PROMPT'='0',
-                       'GIT_ASKPASS'='/bin/false',
-                       'GIT_CONFIG_COUNT'='2',
-                       'GIT_CONFIG_KEY_0'='credential.helper',
-                       'GIT_CONFIG_VALUE_0'='',
-                       'GIT_CONFIG_KEY_1'='credential.interactive',
-                       'GIT_CONFIG_VALUE_1'='never'])].
+          environment(Env)].
 
 
 %! download:pipe_to_log(+Out, +Err, +LogStream) is det.
@@ -922,7 +904,7 @@ download:pipe_to_log(Out, Err, LogStream) :-
 :- meta_predicate download:poll_git_progress(+, +, 2, -).
 
 download:poll_git_progress(Pid, LogPath, Callback, ExitCode) :-
-  ( download:check_process_done(Pid, EC)
+  ( subprocess:poll_exit(Pid, EC)
   -> ExitCode = EC
   ;  download:read_git_progress(LogPath, Pct),
      call(Callback, git, progress(Pct)),

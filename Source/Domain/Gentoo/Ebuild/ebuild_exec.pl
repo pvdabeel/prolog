@@ -424,30 +424,51 @@ ebuild_exec:start_phase_async(EbuildPath, Phase, LogPath, UseString, ExtraEnv, P
   ( sanitize:safe_phase(Phase) -> true
   ; throw(error(permission_error(execute, phase, Phase), context(ebuild_exec:start_phase_async/6, 'Invalid phase name')))
   ),
-  config:ebuild_command(EbuildCmd),
-  atom_string(Phase, PhaseStr),
-  % Fixed -c script; paths/phase via $1..$4 (sanitize argv contract).
-  process_create(
-    path(sh),
-    ['-c', '"$1" --skip-manifest "$2" "$3" >>"$4" 2>&1',
-     '_', EbuildCmd, EbuildPath, PhaseStr, LogPath],
-    [process(Pid),
-     environment(['USE'=UseString,
-                  'GIT_TERMINAL_PROMPT'='0',
-                  'GIT_ASKPASS'='/bin/false',
-                  'GIT_CONFIG_COUNT'='2',
-                  'GIT_CONFIG_KEY_0'='credential.helper',
-                  'GIT_CONFIG_VALUE_0'='',
-                  'GIT_CONFIG_KEY_1'='credential.interactive',
-                  'GIT_CONFIG_VALUE_1'='never'|ExtraEnv])]).
+  ebuild_exec:spawn_ebuild(EbuildPath, [Phase], log(LogPath), UseString, ExtraEnv, Pid).
 
 
-%! ebuild_exec:check_phase_done(+Pid, -ExitCode) is semidet.
+%! ebuild_exec:spawn_ebuild(+EbuildPath, +Phases, +Sink, +UseString, +ExtraEnv, -Pid) is det.
 %
-% Non-blocking check. Succeeds with exit code if the process finished.
+% The one place the `ebuild` CLI is spawned.  Runs Phases (a list of
+% phase atoms) for EbuildPath in the background and returns the Pid; the
+% caller polls (subprocess:poll_exit/2) or waits (process_wait/2).
+%
+% Sink selects where the child's stdout/stderr go:
+%   * null          -- discarded
+%   * log(LogPath)  -- appended to LogPath through a fixed `sh -c` script
+%                      whose variable parts (command, ebuild, log, phases)
+%                      all arrive as positional parameters, so no path or
+%                      phase name is ever interpolated into shell syntax
+%                      (sanitize argv contract).
+%
+% The environment carries USE, the non-interactive git settings (a live
+% ebuild's git fetch must fail on a 401 rather than prompt) and ExtraEnv
+% (e.g. the serial-make MAKEOPTS override; env overrides make.conf in
+% Portage's config stack).
 
-ebuild_exec:check_phase_done(Pid, ExitCode) :-
-  catch(process_wait(Pid, exit(ExitCode), [timeout(0)]), _, fail).
+ebuild_exec:spawn_ebuild(EbuildPath, Phases, Sink, UseString, ExtraEnv, Pid) :-
+  config:ebuild_command(EbuildCmd),
+  maplist(atom_string, Phases, PhaseStrs),
+  subprocess:noninteractive_git_env(GitEnv),
+  append(['USE'=UseString|GitEnv], ExtraEnv, Env),
+  ebuild_exec:ebuild_argv(Sink, EbuildCmd, EbuildPath, PhaseStrs, Exe, Argv, SinkOpts),
+  process_create(Exe, Argv, [process(Pid), environment(Env)|SinkOpts]).
+
+
+%! ebuild_exec:ebuild_argv(+Sink, +EbuildCmd, +EbuildPath, +PhaseStrs, -Exe, -Argv, -SinkOpts) is det.
+%
+% Executable, argument vector and process_create/3 stream options for
+% spawn_ebuild/6's Sink.
+
+ebuild_exec:ebuild_argv(null, EbuildCmd, EbuildPath, PhaseStrs,
+                        path(EbuildCmd),
+                        ['--skip-manifest', EbuildPath|PhaseStrs],
+                        [stdout(null), stderr(null)]).
+ebuild_exec:ebuild_argv(log(LogPath), EbuildCmd, EbuildPath, PhaseStrs,
+                        path(sh),
+                        ['-c', Script, '_', EbuildCmd, EbuildPath, LogPath|PhaseStrs],
+                        []) :-
+  Script = 'cmd="$1"; ebuild="$2"; log="$3"; shift 3; "$cmd" --skip-manifest "$ebuild" "$@" >>"$log" 2>&1'.
 
 
 %! ebuild_exec:poll_phase_progress(+Pid, +Phase, +LogPath, +SizeBefore, +T0, +ExpBytes, +ExpSeconds, :Callback, -ExitCode) is det.
@@ -458,7 +479,7 @@ ebuild_exec:check_phase_done(Pid, ExitCode) :-
 % exits. Percentage is capped at 99 to avoid implying completion.
 
 ebuild_exec:poll_phase_progress(Pid, Phase, LogPath, SizeBefore, T0, ExpBytes, ExpSeconds, Callback, ExitCode) :-
-  ( ebuild_exec:check_phase_done(Pid, EC)
+  ( subprocess:poll_exit(Pid, EC)
   -> ExitCode = EC
   ;  ebuild_exec:log_file_size(LogPath, CurrentSize),
      BytesSoFar is CurrentSize - SizeBefore,
@@ -543,12 +564,9 @@ ebuild_exec:serial_retry_enabled :-
 % inspecting failures.
 
 ebuild_exec:log_serial_retry(LogPath, Phase, ExitCode) :-
-  catch(
-    ( open(LogPath, append, S),
-      format(S, '~n=== ~w failed (exit ~w); retrying with MAKEOPTS=-j1 (parallel-make race recovery) ===~n',
-             [Phase, ExitCode]),
-      close(S)
-    ), _, true).
+  fixup:log_marker(LogPath,
+    '~w failed (exit ~w); retrying with MAKEOPTS=-j1 (parallel-make race recovery)',
+    [Phase, ExitCode]).
 
 
 %! ebuild_exec:maybe_serial_retry(+EbuildPath, +Phase, +LogPath, +UseString, :Callback, +ExitCode0, -ExitCode) is det.
@@ -610,27 +628,13 @@ ebuild_exec:transient_retry_enabled :-
 
 %! ebuild_exec:transient_phase_error(+LogPath, +SizeBefore) is semidet.
 %
-% True when the log content appended after byte offset SizeBefore
-% (i.e. by the phase that just failed) contains the bash PID-reuse
-% signature. Only the trailing 64KB of the segment is examined: the
-% helpers that emit this signature run at the very end of a phase,
-% and this keeps the check cheap even for multi-MB compile logs.
+% True when the log content the failed phase wrote (fixup:log_tail/4)
+% contains the bash PID-reuse signature. Only the trailing 64KB is
+% examined: the helpers that emit this signature run at the very end of
+% a phase, and this keeps the check cheap even for multi-MB compile logs.
 
 ebuild_exec:transient_phase_error(LogPath, SizeBefore) :-
-  catch(
-    ( exists_file(LogPath),
-      size_file(LogPath, Size),
-      Size > SizeBefore,
-      Start is max(SizeBefore, Size - 65536),
-      Len is Size - Start,
-      setup_call_cleanup(
-        open(LogPath, read, S, [type(binary)]),
-        ( seek(S, Start, bof, _),
-          read_string(S, Len, Tail)
-        ),
-        close(S))
-    ),
-    _, fail),
+  fixup:log_tail(LogPath, SizeBefore, 65536, Tail),
   sub_string(Tail, _, _, _, "is not a child of this shell"),
   sub_string(Tail, _, _, _, "wait: pid"),
   !.
@@ -642,12 +646,9 @@ ebuild_exec:transient_phase_error(LogPath, SizeBefore) :-
 % inspecting failures.
 
 ebuild_exec:log_transient_retry(LogPath, Phase, ExitCode) :-
-  catch(
-    ( open(LogPath, append, S),
-      format(S, '~n=== ~w failed (exit ~w) with bash PID-reuse signature; retrying once (transient, portage-ng#76 / Gentoo#965423) ===~n',
-             [Phase, ExitCode]),
-      close(S)
-    ), _, true).
+  fixup:log_marker(LogPath,
+    '~w failed (exit ~w) with bash PID-reuse signature; retrying once (transient, portage-ng#76 / Gentoo#965423)',
+    [Phase, ExitCode]).
 
 
 %! ebuild_exec:maybe_transient_retry(+EbuildPath, +Phase, +LogPath, +UseString, :Callback, +SizeBefore, +ExitCode0, -ExitCode) is det.
@@ -679,29 +680,6 @@ ebuild_exec:maybe_transient_retry(EbuildPath, Phase, LogPath, UseString, Callbac
 %  Phase execution
 % =============================================================================
 
-%! ebuild_exec:run_phase(+EbuildPath, +Phase, +UseString, -ExitCode) is det.
-%
-% Invokes the `ebuild` CLI for a single phase. Output is suppressed
-% (redirected to null) so it doesn't interfere with the display.
-
-ebuild_exec:run_phase(EbuildPath, Phase, UseString, ExitCode) :-
-  config:ebuild_command(EbuildCmd),
-  atom_string(Phase, PhaseStr),
-  process_create(
-    path(EbuildCmd),
-    ['--skip-manifest', EbuildPath, PhaseStr],
-    [stdout(null), stderr(null), process(Pid),
-     environment(['USE'=UseString,
-                  'GIT_TERMINAL_PROMPT'='0',
-                  'GIT_ASKPASS'='/bin/false',
-                  'GIT_CONFIG_COUNT'='2',
-                  'GIT_CONFIG_KEY_0'='credential.helper',
-                  'GIT_CONFIG_VALUE_0'='',
-                  'GIT_CONFIG_KEY_1'='credential.interactive',
-                  'GIT_CONFIG_VALUE_1'='never'])]),
-  process_wait(Pid, exit(ExitCode)).
-
-
 %! ebuild_exec:run_phase_logged(+EbuildPath, +Phase, +LogPath, +UseString, -ExitCode) is det.
 %
 % Invokes the `ebuild` CLI for a single phase, appending all
@@ -719,22 +697,7 @@ ebuild_exec:run_phase_logged(EbuildPath, Phase, LogPath, UseString, ExitCode) :-
 %! ebuild_exec:run_phase_logged_unlocked(+EbuildPath, +Phase, +LogPath, +UseString, -ExitCode) is det.
 
 ebuild_exec:run_phase_logged_unlocked(EbuildPath, Phase, LogPath, UseString, ExitCode) :-
-  config:ebuild_command(EbuildCmd),
-  atom_string(Phase, PhaseStr),
-  % Fixed -c script; paths/phase via $1..$4 (sanitize argv contract).
-  process_create(
-    path(sh),
-    ['-c', '"$1" --skip-manifest "$2" "$3" >>"$4" 2>&1',
-     '_', EbuildCmd, EbuildPath, PhaseStr, LogPath],
-    [process(Pid),
-     environment(['USE'=UseString,
-                  'GIT_TERMINAL_PROMPT'='0',
-                  'GIT_ASKPASS'='/bin/false',
-                  'GIT_CONFIG_COUNT'='2',
-                  'GIT_CONFIG_KEY_0'='credential.helper',
-                  'GIT_CONFIG_VALUE_0'='',
-                  'GIT_CONFIG_KEY_1'='credential.interactive',
-                  'GIT_CONFIG_VALUE_1'='never'])]),
+  ebuild_exec:spawn_ebuild(EbuildPath, [Phase], log(LogPath), UseString, [], Pid),
   process_wait(Pid, exit(ExitCode)).
 
 
@@ -1028,11 +991,7 @@ ebuild_exec:reactivation_log_path(LogPath) :-
 % Writes a phase separator line to the log file before each phase runs.
 
 ebuild_exec:log_phase_header(LogPath, Phase) :-
-  catch(
-    ( open(LogPath, append, S),
-      format(S, '~n=== ~w ===~n', [Phase]),
-      close(S)
-    ), _, true).
+  fixup:log_marker(LogPath, '~w', [Phase]).
 
 
 %! ebuild_exec:run_phases(+EbuildPath, +Phases, +UseString, -ExitCode) is det.
@@ -1077,20 +1036,7 @@ ebuild_exec:run_phases_unlocked(EbuildPath, Phases, UseString, ExitCode) :-
 % environment bindings (e.g. the serial-retry MAKEOPTS override).
 
 ebuild_exec:run_phases_once(EbuildPath, Phases, UseString, ExtraEnv, ExitCode) :-
-  config:ebuild_command(EbuildCmd),
-  maplist(atom_string, Phases, PhaseStrs),
-  process_create(
-    path(EbuildCmd),
-    ['--skip-manifest', EbuildPath | PhaseStrs],
-    [stdout(null), stderr(null), process(Pid),
-     environment(['USE'=UseString,
-                  'GIT_TERMINAL_PROMPT'='0',
-                  'GIT_ASKPASS'='/bin/false',
-                  'GIT_CONFIG_COUNT'='2',
-                  'GIT_CONFIG_KEY_0'='credential.helper',
-                  'GIT_CONFIG_VALUE_0'='',
-                  'GIT_CONFIG_KEY_1'='credential.interactive',
-                  'GIT_CONFIG_VALUE_1'='never'|ExtraEnv])]),
+  ebuild_exec:spawn_ebuild(EbuildPath, Phases, null, UseString, ExtraEnv, Pid),
   process_wait(Pid, exit(ExitCode)).
 
 
@@ -1212,7 +1158,7 @@ ebuild_exec:run_phases_sequential(EbuildPath, Entry, [Phase|Rest], DisplayPhases
 % ticks to keep the spinner alive until the process exits.
 
 ebuild_exec:poll_phase_spinning(Pid, Phase, Callback, ExitCode) :-
-  ( ebuild_exec:check_phase_done(Pid, EC)
+  ( subprocess:poll_exit(Pid, EC)
   -> ExitCode = EC
   ;  call(Callback, Phase, progress(0)),
      sleep(0.5),

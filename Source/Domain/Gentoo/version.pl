@@ -321,6 +321,20 @@ version_domain:domain_reason_terms(Action, C, N, PackageDeps, Context, Reasons) 
 %  Utilities
 % -----------------------------------------------------------------------------
 
+%! version_domain:display_atom(+Version, -Atom) is det.
+%
+% The printable form of a version representation: the canonical version
+% string (7th field) of a version/7 compound, '' for version_none, an
+% atom or number as itself, and the ~w rendering of anything else.  This
+% is the single version-to-text projection shared by the printer, the
+% graphers, the builder and the LLM explainer.
+
+version_domain:display_atom(version(_,_,_,_,_,_,Full), Full) :- !.
+version_domain:display_atom(version_none, '') :- !.
+version_domain:display_atom(V, V) :- atomic(V), !.
+version_domain:display_atom(V, A) :- format(atom(A), '~w', [V]).
+
+
 version_domain:normalize_bound_op(smallerorequal, smallerequal) :- !.
 version_domain:normalize_bound_op(smallerequal, smallerequal) :- !.
 version_domain:normalize_bound_op(smaller, smaller) :- !.

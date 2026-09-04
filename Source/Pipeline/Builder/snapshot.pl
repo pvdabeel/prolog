@@ -415,7 +415,7 @@ snapshot:diff(Id) :-
      -> message:color(green),
         format('~n  Installed since snapshot (~w):~n', [NA]),
         forall(member(pkg(C, N, V, _), Added),
-          ( snapshot:version_str(V, VS),
+          ( version_domain:display_atom(V, VS),
             format('    + ~w/~w-~w~n', [C, N, VS]) )),
         message:color(normal)
      ;  true
@@ -424,7 +424,7 @@ snapshot:diff(Id) :-
      -> message:color(red),
         format('~n  Removed since snapshot (~w):~n', [NR]),
         forall(member(pkg(C, N, V, _), Removed),
-          ( snapshot:version_str(V, VS),
+          ( version_domain:display_atom(V, VS),
             format('    - ~w/~w-~w~n', [C, N, VS]) )),
         message:color(normal)
      ;  true
@@ -433,8 +433,8 @@ snapshot:diff(Id) :-
      -> message:color(orange),
         format('~n  Version changed since snapshot (~w):~n', [NC]),
         forall(member(changed(C, N, _Slot, OldV, NewV), Changed),
-          ( snapshot:version_str(OldV, OVS),
-            snapshot:version_str(NewV, NVS),
+          ( version_domain:display_atom(OldV, OVS),
+            version_domain:display_atom(NewV, NVS),
             format('    ~~ ~w/~w  ~w -> ~w~n', [C, N, OVS, NVS]) )),
         message:color(normal)
      ;  true
@@ -443,13 +443,6 @@ snapshot:diff(Id) :-
      format('~n  Summary: +~w -~w ~~~w (~w binpkgs available for rollback)~n', [NA, NR, NC, BinCount])
   ),
   nl.
-
-
-%! snapshot:version_str(+Ver, -Str) is det.
-
-snapshot:version_str(version(_,_,_,_,_,_,Full), Full) :- !.
-snapshot:version_str(version_none, '') :- !.
-snapshot:version_str(V, S) :- format(atom(S), '~w', [V]).
 
 
 %! snapshot:load_manifest_packages(+Path, -Pkgs) is det.

@@ -9,8 +9,8 @@
 
 
 /** <module> PORTAGE-NG
-A declarative reasoning engine for software configuration, applied to Gentoo
-Linux. 
+A declarative reasoning engine for software configuration management, applied 
+to Gentoo Linux. 
 
 portage-ng uses inductive proof search to reason about package
 dependencies. Every build plan it produces is a formal proof. It fully 
@@ -103,6 +103,7 @@ init_knowledgebase(local) :-
   kb:load,
   feedback:load,
   preference:init.
+
 init_knowledgebase(remote) :-
   interface:process_server(Host, Port),
   kb:newinstance(knowledgebase(Host, Port)),

@@ -95,8 +95,26 @@ fixup:clear :-
 
 
 % -----------------------------------------------------------------------------
-%  Same-version repair rebuild
+%  Shared mechanism helpers
 % -----------------------------------------------------------------------------
+%
+% Every exception mechanism does the same four things around its own
+% detection logic: map the failing build entry to a tree ebuild, read the
+% part of the build log the failed phase wrote, write a marker line into
+% that log, and summarise how many packages it touched.  Those live here
+% once so a mechanism file contains only what is specific to it.
+
+%! fixup:tree_entry(+Entry, -Repo, -C, -N) is semidet.
+%
+% Resolves a build entry (Category/Name-Version) to the tree repository
+% that carries it and its Category/Name. Fails for a VDB-only (pkg) entry
+% or a version that is no longer in any tree.
+
+fixup:tree_entry(Entry, Repo, C, N) :-
+  cache:ordered_entry(Repo, Entry, C, N, _),
+  Repo \== pkg,
+  !.
+
 
 %! fixup:installed_tree_entry(+Entry, -TreeRepo) is semidet.
 %
@@ -107,10 +125,105 @@ fixup:clear :-
 % original semantics).
 
 fixup:installed_tree_entry(Entry, TreeRepo) :-
-  cache:ordered_entry(TreeRepo, Entry, _, _, _),
-  TreeRepo \== pkg,
-  !.
+  fixup:tree_entry(Entry, TreeRepo, _, _).
 
+
+%! fixup:log_tail_window(-Bytes) is det.
+%
+% Default bound on how much of a failed phase's log segment is examined:
+% the die and the eclass/compiler diagnostics that explain it sit at the
+% very end, so the trailing 256KB is enough even for multi-MB compile
+% logs.
+
+fixup:log_tail_window(262144).
+
+
+%! fixup:log_tail(+LogPath, +SizeBefore, -Tail) is semidet.
+%! fixup:log_tail(+LogPath, +SizeBefore, +Window, -Tail) is semidet.
+%
+% Tail is the log content appended after byte offset SizeBefore (i.e. by
+% the phase that just ran), limited to its trailing Window bytes
+% (log_tail_window/1 for the /3 form). Fails when the log is missing, has
+% not grown, or cannot be read -- a mechanism then simply does not match.
+
+fixup:log_tail(LogPath, SizeBefore, Tail) :-
+  fixup:log_tail_window(Window),
+  fixup:log_tail(LogPath, SizeBefore, Window, Tail).
+
+fixup:log_tail(LogPath, SizeBefore, Window, Tail) :-
+  catch(
+    ( exists_file(LogPath),
+      size_file(LogPath, Size),
+      Size > SizeBefore,
+      Start is max(SizeBefore, Size - Window),
+      Len is Size - Start,
+      setup_call_cleanup(
+        open(LogPath, read, S, [type(binary)]),
+        ( seek(S, Start, bof, _),
+          read_string(S, Len, Tail)
+        ),
+        close(S))
+    ),
+    _, fail).
+
+
+%! fixup:scan_log(+LogPath, +SizeBefore, -Lines) is det.
+%
+% The lines of log_tail/3 (CR-trimmed); [] when there is nothing to scan.
+
+fixup:scan_log(LogPath, SizeBefore, Lines) :-
+  ( fixup:log_tail(LogPath, SizeBefore, Tail)
+  -> split_string(Tail, "\n", "\r", Lines)
+  ;  Lines = []
+  ).
+
+
+%! fixup:log_marker(+LogPath, +Format, +Args) is det.
+%
+% Appends a "=== ... ===" marker line (Format/Args rendered by format/3)
+% to the build log so an applied fixup or retry is visible when the log
+% is inspected. Never fails or throws: the log is best-effort evidence.
+
+fixup:log_marker(LogPath, Format, Args) :-
+  catch(
+    ( open(LogPath, append, S),
+      format(S, '~n=== ', []),
+      format(S, Format, Args),
+      format(S, ' ===~n', []),
+      close(S)
+    ), _, true).
+
+
+%! fixup:dedup_first(+Pairs0, -Pairs) is det.
+%
+% Keeps the first Key-Value pair per distinct Key, in order of first
+% appearance. Detectors yield one Key-EvidenceLine pair per matching log
+% line; the first piece of evidence per key is what gets recorded.
+
+fixup:dedup_first(Pairs0, Pairs) :-
+  fixup:dedup_first_(Pairs0, [], Pairs).
+
+fixup:dedup_first_([], _, []).
+fixup:dedup_first_([Key-Value|Rest], Seen, Out) :-
+  ( memberchk(Key, Seen)
+  -> fixup:dedup_first_(Rest, Seen, Out)
+  ;  Out = [Key-Value|More],
+     fixup:dedup_first_(Rest, [Key|Seen], More)
+  ).
+
+
+%! fixup:packages_word(+N, -Word) is det.
+%
+% 'package' or 'packages' for the build-summary header line of a
+% mechanism_note/3.
+
+fixup:packages_word(1, package) :- !.
+fixup:packages_word(_, packages).
+
+
+% -----------------------------------------------------------------------------
+%  Same-version repair rebuild
+% -----------------------------------------------------------------------------
 
 %! fixup:repair_rebuild_use(+TreeRepo, +Entry, -UseString) is det.
 %
@@ -152,11 +265,7 @@ fixup:repair_rebuild(TreeRepo, Entry, Marker, ExitCode) :-
     ebuild_exec:ensure_log_dir,
     ebuild_exec:build_log_path(Entry, LogPath),
     fixup:repair_rebuild_use(TreeRepo, Entry, UseString)
-  -> catch(
-       ( open(LogPath, append, S),
-         format(S, '~n=== ~w ===~n', [Marker]),
-         close(S)
-       ), _, true),
+  -> fixup:log_marker(LogPath, '~w', [Marker]),
      ebuild_exec:run_phases_unlocked(EbuildPath,
        [clean, setup, unpack, prepare, configure, compile, install], UseString, BuildEC),
      ( BuildEC =:= 0

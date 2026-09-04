@@ -99,19 +99,10 @@ removal:print_retained_claim(C, R) :-
 removal:pkg_label(R://E, Label) :-
   query:search([category(C),name(N),version(V)], R://E),
   !,
-  removal:version_text(V, VT),
+  version_domain:display_atom(V, VT),
   format(atom(Label), '~w/~w-~w', [C, N, VT]).
 removal:pkg_label(Term, Label) :-
   format(atom(Label), '~w', [Term]).
-
-
-%! removal:version_text(+Version, -Text)
-%
-% Printable text of a version/7 compound (its Full field); passthrough
-% for anything else.
-
-removal:version_text(version(_,_,_,_,_,_,Full), Full) :- !.
-removal:version_text(V, V).
 
 
 %! removal:print_pkg_list_numbered(+Index, +Packages)

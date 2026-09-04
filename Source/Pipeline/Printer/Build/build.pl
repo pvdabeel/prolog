@@ -23,66 +23,6 @@ the display side of builder execution, while builder.pl handles orchestration.
 :- module(build, []).
 
 % =============================================================================
-%  Right-edge indicator helpers
-% =============================================================================
-
-%! build:right_edge_ok is det.
-%
-% Print a green checkmark at the right edge of the terminal (1 space in).
-% No-op when stdout is not a TTY.
-
-build:right_edge_ok :-
-  \+ config:output_tty, !.
-
-build:right_edge_ok :-
-  message:el,
-  config:printing_tty_size(_, W),
-  Col is W - 1,
-  format("\e[~dG", [Col]),
-  message:color(green),
-  message:print('\u2713'),
-  message:color(normal).
-
-
-%! build:right_edge_fail is det.
-%
-% Print a red bold exclamation at the right edge of the terminal.
-% No-op when stdout is not a TTY.
-
-build:right_edge_fail :-
-  \+ config:output_tty, !.
-
-build:right_edge_fail :-
-  message:el,
-  config:printing_tty_size(_, W),
-  Col is W - 1,
-  format("\e[~dG", [Col]),
-  message:color(red),
-  message:style(bold),
-  message:print('!'),
-  message:style(normal),
-  message:color(normal).
-
-
-%! build:right_edge_spinner(+Tick) is det.
-%
-% Print a gray spinner at the right edge using the quarter-circle style.
-
-build:right_edge_spinner(_Tick) :-
-  \+ config:output_tty, !.
-
-build:right_edge_spinner(Tick) :-
-  message:el,
-  config:printing_tty_size(_, W),
-  Col is W - 1,
-  format("\e[~dG", [Col]),
-  message:spinner_frame(braille, Tick, Frame),
-  message:color(darkgray),
-  message:print(Frame),
-  message:color(normal).
-
-
-% =============================================================================
 %  BUILD declarations
 % =============================================================================
 
@@ -285,7 +225,7 @@ build:render_slot(active, PlanStep, _NumSteps, ActionIdx, Action, RepoEntry) :-
   message:color(green),
   message:column(24, RepoEntry),
   message:color(normal),
-  build:right_edge_spinner(0).
+  message:right_edge_spinner(0).
 
 build:render_slot(done, PlanStep, _NumSteps, ActionIdx, Action, RepoEntry) :-
   build:print_slot_prefix(PlanStep, ActionIdx),
@@ -294,7 +234,7 @@ build:render_slot(done, PlanStep, _NumSteps, ActionIdx, Action, RepoEntry) :-
   message:color(green),
   message:column(24, RepoEntry),
   message:color(normal),
-  build:right_edge_ok.
+  message:right_edge_ok.
 
 build:render_slot(failed(_Reason), PlanStep, _NumSteps, ActionIdx, Action, RepoEntry) :-
   build:print_slot_prefix(PlanStep, ActionIdx),
@@ -303,7 +243,7 @@ build:render_slot(failed(_Reason), PlanStep, _NumSteps, ActionIdx, Action, RepoE
   message:color(green),
   message:column(24, RepoEntry),
   message:color(normal),
-  build:right_edge_fail.
+  message:right_edge_fail.
 
 build:render_slot(failed, PlanStep, NumSteps, ActionIdx, Action, RepoEntry) :-
   build:render_slot(failed('error'), PlanStep, NumSteps, ActionIdx, Action, RepoEntry).
@@ -520,7 +460,7 @@ build:render_file_content(pending, Filename, Size, Distdir) :-
      message:color(normal),
      message:print(' '),
      message:print(Filename),
-     build:right_edge_ok
+     message:right_edge_ok
   ;  message:color(darkgray),
      message:print_bytes(Size),
      message:color(darkgray),
@@ -554,7 +494,7 @@ build:render_file_content(done, Filename, Size, _Distdir) :-
   message:color(normal),
   message:print(' '),
   message:print(Filename),
-  build:right_edge_ok.
+  message:right_edge_ok.
 
 build:render_file_content(failed, Filename, Size, _Distdir) :-
   message:color(magenta),
@@ -562,7 +502,7 @@ build:render_file_content(failed, Filename, Size, _Distdir) :-
   message:color(normal),
   message:print(' '),
   message:print(Filename),
-  build:right_edge_fail.
+  message:right_edge_fail.
 
 build:render_file_content(restricted, Filename, Size, _Distdir) :-
   message:color(magenta),
@@ -663,7 +603,7 @@ build:render_live_content(done) :-
   message:color(normal),
   message:print(' '),
   message:print('git repository'),
-  build:right_edge_ok.
+  message:right_edge_ok.
 
 build:render_live_content(failed) :-
   message:color(magenta),
@@ -671,7 +611,7 @@ build:render_live_content(failed) :-
   message:color(normal),
   message:print(' '),
   message:print('git repository'),
-  build:right_edge_fail.
+  message:right_edge_fail.
 
 
 % =============================================================================
@@ -943,11 +883,11 @@ build:render_overall_indicator(_) :-
 build:render_overall_indicator(PhaseStates) :-
   ( member(_-Status, PhaseStates),
     build:is_failed_status(Status)
-  -> build:right_edge_fail
+  -> message:right_edge_fail
   ;  ( \+ member(_-pending, PhaseStates),
        \+ member(_-active, PhaseStates),
        \+ member(_-progress(_), PhaseStates)
-     -> build:right_edge_ok
+     -> message:right_edge_ok
      ;  build:phase_progress(PhaseStates, AccPct, Current, LiveTotal),
         build:right_edge_progress(AccPct, Current, LiveTotal)
      )
@@ -987,19 +927,14 @@ build:current_phase_index([_|Rest], N, Current) :-
 %
 % Print "(AccPct%) Current/LiveTotal" at the right edge of the terminal.
 
-build:right_edge_progress(_, _, _) :-
-  \+ config:output_tty, !.
-
 build:right_edge_progress(AccPct, Current, LiveTotal) :-
-  message:el,
-  config:printing_tty_size(_, W),
   format(atom(Label), '(~d%) ~d/~d', [AccPct, Current, LiveTotal]),
   atom_length(Label, Len),
-  Col is W - Len,
-  format("\e[~dG", [Col]),
-  message:color(cyan),
-  message:print(Label),
-  message:color(normal).
+  message:at_right_edge(Len,
+    ( message:color(cyan),
+      message:print(Label),
+      message:color(normal) )).
+
 
 build:is_failed_status(failed).
 build:is_failed_status(failed(_)).

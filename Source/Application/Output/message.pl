@@ -824,6 +824,68 @@ message:spinner_frame(Style, Tick, Frame) :-
 
 
 % -----------------------------------------------------------------------------
+%  Right-edge indicators
+% -----------------------------------------------------------------------------
+%
+% Status glyphs printed one column in from the right edge of the current
+% line (plan printer: distfile present; build printer: phase outcome and
+% in-progress spinner). All are no-ops when stdout is not a TTY.
+
+%! message:at_right_edge(+Width, :Goal) is det.
+%
+% Clears the rest of the current line, moves the cursor so that Width
+% columns of output end one column short of the right edge, and runs
+% Goal there; does nothing without a TTY.
+
+:- meta_predicate message:at_right_edge(+, 0).
+
+message:at_right_edge(_Width, _Goal) :-
+  \+ config:output_tty, !.
+message:at_right_edge(Width, Goal) :-
+  message:el,
+  config:printing_tty_size(_, W),
+  Col is W - Width,
+  format("\e[~dG", [Col]),
+  call(Goal).
+
+
+%! message:right_edge_ok is det.
+%
+% Green checkmark at the right edge.
+
+message:right_edge_ok :-
+  message:at_right_edge(1,
+    ( message:color(green),
+      message:print('\u2713'),
+      message:color(normal) )).
+
+
+%! message:right_edge_fail is det.
+%
+% Red bold exclamation mark at the right edge.
+
+message:right_edge_fail :-
+  message:at_right_edge(1,
+    ( message:color(red),
+      message:style(bold),
+      message:print('!'),
+      message:style(normal),
+      message:color(normal) )).
+
+
+%! message:right_edge_spinner(+Tick) is det.
+%
+% Gray braille spinner frame for Tick at the right edge.
+
+message:right_edge_spinner(Tick) :-
+  message:spinner_frame(braille, Tick, Frame),
+  message:at_right_edge(1,
+    ( message:color(darkgray),
+      message:print(Frame),
+      message:color(normal) )).
+
+
+% -----------------------------------------------------------------------------
 %  Misc helpers
 % -----------------------------------------------------------------------------
 

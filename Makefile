@@ -2,8 +2,8 @@
 
 ## ----------------------------------------------------------------------
 ## You need to have a recent version of SWI-Prolog installed. Preferably 
-## a development version (version 10.0.0 or higher). This Makefile will help
-## you create a 'portage-ng' binary that can be installed in /usr/local
+## a development version (version 10.0.0 or higher). This Makefile will 
+## create a 'portage-ng' binary.
 ##
 ## See manpage for more information on how to use portage-ng.
 ## ----------------------------------------------------------------------
@@ -14,7 +14,7 @@ TARGET=portage-ng
 IPCCLIENT=Source/Application/Wrapper/ipcclient
 IPCCLIENT_SRC=Source/Application/Client/ipcclient.cpp
 CXX?=c++
-CXXFLAGS?=-O2 -Wall -Wextra
+CXXFLAGS?=-O3 -Wall -march=native -Wextra
 # Always request C++17 even when the environment overrides CXXFLAGS.
 IPCCLIENT_CXXFLAGS=$(CXXFLAGS) -std=c++17
 

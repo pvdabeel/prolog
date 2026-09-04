@@ -590,6 +590,8 @@ test:must_have(Template) :-
 %  Test expectations
 % =============================================================================
 
+:- discontiguous test:expect/2.
+
 % -----------------------------------------------------------------------------
 %  Basic dependency resolution (test01, test02, test16)
 % -----------------------------------------------------------------------------
@@ -737,132 +739,67 @@ test:expect(overlay://'test15/web-1.0':run?{[]},
             ]).
 
 % -----------------------------------------------------------------------------
-%  Exactly-one-of groups ^^ (test17..test19)
+%  OS choice groups: ^^ / || (test17..test22), blockers + || (test26..test31)
 % -----------------------------------------------------------------------------
+%
+% Twelve cases of one shape: web -> os -> group ( linux bsd windows ), and
+% the plan must contain os plus one admitted alternative. They differ only
+% in the dependency scope (a compile-only alternative reaches :install, not
+% :run, so its action is left open) and in whether a blocker in app keeps
+% windows out of the plan.
 
-% test17: os -> ^^ ( linux bsd windows ) (compile) -- compile deps reach
-% :install, not :run
-test:expect(overlay://'test17/web-1.0':run?{[]},
-            [ test:must_have(overlay://'test17/os-1.0':run?{_}),
-              ( test:must_have(overlay://'test17/linux-1.0':_?{_})
-              ; test:must_have(overlay://'test17/bsd-1.0':_?{_})
-              ; test:must_have(overlay://'test17/windows-1.0':_?{_})
-              )
-            ]).
+%! test:os_choice_case(?Case, ?Action, ?Blocked)
+%
+% Case is the overlay category; Action the action the chosen alternative
+% must reach (run for runtime groups, unbound for compile-only ones);
+% Blocked the alternative a blocker in app must keep out of the plan, or
+% none.
 
-% test18: os -> ^^ ( linux bsd windows ) (runtime)
-test:expect(overlay://'test18/web-1.0':run?{[]},
-            [ test:must_have(overlay://'test18/os-1.0':run?{_}),
-              ( test:must_have(overlay://'test18/linux-1.0':run?{_})
-              ; test:must_have(overlay://'test18/bsd-1.0':run?{_})
-              ; test:must_have(overlay://'test18/windows-1.0':run?{_})
-              )
-            ]).
+% os -> ^^ ( linux bsd windows )
+test:os_choice_case(test17, _,   none).     % compile
+test:os_choice_case(test18, run, none).     % runtime
+test:os_choice_case(test19, run, none).     % compile + runtime
+% os -> || ( linux bsd windows )
+test:os_choice_case(test20, _,   none).     % compile
+test:os_choice_case(test21, run, none).     % runtime
+test:os_choice_case(test22, run, none).     % compile + runtime
+% os -> || ( linux bsd windows ) with a blocker on windows in app: the
+% prover must steer away from windows-1.0 (a weak blocker is additionally
+% recorded separately).
+test:os_choice_case(test26, _, windows).    % RDEPEND !!windows (strong, runtime)
+test:os_choice_case(test27, _, windows).    % RDEPEND !windows (weak, runtime)
+test:os_choice_case(test28, _, windows).    % DEPEND !!windows (strong, compile)
+test:os_choice_case(test29, _, windows).    % DEPEND+RDEPEND !!windows (strong)
+test:os_choice_case(test30, _, windows).    % DEPEND !windows (weak, compile)
+test:os_choice_case(test31, _, windows).    % DEPEND+RDEPEND !windows (weak)
 
-% test19: os -> ^^ ( linux bsd windows ) (compile + runtime)
-test:expect(overlay://'test19/web-1.0':run?{[]},
-            [ test:must_have(overlay://'test19/os-1.0':run?{_}),
-              ( test:must_have(overlay://'test19/linux-1.0':run?{_})
-              ; test:must_have(overlay://'test19/bsd-1.0':run?{_})
-              ; test:must_have(overlay://'test19/windows-1.0':run?{_})
-              )
-            ]).
+test:expect(overlay://Web:run?{[]}, Expectations) :-
+  atomic_list_concat([Case, 'web-1.0'], '/', Web),
+  test:os_choice_case(Case, Action, Blocked),
+  atomic_list_concat([Case, '/os-1.0'], Os),
+  findall(test:must_have(overlay://Alt:Action?{_}),
+          ( member(Name, [linux, bsd, windows]),
+            Name \== Blocked,
+            atomic_list_concat([Case, '/', Name, '-1.0'], Alt)
+          ),
+          Alternatives),
+  test:disjunction(Alternatives, OneOf),
+  ( Blocked == none
+  -> Expectations = [test:must_have(overlay://Os:run?{_}), OneOf]
+  ;  atomic_list_concat([Case, '/', Blocked, '-1.0'], Excluded),
+     Expectations = [test:must_have(overlay://Os:run?{_}),
+                     \+ test:must_have(overlay://Excluded:_?{_}),
+                     OneOf]
+  ).
 
-% -----------------------------------------------------------------------------
-%  Any-of groups || (test20..test22)
-% -----------------------------------------------------------------------------
 
-% test20: os -> || ( linux bsd windows ) (compile) -- compile deps reach
-% :install, not :run
-test:expect(overlay://'test20/web-1.0':run?{[]},
-            [ test:must_have(overlay://'test20/os-1.0':run?{_}),
-              ( test:must_have(overlay://'test20/linux-1.0':_?{_})
-              ; test:must_have(overlay://'test20/bsd-1.0':_?{_})
-              ; test:must_have(overlay://'test20/windows-1.0':_?{_})
-              )
-            ]).
+%! test:disjunction(+Goals, -Goal)
+%
+% Goal is the ;-chain of the non-empty list Goals.
 
-% test21: os -> || ( linux bsd windows ) (runtime)
-test:expect(overlay://'test21/web-1.0':run?{[]},
-            [ test:must_have(overlay://'test21/os-1.0':run?{_}),
-              ( test:must_have(overlay://'test21/linux-1.0':run?{_})
-              ; test:must_have(overlay://'test21/bsd-1.0':run?{_})
-              ; test:must_have(overlay://'test21/windows-1.0':run?{_})
-              )
-            ]).
-
-% test22: os -> || ( linux bsd windows ) (compile + runtime)
-test:expect(overlay://'test22/web-1.0':run?{[]},
-            [ test:must_have(overlay://'test22/os-1.0':run?{_}),
-              ( test:must_have(overlay://'test22/linux-1.0':run?{_})
-              ; test:must_have(overlay://'test22/bsd-1.0':run?{_})
-              ; test:must_have(overlay://'test22/windows-1.0':run?{_})
-              )
-            ]).
-
-% -----------------------------------------------------------------------------
-%  Blockers (strong/weak) + any-of (test26..test31)
-% -----------------------------------------------------------------------------
-
-% test26: app RDEPEND !!windows (strong, runtime) + os any-of -- the prover
-% must avoid windows-1.0 and select linux-1.0 or bsd-1.0 instead
-test:expect(overlay://'test26/web-1.0':run?{[]},
-            [ test:must_have(overlay://'test26/os-1.0':run?{_}),
-              \+ test:must_have(overlay://'test26/windows-1.0':_?{_}),
-              ( test:must_have(overlay://'test26/linux-1.0':_?{_})
-              ; test:must_have(overlay://'test26/bsd-1.0':_?{_})
-              )
-            ]).
-
-% test27: app RDEPEND !windows (weak, runtime) + os any-of -- the prover
-% steers away from windows-1.0; the weak blocker is recorded separately
-test:expect(overlay://'test27/web-1.0':run?{[]},
-            [ test:must_have(overlay://'test27/os-1.0':run?{_}),
-              \+ test:must_have(overlay://'test27/windows-1.0':_?{_}),
-              ( test:must_have(overlay://'test27/linux-1.0':_?{_})
-              ; test:must_have(overlay://'test27/bsd-1.0':_?{_})
-              )
-            ]).
-
-% test28: app DEPEND !!windows (strong, compile) + os any-of -- the prover
-% must avoid windows-1.0 and select linux-1.0 or bsd-1.0 instead
-test:expect(overlay://'test28/web-1.0':run?{[]},
-            [ test:must_have(overlay://'test28/os-1.0':run?{_}),
-              \+ test:must_have(overlay://'test28/windows-1.0':_?{_}),
-              ( test:must_have(overlay://'test28/linux-1.0':_?{_})
-              ; test:must_have(overlay://'test28/bsd-1.0':_?{_})
-              )
-            ]).
-
-% test29: app DEPEND+RDEPEND !!windows (strong, both scopes) + os any-of --
-% the prover must avoid windows-1.0 and select linux-1.0 or bsd-1.0 instead
-test:expect(overlay://'test29/web-1.0':run?{[]},
-            [ test:must_have(overlay://'test29/os-1.0':run?{_}),
-              \+ test:must_have(overlay://'test29/windows-1.0':_?{_}),
-              ( test:must_have(overlay://'test29/linux-1.0':_?{_})
-              ; test:must_have(overlay://'test29/bsd-1.0':_?{_})
-              )
-            ]).
-
-% test30: app DEPEND !windows (weak, compile) + os any-of -- the prover
-% steers away from windows-1.0; the weak blocker is recorded separately
-test:expect(overlay://'test30/web-1.0':run?{[]},
-            [ test:must_have(overlay://'test30/os-1.0':run?{_}),
-              \+ test:must_have(overlay://'test30/windows-1.0':_?{_}),
-              ( test:must_have(overlay://'test30/linux-1.0':_?{_})
-              ; test:must_have(overlay://'test30/bsd-1.0':_?{_})
-              )
-            ]).
-
-% test31: app DEPEND+RDEPEND !windows (weak, both scopes) + os any-of --
-% the prover steers away from windows-1.0; weak blockers recorded separately
-test:expect(overlay://'test31/web-1.0':run?{[]},
-            [ test:must_have(overlay://'test31/os-1.0':run?{_}),
-              \+ test:must_have(overlay://'test31/windows-1.0':_?{_}),
-              ( test:must_have(overlay://'test31/linux-1.0':_?{_})
-              ; test:must_have(overlay://'test31/bsd-1.0':_?{_})
-              )
-            ]).
+test:disjunction([G], G) :- !.
+test:disjunction([G|Gs], (G ; Rest)) :-
+  test:disjunction(Gs, Rest).
 
 % -----------------------------------------------------------------------------
 %  At-most-one-of groups ?? (test23..test25)

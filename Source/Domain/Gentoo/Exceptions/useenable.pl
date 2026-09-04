@@ -91,22 +91,12 @@ fixup:phase_retry_hook(useenable, _EbuildPath, Entry, Phase, LogPath, _UseString
   ( useenable:enabled,
     ExitCode0 =\= 0,
     useenable:retry_phase(Phase),
-    useenable:tree_entry(Entry, Repo, _C, _N),
+    fixup:tree_entry(Entry, Repo, _C, _N),
     useenable:scan_log(LogPath, SizeBefore, Lines),
     Lines \== []
   -> once(useenable:process_detections(Lines, Repo, Entry, Phase, ExitCode0))
   ;  true
   ).
-
-
-%! useenable:tree_entry(+Entry, -Repo, -C, -N) is semidet.
-%
-% Resolves a build entry to its tree repository and Category/Name.
-
-useenable:tree_entry(Entry, Repo, C, N) :-
-  cache:ordered_entry(Repo, Entry, C, N, _),
-  Repo \== pkg,
-  !.
 
 
 % -----------------------------------------------------------------------------
@@ -115,26 +105,12 @@ useenable:tree_entry(Entry, Repo, C, N) :-
 
 %! useenable:scan_log(+LogPath, +SizeBefore, -Lines) is det.
 %
-% Trailing log segment after SizeBefore (same window as missing_provider).
-% Each line is ANSI-stripped so GCC colorized diagnostics still match.
+% fixup:scan_log/3 with each line ANSI-stripped so GCC colorized
+% diagnostics still match the header detectors.
 
 useenable:scan_log(LogPath, SizeBefore, Lines) :-
-  ( catch(
-      ( exists_file(LogPath),
-        size_file(LogPath, Size),
-        Size > SizeBefore,
-        Start is max(SizeBefore, Size - 262144),
-        Len is Size - Start,
-        setup_call_cleanup(
-          open(LogPath, read, S, [type(binary)]),
-          ( seek(S, Start, bof, _),
-            read_string(S, Len, Tail) ),
-          close(S)) ),
-      _, fail)
-  -> split_string(Tail, "\n", "\r", RawLines),
-     maplist(useenable:strip_ansi, RawLines, Lines)
-  ;  Lines = []
-  ).
+  fixup:scan_log(LogPath, SizeBefore, RawLines),
+  maplist(useenable:strip_ansi, RawLines, Lines).
 
 
 %! useenable:strip_ansi(+In, -Out) is det.
@@ -190,23 +166,9 @@ useenable:process_detections(Lines, Repo, Entry, Phase, ExitCode) :-
   findall(Symbol-Line,
           useenable:detector(Lines, Symbol, Line),
           Pairs0),
-  useenable:dedup_symbols(Pairs0, Pairs),
+  fixup:dedup_first(Pairs0, Pairs),
   forall(member(Symbol-Line, Pairs),
          useenable:handle_symbol(Symbol, Line, Repo, Entry, Phase, ExitCode)).
-
-
-%! useenable:dedup_symbols(+Pairs0, -Pairs) is det.
-
-useenable:dedup_symbols(Pairs0, Pairs) :-
-  useenable:dedup_symbols_(Pairs0, [], Pairs).
-
-useenable:dedup_symbols_([], _, []).
-useenable:dedup_symbols_([Symbol-Line|Rest], Seen, Out) :-
-  ( memberchk(Symbol, Seen)
-  -> useenable:dedup_symbols_(Rest, Seen, Out)
-  ;  Out = [Symbol-Line|More],
-     useenable:dedup_symbols_(Rest, [Symbol|Seen], More)
-  ).
 
 
 %! useenable:handle_symbol(+Symbol, +Line, +Repo, +Entry, +Phase, +ExitCode) is det.
@@ -439,6 +401,6 @@ useenable:provides_usedep(cmake_lib, 'X11_Xdamage',
 %! fixup:mechanism_note(+useenable, +Count, -Lines) is semidet.
 
 fixup:mechanism_note(useenable, N, [Line1, Line2]) :-
-  ( N =:= 1 -> Word = 'package' ; Word = 'packages' ),
+  fixup:packages_word(N, Word),
   format(atom(Line1), 'USE-enable feedback: ~d ~w needed a provider rebuilt with additional', [N, Word]),
   Line2 = '                    USE flags learned at build time (portage-ng#110):'.

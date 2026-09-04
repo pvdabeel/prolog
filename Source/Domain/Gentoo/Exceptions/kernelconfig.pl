@@ -101,52 +101,13 @@ fixup:phase_retry_hook(kernelconfig, _EbuildPath, Entry, Phase, LogPath, _UseStr
   ( kernelconfig:enabled,
     ExitCode0 =\= 0,
     Phase == setup,
-    kernelconfig:tree_entry(Entry, Repo, _C, _N),
-    kernelconfig:scan_log(LogPath, SizeBefore, Lines),
+    fixup:tree_entry(Entry, Repo, _C, _N),
+    fixup:scan_log(LogPath, SizeBefore, Lines),
     Lines \== [],
     kernelconfig:detect_options(Lines, Options, EvidenceLines),
     Options \== []
   -> once(kernelconfig:record_requirement(Repo, Entry, Phase, ExitCode0, Options, EvidenceLines))
   ;  true
-  ).
-
-
-%! kernelconfig:tree_entry(+Entry, -Repo, -C, -N) is semidet.
-%
-% Resolves a build entry (Category/Name-Version) to its tree repository
-% and Category/Name. Fails for a VDB-only (pkg) entry.
-
-kernelconfig:tree_entry(Entry, Repo, C, N) :-
-  cache:ordered_entry(Repo, Entry, C, N, _),
-  Repo \== pkg,
-  !.
-
-
-% -----------------------------------------------------------------------------
-%  Log scanning
-% -----------------------------------------------------------------------------
-
-%! kernelconfig:scan_log(+LogPath, +SizeBefore, -Lines) is det.
-%
-% Returns the lines the failed phase appended after byte offset SizeBefore,
-% limited to the trailing 256KB (the CONFIG_CHECK die is at the end).
-% Errors and a non-grown log yield [].
-
-kernelconfig:scan_log(LogPath, SizeBefore, Lines) :-
-  ( catch(
-      ( exists_file(LogPath),
-        size_file(LogPath, Size),
-        Size > SizeBefore,
-        Start is max(SizeBefore, Size - 262144),
-        Len is Size - Start,
-        setup_call_cleanup(
-          open(LogPath, read, S, [type(binary)]),
-          ( seek(S, Start, bof, _),
-            read_string(S, Len, Tail) ),
-          close(S)) ),
-      _, fail)
-  -> split_string(Tail, "\n", "\r", Lines)
-  ;  Lines = []
   ).
 
 
@@ -157,36 +118,19 @@ kernelconfig:scan_log(LogPath, SizeBefore, Lines) :-
 %! kernelconfig:detect_options(+Lines, -Options, -EvidenceLines) is det.
 %
 % Runs the CONFIG_CHECK detectors over the log lines, deduplicating on the
-% option name (first evidence line wins). Options is a sorted list of
-% config(Name, State) with State in {y, n}.
+% option name: the first CONFIG_CHECK verdict per option wins, so a later
+% line asking for a different state of the same option is ignored.
+% Options is a sorted list of config(Name, State) with State in {y, n}.
 
 kernelconfig:detect_options(Lines, Options, EvidenceLines) :-
-  findall(config(Name, State)-Line,
+  findall(Name-(config(Name, State)-Line),
           kernelconfig:detector(Lines, config(Name, State), Line),
           Pairs0),
-  kernelconfig:dedup_options(Pairs0, Pairs),
-  findall(Opt, member(Opt-_, Pairs), Options0),
+  fixup:dedup_first(Pairs0, Pairs),
+  findall(Opt, member(_-(Opt-_), Pairs), Options0),
   sort(Options0, Options),
-  findall(Line, member(_-Line, Pairs), EvidenceLines0),
+  findall(Line, member(_-(_-Line), Pairs), EvidenceLines0),
   sort(EvidenceLines0, EvidenceLines).
-
-
-%! kernelconfig:dedup_options(+Pairs0, -Pairs) is det.
-%
-% Keeps the first evidence line per distinct config-option name (a later
-% line asking for a different state of the same option is ignored -- the
-% first CONFIG_CHECK verdict wins).
-
-kernelconfig:dedup_options(Pairs0, Pairs) :-
-  kernelconfig:dedup_options_(Pairs0, [], Pairs).
-
-kernelconfig:dedup_options_([], _, []).
-kernelconfig:dedup_options_([config(Name, State)-Line|Rest], Seen, Out) :-
-  ( memberchk(Name, Seen)
-  -> kernelconfig:dedup_options_(Rest, Seen, Out)
-  ;  Out = [config(Name, State)-Line|More],
-     kernelconfig:dedup_options_(Rest, [Name|Seen], More)
-  ).
 
 
 %! kernelconfig:detector(+Lines, -Option, -Line) is nondet.
@@ -422,6 +366,6 @@ kernelconfig:log_apply(KDir, Options) :-
 %! fixup:mechanism_note(+kernelconfig, +Count, -Lines) is semidet.
 
 fixup:mechanism_note(kernelconfig, N, [Line1, Line2]) :-
-  ( N =:= 1 -> Word = 'package' ; Word = 'packages' ),
+  fixup:packages_word(N, Word),
   format(atom(Line1), 'Kernel config: ~d ~w required kernel options that were learned at', [N, Word]),
   Line2 = '               setup time and applied to the kernel source .config (portage-ng#105):'.

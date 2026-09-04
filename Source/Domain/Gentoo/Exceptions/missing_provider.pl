@@ -107,50 +107,11 @@ fixup:phase_retry_hook(missing_provider, _EbuildPath, Entry, Phase, LogPath, _Us
   ( missing_provider:enabled,
     ExitCode0 =\= 0,
     missing_provider:retry_phase(Phase),
-    missing_provider:tree_entry(Entry, Repo, _C, _N),
-    missing_provider:scan_log(LogPath, SizeBefore, Lines),
+    fixup:tree_entry(Entry, Repo, _C, _N),
+    fixup:scan_log(LogPath, SizeBefore, Lines),
     Lines \== []
   -> once(missing_provider:process_detections(Lines, Repo, Entry, Phase, ExitCode0))
   ;  true
-  ).
-
-
-%! missing_provider:tree_entry(+Entry, -Repo, -C, -N) is semidet.
-%
-% Resolves a build entry (Category/Name-Version) to its tree repository
-% and Category/Name. Fails for a VDB-only (pkg) entry.
-
-missing_provider:tree_entry(Entry, Repo, C, N) :-
-  cache:ordered_entry(Repo, Entry, C, N, _),
-  Repo \== pkg,
-  !.
-
-
-% -----------------------------------------------------------------------------
-%  Log scanning
-% -----------------------------------------------------------------------------
-
-%! missing_provider:scan_log(+LogPath, +SizeBefore, -Lines) is det.
-%
-% Returns the lines the failed phase appended after byte offset
-% SizeBefore, limited to the trailing 256KB (the die is at the end).
-% Errors and a non-grown log yield [].
-
-missing_provider:scan_log(LogPath, SizeBefore, Lines) :-
-  ( catch(
-      ( exists_file(LogPath),
-        size_file(LogPath, Size),
-        Size > SizeBefore,
-        Start is max(SizeBefore, Size - 262144),
-        Len is Size - Start,
-        setup_call_cleanup(
-          open(LogPath, read, S, [type(binary)]),
-          ( seek(S, Start, bof, _),
-            read_string(S, Len, Tail) ),
-          close(S)) ),
-      _, fail)
-  -> split_string(Tail, "\n", "\r", Lines)
-  ;  Lines = []
   ).
 
 
@@ -167,25 +128,9 @@ missing_provider:process_detections(Lines, Repo, Entry, Phase, ExitCode) :-
   findall(Symbol-Line,
           missing_provider:detector(Lines, Symbol, Line),
           Pairs0),
-  missing_provider:dedup_symbols(Pairs0, Pairs),
+  fixup:dedup_first(Pairs0, Pairs),
   forall(member(Symbol-Line, Pairs),
          missing_provider:handle_symbol(Symbol, Line, Repo, Entry, Phase, ExitCode)).
-
-
-%! missing_provider:dedup_symbols(+Pairs0, -Pairs) is det.
-%
-% Keeps the first evidence line per distinct symbol.
-
-missing_provider:dedup_symbols(Pairs0, Pairs) :-
-  missing_provider:dedup_symbols_(Pairs0, [], Pairs).
-
-missing_provider:dedup_symbols_([], _, []).
-missing_provider:dedup_symbols_([Symbol-Line|Rest], Seen, Out) :-
-  ( memberchk(Symbol, Seen)
-  -> missing_provider:dedup_symbols_(Rest, Seen, Out)
-  ;  Out = [Symbol-Line|More],
-     missing_provider:dedup_symbols_(Rest, [Symbol|Seen], More)
-  ).
 
 
 %! missing_provider:handle_symbol(+Symbol, +Line, +Repo, +Entry, +Phase, +ExitCode) is det.
@@ -548,6 +493,6 @@ missing_provider:provides(command, gperf,            'dev-util/gperf').
 %! fixup:mechanism_note(+missing_provider, +Count, -Lines) is semidet.
 
 fixup:mechanism_note(missing_provider, N, [Line1, Line2]) :-
-  ( N =:= 1 -> Word = 'package' ; Word = 'packages' ),
+  fixup:packages_word(N, Word),
   format(atom(Line1), 'Missing provider: ~d ~w had an undeclared build dependency discovered at', [N, Word]),
   Line2 = '                  build time and learned as BDEPEND (portage-ng#102):'.

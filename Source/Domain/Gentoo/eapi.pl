@@ -831,17 +831,19 @@ eapi:query_operator(O) -->
   eapi:operator(O).
 
 
-%! eapi:comparator_symbol(+Op, -Symbol)
+%! eapi:comparator_symbol(+Op, -Symbol) is det.
 %
-% Maps a comparator atom to its printable symbol.
+% Maps a comparator atom to its printable symbol; an unknown operator is
+% rendered as itself.  The single comparator-to-text projection used by
+% the printer, the bug-report drafts and the graphers.
 
-eapi:comparator_symbol(greaterequal, '>=').
-eapi:comparator_symbol(greater,      '>').
-eapi:comparator_symbol(smallerequal, '<=').
-eapi:comparator_symbol(smaller,      '<').
-eapi:comparator_symbol(equal,        '=').
-eapi:comparator_symbol(tilde,        '~').
-eapi:comparator_symbol(none,         '').
+eapi:comparator_symbol(greaterequal, '>=') :- !.
+eapi:comparator_symbol(greater,      '>')  :- !.
+eapi:comparator_symbol(smallerequal, '<=') :- !.
+eapi:comparator_symbol(smaller,      '<')  :- !.
+eapi:comparator_symbol(equal,        '=')  :- !.
+eapi:comparator_symbol(tilde,        '~')  :- !.
+eapi:comparator_symbol(none,         '')   :- !.
 eapi:comparator_symbol(Op,           Op).
 
 
