@@ -47,7 +47,7 @@ interface:ci_exit_code(ModelAVL, ProofAVL, ExitCode) :-
   ( interface:has_any_assumption(ModelAVL) ->
       ( interface:has_domain_assumptions(ProofAVL) -> interface:exit_code(domain_assumptions, ExitCode, _)
       ; interface:has_cycle_breaks(ProofAVL)       -> interface:exit_code(cycle_breaks, ExitCode, _)
-      ; interface:exit_code(cycle_breaks, ExitCode, _)
+      ; interface:exit_code(clean, ExitCode, _)   % only ineffective blocker records
       )
   ; interface:exit_code(clean, ExitCode, _)
   ).
@@ -63,12 +63,18 @@ interface:has_any_assumption(ModelAVL) :-
 
 %! interface:has_domain_assumptions(+ProofAVL) is semidet.
 %
-% Succeeds if the proof contains at least one domain assumption
-% (proof key of the form rule(assumed(_))).
+% Succeeds if the proof contains at least one *effective* domain
+% assumption (proof key of the form rule(assumed(_))). The check goes
+% through annotation:collect/2 so that weak blocker records whose atom
+% hits nothing in the plan (see annotation:blocker_effective/2) do not
+% count — the printer does not report them, and neither should the exit
+% code.
 
 interface:has_domain_assumptions(ProofAVL) :-
   assoc:gen_assoc(rule(assumed(_)), ProofAVL, _),
-  !.
+  !,
+  annotation:collect(ProofAVL, Annotations),
+  annotation:domain_assumptions(Annotations, [_|_]).
 
 %! interface:has_cycle_breaks(+ProofAVL) is semidet.
 %

@@ -128,6 +128,17 @@ Classification lives in `Source/Pipeline/Printer/Plan/assumption.pl`
 Prover cycle-breaks (`*_cycle`, `naf_cycle`) are a separate, benign axis
 (exit 1), not domain assumptions.
 
+Blocker relevance: pass 1 records every soft blocker it walks past
+(`assumed(blocker(...))`) because the blocked CN's candidate may be
+selected later in the proof. `annotation:collect/2`
+(`Source/Pipeline/Printer/Plan/annotation.pl`) decides post-proof which of
+those records are *effective* — atom (op/version/slot/sub-slot) matches a
+planned merge of the CN, or an installed copy the plan leaves in place —
+and only those appear in the blocker section, the inline
+`(blocked: soft by …)` notes and `interface:ci_exit_code/3`. A
+non-matching record (`!dev-ml/findlib:0/0` vs planned findlib `0/1`) is
+silent and does not force exit 2.
+
 ## "Context" disambiguation (do not conflate these)
 
 The word "context" has three distinct meanings in this codebase:

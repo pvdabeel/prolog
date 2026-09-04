@@ -3056,6 +3056,135 @@ test(record_visibility_override_noop_without_selection,
 
 
 % -----------------------------------------------------------------------------
+%  Printer: blocker relevance (annotation:collect/2)
+% -----------------------------------------------------------------------------
+%
+% Pass 1 records every weak blocker it walks past; annotation:collect/2
+% keeps only those whose atom (operator / version / slot / sub-slot)
+% actually hits a planned merge or an installed copy the plan leaves in
+% place. `!dev-ml/findlib:0/0` against a planned findlib 0/1 and
+% `!<dev-util/ragel-7.0.3` against a planned 7.0.4 must vanish from both
+% the blocker section and the domain assumption list (they drove the CI
+% exit code to 2 for a plan emerge accepts cleanly).
+
+:- begin_tests(annotation_blocker_relevance).
+
+abr_v(V) :- V = version([6,10],'',4,0,[],0,'6.10').
+abr_w(V) :- V = version([7,0,4],'',4,0,[],3,'7.0.4-r3').
+
+abr_setup :-
+  abr_cleanup,
+  abr_v(V6), abr_w(V7),
+  assertz(cache:ordered_entry(qtest, 'abrtest/blk-6.10', abrtest, blk, V6)),
+  assertz(cache:entry_metadata(qtest, 'abrtest/blk-6.10', slot, slot('0'))),
+  assertz(cache:entry_metadata(qtest, 'abrtest/blk-6.10', slot, subslot('0'))),
+  assertz(cache:ordered_entry(qtest, 'abrtest/blk-7.0.4-r3', abrtest, blk, V7)),
+  assertz(cache:entry_metadata(qtest, 'abrtest/blk-7.0.4-r3', slot, slot('0'))),
+  assertz(cache:entry_metadata(qtest, 'abrtest/blk-7.0.4-r3', slot, subslot('1'))),
+  assertz(cache:ordered_entry(qtest, 'abrtest/parent-1', abrtest, parent, V6)).
+
+abr_cleanup :-
+  retractall(cache:ordered_entry(qtest, _, abrtest, _, _)),
+  retractall(cache:entry_metadata(qtest, 'abrtest/blk-6.10', _, _)),
+  retractall(cache:entry_metadata(qtest, 'abrtest/blk-7.0.4-r3', _, _)),
+  abr_vdb_cleanup.
+
+% Installed copy lives in the active VDB repository (in-memory only).
+abr_vdb_setup :-
+  abr_setup,
+  abr_v(V6),
+  knowledgebase:vdb_repository(Vdb),
+  assertz(cache:ordered_entry(Vdb, 'abrtest/blk-6.10', abrtest, blk, V6)),
+  assertz(cache:entry_metadata(Vdb, 'abrtest/blk-6.10', slot, slot('0'))),
+  assertz(cache:entry_metadata(Vdb, 'abrtest/blk-6.10', slot, subslot('0'))).
+
+abr_vdb_cleanup :-
+  knowledgebase:vdb_repository(Vdb),
+  retractall(cache:ordered_entry(Vdb, _, abrtest, _, _)),
+  retractall(cache:entry_metadata(Vdb, 'abrtest/blk-6.10', _, _)).
+
+% Weak blocker recorded by abrtest/parent-1 against abrtest/blk.
+abr_blocker(O, V, SlotReq, Content) :-
+  Content = blocker(weak, run, abrtest, blk, O, V, SlotReq)?{[self(qtest://'abrtest/parent-1')]}.
+
+abr_proof(Planned, Content, Proof) :-
+  findall(rule(qtest://E:A)-(dep(_,[])?{[]}), member(E:A, Planned), Steps),
+  list_to_assoc([rule(assumed(Content))-(dep(_,[])?{[]})|Steps], Proof).
+
+abr_reported(Proof, Content) :-
+  annotation:collect(Proof, Ann),
+  annotation:domain_assumptions(Ann, Domain),
+  memberchk(Content, Domain),
+  annotation:blocker_notes(Ann, Notes),
+  get_assoc(key(abrtest, blk, run), Notes, note(weak, qtest://'abrtest/parent-1')).
+
+abr_silent(Proof, Content) :-
+  annotation:collect(Proof, Ann),
+  annotation:domain_assumptions(Ann, Domain),
+  \+ memberchk(Content, Domain),
+  annotation:blocker_notes(Ann, Notes),
+  \+ get_assoc(key(abrtest, blk, _), Notes, _).
+
+% `!<abrtest/blk-7.0.3` with blk-6.10 planned: a real conflict, reported.
+test(planned_version_inside_blocker_range_is_reported,
+     [setup(abr_setup), cleanup(abr_cleanup)]) :-
+  abr_blocker(smaller, version([7,0,3],'',4,0,[],0,'7.0.3'), [], Content),
+  abr_proof(['abrtest/blk-6.10':install, 'abrtest/parent-1':install], Content, Proof),
+  abr_reported(Proof, Content).
+
+% `!<abrtest/blk-7.0.3` with blk-7.0.4-r3 planned: blocks nothing.
+test(planned_version_outside_blocker_range_is_silent,
+     [setup(abr_setup), cleanup(abr_cleanup)]) :-
+  abr_blocker(smaller, version([7,0,3],'',4,0,[],0,'7.0.3'), [], Content),
+  abr_proof(['abrtest/blk-7.0.4-r3':install, 'abrtest/parent-1':install], Content, Proof),
+  abr_silent(Proof, Content).
+
+% `!abrtest/blk:0/0` with blk 0/1 planned: sub-slot mismatch, silent
+% (the findlib case). Same atom against planned 0/0: reported.
+test(subslot_mismatch_is_silent,
+     [setup(abr_setup), cleanup(abr_cleanup)]) :-
+  abr_blocker(none, version_none, [slot('0'), subslot('0')], Content),
+  abr_proof(['abrtest/blk-7.0.4-r3':install, 'abrtest/parent-1':install], Content, Proof),
+  abr_silent(Proof, Content).
+
+test(subslot_match_is_reported,
+     [setup(abr_setup), cleanup(abr_cleanup)]) :-
+  abr_blocker(none, version_none, [slot('0'), subslot('0')], Content),
+  abr_proof(['abrtest/blk-6.10':install, 'abrtest/parent-1':install], Content, Proof),
+  abr_reported(Proof, Content).
+
+% Nothing of abrtest/blk planned or installed: silent.
+test(unplanned_uninstalled_blocked_cn_is_silent,
+     [setup(abr_setup), cleanup(abr_cleanup)]) :-
+  abr_blocker(none, version_none, [], Content),
+  abr_proof(['abrtest/parent-1':install], Content, Proof),
+  abr_silent(Proof, Content).
+
+% Installed blk-6.10 matches `!<abrtest/blk-7.0.3` and the plan leaves
+% it alone: reported. When the plan replaces it (same slot) with a
+% non-matching 7.0.4-r3, or unmerges it, the plan resolves the blocker.
+test(installed_copy_left_in_place_is_reported,
+     [setup(abr_vdb_setup), cleanup(abr_cleanup)]) :-
+  abr_blocker(smaller, version([7,0,3],'',4,0,[],0,'7.0.3'), [], Content),
+  abr_proof(['abrtest/parent-1':install], Content, Proof),
+  abr_reported(Proof, Content).
+
+test(installed_copy_replaced_by_plan_is_silent,
+     [setup(abr_vdb_setup), cleanup(abr_cleanup)]) :-
+  abr_blocker(smaller, version([7,0,3],'',4,0,[],0,'7.0.3'), [], Content),
+  abr_proof(['abrtest/blk-7.0.4-r3':update, 'abrtest/parent-1':install], Content, Proof),
+  abr_silent(Proof, Content).
+
+test(installed_copy_unmerged_by_plan_is_silent,
+     [setup(abr_vdb_setup), cleanup(abr_cleanup)]) :-
+  abr_blocker(smaller, version([7,0,3],'',4,0,[],0,'7.0.3'), [], Content),
+  abr_proof(['abrtest/blk-6.10':uninstall, 'abrtest/parent-1':install], Content, Proof),
+  abr_silent(Proof, Content).
+
+:- end_tests(annotation_blocker_relevance).
+
+
+% -----------------------------------------------------------------------------
 %  Builder: VDB reconciliation backstop tests
 % -----------------------------------------------------------------------------
 %
@@ -3863,11 +3992,13 @@ test(configure_closure_delays_install_after_run_providers, [nondet]) :-
 % bump. Without the alias, Try only waits for the group and co-waves
 % with the rebuild; configure then dies looking for Builder.pm under
 % the new perl. The alias is a hard requires/2, not a preference.
+% Versions are deliberately non-existent so the synthetic rules cannot
+% collide with real KB entries (pass-1 heuristics on real atoms).
 test(grouped_bdepend_waits_for_provider_rebuild) :-
   G = grouped_package_dependency(no, 'dev-perl', 'XS-Parse-Keyword', []):install,
-  Try = portage://'dev-perl/Syntax-Keyword-Try-0.310.0':install,
-  XSPK = portage://'dev-perl/XS-Parse-Keyword-0.38.0':update,
-  Perl = portage://'dev-lang/perl-5.44.0':update,
+  Try = portage://'dev-perl/Syntax-Keyword-Try-0':install,
+  XSPK = portage://'dev-perl/XS-Parse-Keyword-0':update,
+  Perl = portage://'dev-lang/perl-0':update,
   issue73_rules([Try-[G], G-[], XSPK-[Perl], Perl-[]]),
   ordering_engine_plan([Try, XSPK], ProofOut, Plan),
   ordering_engine_unreachables(ProofOut, []),

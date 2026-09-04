@@ -64,10 +64,14 @@ warning:unwrap_ctx(Ctx0, Ctx) :-
 
 warning:print_warnings(ModelAVL, Annotations, ProofAVL, TriggersAVL) :-
   once((assoc:gen_assoc(Key, ModelAVL, _), Key = assumed(_))),
-  !,
-  nl,
   annotation:domain_assumptions(Annotations, DomainAssumptions),
   annotation:cycle_break_contents(Annotations, CycleAssumptions),
+  % The model may carry assumed(...) keys that annotation:collect/2 filtered
+  % out (soft blocker records that hit nothing); then there is nothing to
+  % report here and the plain suggestions clause below applies.
+  ( DomainAssumptions \== [] ; CycleAssumptions \== [] ),
+  !,
+  nl,
   partition(warning:is_blocker_assumption, DomainAssumptions, BlockerAssumptions, NonBlockerAssumptions),
   % 1. Suggestions/assumptions section first
   warning:print_suggestions_section(NonBlockerAssumptions, BlockerAssumptions, Annotations),

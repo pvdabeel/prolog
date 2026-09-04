@@ -66,11 +66,24 @@ annotation:unwrap_ctx(Ctx0, Ctx) :-
 % - BwuChanges:        use_change(R://E, Enables, Disables) — legacy
 %                      build_with_use scan over proof-context-bearing keys
 % - BlockerNotes:      assoc mapping key(C, N, Phase) -> note(Strength,
-%                      Origin) for blocker domain assumptions
+%                      Origin) for *effective* blocker domain assumptions
 % - CycleBreaks:       cycle_break(Content, Value) for prover cycle-break
 %                      assumptions (proof key assumed(rule(Content)))
 % - DomainAssumptions: Content for domain assumptions (proof key
-%                      rule(assumed(Content)))
+%                      rule(assumed(Content))), minus ineffective blockers
+%
+% Blocker relevance: pass 1 records every weak blocker it walks past as
+% `assumed(blocker(Strength, Phase, C, N, O, V, SlotReq))` because, mid
+% proof, it cannot know which version of C/N the plan ends up with (that
+% candidate may be selected later). The recorded atom is therefore a
+% *candidate* assumption; only here, with the whole proof in hand, can it
+% be evaluated against the packages it could actually hit. A blocker is
+% effective (kept as assumption + inline note) exactly when its atom —
+% operator, version, slot and sub-slot — matches a planned merge of C/N,
+% or an installed copy of C/N that the plan leaves in place. Anything
+% else (e.g. `!dev-ml/findlib:0/0` against a planned findlib 0/1, or
+% `!<dev-util/ragel-7.0.3` against a planned 7.0.4) blocks nothing, so it
+% is neither reported nor allowed to drive the CI exit code.
 
 annotation:collect(ProofAVL, proof_annotations(Unmasks, Licenses, Keywords,
                                                UseChanges, BwuChanges,
@@ -87,8 +100,18 @@ annotation:collect(ProofAVL, proof_annotations(Unmasks, Licenses, Keywords,
   annotation:tagged(usechange,  Tags, UseChanges),
   annotation:tagged(bwu,        Tags, BwuChanges),
   annotation:tagged(cyclebreak, Tags, CycleBreaks),
-  annotation:tagged(domain,     Tags, DomainAssumptions),
-  annotation:tagged(blocker,    Tags, BlockerPairs),
+  annotation:tagged(domain,     Tags, DomainAssumptions0),
+  annotation:tagged(blocker,    Tags, Blockers0),
+  annotation:tagged(planned,    Tags, Planned),
+  annotation:planned_index(Planned, PlannedIdx),
+  partition(annotation:blocker_effective(PlannedIdx), Blockers0,
+            Effective, Ineffective),
+  findall(Content, member(blk(Content,_,_,_,_,_,_,_,_), Ineffective), Dropped0),
+  sort(Dropped0, Dropped),
+  ord_subtract(DomainAssumptions0, Dropped, DomainAssumptions),
+  findall(key(C,N,Phase)-note(Strength,Origin),
+          member(blk(_,Strength,Phase,C,N,_,_,_,Origin), Effective),
+          BlockerPairs),
   empty_assoc(Empty),
   foldl(annotation:blocker_note_put, BlockerPairs, Empty, BlockerNotes).
 
@@ -115,9 +138,10 @@ annotation:proof_entry_tag(rule(assumed(Content)), _Value, Type, Term) :-
   !,
   ( Type = domain,
     Term = Content
-  ; annotation:blocker_assumption_term(Content, Strength, Phase, C, N, Origin),
+  ; annotation:blocker_assumption_term(Content, Strength, Phase, C, N,
+                                       O, V, SlotReq, Origin),
     Type = blocker,
-    Term = key(C,N,Phase)-note(Strength,Origin)
+    Term = blk(Content, Strength, Phase, C, N, O, V, SlotReq, Origin)
   ).
 % Prover cycle-break assumptions (proof key assumed(rule(Content))).
 annotation:proof_entry_tag(assumed(rule(Content)), Value, cyclebreak,
@@ -127,10 +151,17 @@ annotation:proof_entry_tag(assumed(rule(Content)), Value, cyclebreak,
 % carrier (:run path) or a synthetic :annotate carrier (:fetchonly path,
 % see resolving.pl), so the collector never needs to re-derive them from the
 % mask state — it just reads whatever the resolver placed in the context.
-annotation:proof_entry_tag(rule(R://E:_Action), _?Ctx0, Type, Term) :-
+% Merge-family and unmerge actions are additionally tagged `planned` so
+% blocker atoms can be evaluated against what the plan does to their CN.
+annotation:proof_entry_tag(rule(R://E:Action), _?Ctx0, Type, Term) :-
   !,
-  annotation:unwrap_ctx(Ctx0, Ctx),
-  annotation:suggestion_tag(Ctx, R, E, Type, Term).
+  ( annotation:unwrap_ctx(Ctx0, Ctx),
+    annotation:suggestion_tag(Ctx, R, E, Type, Term)
+  ; memberchk(Action, [install, update, downgrade, reinstall, uninstall]),
+    cache:ordered_entry(R, E, C, N, _),
+    Type = planned,
+    Term = planned(C, N, Action, R, E)
+  ).
 % Legacy build_with_use scan over context-bearing proof keys.
 annotation:proof_entry_tag(Key, _Value, bwu, use_change(Entry, Enables, Disables)) :-
   annotation:proof_key_use_changes(Key, Entry, Enables, Disables),
@@ -161,27 +192,107 @@ annotation:suggestion_tag(Ctx, R, E, usechange, use_change(R, E, C, N, Changes))
 %  Blocker note extraction
 % -----------------------------------------------------------------------------
 
-%! annotation:blocker_assumption_term(+Content, -Strength, -Phase, -C, -N, -Origin)
+%! annotation:blocker_assumption_term(+Content, -Strength, -Phase, -C, -N, -O, -V, -SlotReq, -Origin)
 %
 % Destructures a blocker domain assumption (with or without proof context)
-% into its note components.
+% into its atom components (operator, version, slot requirement) and the
+% origin package that carries the blocker.
 
-annotation:blocker_assumption_term(Content0, Strength, Phase, C, N, Origin) :-
-  ( Content0 = '?'(blocker(Strength, Phase, C, N, _O, _V, _SlotReq), Ctx0),
-    ( is_list(Ctx0) ->
-        Ctx = Ctx0
-    ; Ctx0 = {InnerList}, is_list(InnerList) ->
-        Ctx = InnerList
-    ; Ctx = []
-    ),
+annotation:blocker_assumption_term(Content0, Strength, Phase, C, N, O, V, SlotReq, Origin) :-
+  ( Content0 = '?'(blocker(Strength, Phase, C, N, O, V, SlotReq), Ctx0),
+    annotation:unwrap_ctx(Ctx0, Ctx),
     ( memberchk(self(Origin), Ctx) -> true ; Origin = unknown )
   )
   ;
-  ( Content0 = blocker(Strength, Phase, C, N, _O2, _V2, _SlotReq2),
+  ( Content0 = blocker(Strength, Phase, C, N, O, V, SlotReq),
     Origin = unknown
   ),
   ( Strength == weak ; Strength == strong ),
   ( Phase == install ; Phase == run ).
+
+
+%! annotation:planned_index(+Planned, -Index)
+%
+% Groups planned(C, N, Action, R, E) tags into an assoc keyed by C-N whose
+% values are lists of planned(Action, R, E).
+
+annotation:planned_index(Planned, Index) :-
+  findall(C-N, member(planned(C, N, _, _, _), Planned), CNs0),
+  sort(CNs0, CNs),
+  findall(CN-Actions,
+          ( member(CN, CNs),
+            CN = C-N,
+            findall(planned(A, R, E), member(planned(C, N, A, R, E), Planned), Actions)
+          ),
+          Pairs),
+  list_to_assoc(Pairs, Index).
+
+
+%! annotation:blocker_effective(+PlannedIndex, +Blocker) is semidet.
+%
+% True when the blocker atom hits something: a planned merge of C/N, or an
+% installed copy of C/N that no planned action of the same slot replaces
+% or removes. Only such blockers are worth reporting (and only they count
+% as domain assumptions for the exit code). Matching reuses the strong
+% blocker enforcement core, candidate:blocker_spec_matches_selected/7, so
+% both blocker strengths agree on what an atom hits.
+
+annotation:blocker_effective(PlannedIdx, blk(_Content, _Strength, _Phase, C, N, O, V, SlotReq, _Origin)) :-
+  ( get_assoc(C-N, PlannedIdx, Planned) -> true ; Planned = [] ),
+  ( member(planned(Action, R, E), Planned),
+    Action \== uninstall,
+    annotation:blocker_matches_entry(R, E, O, V, SlotReq)
+  -> true
+  ; annotation:blocker_matches_installed(C, N, O, V, SlotReq, Planned)
+  ).
+
+
+%! annotation:blocker_matches_entry(+Repo, +Entry, +O, +V, +SlotReq) is semidet.
+%
+% True when the blocker atom (O, V, SlotReq) matches the version and slot
+% metadata of Repo://Entry.
+
+annotation:blocker_matches_entry(R, E, O, V, SlotReq) :-
+  cache:ordered_entry(R, E, _, _, Ver),
+  catch(query:search(select(slot, constraint([]), SlotMeta), R://E), _, fail),
+  catch(candidate:blocker_spec_matches_selected(Ver, SlotMeta, R, E, O, V, SlotReq), _, fail),
+  !.
+
+
+%! annotation:blocker_matches_installed(+C, +N, +O, +V, +SlotReq, +Planned) is semidet.
+%
+% True when an installed copy of C/N matches the blocker atom and the plan
+% leaves that copy in place (no merge-family or uninstall action of C/N
+% in the same slot). A matching installed copy that the plan replaces
+% with a non-matching version is resolved by the plan itself.
+
+annotation:blocker_matches_installed(C, N, O, V, SlotReq, Planned) :-
+  knowledgebase:vdb_repository(VdbRepo),
+  query:search([name(N), category(C), installed(true)], VdbRepo://Inst),
+  annotation:blocker_matches_entry(VdbRepo, Inst, O, V, SlotReq),
+  \+ annotation:planned_touches_slot_of(Planned, VdbRepo://Inst),
+  !.
+
+
+%! annotation:planned_touches_slot_of(+Planned, +Installed) is semidet.
+%
+% True when some planned action of the same CN lives in the slot of the
+% installed entry (it replaces or removes that copy).
+
+annotation:planned_touches_slot_of(Planned, VdbRepo://Inst) :-
+  annotation:entry_slot(VdbRepo, Inst, Slot),
+  member(planned(_Action, R, E), Planned),
+  annotation:entry_slot(R, E, Slot),
+  !.
+
+
+%! annotation:entry_slot(+Repo, +Entry, -Slot) is semidet.
+%
+% Canonical slot atom of Repo://Entry (default '0' when unset).
+
+annotation:entry_slot(R, E, Slot) :-
+  ( cache:entry_metadata(R, E, slot, slot(S0)) -> true ; S0 = '0' ),
+  slotmeta:canon_slot(S0, Slot).
 
 
 %! annotation:blocker_note_put(+Pair, +NotesIn, -NotesOut)
