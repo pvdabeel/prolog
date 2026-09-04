@@ -108,6 +108,7 @@ action:dispatch_proposal(client, Host, Port, Proposal, _Options, _PretendMode) :
     ),
     Output),
   writeln(Output).
+
 action:dispatch_proposal(_Mode, _Host, _Port, Proposal, Options, PretendMode) :-
   action:run_local_proposal(Proposal, Options, PretendMode).
 
@@ -221,6 +222,7 @@ action:halt_with_error(Message) :-
 % world(Atom):Action side effects (register/unregister packages in @world).
 
 action:execute_world_plan([]) :- !.
+
 action:execute_world_plan([Step|Rest]) :-
   execute_world_step(Step),
   execute_world_plan(Rest).
@@ -231,6 +233,7 @@ action:execute_world_plan([Step|Rest]) :-
 % side effects for any rule whose head is world(Atom):Action.
 
 action:execute_world_step([]) :- !.
+
 action:execute_world_step([Rule|Rest]) :-
   ( Rule = rule(Head,_Body),
     prover:canon_literal(Head, Core, _Ctx),

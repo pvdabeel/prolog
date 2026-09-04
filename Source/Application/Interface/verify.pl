@@ -30,6 +30,7 @@ interface:verify_mode(Mode) :-
 
 interface:check_flags(Mode, Options) :-
   interface:early_exit(Mode, Options).
+
 interface:check_flags(_, _).
 
 

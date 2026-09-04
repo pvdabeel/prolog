@@ -1179,6 +1179,37 @@ plan:already_downloaded_size(_, _, 0).
 %  Variant display
 % -----------------------------------------------------------------------------
 
+%! plan:print_variants(+Results, +BasePlan) is det.
+%
+% Prints each variant_result/2,5 in turn, numbered from 1: a header, the
+% plan size and the diff against the baseline plan, or a warning for a
+% variant whose proof failed.
+
+plan:print_variants(Results, BasePlan) :-
+  variant:plan_entries(BasePlan, BaseEntries),
+  plan:print_variants(Results, BaseEntries, 1).
+
+
+%! plan:print_variants(+Results, +BaseEntries, +N) is det.
+
+plan:print_variants([], _, _).
+plan:print_variants([variant_result(variant(_, _, _, _, Label), failed)|Rest], BaseEntries, N) :-
+  !,
+  plan:print_variant_header(N, Label),
+  message:warning(['Variant proof failed.']),
+  N1 is N + 1,
+  plan:print_variants(Rest, BaseEntries, N1).
+plan:print_variants([variant_result(variant(_, _, _, _, Label), _Proof, _Model, Plan, _Triggers)|Rest], BaseEntries, N) :-
+  plan:print_variant_header(N, Label),
+  variant:plan_entries(Plan, VarEntries),
+  length(VarEntries, VarCount),
+  variant:plan_diff(BaseEntries, VarEntries, Diff),
+  format('  Plan size: ~w actions~n', [VarCount]),
+  plan:print_variant_diff(Diff),
+  N1 is N + 1,
+  plan:print_variants(Rest, BaseEntries, N1).
+
+
 %! plan:print_variant_header(+N, +Label) is det.
 %
 % Prints a prominent header for a variant plan.

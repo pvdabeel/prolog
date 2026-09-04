@@ -355,12 +355,14 @@ server:get_job_for(Job, Timeout, Worker) :-
 server:stop_workers :-
   ( server:workers_done -> true ; assertz(server:workers_done) ).
 
+
 %! server:resume_workers
 %
 % Clear the stop signal so workers receive jobs again.
 
 server:resume_workers :-
   retractall(server:workers_done).
+
 
 %! server:post_result(+Job, +Result)
 %
@@ -376,6 +378,7 @@ server:post_result(Job, Result) :-
      fail
   ).
 
+
 %! server:get_result(-Job, -Result)
 %
 % Collect a result (blocks until one is available).
@@ -383,6 +386,7 @@ server:post_result(Job, Result) :-
 server:get_result(Job, Result) :-
   server:ensure_queues,
   thread_get_message(server_results, result(Job, Result)).
+
 
 %! server:get_result(-Job, -Result, +Timeout)
 %
@@ -392,17 +396,20 @@ server:get_result(Job, Result, Timeout) :-
   server:ensure_queues,
   thread_get_message(server_results, result(Job, Result), [timeout(Timeout)]).
 
+
 %! server:job_count(-N)
 
 server:job_count(N) :-
   server:ensure_queues,
   message_queue_property(server_jobs, size(N)).
 
+
 %! server:result_count(-N)
 
 server:result_count(N) :-
   server:ensure_queues,
   message_queue_property(server_results, size(N)).
+
 
 %! server:submitted_count(-N)
 %
@@ -413,12 +420,14 @@ server:result_count(N) :-
 server:submitted_count(N) :-
   ( server:submitted_counter(N0) -> N = N0 ; N = 0 ).
 
+
 %! server:inflight_count(-N)
 %
 % Number of jobs currently dequeued by workers but not yet resulted.
 
 server:inflight_count(N) :-
   aggregate_all(count, server:inflight_job(_, _, _), N).
+
 
 %! server:reset_progress
 %
@@ -436,6 +445,7 @@ server:reset_progress :-
   server:drain_queue(server_jobs),
   server:drain_queue(server_results).
 
+
 %! server:drain_queue(+Queue)
 %
 % Remove all pending messages from Queue without blocking.
@@ -444,6 +454,7 @@ server:drain_queue(Queue) :-
   ( thread_get_message(Queue, _, [timeout(0)])
   -> server:drain_queue(Queue)
   ;  true ).
+
 
 %! server:requeue_stale_jobs(+Timeout)
 %
@@ -462,6 +473,7 @@ server:requeue_stale_jobs(Timeout) :-
   forall(member(Job-Worker, Stale),
          server:requeue_job(Job, Worker)).
 
+
 %! server:job_is_stale(+Worker, +Since, +Now, +Timeout)
 %
 % True when the worker holding a job is presumed dead.
@@ -469,8 +481,10 @@ server:requeue_stale_jobs(Timeout) :-
 server:job_is_stale(Worker, _Since, Now, Timeout) :-
   server:registered_worker(Worker, _, LastSeen), !,
   Now - LastSeen > Timeout.
+
 server:job_is_stale(_Worker, Since, Now, Timeout) :-
   Now - Since > Timeout.
+
 
 %! server:requeue_job(+Job, +Worker)
 %
@@ -494,6 +508,7 @@ server:submit_all(Repository, Action) :-
   server:ensure_queues,
   forall(cache:ordered_entry(Repository, Id, _, _, _),
          server:post_job(Repository://Id:Action)).
+
 
 %! server:submit_targets(+Targets)
 %
@@ -519,10 +534,12 @@ server:register_worker(Hostname, Cpus, Timestamp) :-
   assertz(server:registered_worker(Hostname, Cpus, Timestamp)),
   message:inform(['Worker registered: ', Hostname, ' (', Cpus, ' CPUs)']).
 
+
 %! server:unregister_worker(+Hostname)
 
 server:unregister_worker(Hostname) :-
   retractall(server:registered_worker(Hostname, _, _)).
+
 
 %! server:worker_heartbeat(+Hostname)
 %
@@ -537,6 +554,7 @@ server:worker_heartbeat(Hostname) :-
     ; true
     )).
 
+
 %! server:workers(-Workers)
 %
 % List of registered workers as Hostname-Cpus pairs.
@@ -545,6 +563,7 @@ server:workers(Workers) :-
   findall(Hostname-Cpus,
           server:registered_worker(Hostname, Cpus, _),
           Workers).
+
 
 %! server:total_cpus(-N)
 %

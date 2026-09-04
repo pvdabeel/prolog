@@ -42,31 +42,16 @@ action:process_bugs(ArgsSets, Options) :-
   ( Mode == 'client' ->
       client:rpc_execute(Host,Port,
         ( pipeline:prove_with_fallback(Proposal,ProofAVL,_ModelAVL,_Triggers),
-          action:print_bugreport_drafts_from_proof(ProofAVL)
+          warning:print_proof_bugreport_drafts(ProofAVL)
         ),
         Output),
       writeln(Output)
   ; pipeline:prove_with_fallback(Proposal,ProofAVL,_ModelAVL,_Triggers),
-    print_bugreport_drafts_from_proof(ProofAVL),
+    warning:print_proof_bugreport_drafts(ProofAVL),
     ( memberchk(ci(true), Options) ->
         halt(0)
     ; true
     )
-  ).
-
-%! action:print_bugreport_drafts_from_proof(+ProofAVL) is det.
-%
-% Extracts domain assumptions from the proof AVL and delegates to
-% warning:print_bugreport_drafts/1. Prints "(none)" when clean.
-
-action:print_bugreport_drafts_from_proof(ProofAVL) :-
-  findall(Content, assoc:gen_assoc(rule(assumed(Content)), ProofAVL, _), DomainAssumptions0),
-  sort(DomainAssumptions0, DomainAssumptions),
-  ( DomainAssumptions == [] ->
-      message:header('Bug report drafts (Gentoo Bugzilla)'),
-      nl,
-      writeln('  (none)')
-  ; warning:print_bugreport_drafts(DomainAssumptions)
   ).
 
 

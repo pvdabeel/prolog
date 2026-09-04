@@ -17,7 +17,6 @@
 % prints each variant sequentially with a diff summary.
 
 action:run_variants(VariantsOpt, Proposal, BaseProof, BasePlan, _BaseTriggers) :-
-  variant:plan_entries(BasePlan, BaseEntries),
   build_variant_specs(VariantsOpt, Proposal, BaseProof, Specs),
   ( Specs == []
   -> message:inform('No variant pivot points detected.')
@@ -29,7 +28,7 @@ action:run_variants(VariantsOpt, Proposal, BaseProof, BasePlan, _BaseTriggers) :
      message:color(normal), nl,
      flush_output,
      pipeline:prove_variants_parallel(Proposal, Specs, Results),
-     print_variant_results(Results, BaseEntries, 1)
+     plan:print_variants(Results, BasePlan)
   ).
 
 
@@ -50,31 +49,3 @@ action:build_variant_specs(all, Proposal, ProofAVL, Specs) :-
 action:build_variant_specs(FlagList, Proposal, ProofAVL, Specs) :-
   atomic_list_concat(Flags, ',', FlagList),
   variant:user_flags_to_specs(Flags, Proposal, ProofAVL, Specs).
-
-
-%! action:print_variant_results(+Results, +BaseEntries, +N) is det.
-
-action:print_variant_results([], _, _).
-
-action:print_variant_results([variant_result(Spec, failed)|Rest], BaseEntries, N) :-
-  !,
-  Spec = variant(_, _, _, _, Label),
-  nl,
-  message:color(cyan),
-  format('--- Variant ~w: ~w ---', [N, Label]),
-  message:color(normal), nl,
-  message:warning(['Variant proof failed.']),
-  N1 is N + 1,
-  print_variant_results(Rest, BaseEntries, N1).
-
-action:print_variant_results([variant_result(Spec, _Proof, _Model, Plan, _Triggers)|Rest], BaseEntries, N) :-
-  Spec = variant(_, _, _, _, Label),
-  nl,
-  plan:print_variant_header(N, Label),
-  variant:plan_entries(Plan, VarEntries),
-  length(VarEntries, VarCount),
-  variant:plan_diff(BaseEntries, VarEntries, Diff),
-  format('  Plan size: ~w actions~n', [VarCount]),
-  plan:print_variant_diff(Diff),
-  N1 is N + 1,
-  print_variant_results(Rest, BaseEntries, N1).

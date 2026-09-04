@@ -18,7 +18,7 @@
 
 action:process_action(info,[],_) :-
   !,
-  interface:print_system_info.
+  info:print_system.
 
 action:process_action(info,Args,_Options) :-
   !,

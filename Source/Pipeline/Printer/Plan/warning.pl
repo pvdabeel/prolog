@@ -514,6 +514,24 @@ warning:print_use_change_suggestions(UseSuggestions) :-
 %  Bug report drafts (domain assumptions)
 % -----------------------------------------------------------------------------
 
+%! warning:print_proof_bugreport_drafts(+ProofAVL)
+%
+% The --bugs output: bug report drafts for the effective domain
+% assumptions of a proof (collected the same way as for the plan
+% printout, so soft blocker records that hit nothing are not drafted),
+% or "(none)" under the header when the proof is clean.
+
+warning:print_proof_bugreport_drafts(ProofAVL) :-
+  annotation:collect(ProofAVL, Annotations),
+  annotation:domain_assumptions(Annotations, DomainAssumptions),
+  ( DomainAssumptions == [] ->
+      message:header('Bug report drafts (Gentoo Bugzilla)'),
+      nl,
+      writeln('  (none)')
+  ; warning:print_bugreport_drafts(DomainAssumptions)
+  ).
+
+
 %! warning:print_bugreport_drafts(+DomainAssumptions)
 %
 % Groups domain assumptions into bug report drafts and prints them

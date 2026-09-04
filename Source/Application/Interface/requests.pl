@@ -49,7 +49,7 @@ interface:request_handler(rollback,        _,    _,    Options, (memberchk(rollb
                                                                  action:process_rollback(Id, Options))).
 interface:request_handler(version,         _,    _,    _,       (interface:version(Version),
                                                                  message:logo(['::- portage-ng ', Version]),
-                                                                 interface:print_version_repos)).
+                                                                 info:print_repositories)).
 interface:request_handler(info,            _,    Args, Options, action:process_action(info, Args, Options)).
 interface:request_handler(bugs,            _,    Args, Options, action:process_bugs(Args, Options)).
 interface:request_handler(clear,           _,    _,    _,       kb:clear).

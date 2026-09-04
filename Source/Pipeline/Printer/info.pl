@@ -9,10 +9,11 @@
 
 
 /** <module> INFO
-Ebuild metadata display.
+Ebuild metadata and system overview display.
 
 Handles printing of individual ebuild metadata (print_entry, print_metadata),
-package dependency and USE flag details.
+package dependency and USE flag details, and the system overview shown by
+--version and --info without a target.
 
 HTML index rendering has moved to Source/Printer/index.pl (module index).
 */
@@ -22,6 +23,68 @@ HTML index rendering has moved to Source/Printer/index.pl (module index).
 % =============================================================================
 %  INFO declarations
 % =============================================================================
+
+% -----------------------------------------------------------------------------
+%  System overview
+% -----------------------------------------------------------------------------
+
+%! info:print_repositories is det.
+%
+% Prints the registered repositories with name, git version and path in
+% aligned columns.
+
+info:print_repositories :-
+  findall(Name-Loc-Ver,
+    ( context:instances(repository, Name),
+      Name:get_location(Loc),
+      interface:repo_git_version(Loc, Ver)
+    ),
+    Repos),
+  ( Repos == []
+  -> true
+  ;  aggregate_all(max(L), (member(N-_-_, Repos), atom_length(N, L)), MaxN),
+     aggregate_all(max(L), (member(_-_-V, Repos), atom_length(V, L)), MaxV),
+     Col1 is MaxN + 4,
+     Col2 is Col1 + MaxV + 2,
+     forall(member(N-Loc-V, Repos),
+       format('  ~w~t~*|~w~t~*|~w~n', [N, Col1, V, Col2, Loc])
+     )
+  ).
+
+
+%! info:print_system is det.
+%
+% Prints the system overview shown by --info without a target: version,
+% profile, hostname, installation directory, terminal size, repositories
+% and the world set.
+
+info:print_system :-
+  interface:version(Version),
+  current_prolog_flag(version, PrologVer),
+  config:hostname(Hostname),
+  ( config:gentoo_profile(Profile) -> true ; Profile = unknown ),
+  nl,
+  format('portage-ng ~w (SWI-Prolog ~w, ~w)~n', [Version, PrologVer, Profile]),
+  format('================================================================~n'),
+  format('System hostname: ~w~n', [Hostname]),
+  ( config:installation_dir(Dir)
+  -> format('Install dir:     ~w~n', [Dir])
+  ;  true
+  ),
+  ( config:printing_tty_size(H, W)
+  -> format('Terminal size:   ~wx~w~n', [W, H])
+  ;  format('Terminal size:   (not a TTY)~n')
+  ),
+  nl,
+  format('Repositories:~n'),
+  info:print_repositories,
+  nl,
+  format('World set:~n'),
+  ( catch(forall(world::entry(E), format('  ~w~n', [E])), _, fail)
+  -> true
+  ;  format('  (not loaded)~n')
+  ).
+
 
 % -----------------------------------------------------------------------------
 %  Entry points

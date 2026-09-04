@@ -372,9 +372,11 @@ daemon:refresh_binpkg_index :-
 daemon:handle_error(_Out, unwind(halt(Code)), ExitCodeTerm) :-
   integer(Code), !,
   nb_setarg(1, ExitCodeTerm, Code).
+
 daemon:handle_error(_Out, halt(Code), ExitCodeTerm) :-
   integer(Code), !,
   nb_setarg(1, ExitCodeTerm, Code).
+
 daemon:handle_error(Out, Error, ExitCodeTerm) :-
   format(Out, 'Daemon error: ~w~n', [Error]),
   nb_setarg(1, ExitCodeTerm, 1).

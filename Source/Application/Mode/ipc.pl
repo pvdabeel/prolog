@@ -76,6 +76,7 @@ ipc:status :-
 ipc:send_command(halt) :-
   !,
   ipclient:send_command(halt).
+
 ipc:send_command(relaunch) :-
   !,
   ipclient:send_command(halt),
@@ -83,6 +84,7 @@ ipc:send_command(relaunch) :-
   config:daemon_socket_path(SocketPath),
   ipclient:wait_for_socket_gone(SocketPath, 50),
   ipc:fork_background(daemon).
+
 ipc:send_command(Cmd) :-
   format(user_error, 'Unknown command: ~w. Use halt or relaunch.~n', [Cmd]).
 
