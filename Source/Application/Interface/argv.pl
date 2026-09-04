@@ -65,6 +65,7 @@ interface:argv_handle_parse_error(E) :-
   ),
   format(user_error, 'Use --help for available options.~n', []),
   halt(1).
+
 interface:argv_handle_parse_error(E) :-
   throw(E).
 
