@@ -638,8 +638,8 @@ candidate:grouped_dep_keep_installed(Action, C, N, PackageDeps1, Context) :-
   % build_with_use dropped, so an installed entry that satisfies the version
   % constraint is kept even when its recorded USE (e.g. an older
   % PYTHON_TARGETS) no longer matches the parent's build_with_use. The
-  % fetchonly dep union folds PDEPEND into the regular closure
-  % (query:pdepend_dep_as_pdepend), so mirror that build_with_use-drop here;
+  % fetchonly dep union folds the pdepend-tagged leaves into the regular
+  % closure, so mirror that build_with_use-drop here;
   % otherwise a satisfied-but-USE-drifted PDEPEND package would be needlessly
   % rebuilt and fetched, diverging from the equivalent merge plan (and
   % forming a parent<->child fetchonly cycle). Mirrors grouped_dep_use_and_slot/3.

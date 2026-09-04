@@ -136,43 +136,6 @@ compile_query_list([S|Ss], Repo://Id, (One, Rest)) :-
 
 
 % -----------------------------------------------------------------------------
-%  PDEPEND helper: tag as its own dependency phase
-% -----------------------------------------------------------------------------
-%
-% The EAPI grammar parses PDEPEND with the same dependency-sequence grammar as
-% RDEPEND, producing package_dependency(run, ...) leaves. In order to model
-% Portage-like "runtime_post" semantics, we re-tag PDEPEND leaves as their own
-% phase so they can be handled as cycle-breakable edges by rules/orderer.
-
-query:pdepend_dep_as_pdepend(package_dependency(run,Strength,C,N,O,V,S,U),
-                             package_dependency(pdepend,Strength,C,N,O,V,S,U)) :-
-  !.
-
-query:pdepend_dep_as_pdepend(use_conditional_group(Pol, Use, Self, Deps0),
-                             use_conditional_group(Pol, Use, Self, Deps)) :-
-  !,
-  maplist(query:pdepend_dep_as_pdepend, Deps0, Deps).
-
-query:pdepend_dep_as_pdepend(any_of_group(Deps0), any_of_group(Deps)) :-
-  !,
-  maplist(query:pdepend_dep_as_pdepend, Deps0, Deps).
-
-query:pdepend_dep_as_pdepend(all_of_group(Deps0), all_of_group(Deps)) :-
-  !,
-  maplist(query:pdepend_dep_as_pdepend, Deps0, Deps).
-
-query:pdepend_dep_as_pdepend(exactly_one_of_group(Deps0), exactly_one_of_group(Deps)) :-
-  !,
-  maplist(query:pdepend_dep_as_pdepend, Deps0, Deps).
-
-query:pdepend_dep_as_pdepend(at_most_one_of_group(Deps0), at_most_one_of_group(Deps)) :-
-  !,
-  maplist(query:pdepend_dep_as_pdepend, Deps0, Deps).
-
-query:pdepend_dep_as_pdepend(T, T).
-
-
-% -----------------------------------------------------------------------------
 %  Helpers: annotate REQUIRED_USE terms for :validate proof
 % -----------------------------------------------------------------------------
 %
@@ -403,8 +366,7 @@ compile_query_compound(dependency(D,fetchonly), Repo://Id,
   ; cache:entry_metadata(Repo,Id,depend,D)
   ; cache:entry_metadata(Repo,Id,idepend,D)
   ; cache:entry_metadata(Repo,Id,rdepend,D)
-  ; ( cache:entry_metadata(Repo,Id,pdepend,D0),
-      query:pdepend_dep_as_pdepend(D0, D) ) )) :- !.
+  ; cache:entry_metadata(Repo,Id,pdepend,D) )) :- !.
 
 
 % 7. key=value queries needed for --search
@@ -875,8 +837,7 @@ compile_query_compound(all(dependency(D,fetchonly)):A?{C}, Repo://Id,
           ; cache:entry_metadata(Repo,Id,depend,Dep)
           ; cache:entry_metadata(Repo,Id,idepend,Dep)
           ; cache:entry_metadata(Repo,Id,rdepend,Dep)
-          ; ( cache:entry_metadata(Repo,Id,pdepend,Dep0),
-              query:pdepend_dep_as_pdepend(Dep0, Dep) )
+          ; cache:entry_metadata(Repo,Id,pdepend,Dep)
           ),
           D)) :- !.
 
@@ -1183,9 +1144,7 @@ compile_query_compound(model(dependency(Merged,pdepend)):config?{Context}, Repo:
       ;  CtxSelf = [self(Repo://Id)|Context]
     ),
     findall(Dep:config?{CtxSelf},
-          ( cache:entry_metadata(Repo,Id,pdepend,Dep0),
-            query:pdepend_dep_as_pdepend(Dep0, Dep)
-          ),
+          cache:entry_metadata(Repo,Id,pdepend,Dep),
           Deps),
   sort(Deps, DepsU),
   prover:prove_model(DepsU, t, AvlModel, t, _ConsOut, t),
@@ -1253,8 +1212,7 @@ compile_query_compound(model(dependency(Merged,fetchonly)):config?{Context}, Rep
           ; cache:entry_metadata(Repo,Id,depend,Dep)
           ; cache:entry_metadata(Repo,Id,idepend,Dep)
           ; cache:entry_metadata(Repo,Id,rdepend,Dep)
-          ; ( cache:entry_metadata(Repo,Id,pdepend,Dep0),
-              query:pdepend_dep_as_pdepend(Dep0, Dep) )
+          ; cache:entry_metadata(Repo,Id,pdepend,Dep)
           ),
           Deps),
   sort(Deps, DepsU),
@@ -1800,7 +1758,7 @@ select(Key,wildcard,Value,R://I) :-
 % - and by slot restriction, because different explicit slots (e.g. ruby:3.2 vs ruby:3.3)
 %   must NOT be merged into a single grouped dependency (they are satisfiable as
 %   separate slotted installs).
-%
+
 dependency_key((package_dependency(Phase,T,C,N,_,_,S,_):_?{_}), Phase-T-C-N-S).
 
 

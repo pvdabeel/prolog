@@ -279,11 +279,9 @@ eapi:value('REQUIRED_USE', R://E, required_use(U)) -->
   eapi:required_use(R://E, U).
 
 % PMS 9, Section 7.3 (PDEPEND)
-% PDEPEND has the same dependency-sequence grammar as RDEPEND. We keep it as
-% metadata only; dependency-handling semantics are implemented elsewhere.
 eapi:value('PDEPEND', R://E, pdepend(D)) -->
   !,
-  eapi:rdepend(R://E, D).
+  eapi:pdepend(R://E, D).
 
 % PMS 9, Section 7.3 (IDEPEND)
 eapi:value('IDEPEND', R://E, idepend(D)) -->
@@ -383,6 +381,17 @@ eapi:depend(R://E, D) -->
 
 eapi:rdepend(R://E, D) -->
   eapi:dependencies(package_r, R://E, D).
+
+
+%! DCG pdepend
+%
+% PMS 9, Section 8.2: a post-merge dependency is a dependency sequence
+% with the same grammar as rdepend. Its packages are tagged with their
+% own phase so the rules and the orderer can treat them as post-merge
+% (cycle-breakable) edges.
+
+eapi:pdepend(R://E, D) -->
+  eapi:dependencies(package_p, R://E, D).
 
 
 %! DCG src_uri
@@ -524,6 +533,9 @@ eapi:dependency(package_d, R://E, D) -->
 
 eapi:dependency(package_r, R://E, D) -->
   eapi:package_dependency(run, R://E, D).
+
+eapi:dependency(package_p, R://E, D) -->
+  eapi:package_dependency(pdepend, R://E, D).
 
 eapi:dependency(package_c, R://E, D) -->
   eapi:package_dependency(compile, R://E, D).

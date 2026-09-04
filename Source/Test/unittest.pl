@@ -485,6 +485,15 @@ test(any_of_dep, [nondet]) :-
 test(empty_dep, [true(D == [])]) :-
   phrase(eapi:depend(repo://entry, D), [], []).
 
+% Each dependency key tags its leaves with its own phase at parse time,
+% including inside groups; nothing downstream re-tags them.
+test(phase_tag_per_key, [true(Phases == [install, run, pdepend])]) :-
+  atom_codes('ssl? ( dev-libs/openssl )', Codes),
+  phrase(eapi:depend(repo://entry,  [use_conditional_group(_, _, _, [package_dependency(P1, _, _, _, _, _, _, _)])]), Codes, []),
+  phrase(eapi:rdepend(repo://entry, [use_conditional_group(_, _, _, [package_dependency(P2, _, _, _, _, _, _, _)])]), Codes, []),
+  phrase(eapi:pdepend(repo://entry, [use_conditional_group(_, _, _, [package_dependency(P3, _, _, _, _, _, _, _)])]), Codes, []),
+  Phases = [P1, P2, P3].
+
 :- end_tests(eapi_dependency_parsing).
 
 

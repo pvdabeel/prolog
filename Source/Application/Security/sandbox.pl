@@ -103,7 +103,6 @@ sandbox:safe_primitive(query:search(_,_)).
 sandbox:safe_primitive(query:repo_not_vdb(_)).
 sandbox:safe_primitive(query:apply_filters(_,_)).
 sandbox:safe_primitive(query:apply_filter(_,_)).
-sandbox:safe_primitive(query:pdepend_dep_as_pdepend(_,_)).
 sandbox:safe_primitive(query:with_required_use_validate(_,_,_)).
 sandbox:safe_primitive(query:strip_validate_annotation(_,_)).
 
