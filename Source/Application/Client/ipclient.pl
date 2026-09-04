@@ -9,34 +9,23 @@
 
 
 /** <module> IPCLIENT
-Ultralight local IPC client for a portage-ng daemon.
+Talk to a running portage-ng daemon over its Unix-domain socket.
 
-Canonical implementation of the client-side Unix-domain protocol (also used
-by `Source/Application/Mode/ipc.pl` for connect/status/halt). This file is a
-standalone entry point: the hot path loads only `library(socket)` — no
-portage-ng.pl, common modules, or world set.
+This is the client side of the daemon protocol. The wrapper loads this
+file on its own for `--mode ipc` (swipl -f ipclient.pl -g ipclient:main),
+so that sending a request costs no more than loading library(socket):
+neither portage-ng.pl nor the knowledge base is loaded in this process.
+library(process) is loaded only when the daemon has to be started or
+relaunched, which happens in a child process running
+`portage-ng-dev --mode daemon --background`. Source/Application/Mode/ipc.pl
+reuses the connect, status and halt predicates from here when the full
+application is loaded.
 
-Heavy work is deferred:
-
-- `library(process)` is loaded only for autostart / relaunch
-- Starting the daemon runs `portage-ng-dev --mode daemon --background` in a
-  child process (full KB load stays out of this address space)
-
-Launch (portage-ng-dev --mode ipc fast-path):
-
-```
-swipl -q -f Source/Application/Client/ipclient.pl -g ipclient:main -t halt -- ARGS
-```
-
-@see Source/Application/Mode/ipc.pl
-@see Source/Application/Mode/daemon.pl
+main/0 is not exported on purpose: an exported main/0 would be imported
+into user when this file is loaded as part of the full application and
+clash with user:main/0 there. Callers name it as ipclient:main.
 */
 
-
-% main/0 is intentionally not exported: exporting it weakly-imports into
-% `user` when this file is loaded via the full portage-ng stack and warns
-% about overriding user:main/0. Callers use ipclient:main/0 explicitly
-% (`-g ipclient:main`).
 :- module(ipclient,
           [ connect/1,
             status/0,
@@ -137,8 +126,8 @@ ipclient:autostart_enabled :-
 
 %! ipclient:daemon_wrapper(-Wrapper) is det.
 %
-% Absolute path to portage-ng-dev, used to start/relaunch the daemon in a
-% child process (lazy full-stack load).
+% Absolute path to portage-ng-dev, the wrapper used to start or relaunch
+% the daemon in a child process.
 
 ipclient:daemon_wrapper(Wrapper) :-
   getenv('PORTAGE_NG_DEV', W),
@@ -423,7 +412,7 @@ ipclient:send_command_(Cmd) :-
 
 %! ipclient:relaunch is det.
 %
-% Stops the daemon and starts a new one via the full-stack wrapper child.
+% Stops the daemon and starts a new one.
 
 ipclient:relaunch :-
   send_command_(halt),
@@ -456,8 +445,8 @@ ipclient:send_term(SocketPath, Term) :-
 
 %! ipclient:maybe_autostart is det.
 %
-% If no daemon socket exists and autostart is enabled, start one in a child
-% process. Hot path (socket already present) does not load library(process).
+% Starts a daemon in a child process when no daemon socket exists and
+% autostart is enabled. When the socket is present nothing is loaded.
 
 ipclient:maybe_autostart :-
   socket_path(SocketPath),
@@ -470,8 +459,8 @@ ipclient:maybe_autostart.
 
 %! ipclient:ensure_process_lib is det.
 %
-% Lazily loads library(process) the first time daemon lifecycle needs it.
-% use_module/1 is a no-op when the library is already imported.
+% Loads library(process) the first time the daemon has to be started or
+% relaunched; use_module/1 does nothing when it is already loaded.
 
 ipclient:ensure_process_lib :-
   use_module(library(process)).
@@ -479,8 +468,9 @@ ipclient:ensure_process_lib :-
 
 %! ipclient:start_daemon_background is det.
 %
-% Starts the full daemon via portage-ng-dev --mode daemon --background.
-% The child loads the knowledge base; this client stays ultralight.
+% Starts the daemon with portage-ng-dev --mode daemon --background and
+% waits for its socket to appear. The knowledge base is loaded by that
+% child, not by this process.
 
 ipclient:start_daemon_background :-
   ensure_process_lib,
