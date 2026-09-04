@@ -115,14 +115,19 @@ preference:init :-
 %
 % Invalidate preference AVL index caches.  Called at the start of a fresh
 % init and after loading `Knowledge/preference.qlf`.
+%
+% The indexes are lazily rebuilt by their lookup predicates on the first
+% `nb_current/2` miss, so invalidation must delete the globals.  Writing an
+% empty AVL instead would make every later lookup succeed against an empty
+% index and never rebuild.
 
 preference:init_reset_indexes :-
-  ( nb_current(pref_userconfig_use_soft_flags, _) -> nb_setval(pref_userconfig_use_soft_flags, t) ; true ),
-  ( nb_current(pref_userconfig_use_soft_cns, _) -> nb_setval(pref_userconfig_use_soft_cns, t) ; true ),
-  ( nb_current(pref_profile_use_soft_flags, _) -> nb_setval(pref_profile_use_soft_flags, t) ; true ), 
-  ( nb_current(pref_profile_use_soft_cns, _) -> nb_setval(pref_profile_use_soft_cns, t) ; true ),
-  ( nb_current(pref_profile_forced_cns, _) -> nb_setval(pref_profile_forced_cns, t) ; true ),
-  ( nb_current(pref_profile_masked_cns, _) -> nb_setval(pref_profile_masked_cns, t) ; true ).
+  nb_delete(pref_userconfig_use_soft_flags),
+  nb_delete(pref_userconfig_use_soft_cns),
+  nb_delete(pref_profile_use_soft_flags),
+  nb_delete(pref_profile_use_soft_cns),
+  nb_delete(pref_profile_forced_cns),
+  nb_delete(pref_profile_masked_cns).
 
 
 %! preference:init_fresh is det.

@@ -152,7 +152,7 @@ buildtime:parse_emerge_lines(In) :-
 buildtime:parse_emerge_start(Line, Epoch, CPV) :-
   split_string(Line, ":", "", [EpochStr|Rest]),
   number_string(Epoch, EpochStr),
-  atomics_to_text(Rest, Joined),
+  atomic_list_concat(Rest, ':', Joined),
   sub_string(Joined, _, _, _, ">>> emerge"),
   split_string(Joined, " ", " ", Tokens),
   buildtime:extract_cpv_from_emerge(Tokens, CPV).
@@ -165,7 +165,7 @@ buildtime:parse_emerge_start(Line, Epoch, CPV) :-
 buildtime:parse_emerge_end(Line, Epoch, CPV) :-
   split_string(Line, ":", "", [EpochStr|Rest]),
   number_string(Epoch, EpochStr),
-  atomics_to_text(Rest, Joined),
+  atomic_list_concat(Rest, ':', Joined),
   sub_string(Joined, _, _, _, "::: completed emerge"),
   split_string(Joined, " ", " ", Tokens),
   buildtime:extract_cpv_from_emerge(Tokens, CPV).

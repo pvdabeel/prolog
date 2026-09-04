@@ -279,15 +279,18 @@ explanation:is_unmasked_candidate(Repo://Entry) :-
 explanation:any_candidate_matches_keywords(Candidates, KeywordOk) :-
   findall(K, preference:accept_keywords(K), Ks0),
   sort(Ks0, Ks),
-  findall(Cand,
-          ( member(Cand, Candidates),
-            member(K, Ks),
-            Cand = Repo://Entry,
-            query:search(keyword(K), Repo://Entry),
-            !
-          ),
-          KeywordOk0),
+  include(explanation:candidate_matches_any_keyword(Ks), Candidates, KeywordOk0),
   sort(KeywordOk0, KeywordOk).
+
+
+%! explanation:candidate_matches_any_keyword(+Keywords, +Candidate) is semidet.
+%
+% True when Candidate carries at least one of Keywords.
+
+explanation:candidate_matches_any_keyword(Ks, Repo://Entry) :-
+  member(K, Ks),
+  query:search(keyword(K), Repo://Entry),
+  !.
 
 
 %! explanation:candidate_keywords(+Candidates, -Keywords) is det.

@@ -1156,48 +1156,20 @@ ebuild_exec:run_phases_with_config(EbuildPath, Entry, AllPhases, DisplayPhases, 
 % moves to the next phase. On failure, marks remaining phases as
 % skipped. Uses log file size growth for progress estimation only.
 % UseString is passed to each ebuild invocation as the USE env var.
+%
+% The poller is chosen BEFORE any side effect (callback, log header): when
+% historical phase stats exist the phase is polled with progress
+% estimation, otherwise with a spinner.  Deciding first keeps the two
+% paths in one clause, so a missing history can never backtrack past an
+% already-emitted `active` callback or log header.
 
 ebuild_exec:run_phases_sequential(_, _, [], _, _, _, _, done).
 
 ebuild_exec:run_phases_sequential(EbuildPath, Entry, [Phase|Rest], DisplayPhases, LogPath, UseString, Callback, Outcome) :-
-  ( memberchk(Phase, DisplayPhases)
-  -> call(Callback, Phase, active)
-  ;  true
+  ( ebuild_exec:expected_phase_stats(Entry, Phase, ExpBytes, ExpSecs)
+  -> Poller = progress(ExpBytes, ExpSecs)
+  ;  Poller = spinning
   ),
-  ebuild_exec:log_phase_header(LogPath, Phase),
-  ebuild_exec:log_file_size(LogPath, SizeBefore),
-  get_time(T0),
-  ebuild_exec:expected_phase_stats(Entry, Phase, ExpBytes, ExpSecs),
-  !,
-  ebuild_exec:with_portage_pkg_merge_lock(Phase,
-    ( ebuild_exec:start_phase_async(EbuildPath, Phase, LogPath, UseString, Pid),
-      ebuild_exec:poll_phase_progress(Pid, Phase, LogPath, SizeBefore, T0, ExpBytes, ExpSecs, Callback, ExitCode0),
-      ebuild_exec:maybe_transient_retry(EbuildPath, Phase, LogPath, UseString, Callback, SizeBefore, ExitCode0, ExitCode1),
-      ebuild_exec:maybe_serial_retry(EbuildPath, Phase, LogPath, UseString, Callback, ExitCode1, ExitCode2),
-      fixup:maybe_phase_retry(EbuildPath, Entry, Phase, LogPath, UseString, Callback, SizeBefore, ExitCode2, ExitCode) )),
-  get_time(T1),
-  TotalSecs is T1 - T0,
-  ebuild_exec:log_file_size(LogPath, SizeAfter),
-  TotalBytes is SizeAfter - SizeBefore,
-  ebuild_exec:record_phase_stats(Entry, Phase, TotalBytes, TotalSecs),
-  ( ExitCode =:= 0
-  -> ( memberchk(Phase, DisplayPhases)
-     -> call(Callback, Phase, done)
-     ;  true
-     ),
-     ebuild_exec:run_phases_sequential(EbuildPath, Entry, Rest, DisplayPhases, LogPath, UseString, Callback, Outcome)
-  ;  ( memberchk(Phase, DisplayPhases)
-     -> call(Callback, Phase, failed(ExitCode, LogPath))
-     ;  true
-     ),
-     forall(
-       (member(P, Rest), memberchk(P, DisplayPhases)),
-       call(Callback, P, skipped)
-     ),
-     Outcome = failed(ExitCode)
-  ).
-
-ebuild_exec:run_phases_sequential(EbuildPath, Entry, [Phase|Rest], DisplayPhases, LogPath, UseString, Callback, Outcome) :-
   ( memberchk(Phase, DisplayPhases)
   -> call(Callback, Phase, active)
   ;  true
@@ -1207,7 +1179,7 @@ ebuild_exec:run_phases_sequential(EbuildPath, Entry, [Phase|Rest], DisplayPhases
   get_time(T0),
   ebuild_exec:with_portage_pkg_merge_lock(Phase,
     ( ebuild_exec:start_phase_async(EbuildPath, Phase, LogPath, UseString, Pid),
-      ebuild_exec:poll_phase_spinning(Pid, Phase, Callback, ExitCode0),
+      ebuild_exec:poll_phase(Poller, Pid, Phase, LogPath, SizeBefore, T0, Callback, ExitCode0),
       ebuild_exec:maybe_transient_retry(EbuildPath, Phase, LogPath, UseString, Callback, SizeBefore, ExitCode0, ExitCode1),
       ebuild_exec:maybe_serial_retry(EbuildPath, Phase, LogPath, UseString, Callback, ExitCode1, ExitCode2),
       fixup:maybe_phase_retry(EbuildPath, Entry, Phase, LogPath, UseString, Callback, SizeBefore, ExitCode2, ExitCode) )),
@@ -1246,6 +1218,17 @@ ebuild_exec:poll_phase_spinning(Pid, Phase, Callback, ExitCode) :-
      sleep(0.5),
      ebuild_exec:poll_phase_spinning(Pid, Phase, Callback, ExitCode)
   ).
+
+
+%! ebuild_exec:poll_phase(+Poller, +Pid, +Phase, +LogPath, +SizeBefore, +T0, :Callback, -ExitCode) is det.
+%
+% Dispatch to the progress-estimating poller when Poller is
+% `progress(ExpBytes, ExpSecs)`, or to the spinner when it is `spinning`.
+
+ebuild_exec:poll_phase(progress(ExpBytes, ExpSecs), Pid, Phase, LogPath, SizeBefore, T0, Callback, ExitCode) :-
+  ebuild_exec:poll_phase_progress(Pid, Phase, LogPath, SizeBefore, T0, ExpBytes, ExpSecs, Callback, ExitCode).
+ebuild_exec:poll_phase(spinning, Pid, Phase, _LogPath, _SizeBefore, _T0, Callback, ExitCode) :-
+  ebuild_exec:poll_phase_spinning(Pid, Phase, Callback, ExitCode).
 
 
 % =============================================================================

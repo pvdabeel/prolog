@@ -134,14 +134,14 @@ register(Entry) ::-
   <+entry(Entry),!.
 
 
-%! set:unregister(+Entry)
+%! set:unregister(+List)
 %
 % Public predicate
 
 unregister(List) ::-
   is_list(List),!,
   forall(member(Entry,List),
-    <+entry(Entry)).
+    <-entry(Entry)).
 
 
 %! set:unregister(+Entry)
