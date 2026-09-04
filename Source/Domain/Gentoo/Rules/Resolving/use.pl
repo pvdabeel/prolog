@@ -125,7 +125,7 @@ use:effective_use_for_entry(RepoEntry0, Use, State) :-
   ;
   use:entry_iuse_default(Repo://Id, Use, Default),
   cache:ordered_entry(Repo, Id, C, N, _),
-      ( variant:use_overridden(Use, Eff) ->
+      ( variant:use_overridden(C, N, Use, Eff) ->
           true
       ; use:profile_hard_use_state(Repo://Id, Use, Eff) ->
           true

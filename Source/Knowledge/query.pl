@@ -884,9 +884,9 @@ compile_query_compound(all(dependency(D,fetchonly)):A?{C}, Repo://Id,
 %      Entries without choice groups contribute [] and are immune to this
 %      hazard.
 %
-%   4. variant:use_override/2 and variant:branch_prefer/1 — thread_local state
+%   4. variant:use_override/4 and variant:branch_prefer/1 — thread_local state
 %      active only during variant exploration; affects effective_use_for_entry
-%      and OR group ordering.
+%      (per-package USE flips) and OR group ordering.
 %      -> cache bypassed entirely while variant state is active (key = none).
 %
 % Remaining inputs (VDB installed state, /etc/portage preferences, profile,
@@ -941,8 +941,8 @@ query:dep_model_cache_enabled :-
 % the cache is bypassed entirely in that case.
 
 query:dep_model_variant_active :-
-  current_predicate(variant:use_override/2),
-  ( variant:use_override(_, _) -> true ; variant:branch_prefer(_) ),
+  current_predicate(variant:use_override/4),
+  ( variant:use_override(_, _, _, _) -> true ; variant:branch_prefer(_) ),
   !.
 
 

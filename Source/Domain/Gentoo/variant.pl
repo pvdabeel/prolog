@@ -20,7 +20,7 @@ that can be re-proved in parallel to show alternative plans.
 %  VARIANT declarations
 % =============================================================================
 
-:- thread_local variant:use_override/2.
+:- thread_local variant:use_override/4.
 :- thread_local variant:branch_prefer/1.
 
 
@@ -28,13 +28,17 @@ that can be re-proved in parallel to show alternative plans.
 %  Thread-local USE override check
 % -----------------------------------------------------------------------------
 
-%! variant:use_overridden(+Use, -State) is semidet.
+%! variant:use_overridden(+Category, +Name, +Use, -State) is semidet.
 %
-% Succeeds when the current thread has a USE flag override active.
-% State is unified with positive or negative.
+% Succeeds when the current thread has a USE flag override active for
+% the package Category/Name. State is unified with positive or negative.
+%
+% Overrides are scoped to the package the pivot was detected on, like a
+% `package.use` line: a target experiment must not flip the same flag on
+% every dependency in the thread that happens to declare it.
 
-variant:use_overridden(Use, State) :-
-  variant:use_override(Use, State).
+variant:use_overridden(Category, Name, Use, State) :-
+  variant:use_override(Category, Name, Use, State).
 
 
 % -----------------------------------------------------------------------------
@@ -372,12 +376,17 @@ variant:branch_label(GroupType, Chosen, Alt, Label) :-
 %
 % Asserts thread-local overrides for a variant specification.
 % Must be paired with variant:cleanup/0 in setup_call_cleanup.
+%
+% A use_flip override is keyed on the Category/Name of the pivot's
+% Repo://Entry so it applies to that package only (any version the
+% resolver ends up selecting), never to dependencies sharing the flag.
 
-variant:apply(variant(use_flip, _RepoEntry, Flag, NewState, _Label)) :-
+variant:apply(variant(use_flip, Repo://Entry, Flag, NewState, _Label)) :-
   !,
+  cache:ordered_entry(Repo, Entry, Category, Name, _),
   ( NewState == positive
-  -> assertz(variant:use_override(Flag, positive))
-  ;  assertz(variant:use_override(Flag, negative))
+  -> assertz(variant:use_override(Category, Name, Flag, positive))
+  ;  assertz(variant:use_override(Category, Name, Flag, negative))
   ).
 
 variant:apply(variant(branch_alt, _None, AltDep, _None2, _Label)) :-
@@ -392,7 +401,7 @@ variant:apply(_).
 % Retracts all thread-local variant overrides.
 
 variant:cleanup :-
-  retractall(variant:use_override(_, _)),
+  retractall(variant:use_override(_, _, _, _)),
   retractall(variant:branch_prefer(_)).
 
 
