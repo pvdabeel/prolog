@@ -16,7 +16,8 @@ Dispatch is table-driven: request_handler/5 declares one fact per recognised
 flag (in dispatch priority order), request_matches/3 decides whether a handler
 is triggered by the parsed Options/Args, and request_select/5 picks the first
 triggered handler. This keeps interface:spec/1 and the dispatch co-verifiable
-and allows per-flag behaviour to be unit-tested (see unittest.pl).
+and allows per-flag behaviour to be unit-tested (see
+Source/Test/Unit/interfacetest.pl).
 */
 
 % -----------------------------------------------------------------------------

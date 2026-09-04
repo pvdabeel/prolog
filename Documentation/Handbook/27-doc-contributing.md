@@ -222,7 +222,7 @@ Regression tooling is hosted in two places:
   is invoked automatically by `tinderbox-ng analyze`. Outputs are
   `analysis.json` + `analysis.txt` in the matrix run directory.
 - **md5-cache extractor regression** — `md5cache_validate/0,1` in
-  `Source/Test/unittest.pl` (re-extracts metadata via
+  `Source/Test/md5cache.pl` (re-extracts metadata via
   `Source/Domain/Gentoo/Ebuild/ebuild-depend.sh --batch` and diffs
   the result key by key against the on-disk md5-cache).
 

@@ -27,45 +27,96 @@ extraction from cached dependency metadata, and cycle path display.
 % -----------------------------------------------------------------------------
 
 %! cycle:print_cycle_explanation(+StartKey,+ProofAVL,+TriggersAVL)
+%
+% Print the cycle a prover cycle-break on StartKey closed. The path is
+% taken from the proof when the prover recorded it, otherwise searched
+% for in the triggers graph and the proof within the inference budget
+% of config:print_prover_cycles_max_inferences/1. Prints nothing for a
+% key that is not a package action or when no cycle can be found.
+
 cycle:print_cycle_explanation(StartKey, ProofAVL, TriggersAVL) :-
   ( StartKey = _://_:install ; StartKey = _://_:run ; StartKey = _://_:fetchonly
   ; StartKey = _:install     ; StartKey = _:run     ; StartKey = _:fetchonly
   ),
-  ( is_assoc(ProofAVL),
-    ( prover:canon_literal(StartKey, Canon, _) -> true ; Canon = StartKey ),
-    get_assoc(cycle_path(Canon), ProofAVL, CyclePath0a) ->
-      cycle:cycle_display_path(CyclePath0a, CyclePath),
-      CyclePath0 = CyclePath0a
-  ; ( cycle:cycle_start_pkg_key(StartKey, TriggersAVL, StartPkg),
-      cycle:find_cycle_via_triggers_pkg(StartPkg, TriggersAVL, CyclePath),
-      CyclePath0 = CyclePath
-    ; cycle:cycle_start_pkg_key(StartKey, TriggersAVL, StartPkg),
-      cycle:find_cycle_via_triggers(StartPkg, TriggersAVL, CyclePath0a),
-      cycle:cycle_display_path(CyclePath0a, CyclePath),
-      CyclePath0 = CyclePath0a
-    ; cycle:find_cycle_via_proof(StartKey, ProofAVL, CyclePath0a),
-      cycle:cycle_display_path(CyclePath0a, CyclePath),
-      CyclePath0 = CyclePath0a
-    )
+  ( cycle:recorded_cycle_path(StartKey, ProofAVL, CyclePath0, CyclePath) ->
+      Outcome = found(CyclePath0, CyclePath)
+  ; config:print_prover_cycles_max_inferences(Budget),
+    call_with_inference_limit(cycle:search_cycle_path(StartKey, ProofAVL, TriggersAVL, CyclePath0, CyclePath),
+                              Budget, Result) ->
+      ( Result == inference_limit_exceeded ->
+          Outcome = budget_exhausted
+      ; Outcome = found(CyclePath0, CyclePath)
+      )
+  ; Outcome = not_found
   ),
-  ( CyclePath = [_|_] ->
-    sampler:record(cycle(CyclePath0, CyclePath)),
-    nl,
-    message:color(darkgray),
-    message:print('  Reason : Dependency cycle :'), nl,
-    message:color(normal),
-    nl,
-    cycle:cycle_edge_guard_map(CyclePath0, GuardMap),
-    cycle:print_cycle_tree(CyclePath, GuardMap)
-  ;
-    message:color(darkgray),
-    message:print('  (cycle path not found)'),
-    message:color(normal),
-    nl
-  ),
+  cycle:print_cycle_outcome(Outcome),
   !.
-cycle:print_cycle_explanation(_, _, _) :-
-  true.
+cycle:print_cycle_explanation(_, _, _).
+
+
+%! cycle:recorded_cycle_path(+StartKey,+ProofAVL,-CyclePath0,-CyclePath)
+%
+% The cycle path the prover recorded for StartKey while breaking the cycle.
+
+cycle:recorded_cycle_path(StartKey, ProofAVL, CyclePath0, CyclePath) :-
+  is_assoc(ProofAVL),
+  ( prover:canon_literal(StartKey, Canon, _) -> true ; Canon = StartKey ),
+  get_assoc(cycle_path(Canon), ProofAVL, CyclePath0),
+  cycle:cycle_display_path(CyclePath0, CyclePath).
+
+
+%! cycle:search_cycle_path(+StartKey,+ProofAVL,+TriggersAVL,-CyclePath0,-CyclePath)
+%
+% Search for a cycle through StartKey: first a short witness over package
+% keys only (bounded BFS), then a depth-bounded DFS over the triggers
+% graph, finally one over the proof bodies. The caller bounds the total
+% search by an inference budget.
+
+cycle:search_cycle_path(StartKey, _ProofAVL, TriggersAVL, CyclePath, CyclePath) :-
+  cycle:cycle_start_pkg_key(StartKey, TriggersAVL, StartPkg),
+  cycle:find_cycle_via_triggers_pkg(StartPkg, TriggersAVL, CyclePath),
+  !.
+cycle:search_cycle_path(StartKey, _ProofAVL, TriggersAVL, CyclePath0, CyclePath) :-
+  cycle:cycle_start_pkg_key(StartKey, TriggersAVL, StartPkg),
+  cycle:find_cycle_via_triggers(StartPkg, TriggersAVL, CyclePath0),
+  cycle:cycle_display_path(CyclePath0, CyclePath),
+  !.
+cycle:search_cycle_path(StartKey, ProofAVL, _TriggersAVL, CyclePath0, CyclePath) :-
+  cycle:find_cycle_via_proof(StartKey, ProofAVL, CyclePath0),
+  cycle:cycle_display_path(CyclePath0, CyclePath).
+
+
+%! cycle:print_cycle_outcome(+Outcome)
+%
+% Render the result of the cycle path lookup: the cycle tree when a path
+% was found, a dark-gray note when the display path is empty or the
+% search budget ran out, nothing when no cycle exists.
+
+cycle:print_cycle_outcome(found(CyclePath0, CyclePath)) :-
+  CyclePath = [_|_],
+  !,
+  sampler:record(cycle(CyclePath0, CyclePath)),
+  nl,
+  message:color(darkgray),
+  message:print('  Reason : Dependency cycle :'), nl,
+  message:color(normal),
+  nl,
+  cycle:cycle_edge_guard_map(CyclePath0, GuardMap),
+  cycle:print_cycle_tree(CyclePath, GuardMap).
+cycle:print_cycle_outcome(found(_, _)) :-
+  cycle:print_cycle_note('  (cycle path not found)').
+cycle:print_cycle_outcome(budget_exhausted) :-
+  cycle:print_cycle_note('  (cycle explanation omitted: search budget)').
+cycle:print_cycle_outcome(not_found).
+
+
+%! cycle:print_cycle_note(+Text)
+
+cycle:print_cycle_note(Text) :-
+  message:color(darkgray),
+  message:print(Text),
+  message:color(normal),
+  nl.
 
 % Backward compatibility (older callers).
 cycle:print_cycle_explanation(StartKey, TriggersAVL) :-

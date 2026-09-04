@@ -817,6 +817,11 @@ ranking:cn_is_installed(C, N) :-
 
 %! ranking:choice_cache_get(+Key, -Value) is semidet.
 %! ranking:choice_cache_put(+Key, +Value) is det.
+%
+% The per-choice-group memo of prioritize_deps_keep_all/3. It exists
+% only inside that predicate's setup_call_cleanup scope: a put from
+% outside the scope is dropped rather than creating a global that would
+% outlive the choice group and never be invalidated.
 
 ranking:choice_cache_get(Key, Value) :-
   nb_current(ranking_choice_cache, AVL),
@@ -824,9 +829,11 @@ ranking:choice_cache_get(Key, Value) :-
   !.
 
 ranking:choice_cache_put(Key, Value) :-
-  ( nb_current(ranking_choice_cache, AVL0) -> true ; empty_assoc(AVL0) ),
-  put_assoc(Key, AVL0, Value, AVL1),
-  nb_setval(ranking_choice_cache, AVL1).
+  ( nb_current(ranking_choice_cache, AVL0)
+  -> put_assoc(Key, AVL0, Value, AVL1),
+     nb_setval(ranking_choice_cache, AVL1)
+  ;  true
+  ).
 
 
 %! ranking:dep_best_admitted(+Dep, -BestRE, -BestVer) is det.

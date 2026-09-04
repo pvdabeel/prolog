@@ -53,7 +53,7 @@ plan:print(Target, ModelAVL, ProofAVL, Plan, Call, TriggersAVL) :-
   plan:inject_cycle_break_verifies(Annotations, Plan, AugmentedPlan),
   plan:print_body(TargetPrint, BlockerNotes, AugmentedPlan, Call, PreSteps, Steps),
   plan:print_footer(AugmentedPlan, ModelAVL, Steps, PreActions),
-  warning:print_warnings(ModelAVL, Annotations, ProofAVL, TriggersAVL).
+  warning:print_warnings(Annotations, ProofAVL, TriggersAVL).
 
 
 %! plan:dry_run(+Step)

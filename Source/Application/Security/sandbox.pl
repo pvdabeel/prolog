@@ -36,6 +36,7 @@ sandbox:safe_primitive(config:force_emerge_regen(_)).
 sandbox:safe_primitive(config:print_prover_cycles(_)).
 sandbox:safe_primitive(config:print_prover_cycles_max_total(_)).
 sandbox:safe_primitive(config:print_prover_cycles_max_depth(_)).
+sandbox:safe_primitive(config:print_prover_cycles_max_inferences(_)).
 sandbox:safe_primitive(config:print_blockers(_)).
 sandbox:safe_primitive(config:bugreport_drafts_enabled(_)).
 sandbox:safe_primitive(config:bugreport_drafts_max_assumptions(_)).

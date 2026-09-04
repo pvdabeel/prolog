@@ -798,6 +798,17 @@ config:print_prover_cycles_max_total(10).
 config:print_prover_cycles_max_depth(25).
 
 
+%! config:print_prover_cycles_max_inferences(?N)
+%
+% Inference budget for the search that reconstructs one prover cycle
+% path (cycle:print_cycle_explanation/3). The depth-bounded searches are
+% exponential in the branching factor in the worst case; the budget caps
+% them deterministically, so the same plan prints the same explanation
+% on every machine. When it is exhausted the explanation is omitted.
+
+config:print_prover_cycles_max_inferences(10000000).
+
+
 %! config:print_blockers(?Style)
 %
 % How to display blocker assumptions in plan output.

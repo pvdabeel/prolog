@@ -503,26 +503,13 @@ binpkg_exec:src_entry_cnv(SrcRepo, SrcEntry, Cat, Name, Version) :-
 
 %! binpkg_exec:pick_best_candidate(+Candidates, -BestEid) is det.
 %
-% Candidates is a list of `BuildId-Eid` pairs. Sort descending on BuildId
-% (msort + reverse beats keysort because BuildId is an integer; we want
-% standard numeric order, not term order). Return the head's Eid.
+% Candidates is a non-empty list of `BuildId-Eid` pairs; BestEid is the
+% Eid with the highest BuildId (the most recent build). The standard
+% order of terms compares the integer keys numerically; BuildId is unique
+% per binpkg, so there are no ties to break.
 
 binpkg_exec:pick_best_candidate(Candidates, BestEid) :-
-  predsort(binpkg_exec:bid_desc, Candidates, Sorted),
-  Sorted = [_-BestEid | _].
-
-
-%! binpkg_exec:bid_desc(-Order, +A, +B) is det.
-%
-% predsort/3 comparator: descending integer BuildId. Distinct Eids with
-% the same BuildId are kept in input order (predsort would dedupe them
-% otherwise, but BuildId is unique per binpkg so this is moot).
-
-binpkg_exec:bid_desc(Order, BidA-_, BidB-_) :-
-  ( BidA  >  BidB -> Order = (<)
-  ; BidA  <  BidB -> Order = (>)
-  ;                  Order = (=)
-  ).
+  max_member(_-BestEid, Candidates).
 
 
 % -----------------------------------------------------------------------------

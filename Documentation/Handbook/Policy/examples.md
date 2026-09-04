@@ -325,7 +325,7 @@ no assumptions — PDEPEND is never disabled to avoid it.
 ## PLUnit companions
 
 Overlay stories cover end-to-end policy. For isolated primitives, prefer
-PLUnit in `Source/Test/unittest.pl`:
+PLUnit under `Source/Test/Unit/`:
 
 | Area | Where to look |
 | :--- | :--- |

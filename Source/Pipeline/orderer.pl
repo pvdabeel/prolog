@@ -506,7 +506,9 @@ add_rule_to_head_set_(Rule, In, Out) :-
   ).
 
 compute_refcount(TriggersAVL, HeadSet, Head, In, Out) :-
-  orderer:effective_trigger_keys(Head, TriggerKeys),
+  % The rule set decides which heads count as references to Head (for
+  % Gentoo: a merge step and its :run head, ordering:reference_heads/2).
+  ordering:reference_heads(Head, TriggerKeys),
   % Assoc-set uniqueness avoids findall + sort over the dependents bag.
   empty_assoc(U0),
   foldl(orderer:refcount_add_key(TriggersAVL, HeadSet, Head),
@@ -528,20 +530,6 @@ refcount_add_dep(HeadSet, Head, D0, In, Out) :-
   !,
   put_assoc(DepHead, In, true, Out).
 refcount_add_dep(_HeadSet, _Head, _D0, In, In).
-
-
-%! orderer:effective_trigger_keys(+Head, -Keys)
-%
-% For merge actions (:install/:update/:downgrade/:reinstall), also count
-% triggers on the corresponding :run head, since other packages depend on
-% the :run action rather than the :install action directly.
-
-effective_trigger_keys(Head, Keys) :-
-  ( Head = R://L:Action,
-    memberchk(Action, [install, update, downgrade, reinstall])
-  -> Keys = [Head, R://L:run]
-  ; Keys = [Head]
-  ).
 
 
 %! orderer:reorder_waves_by_refcount(+PlanIn, +RefCountMap, -PlanOut)

@@ -120,7 +120,7 @@ remains the executable rule/2 surface; Policy/ must not drift from it.
 %  Synthetic rule store
 % -----------------------------------------------------------------------------
 %
-% KB-independent unit tests (Source/Test/unittest.pl, issue #73) drive the
+% KB-independent unit tests (Source/Test/Unit/synthetictest.pl, issue #73) drive the
 % prover and orderer over tiny hand-built rule sets without a loaded
 % knowledge base.  While the store is active, rule/2 resolves EXCLUSIVELY
 % against the dynamic test_rule/2 clauses (committed choice), so synthetic

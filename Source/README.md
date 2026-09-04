@@ -71,7 +71,10 @@ Source/
     Private/                              API keys and passwords (gitignored)
 
   Test/                                  (testing)
-    unittest.pl                           207 PLUnit tests
+    unittest.pl                           PLUnit loader (Unit/*test.pl, one file per subject)
+    Unit/                                 PLUnit tests by subject + shared fixtures
+    md5cache.pl                           md5-cache extractor regression harness
+    profilemask.pl                        profile package.mask golden regression
     test.pl                               Integration test cases and expectations
     tester.pl                             Test runner and trace utilities
     stat.pl                               Progress counter for tester title updates

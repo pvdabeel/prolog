@@ -73,14 +73,14 @@ test-overlay: ## Run overlay regression tests (requires loaded overlay repositor
 
 test-profile-mask-golden: ## Validate profile package.mask against the golden snapshot (needs kb.qlf + profile.qlf).
 	  printf '%s\n' \
-	    "load_files(portage('Source/Test/unittest'), [if(true)])." \
+	    "load_files(portage('Source/Test/profilemask'), [if(true)])." \
 	    "profile_mask_golden_main." \
 	    "halt." | \
 	    ./Source/Application/Wrapper/portage-ng-dev --mode standalone --shell
 
-test-profile-mask-golden-update: ## Regenerate the profile package.mask golden snapshot in unittest.pl.
+test-profile-mask-golden-update: ## Regenerate the profile package.mask golden snapshot in Source/Test/profilemask.pl.
 	  printf '%s\n' \
-	    "load_files(portage('Source/Test/unittest'), [if(true)])." \
+	    "load_files(portage('Source/Test/profilemask'), [if(true)])." \
 	    "profile_mask_golden_update." \
 	    "halt." | \
 	    ./Source/Application/Wrapper/portage-ng-dev --mode standalone --shell

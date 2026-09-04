@@ -172,7 +172,7 @@ requires(R:unmerge, C:unmerge) :-
 %! unmerging:world_override(+D)
 %
 % Test hook: unit tests assert world facts here to exercise the laws
-% without a VDB (see Source/Test/unittest.pl).
+% without a VDB (see Source/Test/Unit/synthetictest.pl).
 
 :- dynamic world_override/1.
 

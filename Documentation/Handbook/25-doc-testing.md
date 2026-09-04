@@ -7,7 +7,8 @@ merge-vs-emerge comparison for correctness measurement against Portage.
 
 ## PLUnit tests
 
-Standard SWI-Prolog unit tests in `Source/Test/unittest.pl`:
+Standard SWI-Prolog unit tests, one file per subject under
+`Source/Test/Unit/` (loaded together by `Source/Test/unittest.pl`):
 
 ```bash
 make test
@@ -168,7 +169,7 @@ plancompare:diff('/tmp/before.tsv', '/tmp/after.tsv').
 
 ## md5-cache extractor regression
 
-`md5cache_validate/0,1` (in `Source/Test/unittest.pl`) runs the
+`md5cache_validate/0,1` (in `Source/Test/md5cache.pl`) runs the
 standalone bash extractor at
 `Source/Domain/Gentoo/Ebuild/ebuild-depend.sh --batch` over every
 md5-cache entry in the configured Portage tree and diffs the produced
@@ -176,7 +177,7 @@ metadata against the on-disk cache, key by key.
 
 ```sh
 ./Source/Application/Wrapper/portage-ng-dev --mode standalone --shell <<'PL'
-load_files(portage('Source/Test/unittest'), [if(true)]).
+load_files(portage('Source/Test/md5cache'), [if(true)]).
 md5cache_validate([limit(50), verbose(true)]).
 halt.
 PL

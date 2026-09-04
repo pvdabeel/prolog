@@ -281,9 +281,8 @@ prefers(H, D) :-
   prover:canon_literal(Literal, assumed(Inner), _),
   prover:canon_literal(Inner, G:Action, _),
   ordering:grouped_cn(G, C, N),
-  ordering:phase_actions(Action, Actions),
   ordering:cn_action_index(Idx),
-  member(A, Actions),
+  ordering:phase_action(Action, A),
   get_assoc(cn(C-N)-A, Idx, Steps),
   member(D, Steps),
   D \== H.
@@ -442,9 +441,8 @@ entry_cn(_Repository, Entry, C, N) :-
 grouped_install_planned(Core, D) :-
   Core = G:install,
   ordering:grouped_cn(G, C, N),
-  ordering:phase_actions(install, Actions),
   ordering:cn_action_index(Idx),
-  member(A, Actions),
+  ordering:phase_action(install, A),
   get_assoc(cn(C-N)-A, Idx, Steps),
   member(D, Steps),
   ordering:step(D).
@@ -470,19 +468,45 @@ grouped_cn(grouped_package_dependency(C, N, _), C, N).
 % collapse, see requires/2).
 
 virtual_merge_step(Repository://Entry:Action) :-
-  memberchk(Action, [install, update, downgrade, reinstall]),
+  ordering:merge_action(Action),
   ordering:entry_cn(Repository, Entry, C, _),
   C == virtual.
 
 
-%! ordering:phase_actions(+DepAction, -PlanActions)
+%! ordering:merge_action(?Action)
 %
-% The concrete plan actions that satisfy a dependency phase: an
-% :install dep is satisfied by any merge-family action, a :run dep by
-% the :run head.
+% The merge-family plan actions: those that (re)install an ebuild, as
+% opposed to the :run head its consumers depend on.
 
-phase_actions(install, [install, update, downgrade, reinstall]).
-phase_actions(run, [run]).
+merge_action(install).
+merge_action(update).
+merge_action(downgrade).
+merge_action(reinstall).
+
+
+%! ordering:phase_action(+DepAction, -PlanAction)
+%
+% A concrete plan action that satisfies a dependency phase: an :install
+% dep is satisfied by any merge-family action, a :run dep by the :run
+% head.
+
+phase_action(install, Action) :-
+  ordering:merge_action(Action).
+phase_action(run, run).
+
+
+%! ordering:reference_heads(+H, -Heads)
+%
+% The proof heads whose dependents count as references to plan step H
+% (orderer:merge_order_bias/4): H itself and, for a merge-family step,
+% its :run head, because consumers depend on a package's :run action
+% rather than on the merge that provides it.
+
+reference_heads(H, [H, Repository://Entry:run]) :-
+  H = Repository://Entry:Action,
+  ordering:merge_action(Action),
+  !.
+reference_heads(H, [H]).
 
 
 % -----------------------------------------------------------------------------
@@ -492,7 +516,7 @@ phase_actions(run, [run]).
 %! ordering:world_override(+D)
 %
 % Test hook: unit tests assert world facts here to exercise the laws
-% without a knowledge base or VDB (see Source/Test/unittest.pl).
+% without a knowledge base or VDB (see Source/Test/Unit/synthetictest.pl).
 
 :- dynamic world_override/1.
 
@@ -545,7 +569,8 @@ world(_H, Repository://Entry:Action) :-
 % when citing the rebuild would close a loop (python/tk/fontconfig): an
 % already-installed CN of the same package still bridges the cycle.
 world(_H, Repository://Entry:Action) :-
-  memberchk(Action, [update, downgrade, reinstall]),
+  ordering:merge_action(Action),
+  Action \== install,
   !,
   catch(ordering:installed_same_cn(Repository, Entry), _, fail).
 
@@ -558,7 +583,7 @@ world(_H, Repository://Entry:Action) :-
 
 installed_satisfies(C, N, []) :-
   !,
-  ranking:cn_is_installed(C, N).
+  ordering:installed_cn(C, N).
 installed_satisfies(_C, _N, Deps) :-
   forall(member(Dep, Deps),
          ( Dep = package_dependency(_, no, _, _, _, _, _, _),
@@ -586,5 +611,18 @@ installed_same_version(Repository, Entry) :-
 
 installed_same_cn(Repository, Entry) :-
   cache:ordered_entry(Repository, Entry, C, N, _),
-  ranking:cn_is_installed(C, N),
+  ordering:installed_cn(C, N),
+  !.
+
+
+%! ordering:installed_cn(+C, +N)
+%
+% Some version of category C, name N is installed. Read from the VDB
+% directly: the pass-1 ranking memo (ranking:cn_is_installed/2) lives
+% only inside ranking:prioritize_deps_keep_all/3 and must not be
+% populated from pass 2.
+
+installed_cn(C, N) :-
+  knowledgebase:vdb_repository(VdbRepo),
+  query:search([name(N), category(C), installed(true)], VdbRepo://_),
   !.

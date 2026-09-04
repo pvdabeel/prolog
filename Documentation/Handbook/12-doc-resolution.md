@@ -442,7 +442,7 @@ need `cp_map` are uncommon.  Slot consistency is enforced later by
 ### Validation
 
 - PLUnit: `ranking_any_of_version_branch`, `ranking_any_of_preference_keys`
-  in `Source/Test/unittest.pl`.
+  in `Source/Test/Unit/rankingtest.pl`.
 - Overlay suite (`||` / USE / slot cases) and tinderbox-ng compare on
   USE-dep `||` and llvm/gcc/python slot packages.
 

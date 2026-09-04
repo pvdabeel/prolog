@@ -1108,41 +1108,27 @@ compile_query_compound(model(required_use(Model)), Repo://Id,
    	     \+eapi:abstract_syntax_construct(Key)),
             Model) ) ) :- !.
 
-compile_query_compound(model(dependency(Merged,run)):config?{Context}, Repo://Id,
-  ( query:dep_model_key(Repo, Id, Context, CacheKey),
-    ( CacheKey \== none,
-      memo:dep_model_cache_(Repo, Id, run, CacheKey, CachedMerged)
-    ->
-      Merged = CachedMerged
-    ;
-    ( memberchk(self(Repo://Id), Context)
-      -> CtxSelf = Context
-      ;  CtxSelf = [self(Repo://Id)|Context]
-    ),
-    findall(Dep:config?{CtxSelf},
-          ( cache:entry_metadata(Repo,Id,idepend,Dep)
-          ; cache:entry_metadata(Repo,Id,rdepend,Dep)
-          ),
-          Deps),
-  sort(Deps, DepsU),
-  prover:prove_model(DepsU, t, AvlModel, t, _ConsOut, t),
-  findall(Fact:Phase?{CtxOut},
-          ( gen_assoc(Fact:_,AvlModel,CtxIn),
-            Fact =.. [package_dependency|_],
-            Fact =.. [package_dependency,Phase|_],
-            ( CtxIn == {} -> CtxOut = [] ; CtxOut = CtxIn )
-          ),
-          Model0),
-  query:group_dependencies(Model0, Merged),
-  ( CacheKey == none
-    -> true
-    ;  assertz(memo:dep_model_cache_(Repo, Id, run, CacheKey, Merged))
-  ) ) ) ) :- !.
+% The dependency model of an ebuild for one phase: the package_dependency
+% leaves of the metadata trees that phase draws on (dep_model_sources/5),
+% proven into a model (USE conditionals flattened), tagged with the phase
+% the consumer proves them under (dep_model_leaf/4) and grouped. Cached
+% per proof under the hazard-encoded key (see "Dependency-model cache
+% key" above). One template, instantiated at compile time per phase.
 
-compile_query_compound(model(dependency(Merged,pdepend)):config?{Context}, Repo://Id,
+compile_query_compound(model(dependency(Merged,Phase)):config?{Context}, Repo://Id, Goal) :-
+  atom(Phase),
+  query:dep_model_sources(Phase, Repo, Id, Dep, Sources),
+  query:dep_model_leaf(Phase, Fact, LeafPhase, LeafPhaseGoals),
+  append([ [ gen_assoc(Fact:_,AvlModel,CtxIn),
+             Fact =.. [package_dependency|_] ],
+           LeafPhaseGoals,
+           [ ( CtxIn == {} -> CtxOut = [] ; CtxOut = CtxIn ) ] ],
+         LeafGoals),
+  query:goals_conjunction(LeafGoals, LeafGoal),
+  Goal =
   ( query:dep_model_key(Repo, Id, Context, CacheKey),
     ( CacheKey \== none,
-      memo:dep_model_cache_(Repo, Id, pdepend, CacheKey, CachedMerged)
+      memo:dep_model_cache_(Repo, Id, Phase, CacheKey, CachedMerged)
     ->
       Merged = CachedMerged
     ;
@@ -1150,91 +1136,72 @@ compile_query_compound(model(dependency(Merged,pdepend)):config?{Context}, Repo:
       -> CtxSelf = Context
       ;  CtxSelf = [self(Repo://Id)|Context]
     ),
-    findall(Dep:config?{CtxSelf},
-          cache:entry_metadata(Repo,Id,pdepend,Dep),
-          Deps),
-  sort(Deps, DepsU),
-  prover:prove_model(DepsU, t, AvlModel, t, _ConsOut, t),
-  findall(Fact:run?{CtxOut},
-          ( gen_assoc(Fact:_,AvlModel,CtxIn),
-            Fact =.. [package_dependency|_],
-            ( CtxIn == {} -> CtxOut = [] ; CtxOut = CtxIn )
-          ),
-          Model0),
-  query:group_dependencies(Model0, Merged),
-  ( CacheKey == none
-    -> true
-    ;  assertz(memo:dep_model_cache_(Repo, Id, pdepend, CacheKey, Merged))
-  ) ) ) ) :- !.
+    findall(Dep:config?{CtxSelf}, Sources, Deps),
+    sort(Deps, DepsU),
+    prover:prove_model(DepsU, t, AvlModel, t, _ConsOut, t),
+    findall(Fact:LeafPhase?{CtxOut}, LeafGoal, Model0),
+    query:group_dependencies(Model0, Merged),
+    ( CacheKey == none
+      -> true
+      ;  assertz(memo:dep_model_cache_(Repo, Id, Phase, CacheKey, Merged))
+    ) ) ),
+  !.
 
-compile_query_compound(model(dependency(Merged,install)):config?{Context}, Repo://Id,
-  ( query:dep_model_key(Repo, Id, Context, CacheKey),
-    ( CacheKey \== none,
-      memo:dep_model_cache_(Repo, Id, install, CacheKey, CachedMerged)
-    ->
-      Merged = CachedMerged
-    ;
-    ( memberchk(self(Repo://Id), Context)
-      -> CtxSelf = Context
-      ;  CtxSelf = [self(Repo://Id)|Context]
-    ),
-    findall(Dep:config?{CtxSelf},
-          ( cache:entry_metadata(Repo,Id,bdepend,Dep)
-          ; cache:entry_metadata(Repo,Id,cdepend,Dep)
-          ; cache:entry_metadata(Repo,Id,depend,Dep)
-          ; cache:entry_metadata(Repo,Id,idepend,Dep)
-          ; cache:entry_metadata(Repo,Id,rdepend,Dep)
-          ; feedback:discovered_bdepend_dep(Repo,Id,Dep)
-          ),
-          Deps),
-  sort(Deps, DepsU),
-  prover:prove_model(DepsU, t, AvlModel, t, _ConsOut, t),
-  findall(Fact:Phase?{CtxOut},
-           ( gen_assoc(Fact:_,AvlModel,CtxIn),
-             Fact =.. [package_dependency|_],
-             Fact =.. [package_dependency,Phase|_],
-             ( CtxIn == {} -> CtxOut = [] ; CtxOut = CtxIn )
-           ),
-          Model0),
-  query:group_dependencies(Model0, Merged),
-  ( CacheKey == none
-    -> true
-    ;  assertz(memo:dep_model_cache_(Repo, Id, install, CacheKey, Merged))
-  ) ) ) ) :- !.
 
-compile_query_compound(model(dependency(Merged,fetchonly)):config?{Context}, Repo://Id,
-  ( query:dep_model_key(Repo, Id, Context, CacheKey),
-    ( CacheKey \== none,
-      memo:dep_model_cache_(Repo, Id, fetchonly, CacheKey, CachedMerged)
-    ->
-      Merged = CachedMerged
-    ;
-    ( memberchk(self(Repo://Id), Context)
-      -> CtxSelf = Context
-      ;  CtxSelf = [self(Repo://Id)|Context]
-    ),
-    findall(Dep:config?{CtxSelf},
-    	  ( cache:entry_metadata(Repo,Id,bdepend,Dep)
-          ; cache:entry_metadata(Repo,Id,cdepend,Dep)
-          ; cache:entry_metadata(Repo,Id,depend,Dep)
-          ; cache:entry_metadata(Repo,Id,idepend,Dep)
-          ; cache:entry_metadata(Repo,Id,rdepend,Dep)
-          ; cache:entry_metadata(Repo,Id,pdepend,Dep)
-          ),
-          Deps),
-  sort(Deps, DepsU),
-  prover:prove_model(DepsU, t, AvlModel, t, _ConsOut, t),
-  findall(Fact:fetchonly?{CtxOut},
-          ( gen_assoc(Fact:_,AvlModel,CtxIn),
-            Fact =.. [package_dependency|_],
-            ( CtxIn == {} -> CtxOut = [] ; CtxOut = CtxIn )
-          ),
-          Model0),
-  query:group_dependencies(Model0, Merged),
-  ( CacheKey == none
-    -> true
-    ;  assertz(memo:dep_model_cache_(Repo, Id, fetchonly, CacheKey, Merged))
-  ) ) ) ) :- !.
+%! query:dep_model_sources(+Phase, +Repo, +Id, -Dep, -Sources)
+%
+% The goal enumerating the dependency trees Dep that the model of Phase
+% is built from: the runtime trees for :run, PDEPEND alone for :pdepend,
+% every build- and run-time tree (plus BDEPEND discovered at build time,
+% feedback:discovered_bdepend_dep/3) for :install, and every tree
+% including PDEPEND for :fetchonly, which must fetch the sources of the
+% whole closure.
+
+query:dep_model_sources(run, Repo, Id, Dep,
+  ( cache:entry_metadata(Repo,Id,idepend,Dep)
+  ; cache:entry_metadata(Repo,Id,rdepend,Dep)
+  )).
+query:dep_model_sources(pdepend, Repo, Id, Dep,
+    cache:entry_metadata(Repo,Id,pdepend,Dep)).
+query:dep_model_sources(install, Repo, Id, Dep,
+  ( cache:entry_metadata(Repo,Id,bdepend,Dep)
+  ; cache:entry_metadata(Repo,Id,cdepend,Dep)
+  ; cache:entry_metadata(Repo,Id,depend,Dep)
+  ; cache:entry_metadata(Repo,Id,idepend,Dep)
+  ; cache:entry_metadata(Repo,Id,rdepend,Dep)
+  ; feedback:discovered_bdepend_dep(Repo,Id,Dep)
+  )).
+query:dep_model_sources(fetchonly, Repo, Id, Dep,
+  ( cache:entry_metadata(Repo,Id,bdepend,Dep)
+  ; cache:entry_metadata(Repo,Id,cdepend,Dep)
+  ; cache:entry_metadata(Repo,Id,depend,Dep)
+  ; cache:entry_metadata(Repo,Id,idepend,Dep)
+  ; cache:entry_metadata(Repo,Id,rdepend,Dep)
+  ; cache:entry_metadata(Repo,Id,pdepend,Dep)
+  )).
+
+
+%! query:dep_model_leaf(+Phase, ?Fact, -LeafPhase, -Goals)
+%
+% How a proven package_dependency leaf Fact is tagged in the model of
+% Phase. The :run and :install models keep the leaf's own phase tag
+% (install / run / pdepend, read from the term); a PDEPEND leaf is a
+% runtime dependency of the consumer and a fetch-only model fetches
+% every leaf, so those two carry a fixed tag and need no extra goal.
+
+query:dep_model_leaf(run,       Fact, Phase,     [Fact =.. [package_dependency,Phase|_]]).
+query:dep_model_leaf(install,   Fact, Phase,     [Fact =.. [package_dependency,Phase|_]]).
+query:dep_model_leaf(pdepend,   _,    run,       []).
+query:dep_model_leaf(fetchonly, _,    fetchonly, []).
+
+
+%! query:goals_conjunction(+Goals, -Conjunction)
+%
+% A non-empty list of goals as a right-nested conjunction.
+
+query:goals_conjunction([G], G) :- !.
+query:goals_conjunction([G|Gs], (G, C)) :-
+  query:goals_conjunction(Gs, C).
 
 
 % 11. qualified_target queries, generated by --merge, --unmerge and --info

@@ -41,9 +41,9 @@ warning:unwrap_ctx(Ctx0, Ctx) :-
 %  Print warnings
 % -----------------------------------------------------------------------------
 
-%! warning:print_warnings(+ModelAVL, +Annotations, +ProofAVL, +TriggersAVL)
+%! warning:print_warnings(+Annotations, +ProofAVL, +TriggersAVL)
 %
-% Prints assumptions found in the proof/model. Annotations is the
+% Prints assumptions found in the proof. Annotations is the
 % proof_annotations record produced by annotation:collect/2 (single-pass
 % proof traversal); ProofAVL is still needed for cycle explanations.
 %
@@ -62,13 +62,12 @@ warning:unwrap_ctx(Ctx0, Ctx) :-
 %   These are "cycle breaks" (not domain facts). The printer explains them using
 %   the Triggers graph to show a cycle path.
 
-warning:print_warnings(ModelAVL, Annotations, ProofAVL, TriggersAVL) :-
-  once((assoc:gen_assoc(Key, ModelAVL, _), Key = assumed(_))),
+warning:print_warnings(Annotations, ProofAVL, TriggersAVL) :-
   annotation:domain_assumptions(Annotations, DomainAssumptions),
   annotation:cycle_break_contents(Annotations, CycleAssumptions),
-  % The model may carry assumed(...) keys that annotation:collect/2 filtered
-  % out (soft blocker records that hit nothing); then there is nothing to
-  % report here and the plain suggestions clause below applies.
+  % annotation:collect/2 already filtered out the assumed(...) records that
+  % hit nothing (soft blockers); when nothing effective remains, the plain
+  % suggestions clause below applies.
   ( DomainAssumptions \== [] ; CycleAssumptions \== [] ),
   !,
   nl,
@@ -127,18 +126,8 @@ warning:print_warnings(ModelAVL, Annotations, ProofAVL, TriggersAVL) :-
                  ; true
                ),
                plan:print_cycle_break_detail(Content),
-               % The cycle witness search is a depth-bounded DFS/BFS over
-               % the triggers graph (config:print_prover_cycles_max_depth)
-               % whose worst case is exponential in the branching factor;
-               % the time limit caps that search, nothing else in the
-               % explanation is unbounded.
                ( config:print_prover_cycles(true) ->
-                   catch(call_with_time_limit(2.0, cycle:print_cycle_explanation(Content, ProofAVL, TriggersAVL)),
-                         time_limit_exceeded,
-                         ( message:color(darkgray),
-                           message:print('  (cycle explanation omitted: time limit)'),
-                           message:color(normal),
-                           nl ))
+                   cycle:print_cycle_explanation(Content, ProofAVL, TriggersAVL)
                ; true
                ),
                ( config:print_prover_cycles_style(detailed) -> nl ; true )
@@ -155,7 +144,7 @@ warning:print_warnings(ModelAVL, Annotations, ProofAVL, TriggersAVL) :-
   nl,
   message:color(normal),nl.
 
-warning:print_warnings(_, Annotations, _, _) :-
+warning:print_warnings(Annotations, _, _) :-
   !,
   warning:print_suggestions_section([], [], Annotations),
   nl.
