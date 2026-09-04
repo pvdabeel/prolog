@@ -98,7 +98,7 @@ semantic:package_text(Repo, Entry, Text) :-
   ; Desc = ''
   ),
   ( findall(U, ( cache:entry_metadata(Repo, Entry, iuse, Raw),
-                 eapi:strip_use_default(Raw, U) ), Flags),
+                 eapi:use_flag_name(Raw, U) ), Flags),
     Flags \== []
   -> atomic_list_concat(Flags, ' ', UseLine)
   ; UseLine = ''

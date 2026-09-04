@@ -461,7 +461,7 @@ candidate:eligible(use_conditional(positive, Use, R://E):_?{_}) :-
   \+ Use =.. [minus,_],
   preference:global_use(Use),
   \+ ( query:search(iuse(Value), R://E),
-       eapi:strip_use_default(Value, Use) ), !.
+       eapi:use_flag_name(Value, Use) ), !.
 candidate:eligible(use_conditional(positive, Use, R://E):_?{_}) :-
   use:effective_use_for_entry(R://E, Use, positive), !.
 
@@ -470,12 +470,12 @@ candidate:eligible(use_conditional(negative, Use, _R://_E):_?{Context}) :-
 candidate:eligible(use_conditional(negative, Use, R://E):_?{_}) :-
   preference:global_use(minus(Use)),
   \+ ( query:search(iuse(Value), R://E),
-       eapi:strip_use_default(Value, Use) ), !.
+       eapi:use_flag_name(Value, Use) ), !.
 candidate:eligible(use_conditional(negative, Use, R://E):_?{_}) :-
   \+ preference:global_use(Use),
   \+ preference:global_use(minus(Use)),
   \+ ( query:search(iuse(Value), R://E),
-       eapi:strip_use_default(Value, Use) ), !.
+       eapi:use_flag_name(Value, Use) ), !.
 candidate:eligible(use_conditional(negative, Use, R://E):_?{_}) :-
   use:effective_use_for_entry(R://E, Use, negative), !.
 

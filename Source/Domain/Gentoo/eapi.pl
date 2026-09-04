@@ -2082,13 +2082,34 @@ eapi:strip_prefix_atom(Prefix,Atom,Result) :-
   sub_atom(Atom,B,_,0,Result).
 
 
-%! eapi:strip_use_default(+Use,-NewUse)
+%! eapi:use_flag_name(+Term, -Flag)
 %
-% Strip plus(..) and minus(..) use default information from a use flag
+% The bare flag atom of a USE flag term: an IUSE entry carrying a default
+% (plus/1, minus/1), a use-dependency directive (enable/1, disable/1,
+% equal/1, inverse/1, optenable/1, optdisable/1) or a bare flag.
 
-eapi:strip_use_default(plus(Use),Use) :- !.
-eapi:strip_use_default(minus(Use),Use) :- !.
-eapi:strip_use_default(Use,Use) :- !.
+eapi:use_flag_name(Term, Flag) :-
+  eapi:use_flag_polarity(Term, _, Flag),
+  !.
+eapi:use_flag_name(Flag, Flag).
+
+
+%! eapi:use_flag_polarity(?Term, ?Polarity, ?Flag)
+%
+% Wrapped USE flag terms with their polarity: positive for an IUSE `+`
+% default and for the directives that require the flag enabled, negative
+% for a `-` default and for the directives that require it disabled.
+% Fails for a bare flag, which carries no polarity.
+
+eapi:use_flag_polarity(plus(Flag),       positive, Flag).
+eapi:use_flag_polarity(minus(Flag),      negative, Flag).
+eapi:use_flag_polarity(enable(Flag),     positive, Flag).
+eapi:use_flag_polarity(equal(Flag),      positive, Flag).
+eapi:use_flag_polarity(optenable(Flag),  positive, Flag).
+eapi:use_flag_polarity(disable(Flag),    negative, Flag).
+eapi:use_flag_polarity(inverse(Flag),    negative, Flag).
+eapi:use_flag_polarity(optdisable(Flag), negative, Flag).
+
 
 %! eapi:parse_iuse_search_value(+Value, -Sign, -Pattern)
 %
@@ -2182,7 +2203,7 @@ eapi:categorize_use(Use,negative,default) :-
 
 eapi:categorize_use_for_entry(RawIuse, Repo://Id, State, Reason) :-
   % Derive the plain flag name.
-  eapi:strip_use_default(RawIuse, Use),
+  eapi:use_flag_name(RawIuse, Use),
   cache:ordered_entry(Repo, Id, C, N, _),
   ( % Profile-enforced per-package constraints (hard): package.use.mask/force
     preference:profile_use_hard(Repo://Id, Use, State0, Reason0),

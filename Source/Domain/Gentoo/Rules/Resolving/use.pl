@@ -190,7 +190,7 @@ use:entry_iuse_default(Repo://Entry, Use, Default) :-
             ( member(Raw, RawIuse),
               ( Raw = plus(U)  -> Def = positive
               ; Raw = minus(U) -> Def = negative
-              ; eapi:strip_use_default(Raw, U),
+              ; eapi:use_flag_name(Raw, U),
                 Def = negative
               )
             ),
@@ -242,7 +242,7 @@ use:entry_iuse_info(Repo://Entry, Info) :-
     sort(RawIuse0, RawIuse),
     findall(U,
             ( member(Raw, RawIuse),
-              eapi:strip_use_default(Raw, U)
+              eapi:use_flag_name(Raw, U)
             ),
             Iuse0),
     sort(Iuse0, IuseSet),
@@ -545,7 +545,7 @@ use:self_context_use_state_compute_(Repo, Id, Use, State) :-
   ( \+ eapi:check_use_expand_atom(Use),
     findall(S0:R0,
             ( cache:entry_metadata(Repo, Id, iuse, Arg),
-              eapi:strip_use_default(Arg, Use),
+              eapi:use_flag_name(Arg, Use),
               eapi:categorize_use_for_entry(Arg, Repo://Id, S0, R0)
             ),
             States0),
@@ -559,7 +559,7 @@ use:self_context_use_state_compute_(Repo, Id, Use, State) :-
     eapi:strip_prefix_atom(Prefix, Use, Value),
     cache:entry_metadata(Repo, Id, iuse, UEArg),
     eapi:categorize_use_for_entry(UEArg, Repo://Id, State, _),
-    eapi:strip_use_default(UEArg, UEArgB),
+    eapi:use_flag_name(UEArg, UEArgB),
     eapi:check_prefix_atom(Prefix, UEArgB),
     eapi:strip_prefix_atom(Prefix, UEArgB, Value)
   ).
@@ -1055,7 +1055,7 @@ use:vdb_enabled_use_set(RepoEntry, UseSet) :-
 use:entry_iuse_set(RepoEntry, IuseSet) :-
   findall(U,
           ( query:search(iuse(Value), RepoEntry),
-            eapi:strip_use_default(Value, U)
+            eapi:use_flag_name(Value, U)
           ),
           Us0),
   sort(Us0, IuseSet).
@@ -1076,7 +1076,7 @@ use:entry_enabled_use_set(RepoEntry, UseSet) :-
   findall(U,
           ( query:search(iuse(Value), RepoEntry),
             eapi:categorize_use(Value, positive, _Reason),
-            eapi:strip_use_default(Value, U)
+            eapi:use_flag_name(Value, U)
           ),
           Us0),
   sort(Us0, UseSet).

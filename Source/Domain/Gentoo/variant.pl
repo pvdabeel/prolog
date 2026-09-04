@@ -103,7 +103,7 @@ variant:ensure_tree_entry(Entry, Entry).
 
 variant:impactful_use_flag(Repo://Entry, Flag, CurrentState) :-
   query:search(iuse(RawIuse), Repo://Entry),
-  eapi:strip_use_default(RawIuse, Flag),
+  eapi:use_flag_name(RawIuse, Flag),
   \+ variant:is_implicit_use(Flag),
   variant:flag_gates_dep(Repo, Entry, Flag),
   use:effective_use_for_entry(Repo://Entry, Flag, CurrentState).

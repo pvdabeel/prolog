@@ -534,14 +534,26 @@ test(parse_defined_phases, [nondet]) :-
 
 :- begin_tests(eapi_helpers).
 
-test(strip_use_default_plus, [true(U == ssl)]) :-
-  eapi:strip_use_default(plus(ssl), U).
+test(use_flag_plus, [true(U == ssl)]) :-
+  eapi:use_flag_name(plus(ssl), U).
 
-test(strip_use_default_minus, [true(U == debug)]) :-
-  eapi:strip_use_default(minus(debug), U).
+test(use_flag_minus, [true(U == debug)]) :-
+  eapi:use_flag_name(minus(debug), U).
 
-test(strip_use_default_bare, [true(U == test)]) :-
-  eapi:strip_use_default(test, U).
+test(use_flag_bare, [true(U == test)]) :-
+  eapi:use_flag_name(test, U).
+
+test(use_flag_directive, [true(U == ssl)]) :-
+  eapi:use_flag_name(inverse(ssl), U).
+
+test(use_flag_polarity, [true(Ps == [positive,negative,positive,positive,positive,negative,negative,negative])]) :-
+  findall(P,
+          ( member(T, [plus(f),minus(f),enable(f),equal(f),optenable(f),disable(f),inverse(f),optdisable(f)]),
+            eapi:use_flag_polarity(T, P, f) ),
+          Ps).
+
+test(use_flag_bare_has_no_polarity, [fail]) :-
+  eapi:use_flag_polarity(ssl, _, _).
 
 test(check_prefix_atom_match) :-
   eapi:check_prefix_atom(python_targets, python_targets_python3_12).

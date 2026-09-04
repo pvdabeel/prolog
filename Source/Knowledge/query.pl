@@ -1553,7 +1553,7 @@ search(iuse(Iuse,State:Reason),R://I) :-
   !,
   cache:entry_metadata(R,I,iuse,Value),
   eapi:categorize_use_for_entry(Value,R://I,State,Reason),
-  eapi:strip_use_default(Value,Iuse).
+  eapi:use_flag_name(Value,Iuse).
 
 
 % -----------------------------------------------------------------------------
@@ -1563,7 +1563,7 @@ search(iuse(Iuse,State:Reason),R://I) :-
 search(iuse_filtered(Iuse),R://I) :-
   !,
   cache:entry_metadata(R,I,iuse,Arg),
-  eapi:strip_use_default(Arg,Iuse),
+  eapi:use_flag_name(Arg,Iuse),
   \+(eapi:check_use_expand_atom(Iuse)).
 
 
@@ -1575,13 +1575,13 @@ search(iuse_filtered(Iuse,State:Reason),R://I) :-
   !,
   setof(Iuse0,
         Arg0^(cache:entry_metadata(R,I,iuse,Arg0),
-              eapi:strip_use_default(Arg0,Iuse0),
+              eapi:use_flag_name(Arg0,Iuse0),
               \+ eapi:check_use_expand_atom(Iuse0)),
         IuseFlags),
   member(Iuse, IuseFlags),
   findall(State0:Reason0,
           ( cache:entry_metadata(R,I,iuse,Arg),
-            eapi:strip_use_default(Arg,Iuse),
+            eapi:use_flag_name(Arg,Iuse),
             eapi:categorize_use_for_entry(Arg,R://I,State0,Reason0)
           ),
           States0),
@@ -1596,7 +1596,7 @@ search(Statement,R://I) :-
   Statement =.. [Key,Value],
   eapi:use_expand(Key),!,
   cache:entry_metadata(R,I,iuse,Arg),
-  eapi:strip_use_default(Arg,ArgB),
+  eapi:use_flag_name(Arg,ArgB),
   eapi:check_prefix_atom(Key,ArgB),
   eapi:strip_prefix_atom(Key,ArgB,Value).
 
@@ -1610,7 +1610,7 @@ search(Statement,R://I) :-
   eapi:use_expand(Key),!,
   cache:entry_metadata(R,I,iuse,Arg),
   eapi:categorize_use_for_entry(Arg,R://I,State,Reason),
-  eapi:strip_use_default(Arg,ArgB),
+  eapi:use_flag_name(Arg,ArgB),
   eapi:check_prefix_atom(Key,ArgB),
   eapi:strip_prefix_atom(Key,ArgB,Value).
 
@@ -1721,7 +1721,7 @@ select(iuse,equal,Value,R://I) :-
   cache:entry_metadata(R,I,iuse,Raw),
   eapi:parse_iuse_search_value(Value, RequiredSign, Pattern),
   query:iuse_sign_matches(Raw, RequiredSign),
-  query:iuse_flag_atom(Raw, Flag),
+  eapi:use_flag_name(Raw, Flag),
   Flag == Pattern.
 
 % Fuzzy search (~) for IUSE, with optional leading + / - in the pattern.
@@ -1735,7 +1735,7 @@ select(iuse,tilde,Value,R://I) :-
   cache:entry_metadata(R,I,iuse,Raw),
   eapi:parse_iuse_search_value(Value, RequiredSign, Pattern),
   query:iuse_sign_matches(Raw, RequiredSign),
-  query:iuse_flag_atom(Raw, Flag),
+  eapi:use_flag_name(Raw, Flag),
   dwim_match(Pattern, Flag).
 
 select(Key,equal,Value,R://I) :-
@@ -1752,7 +1752,7 @@ select(iuse,wildcard,Pattern,R://I) :-
   cache:entry_metadata(R,I,iuse,Raw),
   eapi:parse_iuse_search_value(Pattern, RequiredSign, Pattern1),
   query:iuse_sign_matches(Raw, RequiredSign),
-  query:iuse_flag_atom(Raw, Flag),
+  eapi:use_flag_name(Raw, Flag),
   wildcard_match(Pattern1, Flag).
 
 
@@ -1767,86 +1767,59 @@ select(Key,wildcard,Value,R://I) :-
 %  Grouping dependencies
 % -----------------------------------------------------------------------------
 
-%! dependency_key(+Dependency, -Key)
+%! group_dependencies(+Deps, -Groups)
 %
-% Sets the grouping key for dependencies.
-
-% Grouping key for dependencies:
-% - group by block strength + category/name
-% - and by dependency phase (install vs run), so grouped dependencies remain phase-homogeneous
-%   (avoids confusing groups like grouped_package_dependency(...):install containing :run deps)
-% - and by slot restriction, because different explicit slots (e.g. ruby:3.2 vs ruby:3.3)
-%   must NOT be merged into a single grouped dependency (they are satisfiable as
-%   separate slotted installs).
-
-dependency_key((package_dependency(Phase,T,C,N,_,_,S,_):_?{_}), Phase-T-C-N-S).
-
-
-%! dep_to_keyed_pair(+DepElem, -Pair)
+% Groups the package dependencies of a model into
+% grouped_package_dependency(BlockType, C, N, Members):Action?{Context}
+% terms, one per distinct grouping key, in key order. Two dependencies
+% share a group when they agree on phase, block type, category, name,
+% slot restriction, action and proof context: a group is therefore
+% phase-homogeneous, and explicit slots such as ruby:3.2 and ruby:3.3
+% stay separate because they are satisfiable as separate slotted
+% installs.
 %
-% Maps a dependency element E:Action?{Context} to a Key-E pair for sorting.
+% A regular (non-blocker) group whose members still target several slots
+% or several exactish versions of the same C/N (slotmeta:
+% should_split_grouped_dep/1) is emitted as one singleton group per
+% member, so each of them is resolved independently instead of as
+% alternatives for one merge.
 
-dep_to_keyed_pair(E:Action?{Context}, (Phase-T-C-N-S:Action?{Context})-E) :-
-    E = package_dependency(Phase,T,C,N,_,_,S,_).
+group_dependencies(Deps, Groups) :-
+  maplist(dep_group_key, Deps, Keyed),
+  msort(Keyed, Sorted),
+  group_pairs_by_key(Sorted, Grouped),
+  dep_groups(Grouped, Groups).
 
 
-%! keyed_group_to_dep(+KeyGroup, -GroupedDep)
+%! dep_group_key(+Dep, -Key-Dep)
 %
-% Converts a key-group pair from group_pairs_by_key into the
-% grouped_package_dependency output format.
+% Pairs a package dependency E:Action?{Context} with its grouping key.
 
-keyed_group_to_dep((_Phase-T-C-N-_S:Action?{Context})-Group,
-                   grouped_package_dependency(T,C,N,Group):Action?{Context}).
+dep_group_key(E:Action?{Context}, (Phase-T-C-N-S:Action?{Context})-E) :-
+  E = package_dependency(Phase,T,C,N,_,_,S,_).
 
 
-%! group_dependencies(+List, -Groups)
+%! dep_groups(+KeyedGroups, -Groups)
 %
-% Groups dependencies by their key (Phase, BlockType, Category, Name, Slot).
-% Uses msort + group_pairs_by_key for O(n log n) grouping instead of the
-% O(n * g) group_by/4 + member/2 approach.
-%
-% After grouping, multi-slot groups (deps targeting distinct slots or
-% distinct exactish versions of the same C/N) are split back into
-% individual singleton groups so each slot is resolved independently.
+% Turns the Key-Members pairs of group_pairs_by_key/2 into grouped
+% dependencies, splitting the multi-slot / multi-version regular groups
+% into singletons. Variables in Action and Context stay shared with the
+% input (no copying).
 
-group_dependencies(L, Groups) :-
-    maplist(dep_to_keyed_pair, L, Pairs),
-    msort(Pairs, Sorted),
-    group_pairs_by_key(Sorted, Grouped),
-    maplist(keyed_group_to_dep, Grouped, Groups0),
-    foldl(split_multislot_group, Groups0, [], GroupsRev),
-    reverse(GroupsRev, Groups).
-
-
-%! split_multislot_group(+GroupedDep, +Acc, -Acc1)
-%
-% If a regular (no-blocker) group contains deps that target multiple
-% slots or multiple exactish versions, split it into one singleton
-% group per dep. Otherwise keep the group as-is.
-
-split_multislot_group(grouped_package_dependency(no,C,N,PackageDeps):Action?{Ctx}, Acc, Acc1) :-
-    slotmeta:should_split_grouped_dep(PackageDeps),
-    !,
-    split_grouped_singletons(PackageDeps, C, N, Action, Ctx, Acc, Acc1).
-split_multislot_group(Group, Acc, [Group|Acc]).
+dep_groups([], []).
+dep_groups([(_Phase-T-C-N-_S:Action?{Ctx})-Members|Rest], Groups) :-
+  ( T == no,
+    slotmeta:should_split_grouped_dep(Members)
+  -> maplist(singleton_group(C, N, Action, Ctx), Members, Singletons),
+     append(Singletons, Groups1, Groups)
+  ;  Groups = [grouped_package_dependency(T,C,N,Members):Action?{Ctx}|Groups1]
+  ),
+  dep_groups(Rest, Groups1).
 
 
-%! split_grouped_singletons(+PackageDeps, +C, +N, +Action, +Ctx, +Acc, -Acc1)
-%
-% Prepend one singleton grouped_package_dependency/4 per dep onto Acc,
-% reusing the group's bound C/N/Action/Ctx. An earlier yall lambda
-% (`[D,A0,...]>>true`) was used here but yall does NOT share free
-% variables by default -- C, N, Action and Ctx were copied to fresh
-% unbound variables on every call, so the split singletons lost their
-% category/name. The prover's self-satisfied resolve clause then
-% rebound those unbound C/N from the anchor's `self(...)` context and
-% silently dropped the dependency (e.g. dotnet-sdk-bin's PDEPEND on
-% the dev-dotnet/dotnet-runtime-nugets packs -- portage-ng#17).
+%! singleton_group(+C, +N, +Action, +Ctx, +Dep, -Group)
 
-split_grouped_singletons([], _C, _N, _Action, _Ctx, Acc, Acc).
-split_grouped_singletons([D|Ds], C, N, Action, Ctx, Acc, Acc1) :-
-    split_grouped_singletons(Ds, C, N, Action, Ctx,
-        [grouped_package_dependency(no,C,N,[D]):Action?{Ctx}|Acc], Acc1).
+singleton_group(C, N, Action, Ctx, D, grouped_package_dependency(no,C,N,[D]):Action?{Ctx}).
 
 
 
@@ -1892,56 +1865,24 @@ apply_filter(R://I,SlotReq) :-
 %! query:apply_use_filter(+RepoEntry, +UseDep)
 %
 % Selection-time check for a single use dependency: the candidate must declare
-% the flag in its IUSE, unless the dependency's IUSE default ((+)/(-)) makes an
-% absent flag acceptable. Optional directives (optenable/optdisable) only
-% constrain when the flag is present, so they never exclude a candidate here.
-% This is a presence filter only: it decides which ebuilds qualify, not which
-% flags are enabled. Enabling/disabling a flag remains governed by the USE
-% environment, package.use and the profile -- never by the target atom.
+% the flag in its IUSE, unless the dependency's IUSE default ((+)/(-)) has the
+% polarity the directive requires, which makes an absent flag acceptable.
+% Optional directives (optenable/optdisable) only constrain when the flag is
+% present, so they never exclude a candidate here. This is a presence filter
+% only: it decides which ebuilds qualify, not which flags are enabled.
+% Enabling/disabling a flag remains governed by the USE environment,
+% package.use and the profile -- never by the target atom.
 
 apply_use_filter(_R://_I, use(optenable(_), _)) :- !.
 
 apply_use_filter(_R://_I, use(optdisable(_), _)) :- !.
 
 apply_use_filter(R://I, use(Spec, Default)) :-
-  query:use_dep_mode_flag(Spec, Mode, Use),
+  eapi:use_flag_polarity(Spec, Polarity, Use),
   ( use:candidate_iuse_present(R://I, Use)
   -> true
-  ;  use:use_dep_default_satisfies_absent_iuse(Default, Mode)
+  ;  Default == Polarity
   ).
-
-
-%! query:use_dep_mode_flag(+Spec, -Mode, -Flag)
-%
-% Map a parsed use dependency directive to its requirement mode and flag.
-
-use_dep_mode_flag(enable(U),  enable,  U).
-use_dep_mode_flag(disable(U), disable, U).
-use_dep_mode_flag(equal(U),   enable,  U).
-use_dep_mode_flag(inverse(U), disable, U).
-
-
-% -----------------------------------------------------------------------------
-%  Helper: iuse_flag_atom
-% -----------------------------------------------------------------------------
-
-% Robust extraction of the "bare" USE flag atom from IUSE metadata values.
-% Examples:
-%   plus(foo)     -> foo
-%   minus(foo)    -> foo
-%   foo           -> foo
-
-iuse_flag_atom(plus(X), Atom)  :- !, iuse_flag_atom(X, Atom).
-iuse_flag_atom(minus(X), Atom) :- !, iuse_flag_atom(X, Atom).
-iuse_flag_atom(X, Atom) :-
-  atom(X),
-  !,
-  Atom = X.
-query:iuse_flag_atom(X, Atom) :-
-  compound(X),
-  X =.. [_F, Inner],
-  !,
-  iuse_flag_atom(Inner, Atom).
 
 
 % -----------------------------------------------------------------------------

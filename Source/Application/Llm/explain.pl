@@ -299,7 +299,7 @@ explain:format_use_expand(Repo, Entry, Str) :-
     ( eapi:use_expand(Key),
       findall(Token,
         ( cache:entry_metadata(Repo, Entry, iuse, Arg),
-          eapi:strip_use_default(Arg, ArgB),
+          eapi:use_flag_name(Arg, ArgB),
           eapi:check_prefix_atom(Key, ArgB),
           eapi:strip_prefix_atom(Key, ArgB, Value),
           eapi:categorize_use_for_entry(Arg, Repo://Entry, State, _Reason),
