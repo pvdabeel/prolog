@@ -39,6 +39,10 @@ and allows per-flag behaviour to be unit-tested (see unittest.pl).
 % Handlers with a dedicated guard in request_matches/3: 'rollback' (atom
 % value, triggers when not 'none'), 'llm' (atom value, optional service
 % name) and the pseudo-flag 'shellrun' (--shell with target arguments).
+%
+% 'update' is a plain :run merge: for a single target Portage's --update
+% resolves the full runtime closure and replaces where needed, which is
+% exactly what proving :run does.
 
 interface:request_handler(snapshots,       _,    _,    _,       snapshot:list).
 interface:request_handler(rollback,        _,    _,    Options, (memberchk(rollback(Id), Options),
@@ -54,9 +58,6 @@ interface:request_handler(deselect,        _,    Args, _,       action:process_d
 interface:request_handler(unmerge,         _,    Args, Options, action:process_action(uninstall, Args, Options)).
 interface:request_handler(depclean,        _,    Args, Options, action:process_action(depclean, Args, Options)).
 interface:request_handler(upgrade,         _,    Args, Options, action:process_upgrade(Args, Options)).
-% For a single target, Portage-style update behaves like a normal merge:
-% resolve full runtime closure and perform a transactional replace if needed.
-% In portage-ng the "full closure" corresponds to proving :run.
 interface:request_handler(update,          _,    Args, Options, action:process_action(run, Args, Options)).
 interface:request_handler(search,          _,    Args, Options, action:process_action(search, Args, Options)).
 interface:request_handler(listsets,        _,    _,    _,       action:process_list_sets).

@@ -47,10 +47,11 @@ interface:ci_exit_code(ModelAVL, ProofAVL, ExitCode) :-
   ( interface:has_any_assumption(ModelAVL) ->
       ( interface:has_domain_assumptions(ProofAVL) -> interface:exit_code(domain_assumptions, ExitCode, _)
       ; interface:has_cycle_breaks(ProofAVL)       -> interface:exit_code(cycle_breaks, ExitCode, _)
-      ; interface:exit_code(clean, ExitCode, _)   % only ineffective blocker records
+      ; interface:exit_code(clean, ExitCode, _)    % only ineffective blocker records
       )
   ; interface:exit_code(clean, ExitCode, _)
   ).
+
 
 %! interface:has_any_assumption(+ModelAVL) is semidet.
 %
@@ -60,6 +61,7 @@ interface:has_any_assumption(ModelAVL) :-
   assoc:gen_assoc(Key, ModelAVL, _),
   Key = assumed(_),
   !.
+
 
 %! interface:has_domain_assumptions(+ProofAVL) is semidet.
 %
@@ -75,6 +77,7 @@ interface:has_domain_assumptions(ProofAVL) :-
   !,
   annotation:collect(ProofAVL, Annotations),
   annotation:domain_assumptions(Annotations, [_|_]).
+
 
 %! interface:has_cycle_breaks(+ProofAVL) is semidet.
 %
