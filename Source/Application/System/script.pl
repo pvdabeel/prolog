@@ -57,6 +57,12 @@ script:exec_streaming(S,Args,Env) :-
   ),
   !.
 
+
+%! script:stream_prefix_chars(+Stream,+BOL)
+%
+% Stream is a stream to which stdout is piped. BOL is a boolean indicating
+% whether the stream is at the beginning of a line.
+
 script:stream_prefix_chars(Stream,BOL) :-
   get_char(Stream,Char),
   ( Char == end_of_file ->

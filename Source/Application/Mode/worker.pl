@@ -78,9 +78,11 @@ worker:start :-
 worker:host_matches_pin(Host, Pinned) :-
   Host == Pinned,
   !.
+
 worker:host_matches_pin(Host, Pinned) :-
   atom_concat(Pinned, '.local', Host),
   !.
+
 worker:host_matches_pin(Host, Pinned) :-
   atom_concat(Host, '.local', Pinned).
 
@@ -102,6 +104,7 @@ worker:sync_to_server(Host, Port) :-
   !,
   message:inform(['Server snapshot: ', Commit]),
   worker:sync_to_commit(Commit).
+
 worker:sync_to_server(_, _) :-
   message:inform(['Could not query server snapshot; using local KB as-is.']).
 
@@ -135,6 +138,7 @@ worker:advertise(Cpus) :-
   config:bonjour_worker_service(Service),
   bonjour:advertise(Service, Host, Cpus).
 
+
 %! worker:register(+ServerHost, +ServerPort, +Cpus)
 %
 % Register this worker with the server.
@@ -162,6 +166,7 @@ worker:spawn_threads(Host, Port, N) :-
          ( atom_concat(worker_thread_, I, Alias),
            thread_create(worker:poll_loop(Host, Port), _, [alias(Alias)])
          )).
+
 
 %! worker:poll_loop(+Host, +Port)
 %
@@ -195,6 +200,7 @@ worker:poll_loop(Host, Port, Backoff) :-
     )
   ).
 
+
 %! worker:log_stop
 %
 % Log that the current poll thread is shutting down.
@@ -202,6 +208,7 @@ worker:poll_loop(Host, Port, Backoff) :-
 worker:log_stop :-
   thread_self(Thread),
   message:inform(['Worker ', Thread, ': stopping.']).
+
 
 %! worker:poll_once(+Host, +Port, -Continue)
 %
@@ -226,6 +233,7 @@ worker:poll_once(Host, Port, Continue) :-
       )
   ; Continue = continue
   ).
+
 
 %! worker:post_result(+Host, +Port, +Job, +Result)
 %
@@ -286,6 +294,7 @@ worker:execute_job(Job, Result) :-
   ; Result = failed(Job)
   ).
 
+
 %! worker:job_goals(+Job, -Goals)
 %
 % Wrap a job target in a goal list, attaching an empty `?{Context}` list
@@ -293,7 +302,9 @@ worker:execute_job(Job, Result) :-
 
 worker:job_goals(Job, [Job]) :-
   Job = _?{_}, !.
+
 worker:job_goals(Job, [Job?{[]}]).
+
 
 %! worker:assumption_summary(+ProofAVL, -Summary)
 %
