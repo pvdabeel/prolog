@@ -7,7 +7,7 @@ Prolog source code for portage-ng, organized by architectural concern.
 | File | Description |
 |------|-------------|
 | `config.pl` | Paths, hostname, ports, graph directory, TTY size |
-| `loader.pl` | Mode table (`loader:mode/2`, `loader:optional/2`) and `load_modules/1` |
+| `loader.pl` | Mode table (`loader:mode/2`, `loader:optional/3`) and `load_modules/1` |
 
 ## Directory structure
 

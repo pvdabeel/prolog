@@ -1925,9 +1925,9 @@ config:llm_capability(metacircular,Capability) :-
 % When false, `load_modules/1` skips the LLM backends (no provider backends,
 % explain, metacircular, or semantic search). Builder/CLI paths that
 % need LLM support detect the absence and skip with a warning.
-% Override from a host config with
-% `:- asserta(config:load_llm_modules(false)).` before init completes,
-% or set the dynamic fact early in startup.
+% The fact is consulted by load_modules(Mode), which runs before the
+% host config (Source/Config/<host>.local.pl) is loaded, so it must be
+% changed here or via retractall/1 + assertz/1 before load_modules/1.
 
 :- dynamic config:load_llm_modules/1.
 

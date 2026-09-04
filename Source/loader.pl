@@ -11,9 +11,10 @@
 /** <module> LOADER
 Per-mode module loading.
 
-Module groups are declared as loader:group/2 facts; a group whose load
-depends on configuration carries a loader:optional/2 guard. Operating
-modes are declared as loader:mode/2 facts (an ordered group list).
+Module groups are declared as loader:group/2 facts. Operating modes
+are declared as loader:mode/2 facts (an ordered group list), with
+loader:optional/3 naming the groups a mode loads only when a
+condition holds.
 load_modules/1 is the single entry point. A module needed by several
 modes lives in exactly one shared group, so additions propagate
 automatically and the delta between modes (e.g. standalone vs worker)
@@ -279,32 +280,13 @@ loader:group(llm_modules,
 
 
 % -----------------------------------------------------------------------------
-%  Optional groups
-% -----------------------------------------------------------------------------
-
-%! loader:optional(?Group, :Condition) is nondet.
-%
-% Declares that Group is loaded only when Condition holds at load time.
-% A group without a guard is always loaded. Guards run under catch/3, so
-% an absent config predicate counts as false and the group is skipped.
-%
-% The Generative AI groups are gated by config:load_llm_modules/1: when
-% false the builder / CLI continue without LLM backends, and call sites
-% must tolerate that (stubs + soft call_llm).
-
-loader:optional(llm_libraries, config:load_llm_modules(true)).
-loader:optional(llm_modules,   config:load_llm_modules(true)).
-
-
-% -----------------------------------------------------------------------------
 %  Mode table
 % -----------------------------------------------------------------------------
 
 %! loader:mode(?Mode, ?Groups) is nondet.
 %
 % Declares the module groups of an operating mode. Groups is an ordered
-% list of loader:group/2 names; optional groups (loader:optional/2) are
-% listed like any other and skipped at load time when their guard fails.
+% list of loader:group/2 names.
 %
 % common is a prerequisite loaded before mode dispatch. daemon and
 % server extend standalone so pipeline additions propagate.
@@ -320,9 +302,7 @@ loader:mode(client,
    [client_libraries,
     client_core_modules,
     printer_modules,
-    client_modules,
-    llm_libraries,
-    llm_modules]).
+    client_modules]).
 
 loader:mode(standalone,
    [pipeline_libraries,
@@ -331,9 +311,7 @@ loader:mode(standalone,
     domain_modules,
     pipeline_modules,
     printer_modules,
-    standalone_modules,
-    llm_libraries,
-    llm_modules]).
+    standalone_modules]).
 
 loader:mode(worker,
    [pipeline_libraries,
@@ -342,9 +320,7 @@ loader:mode(worker,
     domain_modules,
     pipeline_modules,
     printer_modules,
-    worker_modules,
-    llm_libraries,
-    llm_modules]).
+    worker_modules]).
 
 loader:mode(daemon, [daemon_modules|Groups]) :-
    loader:mode(standalone, Groups).
@@ -354,21 +330,34 @@ loader:mode(server, Groups) :-
    append(Standalone, [server_libraries, server_modules], Groups).
 
 
+%! loader:optional(?Mode, ?Groups, :Condition) is nondet.
+%
+% Declares module groups that Mode loads after its loader:mode/2 groups,
+% only when Condition holds. The Generative AI groups are gated by
+% config:load_llm_modules/1; when false the builder / CLI continue
+% without LLM backends, and call sites must tolerate that (stubs + soft
+% call_llm). daemon and server inherit standalone's optional groups.
+
+loader:optional(client,     [llm_libraries, llm_modules], config:load_llm_modules(true)).
+loader:optional(standalone, [llm_libraries, llm_modules], config:load_llm_modules(true)).
+loader:optional(worker,     [llm_libraries, llm_modules], config:load_llm_modules(true)).
+
+loader:optional(daemon, Groups, Condition) :-
+   loader:optional(standalone, Groups, Condition).
+
+loader:optional(server, Groups, Condition) :-
+   loader:optional(standalone, Groups, Condition).
+
+
 % -----------------------------------------------------------------------------
 %  Group loading
 % -----------------------------------------------------------------------------
 
 %! loader:load_group(+Group) is det.
 %
-% Loads every file spec in a module group, in declaration order, unless
-% the group is optional and its guard fails. Files are loaded into the
-% user module, matching the load context of load_modules/1.
+% Loads every file spec in a module group, in declaration order. Files are
+% loaded into the user module, matching the load context of load_modules/1.
 
-loader:load_group(Group) :-
-   loader:optional(Group, Condition),
-   \+ catch(Condition, _, fail), !,
-   format(atom(Msg), 'Skipping ~w (~w does not hold).', [Group, Condition]),
-   message:log(Msg).
 loader:load_group(Group) :-
    loader:group(Group, Specs),
    forall(member(Spec, Specs), user:ensure_loaded(Spec)).
@@ -388,10 +377,14 @@ loader:load_groups(Groups) :-
 
 %! load_modules(+Mode) is det.
 %
-% Loads every module group declared for Mode, in order.
+% Loads the module groups declared for Mode, then its optional groups
+% whose condition holds.
 
 load_modules(Mode) :-
    loader:mode(Mode, Groups),
    loader:load_groups(Groups),
+   forall(( loader:optional(Mode, Optional, Condition),
+            call(Condition) ),
+          loader:load_groups(Optional)),
    format(atom(Msg), 'Loaded ~w modules...', [Mode]),
    message:log(Msg).
