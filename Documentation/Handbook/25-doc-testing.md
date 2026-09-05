@@ -72,7 +72,7 @@ Each test under `Documentation/Tests/testNN/` contains:
 | PDEPEND | 66, 79 |
 | BDEPEND / IDEPEND | 67, 72 |
 | Multi-slot co-install | 68 |
-| Fetch-only | 71 |
+| Fetch-only (`:run` proof + print filter) | 71 |
 | Onlydeps | 78 |
 
 ### Failure testing

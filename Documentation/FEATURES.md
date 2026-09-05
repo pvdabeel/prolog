@@ -276,7 +276,8 @@ collects results.
 
 **Emerge-compatible flags.**
 `--pretend`, `--ask`, `--verbose`, `--deep`, `--newuse`, `--emptytree`,
-`--fetchonly`, `--buildpkg`, `--usepkg`, and dozens more -- familiar to any
+`--fetchonly` (same `:run` proof as `--merge`, then download-only
+print/execute), `--buildpkg`, `--usepkg`, and dozens more -- familiar to any
 Gentoo user.
 
 **Resolver hints.**

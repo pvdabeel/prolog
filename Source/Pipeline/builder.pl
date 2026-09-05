@@ -394,6 +394,14 @@ builder:count_nonempty_steps([Step|Rest], Acc, Total) :-
 %! builder:is_executable_rule(+Rule) is semidet.
 
 builder:is_executable_rule(rule(_Repository://_Entry:annotate?{_Context}, _Body)) :- !, fail.
+builder:is_executable_rule(rule(_Repository://_Entry:Action?{_Context}, _Body)) :-
+  preference:fetchonly_skips_action(Action),
+  !,
+  fail.
+builder:is_executable_rule(rule(world(_Atom):_Action?{_Ctx}, _Body)) :-
+  preference:flag(fetchonly),
+  !,
+  fail.
 builder:is_executable_rule(rule(_Repository://_Entry:_Action?{_Context}, _Body)) :- !.
 builder:is_executable_rule(rule(world(_Atom):_Action?{_Ctx}, _Body)) :- !.
 builder:is_executable_rule(_) :- fail.

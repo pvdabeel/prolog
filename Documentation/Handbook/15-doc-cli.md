@@ -101,7 +101,21 @@ everyday workflows.
 | `--merge` | Execute the build plan |
 | `--unmerge <target>` | Remove a package |
 | `--depclean` | Remove unneeded packages |
-| `--fetchonly` | Fetch source archives only |
+| `--fetchonly` / `-f` | Same `:run` proof as `--merge`; print and execute downloads (and unmask / keyword / USE / license pre-actions) only |
+| `--fetch-all-uri` / `-F` | Same as `--fetchonly`, plus every `SRC_URI` regardless of USE |
+
+`--fetchonly` is a **restriction on the merge plan**, not a second resolve.
+The prover still proves `target:run` (same 5-tier fallback as `--merge`).
+The `fetchonly` preference flag then:
+
+- hides install / run / update / downgrade / reinstall from the printer
+- lets the builder execute only the remaining download (and pre-action) steps
+- skips `@world` registration, even on a real (non-pretend) run
+
+`-F` uses that same filter and additionally asks `ebuild:distfile_scope/1`
+for every file listed in `SRC_URI`. Combine with `--build` to actually
+fetch; without `--build` the filtered plan is printed only (same split as
+`--merge` vs `--build`).
 
 ### Information
 

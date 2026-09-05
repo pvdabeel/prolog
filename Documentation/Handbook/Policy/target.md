@@ -8,7 +8,7 @@ selection. Sets expand before resolution.
 
 **Literals:**
 
-- `target(Q, Arg):run|fetchonly|uninstall?{Ctx}`
+- `target(Q, Arg):run|uninstall?{Ctx}` (CLI `--fetchonly` / `-F` also prove `:run`)
 - Expands to `Repo://Ebuild:Action?{Ctx}` (and optional `world/1` side effects)
 
 **Owns:** `Rules/Resolving/target.pl`, `resolving.pl` TARGET section, `Preference/sets.pl`
@@ -18,8 +18,9 @@ selection. Sets expand before resolution.
 
 - Unconstrained CN targets prefer **visible** candidates before unmasking.
 - Explicit versions try candidates in standard order (user pin wins).
-- `:fetchonly` does not register `@world`; `:uninstall` may unregister
-  unless `--oneshot`.
+- CLI `--fetchonly` / `-F` prove `:run` then filter print/execute; they do
+  not write `@world` even though the plan may contain `world:register`.
+- `:uninstall` may unregister unless `--oneshot`.
 - Set atoms (`@world`, `@security`, `@preserved-rebuild`, `@changed-deps`,
   …) expand to ordinary package atoms before target rules run
   (`sets:expand/2` for computed sets).

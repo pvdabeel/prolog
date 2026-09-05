@@ -59,8 +59,8 @@ action is performed per invocation.
 | **--build** | Build target: resolve the plan, then execute it with live progress display. Downloads distfiles, runs ebuild phases, and shows per-phase status inline. The plan is saved to `Knowledge/resume.pl` so that an interrupted build can be continued with `--resume`. |
 | **-r**, **--resume** | Resume a previously interrupted `--build` run. Loads the saved plan from `Knowledge/resume.pl` and re-executes only the packages that did not complete successfully. The `clean` phase is skipped so that ebuild can pick up from the preserved work directory. |
 | **--skip** *PACKAGE* | Used with `--resume`. Skip the named package instead of re-executing it. The flag is repeatable. Additionally, when `--resume` is active, positional arguments are interpreted as packages to skip. |
-| **-f**, **--fetchonly** | Only download source archives (distfiles) without building. |
-| **-F**, **--fetch-all-uri** | Like `--fetchonly` but download all files listed in `SRC_URI` regardless of the current USE flag configuration. |
+| **-f**, **--fetchonly** | Restriction on the `:run` merge plan, not a second proof. Proves the same dependency closure as `--merge`, then prints and (with `--build`) executes only downloads plus configuration pre-actions (unmask / keyword / USE / license). Does not install, run, or write `@world`. |
+| **-F**, **--fetch-all-uri** | Same restriction as `--fetchonly`, and download every file listed in `SRC_URI` regardless of the current USE flag configuration. |
 
 ### Package management
 

@@ -54,7 +54,8 @@ working-directory init)
 % | usepkgexcludelive         | binpkg_exec:entry_allowed/2                         |
 % | binpkgchangeddeps         | binpkg_exec:changed_deps_policy/1                   |
 % | binpkgrespectuse          | binpkg_exec:respect_use_policy/1                    |
-% | fetchall                  | interface:request_handler(fetchall) + ebuild:distfile_scope/1 |
+% | fetchonly                 | printer + builder (hide/skip merge actions; keep downloads) |
+% | fetchall                  | fetchonly + ebuild:distfile_scope/1 (all SRC_URI) |
 % | failclean                 | ebuild_exec:maybe_fail_clean/4                      |
 % | readnews, ask, alert      | builder (pre-build prompt / bell)                   |
 % | quiet                     | message:scroll expansion                            |
@@ -93,7 +94,10 @@ interface:process_flags :-
   (lists:memberchk(usepkgonly(true),        Options) -> asserta(preference:local_flag(usepkgonly)) ; true),
   (lists:memberchk(getbinpkg(true),         Options) -> asserta(preference:local_flag(getbinpkg)) ; true),
   (lists:memberchk(getbinpkgonly(true),     Options) -> asserta(preference:local_flag(getbinpkgonly)) ; true),
-  (lists:memberchk(fetchall(true),          Options) -> asserta(preference:local_flag(fetchall)) ; true),
+  (lists:memberchk(fetchonly(true),         Options) -> asserta(preference:local_flag(fetchonly)) ; true),
+  (lists:memberchk(fetchall(true),          Options)
+    -> asserta(preference:local_flag(fetchall)),
+       asserta(preference:local_flag(fetchonly)) ; true),
   (lists:memberchk(failclean(true),         Options) -> asserta(preference:local_flag(failclean)) ; true),
   (lists:memberchk(usepkgexcludelive(true), Options) -> asserta(preference:local_flag(usepkgexcludelive)) ; true),
   (lists:memberchk(binpkgchangeddeps(true), Options) -> asserta(preference:local_flag(binpkgchangeddeps)) ; true),

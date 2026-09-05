@@ -78,13 +78,13 @@ rule applies.
 
 | **Head pattern** | **Purpose** |
 | :--- | :--- |
-| `target(Q, Arg):run` | Resolve a user target to a candidate ebuild |
-| `target(Q, Arg):fetchonly` | Fetch-only target resolution |
+| `target(Q, Arg):run` | Resolve a user target to a candidate ebuild (`--merge`, `--fetchonly`) |
+| `target(Q, Arg):fetchonly` | Legacy fetch-only target (CLI `--fetchonly` proves `:run` instead) |
 | `target(Q, Arg):uninstall` | Uninstall target resolution |
 | `Repo://Ebuild:install` | Build and install an ebuild (DEPEND + BDEPEND) |
 | `Repo://Ebuild:run` | Runtime availability (RDEPEND) |
 | `Repo://Ebuild:download` | Fetch source archives |
-| `Repo://Ebuild:fetchonly` | Fetch only |
+| `Repo://Ebuild:fetchonly` | Legacy fetch-only ebuild action |
 | `Repo://Ebuild:depclean` | Remove unneeded package |
 | `grouped_package_dependency(...):Action` | Resolve a grouped dependency |
 | `package_dependency(...):config` | Configure a single dependency |

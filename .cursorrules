@@ -45,6 +45,15 @@ with a rule set:
   exactly when they close no cycle
 - printer renders plan + assumptions & warnings
 
+`--fetchonly` / `-f` and `--fetch-all-uri` / `-F` are a restriction on
+the `:run` plan, not a second proof (Portage `-f` works the same way).
+Prove `target:run` with the usual 5-tier fallback, then
+`preference:local_flag(fetchonly)` hides merge-phase actions from the
+printer and builder (downloads + unmask/keyword/USE/license pre-actions
+remain) and skips `@world`. `-F` additionally sets
+`ebuild:distfile_scope/1` to all SRC_URI. Do not introduce a separate
+`:fetchonly` prove for CLI or graph `.fetchonly` files.
+
 Callers outside any pass (query-side model construction) fall back to
 `config:default_rules/1` (= `resolving`).
 

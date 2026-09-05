@@ -227,8 +227,13 @@ plan:action_phase(_Other, other).
 %
 % Declares which Literals are printable. State is the ps/3 print-state term
 % (see plan:print_body/6); only the planned-package suppression clauses
-% consult it.
+% consult it. `--fetchonly` keeps downloads (and uri/verify/assumptions)
+% and hides merge-phase actions; pre-actions are printed separately.
 
+plan:printable_element(_, Rule) :-
+  plan:fetchonly_hidden_element(Rule),
+  !,
+  fail.
 plan:printable_element(_,rule(uri(_,_,_),_)) :- !.
 plan:printable_element(_,rule(uri(_),_)) :- !.
 plan:printable_element(_,rule(_Repository://_Entry:run?_,_)) :- !.
@@ -287,6 +292,15 @@ plan:printable_element(_,assumed(rule(package_dependency(_,_,_,_,_,_,_,_):run?_,
 % Suppress any remaining cycle-break types from plan display
 % (including grouped_package_dependency — always benign via heuristic:cycle_benign/2).
 plan:printable_element(_,assumed(rule(_,_))) :- !, fail.
+
+
+%! plan:fetchonly_hidden_element(+Literal) is semidet.
+%
+% True when Literal is a concrete merge-phase plan rule that `--fetchonly`
+% must not print.
+
+plan:fetchonly_hidden_element(rule(_Repository://_Entry:Action?_, _)) :-
+  preference:fetchonly_skips_action(Action).
 
 
 % Uncomment if you want 'confirm' steps shown in the plan:
@@ -1143,6 +1157,10 @@ plan:footer_stats_from_rule(Rule0, S0, S) :-
   plan:footer_stats_from_head(Head, S0, S).
 plan:footer_stats_from_rule(_Other, S, S).
 
+plan:footer_stats_from_head(_://_:Action, S0, S) :-
+  preference:fetchonly_skips_action(Action),
+  !,
+  S = S0.
 plan:footer_stats_from_head(R://E:download, S0, S) :-
   !,
   ebuild:distfile_scope(Scope),

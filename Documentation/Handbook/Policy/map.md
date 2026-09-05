@@ -6,10 +6,10 @@ policy card. Procedural “how” lives in the **Owns** column of each card.
 
 | `rule/2` head (pattern) | Obligation schema (what) | Specimen | Card |
 | :--- | :--- | :--- | :--- |
-| `target(Q,Arg):run\|fetchonly\|uninstall` | Resolve query → ebuild action (+ world side effects) | [test01](examples.md#test01), [test71](examples.md#test71) | [Target](target.md) |
+| `target(Q,Arg):run\|uninstall` | Resolve query → ebuild action (+ world side effects) | [test01](examples.md#test01), [test71](examples.md#test71) | [Target](target.md) |
 | `Repo://E:install` | Eligible ∧ (keep \| update-for-USE \| resolve build deps) | [test01](examples.md#test01), [test67](examples.md#test67) | [Install](install.md) |
 | `Repo://E:run` | Eligible ∧ (keep \| update-for-USE \| install + RDEPEND) | [test01](examples.md#test01), [test66](examples.md#test66) | [Run](run.md) |
-| `Repo://E:download\|fetchonly` | Fetch / fetch-only obligations | [test71](examples.md#test71) | [Target](target.md) |
+| `Repo://E:download` | Fetch obligations (`--fetchonly` keeps these from the `:run` plan) | [test71](examples.md#test71) | [Target](target.md) |
 | `Repo://E:update\|upgrade\|downgrade` | Replace installed with selected under constraints | [test73](../../Tests/test73/README.md), [test74](examples.md#test74) | [Install](install.md) |
 | `Repo://E:depclean\|uninstall\|reinstall` | VDB-oriented maintenance actions | [test75](../../Tests/test75/README.md), [test77](../../Tests/test77/README.md) | [Install](install.md) |
 | `grouped_package_dependency(no,…)` | Select one CN under version/slot/USE domain | [test13](examples.md#test13), [test55](examples.md#test55) | [Dependency](dependency.md) |

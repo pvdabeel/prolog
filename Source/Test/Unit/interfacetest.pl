@@ -107,6 +107,28 @@ test(select_merge_catchall) :-
   Flag == merge,
   Goal == action:process_action(run, ['app-misc/foo'], Opts).
 
+% `--fetchonly` / `-F` prove the same :run plan as --merge.
+test(fetchonly_handler_proves_run) :-
+  once(interface:request_handler(fetchonly, mode, args, opts, Goal)),
+  Goal == action:process_action(run, args, opts).
+
+test(fetchall_handler_proves_run) :-
+  once(interface:request_handler(fetchall, mode, args, opts, Goal)),
+  Goal == action:process_action(run, args, opts).
+
+% `--build --fetchonly` must execute (filtered) rather than only print.
+test(build_precedes_fetchonly) :-
+  findall(Flag, interface:request_handler(Flag, _, _, _, _), Flags),
+  once(nth0(Build, Flags, build)),
+  once(nth0(Fetch, Flags, fetchonly)),
+  Build < Fetch.
+
+test(select_build_over_fetchonly) :-
+  Opts = [build(true), fetchonly(true), merge(true)],
+  interface:request_select(standalone, ['app-misc/foo'], Opts, Flag, Goal),
+  Flag == build,
+  Goal == action:process_build(['app-misc/foo'], Opts).
+
 % No handler triggered -> selection fails (process_requests then reports
 % the unrecognised options and falls through to its catch-all halt(1)).
 test(select_fails_on_unrecognised_options, [fail]) :-

@@ -51,7 +51,6 @@ is the wave.  Each line shows:
   - `run` — runtime dependency check
   - `confirm` — verify that a running dependency is available
   - `download` — fetch source from a mirror
-  - `fetchonly` — fetch only, do not build
   - `verify` — assumed dependency that needs manual verification
 - **Package atom** — repository, category, name, and version (e.g.
   `portage://dev-libs/openssl-3.1.4`).
@@ -59,6 +58,11 @@ is the wave.  Each line shows:
   upgrades/downgrades, `(~amd64)` for keyword-accepted packages,
   `(USE modified)` for USE flag changes, or `(non-existent, assumed
   installed)` for unresolvable dependencies.
+
+`--fetchonly` / `-F` does not introduce a separate plan action. It proves
+the same `:run` plan as `--merge` and hides merge-phase bubbles
+(install / run / update / …), leaving downloads and configuration
+pre-actions. See [Chapter 15](15-doc-cli.md).
 
 Target packages — the ones you explicitly asked to prove — appear in
 **bold green** with a green action bubble.  Non-target dependencies

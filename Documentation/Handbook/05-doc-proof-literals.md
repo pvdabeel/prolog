@@ -112,7 +112,7 @@ These apply to `Repo://Entry` literals:
 | `run` | Full installation + runtime availability |
 | `install` | Build and install (DEPEND + BDEPEND + RDEPEND) |
 | `download` | Fetch source archives |
-| `fetchonly` | Fetch only, do not build |
+| `fetchonly` | Legacy fetch-only ebuild action (overlay / cycle tests). CLI `--fetchonly` does **not** prove this; it proves `:run` and filters print/execute. |
 | `reinstall` | Reinstall an already-installed package |
 | `update` | Update to a newer version |
 | `downgrade` | Downgrade to an older version |
@@ -246,8 +246,8 @@ Some literals do not follow the `Repo://Entry` pattern:
 | :-- | :-- |
 | `world(Atom):register` | Add a package to the @world set |
 | `world(Atom):unregister` | Remove a package from the @world set |
-| `target(Query, Arg):run` | Top-level target resolution |
-| `target(Query, Arg):fetchonly` | Top-level fetch-only target |
+| `target(Query, Arg):run` | Top-level target resolution (`--merge`, `--fetchonly`, `--build`) |
+| `target(Query, Arg):fetchonly` | Legacy fetch-only target (not used by CLI `--fetchonly`) |
 | `target(Query, Arg):uninstall` | Top-level uninstall target |
 
 

@@ -5527,17 +5527,24 @@ Total: 5 actions (2 downloads, 2 installs, 1 run), grouped into 4 steps.
 </details>
 ---
 
-## test71 — Download-only action
+## test71 — Fetchonly as a filter on the `:run` plan
 
 **Category:** Fetchonly
 
-This test case checks the prover's handling of the fetchonly action. The dependency
-structure is identical to test01, but the entry point uses :fetchonly instead of
-:run. In fetchonly mode, only download actions should be produced, with no
-install/run steps.
+`--fetchonly` / `-f` (and `--fetch-all-uri` / `-F`) is **not a second proof**.
+Portage's `emerge -f` works the same way: it resolves the merge plan, then
+restricts what is printed and executed.
 
-**Expected:** All four packages should appear in the proof with download/fetchonly actions. No
-install or run steps should be produced in the plan.
+portage-ng proves `target:run` with the same 5-tier fallback as `--merge`.
+`preference:local_flag(fetchonly)` then hides install/run from the printer
+and builder, and does not write `@world`. `-F` is the same filter, plus
+all-SRC_URI distfile scope.
+
+The overlay fixture is the same four-package graph as test01. The case
+proves `:run`; the harness sets the fetchonly flag only while printing.
+
+**Expected:** The proof is a normal `:run` closure (web, app, db, os). The
+printed plan lists four downloads and no install/run steps.
 
 ![test71](test71/test71.svg)
 
@@ -5558,7 +5565,7 @@ Dependency resolution took 0.75 s (backtrack: 0/20).
 
 ```
 
->>> Emerging : overlay://test71/web-1.0:fetchonly?{[]}
+>>> Emerging : overlay://test71/web-1.0:run?{[]}
 
 These are the packages that would be merged, in order:
 

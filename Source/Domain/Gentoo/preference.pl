@@ -623,6 +623,44 @@ preference:flag(Flag) :-
   ).
 
 
+%! preference:with_local_flag(+Flag, :Goal) is det.
+%
+% Asserts preference:local_flag(Flag) for the duration of Goal. Used by
+% graph writers and tests that print or execute a :run plan under
+% `--fetchonly` without going through interface:process_flags/0.
+
+:- meta_predicate preference:with_local_flag(+, 0).
+
+preference:with_local_flag(Flag, Goal) :-
+  setup_call_cleanup(
+    asserta(preference:local_flag(Flag), Ref),
+    Goal,
+    erase(Ref)).
+
+
+%! preference:fetchonly_skips_action(+Action) is semidet.
+%
+% True when `--fetchonly` / `--fetch-all-uri` is active and Action is a
+% merge-phase action that must not be printed or executed. Downloads and
+% configuration pre-actions (unmask / keyword / USE / license) remain.
+
+preference:fetchonly_skips_action(Action) :-
+  preference:flag(fetchonly),
+  preference:fetchonly_merge_action(Action).
+
+
+%! preference:fetchonly_merge_action(+Action) is semidet.
+%
+% Merge-phase actions omitted from a fetchonly print or execute pass.
+
+preference:fetchonly_merge_action(run).
+preference:fetchonly_merge_action(install).
+preference:fetchonly_merge_action(reinstall).
+preference:fetchonly_merge_action(update).
+preference:fetchonly_merge_action(downgrade).
+preference:fetchonly_merge_action(upgrade).
+
+
 %! preference:masked(?Entry) is nondet.
 %
 % Returns masked entries (Repo://Id).  In standalone mode, the masks are

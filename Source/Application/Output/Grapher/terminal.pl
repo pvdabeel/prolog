@@ -52,7 +52,8 @@ terminal:graph(Type, Repository://Entry) :-
 
 %! terminal:capture_content(+Type, +Target, -Content)
 %
-% Obtain the raw ANSI text content for the given type.
+% Obtain the raw ANSI text content for the given type. Fetchonly proves
+% `:run` and prints under preference:local_flag(fetchonly).
 
 terminal:capture_content(merge, Repository://Entry, Content) :-
     Goals = [Repository://Entry:run?{[]}],
@@ -74,13 +75,14 @@ terminal:capture_content(merge, Repository://Entry, Content) :-
     ).
 
 terminal:capture_content(fetchonly, Repository://Entry, Content) :-
-    Goals = [Repository://Entry:fetchonly?{[]}],
+    Goals = [Repository://Entry:run?{[]}],
     get_time(T0),
     (   catch(
             (   pipeline:prove_plan_with_fallback(Goals, Proof, Model, Plan, Triggers, _FallbackUsed),
                 capture_output(
                     (   timing:print_timing_header('fetchonly', T0),
-                        printer:print(Goals, Model, Proof, Plan, Triggers),
+                        preference:with_local_flag(fetchonly,
+                          printer:print(Goals, Model, Proof, Plan, Triggers)),
                         timing:print_timing_footer('fetchonly', T0)
                     ),
                     Content)

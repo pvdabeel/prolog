@@ -15,7 +15,7 @@ Tests are organised around an overlay repository containing synthetic
 ebuilds (test01..test80). Each test case targets a specific resolver
 feature: basic dependency resolution, version selection, cycle handling,
 USE flag propagation, slot requirements, blockers, PDEPEND, BDEPEND,
-IDEPEND, version operators, fetchonly, multi-slot, and VDB-dependent
+IDEPEND, version operators, fetchonly (print filter on `:run`), multi-slot, and VDB-dependent
 scenarios (update, downgrade, reinstall, newuse rebuild, depclean,
 onlydeps).
 
@@ -30,6 +30,7 @@ The validation layer supports two styles:
 :- multifile test:is_success/5.
 :- multifile test:expect/2.
 :- multifile test:xfail/2.
+:- multifile test:case_local_flags/2.
 
 :- dynamic failed/1.
 :- dynamic test:current_model/1.
@@ -113,7 +114,7 @@ test:cases([overlay://'test01/web-1.0':run?{[]},
             overlay://'test68/app-1.0':run?{[]},
             overlay://'test69/app-1.0':run?{[]},
             overlay://'test70/app-1.0':run?{[]},
-            overlay://'test71/web-1.0':fetchonly?{[]},
+            overlay://'test71/web-1.0':run?{[]},
             overlay://'test72/app-1.0':run?{[]},
             overlay://'test73/app-1.0':run?{[]},
             overlay://'test74/app-1.0':run?{[]},
@@ -324,7 +325,8 @@ test:run_case(Repo://Id:Action?{Context},Stream,Result) :-
              message:color(normal),
              write_plan(Plan),
              nl,
-             printer:print([Repo://Id:Action?{Context}],Model,Proof,Plan,Triggers),
+             test:with_case_flags(Repo://Id:Action?{Context},
+               printer:print([Repo://Id:Action?{Context}],Model,Proof,Plan,Triggers)),
              test:validate(Repo://Id:Action?{Context},Proof,Plan,Model,Triggers)
            )
            -> Result = success(Proof,Model,Plan,Triggers)
@@ -392,7 +394,8 @@ test:run_single_case(Repo://Id:Action?{Context}) :-
         ;  true),
        message:style(normal),
        nl,
-       printer:print([Repo://Id:Action?{Context}],Model,Proof,Plan,Triggers),
+       test:with_case_flags(Repo://Id:Action?{Context},
+         printer:print([Repo://Id:Action?{Context}],Model,Proof,Plan,Triggers)),
        message:header('Legacy emerge output :'),
        (exists_file(EmergeLog)
         -> test:write_description(EmergeLog)
@@ -573,6 +576,32 @@ test:check_expectation(Goal, _Target, _Proof, _Plan, Model, _Triggers) :-
     call(Goal),
     retract(test:current_model(Model))
   ).
+
+
+%! test:with_case_flags(+Target, :Goal) is det.
+%
+% Runs Goal under any preference:local_flag/1 facts declared for Target
+% via test:case_local_flags/2 (e.g. fetchonly for test71).
+
+:- meta_predicate test:with_case_flags(+, 0).
+
+test:with_case_flags(Target, Goal) :-
+  ( test:case_local_flags(Target, Flags) ->
+      test:with_local_flags(Flags, Goal)
+  ; call(Goal)
+  ).
+
+
+%! test:with_local_flags(+Flags, :Goal) is det.
+%
+% Nested preference:with_local_flag/2 over Flags.
+
+:- meta_predicate test:with_local_flags(+, 0).
+
+test:with_local_flags([], Goal) :-
+  call(Goal).
+test:with_local_flags([Flag|Flags], Goal) :-
+  preference:with_local_flag(Flag, test:with_local_flags(Flags, Goal)).
 
 
 %! test:must_have(+Template)
@@ -1188,15 +1217,18 @@ test:expect(overlay://'test80/app-1.0':run?{[]},
             ]).
 
 % -----------------------------------------------------------------------------
-%  Fetchonly action (test71)
+%  Fetchonly print filter (test71)
 % -----------------------------------------------------------------------------
 
-% test71: fetchonly action -- same deps as test01, download only
-test:expect(overlay://'test71/web-1.0':fetchonly?{[]},
-            [ test:must_have(overlay://'test71/web-1.0':fetchonly?{_}),
-              test:must_have(overlay://'test71/app-1.0':fetchonly?{_}),
-              test:must_have(overlay://'test71/db-1.0':fetchonly?{_}),
-              test:must_have(overlay://'test71/os-1.0':fetchonly?{_})
+% test71: same :run proof as test01. `--fetchonly` is a print/execute
+% filter (preference:local_flag(fetchonly)), not a second proof.
+test:case_local_flags(overlay://'test71/web-1.0':run?{[]}, [fetchonly]).
+
+test:expect(overlay://'test71/web-1.0':run?{[]},
+            [ test:must_have(overlay://'test71/web-1.0':run?{_}),
+              test:must_have(overlay://'test71/app-1.0':run?{_}),
+              test:must_have(overlay://'test71/db-1.0':run?{_}),
+              test:must_have(overlay://'test71/os-1.0':run?{_})
             ]).
 
 % -----------------------------------------------------------------------------

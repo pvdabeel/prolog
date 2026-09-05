@@ -13,7 +13,7 @@ The Writer produces per-ebuild plan files (.merge, .fetchonly, .info,
 .emerge) and HTML index files for the graph directory.
 
 Responsibilities:
-- Writing .merge and .fetchonly plan files with timing metadata (% merge / % fetchonly lines).
+- Writing .merge and .fetchonly plan files with timing metadata (% merge / % fetchonly lines). `.fetchonly` is the `:run` proof printed under `preference:local_flag(fetchonly)`.
 - Writing .info files with ebuild detail output.
 - Writing .emerge files capturing `emerge -vp` output via the gentoo-prefix
   emerge-vp wrapper, wrapped with `% emerge started/ended/wall_time_ms`
@@ -71,12 +71,13 @@ writer:write_merge_file(Directory,Repository://Entry) :-
 
 %! writer:write_fetchonly_file(+Directory,+Repository://Entry)
 %
-% Proves and writes the fetchonly plan to file for an entry in a repository.
-% Uses prove_plan_with_fallback for the canonical 5-tier fallback chain.
-% Assumes directory exists. (See repository:prepare_directory)
+% Proves the same :run plan as write_merge_file/2, then prints it under
+% preference:local_flag(fetchonly) so the file lists downloads and
+% configuration pre-actions only. Uses prove_plan_with_fallback for the
+% canonical 5-tier fallback chain. Assumes directory exists.
 
 writer:write_fetchonly_file(Directory,Repository://Entry) :-
-  Action = fetchonly,
+  Action = run,
   Extension = '.fetchonly',
   Goals = [Repository://Entry:Action?{[]}],
   get_time(T0),
@@ -89,7 +90,8 @@ writer:write_fetchonly_file(Directory,Repository://Entry) :-
         tell(TmpFile),
         ( set_stream(current_output,tty(true)),
           timing:print_timing_header('fetchonly', T0),
-          printer:print(Goals,Model,Proof,Plan,Triggers),
+          preference:with_local_flag(fetchonly,
+            printer:print(Goals,Model,Proof,Plan,Triggers)),
           timing:print_timing_footer('fetchonly', T0)
         ),
         told
@@ -99,7 +101,7 @@ writer:write_fetchonly_file(Directory,Repository://Entry) :-
     )
   -> catch(rename_file(TmpFile, File), _, true)
   ; ( ( catch(delete_file(TmpFile), _, true) ),
-      with_mutex(mutex,message:warning([Repository,'://',Entry,' ',Action]))
+      with_mutex(mutex,message:warning([Repository,'://',Entry,' fetchonly']))
     )
   ).
 

@@ -287,7 +287,7 @@ with merged USE.
 ### test71
 
 **Cards:** [Target](target.md)  
-**Story:** Fetch-only action path.  
+**Story:** `--fetchonly` is a print/execute filter on the `:run` plan.  
 **Read:** [test71/README.md](../../Tests/test71/README.md)
 
 ### test74

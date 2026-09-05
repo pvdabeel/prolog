@@ -267,3 +267,49 @@ test(assumption_reason_type_unknown_fails, [fail]) :-
   assumption:assumption_reason_type(no_such_reason, _).
 
 :- end_tests(assumption_polarity).
+
+
+% -----------------------------------------------------------------------------
+%  Fetchonly print filter
+% -----------------------------------------------------------------------------
+%
+% `--fetchonly` proves :run, then hides merge-phase actions from the
+% printed plan and footer. Downloads stay visible.
+
+:- begin_tests(fetchonly_print_filter).
+
+fo_cleanup :-
+  retractall(preference:local_flag(fetchonly)).
+
+test(hides_install,
+     [setup(fo_cleanup), cleanup(fo_cleanup)]) :-
+  preference:with_local_flag(fetchonly,
+    \+ plan:printable_element(_, rule(r://'p-1':install?{[]}, []))).
+
+test(hides_run,
+     [setup(fo_cleanup), cleanup(fo_cleanup)]) :-
+  preference:with_local_flag(fetchonly,
+    \+ plan:printable_element(_, rule(r://'p-1':run?{[]}, []))).
+
+test(keeps_download,
+     [setup(fo_cleanup), cleanup(fo_cleanup)]) :-
+  preference:with_local_flag(fetchonly,
+    plan:printable_element(_, rule(r://'p-1':download?{[]}, []))).
+
+test(merge_still_prints_install,
+     [setup(fo_cleanup), cleanup(fo_cleanup)]) :-
+  plan:printable_element(_, rule(r://'p-1':install?{[]}, [])).
+
+test(footer_omits_merge_actions,
+     [setup(fo_cleanup), cleanup(fo_cleanup)]) :-
+  Plan = [[rule(r://'p-1':download?{[]}, []),
+           rule(r://'p-1':install?{[]}, []),
+           rule(r://'p-1':run?{[]}, [])]],
+  preference:with_local_flag(fetchonly,
+    plan:footer_stats_from_plan(Plan, S)),
+  S.downloads == 1,
+  S.installs == 0,
+  S.runs == 0,
+  S.actions == 1.
+
+:- end_tests(fetchonly_print_filter).

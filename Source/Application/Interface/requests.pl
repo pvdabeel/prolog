@@ -45,9 +45,12 @@ Source/Test/Unit/interfacetest.pl).
 % resolves the full runtime closure and replaces where needed, which is
 % exactly what proving :run does.
 %
-% 'fetchall' (--fetch-all-uri) is a fetchonly run: Portage's -F fetches
-% instead of building; the "all SRC_URI regardless of USE" half is the
-% distfile scope (ebuild:distfile_scope/1), read from the flag.
+% 'fetchonly' / 'fetchall' prove the same :run plan as --merge. The
+% preference flag then restricts print and execute to downloads plus
+% configuration pre-actions (unmask / keyword / USE / license). 'fetchall'
+% (--fetch-all-uri) additionally widens distfile scope to every SRC_URI
+% (ebuild:distfile_scope/1). 'build' precedes both so `--build --fetchonly`
+% executes that filtered plan rather than only printing it.
 
 interface:request_handler(snapshots,       _,    _,    _,       snapshot:list).
 interface:request_handler(rollback,        _,    _,    Options, (memberchk(rollback(Id), Options),
@@ -73,12 +76,12 @@ interface:request_handler(metadata,        Mode, Args, _,       action:process_r
 interface:request_handler(sync,            Mode, Args, _,       action:process_sync(Mode, Args)).
 interface:request_handler(save,            _,    _,    _,       kb:save).
 interface:request_handler(load,            _,    _,    _,       kb:load).
-interface:request_handler(fetchonly,       _,    Args, Options, action:process_action(fetchonly, Args, Options)).
-interface:request_handler(fetchall,        _,    Args, Options, action:process_action(fetchonly, Args, Options)).
 interface:request_handler(resume,          _,    Args, Options, (action:assert_resume_skip_args(Args),
                                                                  builder:build_resume,
                                                                  action:maybe_ci_exit_on_build_failure(Options))).
 interface:request_handler(build,           _,    Args, Options, action:process_build(Args, Options)).
+interface:request_handler(fetchonly,       _,    Args, Options, action:process_action(run, Args, Options)).
+interface:request_handler(fetchall,        _,    Args, Options, action:process_action(run, Args, Options)).
 interface:request_handler(contents,        _,    Args, _,       action:process_vdb_query(contents, Args)).
 interface:request_handler(owner,           _,    Args, _,       action:process_vdb_query(owner, Args)).
 interface:request_handler(pkgsize,         _,    Args, _,       action:process_vdb_query(size, Args)).

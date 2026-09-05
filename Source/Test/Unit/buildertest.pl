@@ -242,3 +242,42 @@ eapi_repo_registered :-
   catch(portage:get_type(eapi), _, fail).
 
 :- end_tests(builder_vdb_reconciliation).
+
+
+% -----------------------------------------------------------------------------
+%  Fetchonly execute filter
+% -----------------------------------------------------------------------------
+%
+% `--fetchonly` proves :run, then builder:is_executable_rule/1 keeps only
+% downloads (and skips @world side effects).
+
+:- begin_tests(fetchonly_execute_filter).
+
+fo_cleanup :-
+  retractall(preference:local_flag(fetchonly)).
+
+test(keeps_download,
+     [setup(fo_cleanup), cleanup(fo_cleanup)]) :-
+  preference:with_local_flag(fetchonly,
+    builder:is_executable_rule(rule(r://'p-1':download?{[]}, []))).
+
+test(skips_install,
+     [setup(fo_cleanup), cleanup(fo_cleanup)]) :-
+  preference:with_local_flag(fetchonly,
+    \+ builder:is_executable_rule(rule(r://'p-1':install?{[]}, []))).
+
+test(skips_run,
+     [setup(fo_cleanup), cleanup(fo_cleanup)]) :-
+  preference:with_local_flag(fetchonly,
+    \+ builder:is_executable_rule(rule(r://'p-1':run?{[]}, []))).
+
+test(skips_world,
+     [setup(fo_cleanup), cleanup(fo_cleanup)]) :-
+  preference:with_local_flag(fetchonly,
+    \+ builder:is_executable_rule(rule(world(foo):register?{[]}, []))).
+
+test(merge_still_executes_install,
+     [setup(fo_cleanup), cleanup(fo_cleanup)]) :-
+  builder:is_executable_rule(rule(r://'p-1':install?{[]}, [])).
+
+:- end_tests(fetchonly_execute_filter).

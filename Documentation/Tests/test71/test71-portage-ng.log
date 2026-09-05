@@ -1,5 +1,5 @@
 
->>> Emerging : overlay://test71/web-1.0:fetchonly?{[]}
+>>> Emerging : overlay://test71/web-1.0:run?{[]}
 
 These are the packages that would be merged, in order:
 

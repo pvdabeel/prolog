@@ -13,7 +13,8 @@
 
 %! action:process_action(+Action, +Args, +Options) is det.
 %
-% Catch-all action dispatcher for merge/unmerge/fetchonly.
+% Catch-all action dispatcher for merge/unmerge. `--fetchonly` / `-F`
+% prove :run (same proposal) and set preference:local_flag(fetchonly).
 % These clauses MUST appear after the specific info/search/depclean
 % clauses (ensured by include order in action.pl).
 
@@ -189,9 +190,11 @@ action:maybe_ci_halt(Options, ModelAVL, ProofAVL) :-
 %! action:maybe_execute_world(+FallbackUsed, +PretendMode, +Plan) is det.
 %
 % Applies world-file side effects only on a real (non-pretend) merge
-% that did not fall through a fallback tier.
+% that did not fall through a fallback tier. `--fetchonly` / `-F` prove
+% the same :run plan but must not write @world.
 
 action:maybe_execute_world(false, false, Plan) :-
+  \+ preference:flag(fetchonly),
   !,
   execute_world_plan(Plan),
   world:save.
