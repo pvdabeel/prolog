@@ -56,5 +56,5 @@ The portage-ng handbook is available as a
 - **Part I** -- Getting Started (introduction, installation, configuration)
 - **Part II** -- Architecture and Internals (pipeline, prover, assumptions, version domains, rules, planning, output)
 - **Part III** -- Features (CLI, building, LLM integration, distributed proving, upstream bugs)
-- **Part IV** -- Foundations (contextual logic programming, context terms, resolver comparison, dependency ordering)
+- **Part IV** -- Foundations (contextual logic programming, context terms, dependency ordering)
 - **Part V** -- Development (testing, performance, contributing)
