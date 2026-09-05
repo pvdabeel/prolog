@@ -533,11 +533,11 @@ terminal:type_label(emerge, 'Emerge Output').
 
 %! terminal:type_window_title(+Type, -Title) is det.
 %
-% Title shown in the macOS-style terminal bar on merge / fetchonly / emerge
-% pages.
+% Title shown in the macOS-style terminal bar.
 
 terminal:type_window_title(merge, 'portage-ng --merge').
 terminal:type_window_title(fetchonly, 'portage-ng --fetchonly').
+terminal:type_window_title(info, 'portage-ng --info').
 terminal:type_window_title(emerge, 'emerge -vp').
 
 
@@ -547,18 +547,9 @@ terminal:type_window_title(emerge, 'emerge -vp').
 
 %! terminal:emit_content(+Type, +HtmlContent, +TimingStats) is det.
 %
-% Emit the terminal body. Merge, fetchonly and emerge use the handbook
-% terminal window (traffic-light bar + blinking cursor). Info stays a
-% plain &lt;pre&gt;.
+% Emit the terminal body in the handbook window (traffic-light bar +
+% blinking cursor).
 
-terminal:emit_content(info, HtmlContent, TimingStats) :-
-    !,
-    write('<div class="content">'), nl,
-    write('<pre class="terminal">'),
-    write(HtmlContent),
-    write('</pre>'), nl,
-    emit_terminal_stats(info, TimingStats),
-    write('</div>'), nl.
 terminal:emit_content(Type, HtmlContent, TimingStats) :-
     type_window_title(Type, TermTitle),
     write('<div class="content">'), nl,

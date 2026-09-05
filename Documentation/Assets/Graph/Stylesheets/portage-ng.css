@@ -272,14 +272,14 @@ h1 { font-size: 20px; font-weight: 600; font-family: var(--mono); letter-spacing
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 8px 16px;
   margin: 0 0 12px;
   padding-bottom: 12px;
   border-bottom: 1px solid var(--border);
 }
-.page-head .subtitle { margin: 0; font-size: 13px; }
-.page-head .nav-rows { margin: 0; }
+.page-head .nav-rows { margin: 0; order: 0; }
+.page-head .subtitle { margin: 0; font-size: 13px; order: 1; }
 
 .nav-rows { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 12px; }
 .nav-bar { display: flex; gap: 8px; font-size: 12px; width: fit-content; flex-wrap: wrap; }
@@ -343,6 +343,15 @@ html.embedded body.page-deptree { padding: 16px 32px; }
 body.page-deptree .graph-main {
   flex: 1; min-height: 0; display: flex; flex-direction: column;
 }
+body.page-deptree .term {
+  flex: 1; min-height: 0;
+  display: flex; flex-direction: column;
+}
+body.page-deptree .term-body {
+  flex: 1; min-height: 0;
+  display: flex; flex-direction: column;
+  padding: 12px 14px 14px;
+}
 
 .dep-tabs { display: flex; gap: 8px; margin-bottom: 12px; align-items: center; flex-wrap: wrap; }
 .dep-tab, .action-btn {
@@ -371,6 +380,9 @@ body.page-deptree .graph-container {
   position: relative; width: 100%; flex: 1; min-height: 0;
   border: 1px solid var(--border); border-radius: var(--radius);
   overflow: hidden; background: var(--surface2);
+}
+body.page-deptree .term .graph-container {
+  border: none; border-radius: 0; background: transparent;
 }
 body.page-deptree .graph-container svg { width: 100%; height: 100%; }
 
@@ -553,7 +565,7 @@ table.src-table td:nth-child(3) { text-align: right; }
 .src-status.pending { background: var(--pending-bg); color: var(--pending-text); }
 
 body.page-gantt .legend {
-  display: flex; gap: 12px; margin-top: 20px; font-size: 12px;
+  display: flex; gap: 12px; margin-top: 16px; font-size: 12px;
   color: var(--text); align-items: center; flex-wrap: wrap;
 }
 body.page-gantt .legend-item { display: flex; align-items: center; gap: 4px; }
@@ -681,6 +693,9 @@ body.page-detail .graph-container {
   border: 1px solid var(--border); border-radius: var(--radius);
   background: var(--surface2); margin-top: 8px;
 }
+body.page-detail .term .graph-container {
+  border: none; border-radius: 0; background: transparent; margin-top: 0;
+}
 body.page-detail .graph-container svg { width: 100%; height: 100%; }
 body.page-detail .graph-container svg text { font-family: var(--sans); }
 
@@ -699,8 +714,8 @@ body.page-detail .legend-swatch { width: 12px; height: 12px; border-radius: 3px;
 
 .content { margin-top: 12px; }
 
-/* Handbook terminal window (merge / fetchonly / emerge) */
-body.page-terminal .term {
+/* Handbook hero window (CLI pages + graph views) */
+.term {
   background: #0d0f16;
   border: 1px solid var(--border-strong);
   border-radius: 14px;
@@ -710,7 +725,7 @@ body.page-terminal .term {
     0 0 90px rgba(124, 92, 240, 0.10);
   overflow: hidden;
 }
-html[data-theme="light"] body.page-terminal .term {
+html[data-theme="light"] .term {
   background: #ffffff;
   box-shadow:
     0 24px 70px rgba(24, 22, 60, 0.22),
@@ -718,7 +733,7 @@ html[data-theme="light"] body.page-terminal .term {
     0 0 90px rgba(124, 92, 240, 0.10);
 }
 
-body.page-terminal .term-bar {
+.term-bar {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -726,16 +741,17 @@ body.page-terminal .term-bar {
   background: var(--bg2);
   border-bottom: 1px solid var(--border);
 }
-body.page-terminal .term-dot { width: 11px; height: 11px; border-radius: 50%; }
-body.page-terminal .term-dot.r { background: #ff5f57; }
-body.page-terminal .term-dot.y { background: #febc2e; }
-body.page-terminal .term-dot.g { background: #28c840; }
-body.page-terminal .term-title {
+.term-dot { width: 11px; height: 11px; border-radius: 50%; }
+.term-dot.r { background: #ff5f57; }
+.term-dot.y { background: #febc2e; }
+.term-dot.g { background: #28c840; }
+.term-title {
   margin-left: 8px;
   font-family: var(--mono);
   font-size: 11.5px;
   color: var(--text-3);
 }
+.term-body { padding: 14px 16px 16px; min-width: 0; }
 
 body.page-terminal .t-cursor {
   display: inline-block;

@@ -192,6 +192,35 @@ navtheme:emit_page_head_close :-
     write('</div>'), nl.
 
 
+% -----------------------------------------------------------------------------
+%  HTML: handbook hero window
+% -----------------------------------------------------------------------------
+
+%! navtheme:emit_term_open(+Title) is det.
+%
+% Open the handbook hero window: traffic-light bar titled Title, then
+% a term-body wrapper for the page content.
+
+navtheme:emit_term_open(Title) :-
+    write('<div class="term">'), nl,
+    write('  <div class="term-bar">'), nl,
+    write('    <span class="term-dot r"></span>'),
+    write('<span class="term-dot y"></span>'),
+    write('<span class="term-dot g"></span>'), nl,
+    format('    <span class="term-title">~w</span>~n', [Title]),
+    write('  </div>'), nl,
+    write('  <div class="term-body">'), nl.
+
+
+%! navtheme:emit_term_close is det.
+%
+% Close the handbook hero window.
+
+navtheme:emit_term_close :-
+    write('  </div>'), nl,
+    write('</div>'), nl.
+
+
 %! navtheme:emit_nav_bar(+Repo, +Entry, +Cat, +Name, +ActiveType, +Newer, +Newest, +Older, +Oldest)
 %
 % Emit the in-page tab bar: version, graph types, CLI, and legacy in one
