@@ -510,15 +510,18 @@ terminal:emit_html(Type, Target, HtmlContent, TimingStats) :-
     type_label(Type, Label),
     format(atom(Title), '~w/~w-~w &mdash; ~w', [Cat, Name, Ver, Label]),
     navtheme:emit_doctype,
-    navtheme:emit_head_open(Title),
+    navtheme:emit_head_open(Title, '../'),
     navtheme:emit_head_close,
     navtheme:emit_body_open('page-terminal'),
-    emit_title_row(Cat, Name, Ver, Label),
+    navtheme:emit_top_bar('../', Repo, Cat, Name),
+    navtheme:emit_main_open,
     deptree:version_neighbours(Repo, Entry, Newer, Newest, Older, Oldest),
     navtheme:emit_nav_bar(Repo, Entry, Cat, Name, Type, Newer, Newest, Older, Oldest),
-    write('</div>'), nl,
     emit_content(Type, HtmlContent, TimingStats),
+    navtheme:emit_main_close,
+    navtheme:emit_theme_script,
     navtheme:emit_body_close.
+
 
 terminal:type_label(merge, 'Merge Plan').
 terminal:type_label(fetchonly, 'Fetch Plan').
@@ -530,22 +533,13 @@ terminal:type_label(emerge, 'Emerge Output').
 %  HTML emission - body elements
 % -----------------------------------------------------------------------------
 
-terminal:emit_title_row(Cat, Name, Ver, Label) :-
-    write('<div class="header">'), nl,
-    write('<div class="title-row">'), nl,
-    format('<h1>~w/~w-~w &mdash; ~w</h1>~n', [Cat, Name, Ver, Label]),
-    navtheme:emit_theme_btn,
-    write('</div>'), nl.
-
-
 terminal:emit_content(Type, HtmlContent, TimingStats) :-
     write('<div class="content">'), nl,
     write('<pre class="terminal">'),
     write(HtmlContent),
     write('</pre>'), nl,
     emit_terminal_stats(Type, TimingStats),
-    write('</div>'), nl,
-    navtheme:emit_theme_script('terminal-theme').
+    write('</div>'), nl.
 
 
 %! terminal:emit_terminal_stats(+Type, +timing_display(WallSec, CompareNgSec))

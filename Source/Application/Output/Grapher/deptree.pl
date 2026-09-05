@@ -189,33 +189,27 @@ deptree:emit_html(Target, TypeTrees) :-
     version_domain:display_atom(Version, Ver),
     format(atom(Title), '~w/~w-~w &mdash; Dependency Graph', [Cat, Name, Ver]),
     navtheme:emit_doctype,
-    navtheme:emit_head_open(Title),
+    navtheme:emit_head_open(Title, '../'),
     navtheme:emit_head_close,
     navtheme:emit_body_open('page-deptree'),
-    emit_title(Cat, Name, Ver),
+    navtheme:emit_top_bar('../', Repo, Cat, Name),
+    navtheme:emit_main_open,
     emit_subtitle_placeholder,
     version_neighbours(Repo, Entry, Newer, Newest, Older, Oldest),
     navtheme:emit_nav_bar(Repo, Entry, Cat, Name, deptree, Newer, Newest, Older, Oldest),
-    write('</div>'), nl,
     emit_dep_tabs,
     emit_graph_container,
     emit_tooltip_container,
     emit_legend,
     emit_script(Repo, Entry, TypeTrees),
-    navtheme:emit_theme_script('deptree-theme'),
+    navtheme:emit_main_close,
+    navtheme:emit_theme_script,
     navtheme:emit_body_close.
 
 
 % -----------------------------------------------------------------------------
 %  HTML emission - document structure
 % -----------------------------------------------------------------------------
-
-emit_title(Cat, Name, Ver) :-
-    write('<div class="header">'), nl,
-    write('<div class="title-row">'), nl,
-    format('<h1>~w/~w-~w &mdash; Dependency Graph</h1>~n', [Cat, Name, Ver]),
-    navtheme:emit_theme_btn,
-    write('</div>'), nl.
 
 emit_subtitle_placeholder :-
     write('<p class="subtitle" id="subtitle"></p>'), nl.

@@ -9,7 +9,7 @@
 
 /** <module> INDEX
 HTML index page rendering for repository, category, and package listings.
-Self-contained pages with inline CSS, day/night theme toggle, and card layout.
+Handbook chrome (brand, crumb, png-theme) plus a card layout.
 */
 
 :- module(index, []).
@@ -29,8 +29,7 @@ Self-contained pages with inline CSS, day/night theme toggle, and card layout.
 index:print_repository_index(Repository) :-
     findall(Cat, cache:category(Repository, Cat), Cats),
     length(Cats, Count),
-    emit_page_open(Repository, '', Count, 'categories'),
-    emit_breadcrumb_repo(Repository),
+    emit_page_open(Repository, '', '', '', Count, 'categories'),
     collect_letters(Cats, Letters),
     emit_alphabet_bar(Letters),
     emit_grid_open_vertical,
@@ -46,9 +45,7 @@ index:print_repository_index(Repository) :-
 index:print_category_index(Repository, Category) :-
     findall(Name, cache:package(Repository, Category, Name), Names),
     length(Names, Count),
-    atomic_list_concat([Repository, '://', Category], Title),
-    emit_page_open(Title, '../', Count, 'packages'),
-    emit_breadcrumb_category(Repository, Category),
+    emit_page_open(Repository, Category, '', '../', Count, 'packages'),
     collect_letters(Names, Letters),
     emit_alphabet_bar(Letters),
     emit_grid_open_vertical,
@@ -68,9 +65,7 @@ index:print_package_index(Repository, Category, Name) :-
             ),
             Pairs),
     length(Pairs, Count),
-    atomic_list_concat([Repository, '://', Category, '/', Name], Title),
-    emit_page_open(Title, '../', Count, 'versions'),
-    emit_breadcrumb_package(Repository, Category, Name),
+    emit_page_open(Repository, Category, Name, '../', Count, 'versions'),
     emit_grid_open_vertical,
     forall(member(Entry-Version, Pairs),
            emit_card_version(Name, Entry, Version)),
@@ -82,48 +77,36 @@ index:print_package_index(Repository, Category, Name) :-
 %  Page structure
 % -----------------------------------------------------------------------------
 
-emit_page_open(Title, CssPrefix, Count, Unit) :-
-    write('<!DOCTYPE html>'), nl,
-    write('<html lang="en" data-theme="dark">'), nl,
-    write('<head>'), nl,
-    write('<meta charset="UTF-8">'), nl,
-    write('<meta name="viewport" content="width=device-width, initial-scale=1.0">'), nl,
-    format('<title>~w</title>~n', [Title]),
-    navtheme:emit_css_link(CssPrefix),
-    write('</head>'), nl,
-    write('<body class="page-index">'), nl,
-    write('<div class="header">'), nl,
-    write('<div class="title-row">'), nl,
-    format('<h1>~w <span class="count">(~w ~w)</span></h1>~n', [Title, Count, Unit]),
-    navtheme:emit_theme_btn,
-    write('</div>'), nl.
+%! emit_page_open(+Repo, +Cat, +Name, +Prefix, +Count, +Unit) is det.
+%
+% Emit doctype through the handbook top bar and the index heading.
+% Cat and Name may be ''.
+
+emit_page_open(Repo, Cat, Name, Prefix, Count, Unit) :-
+    index_title(Repo, Cat, Name, Title),
+    navtheme:emit_doctype,
+    navtheme:emit_head_open(Title, Prefix),
+    navtheme:emit_head_close,
+    navtheme:emit_body_open('page-index'),
+    navtheme:emit_top_bar(Prefix, Repo, Cat, Name),
+    navtheme:emit_main_open,
+    format('<h1>~w <span class="count">(~w ~w)</span></h1>~n', [Title, Count, Unit]).
+
 
 emit_page_close :-
-    navtheme:emit_theme_script('index-theme'),
-    write('</body>'), nl,
-    write('</html>'), nl.
+    navtheme:emit_main_close,
+    navtheme:emit_theme_script,
+    navtheme:emit_body_close.
 
 
-% -----------------------------------------------------------------------------
-%  Breadcrumb navigation
-% -----------------------------------------------------------------------------
-
-emit_breadcrumb_repo(_Repository) :-
-    write('<div class="breadcrumb"></div>'), nl,
-    write('</div>'), nl.
-
-emit_breadcrumb_category(Repository, _Category) :-
-    write('<div class="breadcrumb">'), nl,
-    format('  <a href="../index.html">~w</a>~n', [Repository]),
-    write('</div>'), nl,
-    write('</div>'), nl.
-
-emit_breadcrumb_package(Repository, Category, _Name) :-
-    write('<div class="breadcrumb">'), nl,
-    format('  <a href="../index.html">~w</a> <span class="sep">/</span>~n', [Repository]),
-    format('  <a href="./index.html">~w</a>~n', [Category]),
-    write('</div>'), nl,
-    write('</div>'), nl.
+index_title(Repo, '', '', Title) :-
+    !,
+    Title = Repo.
+index_title(Repo, Cat, '', Title) :-
+    !,
+    atomic_list_concat([Repo, '://', Cat], Title).
+index_title(Repo, Cat, Name, Title) :-
+    atomic_list_concat([Repo, '://', Cat, '/', Name], Title).
 
 
 % -----------------------------------------------------------------------------

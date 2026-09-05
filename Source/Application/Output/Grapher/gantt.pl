@@ -499,15 +499,16 @@ gantt:emit_html(Target, Grid, Deps, NumSteps, HasPre) :-
     length(Grid, PkgCount),
     collect_download_totals(Grid, Repo, TotalBytes, CachedBytes),
     (HasPre == true -> MinStep = 0 ; MinStep = 1),
+    format(atom(Title), '~w/~w-~w &mdash; Execution Plan', [Cat, Name, Ver]),
     navtheme:emit_doctype,
-    navtheme:emit_head_open(''),
+    navtheme:emit_head_open(Title, '../'),
     navtheme:emit_head_close,
     navtheme:emit_body_open('page-gantt'),
-    emit_title(Cat, Name, Ver),
+    navtheme:emit_top_bar('../', Repo, Cat, Name),
+    navtheme:emit_main_open,
     emit_subtitle(PkgCount, NumSteps, TotalBytes, CachedBytes),
     deptree:version_neighbours(Repo, Entry, Newer, Newest, Older, Oldest),
     navtheme:emit_nav_bar(Repo, Entry, Cat, Name, gantt, Newer, Newest, Older, Oldest),
-    write('</div>'), nl,
     gantt:pkg_use_flags(Repo, Entry, TargetFlags),
     emit_global_use(TargetFlags),
     emit_filters,
@@ -517,24 +518,14 @@ gantt:emit_html(Target, Grid, Deps, NumSteps, HasPre) :-
     emit_table_close,
     emit_legend,
     emit_script(Grid, Deps),
-    navtheme:emit_theme_script('gantt-theme'),
+    navtheme:emit_main_close,
+    navtheme:emit_theme_script,
     navtheme:emit_body_close.
 
 
 % -----------------------------------------------------------------------------
 %  HTML emission - document structure
 % -----------------------------------------------------------------------------
-
-%! gantt:emit_title(+Cat, +Name, +Ver) is det.
-%
-% Emit the page title header with theme toggle button.
-
-gantt:emit_title(Cat, Name, Ver) :-
-    write('<div class="header">'), nl,
-    write('<div class="title-row">'), nl,
-    format('<h1>~w/~w-~w &mdash; Execution Plan</h1>~n', [Cat, Name, Ver]),
-    navtheme:emit_theme_btn,
-    write('</div>'), nl.
 
 %! gantt:emit_subtitle(+PkgCount, +NumSteps, +TotalBytes, +CachedBytes) is det.
 %

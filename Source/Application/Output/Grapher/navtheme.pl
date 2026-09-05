@@ -9,9 +9,8 @@
 
 
 /** <module> NAVTHEME
-Shared navigation bar and day/night theme infrastructure for all graph HTML
-pages. Provides a uniform two-row navigation bar, base CSS custom properties,
-theme toggle button, and theme persistence JavaScript.
+Handbook-style chrome for all graph HTML pages: brand + crumb top bar,
+png-theme persistence, and in-page type/version tab bars.
 */
 
 :- module(navtheme, []).
@@ -19,7 +18,6 @@ theme toggle button, and theme persistence JavaScript.
 % =============================================================================
 %  NAVTHEME declarations
 % =============================================================================
-
 
 % -----------------------------------------------------------------------------
 %  External CSS link
@@ -47,18 +45,19 @@ navtheme:emit_doctype :-
     write('<!DOCTYPE html>'), nl.
 
 
-%! navtheme:emit_head_open(+Title) is det.
+%! navtheme:emit_head_open(+Title, +Prefix) is det.
 %
-% Emit the opening <html>/<head> elements with the standard meta tags, an
-% optional <title> (omitted when Title == ''), and the shared CSS link.
+% Emit the opening <html>/<head> elements: light-theme default, FOUC +
+% embed script, title, and the shared CSS link at Prefix.
 
-navtheme:emit_head_open(Title) :-
-    write('<html lang="en" data-theme="dark">'), nl,
+navtheme:emit_head_open(Title, Prefix) :-
+    write('<html lang="en" data-theme="light">'), nl,
     write('<head>'), nl,
     write('<meta charset="UTF-8">'), nl,
     write('<meta name="viewport" content="width=device-width, initial-scale=1.0">'), nl,
-    ( Title == '' -> true ; format('<title>~w</title>~n', [Title]) ),
-    navtheme:emit_css_link('../').
+    write('<script>try{if(window.parent!==window)document.documentElement.classList.add("embedded");if(localStorage.getItem("png-theme")==="dark")document.documentElement.removeAttribute("data-theme")}catch(e){}</script>'), nl,
+    format('<title>~w</title>~n', [Title]),
+    navtheme:emit_css_link(Prefix).
 
 
 %! navtheme:emit_head_close is det.
@@ -86,41 +85,113 @@ navtheme:emit_body_close :-
     write('</html>'), nl.
 
 
+%! navtheme:emit_main_open is det.
+%
+% Emit the opening wrapper for in-page content below the top bar.
+
+navtheme:emit_main_open :-
+    write('<div class="graph-main">'), nl.
+
+
+%! navtheme:emit_main_close is det.
+%
+% Emit the closing wrapper for in-page content.
+
+navtheme:emit_main_close :-
+    write('</div>'), nl.
+
+
 % -----------------------------------------------------------------------------
-%  HTML: navigation bar
+%  HTML: handbook top bar
+% -----------------------------------------------------------------------------
+
+%! navtheme:emit_top_bar(+Prefix, +Repo, +Cat, +Name) is det.
+%
+% Emit the fixed brand + crumb + theme-toggle bar. Cat and Name may be
+% '' on repository and category index pages. Prefix is the relative path
+% to the repository index ('' at repo root, '../' in a category directory).
+
+navtheme:emit_top_bar(Prefix, Repo, Cat, Name) :-
+    navtheme:html_escape(Repo, RepoE),
+    write('<header class="docs-top">'), nl,
+    format('  <a class="brand" href="~windex.html">', [Prefix]),
+    emit_brand_svg,
+    write(' portage-ng</a>'), nl,
+    write('  <span class="crumb">'), nl,
+    emit_crumb(Prefix, RepoE, Cat, Name),
+    write('  </span>'), nl,
+    write('  <div class="top-right">'), nl,
+    emit_theme_toggle,
+    write('  </div>'), nl,
+    write('</header>'), nl.
+
+
+%! navtheme:emit_crumb(+Prefix, +RepoEscaped, +Cat, +Name) is det.
+%
+% Emit the mono crumb trail. Earlier segments are links; the last is
+% the current page.
+
+navtheme:emit_crumb(_Prefix, RepoE, '', '') :-
+    !,
+    write('    <span class="crumb-sep">/</span>'), nl,
+    format('    <span class="crumb-current">~w</span>~n', [RepoE]).
+navtheme:emit_crumb(Prefix, RepoE, Cat, '') :-
+    !,
+    navtheme:html_escape(Cat, CatE),
+    write('    <span class="crumb-sep">/</span>'), nl,
+    format('    <a href="~windex.html">~w</a>~n', [Prefix, RepoE]),
+    write('    <span class="crumb-sep">/</span>'), nl,
+    format('    <span class="crumb-current">~w</span>~n', [CatE]).
+navtheme:emit_crumb(Prefix, RepoE, Cat, Name) :-
+    navtheme:html_escape(Cat, CatE),
+    navtheme:html_escape(Name, NameE),
+    write('    <span class="crumb-sep">/</span>'), nl,
+    format('    <a href="~windex.html">~w</a>~n', [Prefix, RepoE]),
+    write('    <span class="crumb-sep">/</span>'), nl,
+    format('    <a href="./index.html">~w</a>~n', [CatE]),
+    write('    <span class="crumb-sep">/</span>'), nl,
+    format('    <a href="./~w.html">~w</a>~n', [NameE, NameE]).
+
+
+%! navtheme:emit_brand_svg is det.
+%
+% Emit the four-dot portage-ng brand mark.
+
+navtheme:emit_brand_svg :-
+    write('<svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#161a26"/><circle cx="17" cy="23.5" r="5" fill="#a78bfa"/><circle cx="17" cy="40.5" r="5" fill="#a78bfa"/><circle cx="31.5" cy="23.5" r="5" fill="#a78bfa"/><circle cx="31.5" cy="40.5" r="5" fill="#a78bfa"/><rect x="41" y="28.75" width="14.5" height="6.5" rx="3.25" fill="#4ade80"/></svg>').
+
+
+%! navtheme:emit_theme_toggle is det.
+%
+% Emit the handbook sun/moon theme button.
+
+navtheme:emit_theme_toggle :-
+    write('    <button class="theme-toggle" id="themeToggle" aria-label="Switch between dark and light theme" title="Toggle theme" onclick="toggleTheme()">'), nl,
+    write('      <svg class="icon-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>'), nl,
+    write('      <svg class="icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>'), nl,
+    write('    </button>'), nl.
+
+
+% -----------------------------------------------------------------------------
+%  HTML: in-page type / version tabs
 % -----------------------------------------------------------------------------
 
 %! navtheme:emit_nav_bar(+Repo, +Entry, +Cat, +Name, +ActiveType, +Newer, +Newest, +Older, +Oldest)
 %
-% Emit the full two-row navigation bar. Row 1 has navigation and version
-% groups, row 2 has graphs, CLI, and legacy groups. ActiveType determines
-% which link is highlighted and where version links point.
+% Emit the two-row in-page tab bar. Row 1 has version and graph types,
+% row 2 has CLI and legacy groups. Repo/Cat/Name live in the top-bar crumb.
 
-navtheme:emit_nav_bar(Repo, Entry, Cat, Name, ActiveType, Newer, Newest, Older, Oldest) :-
+navtheme:emit_nav_bar(_Repo, Entry, _Cat, _Name, ActiveType, Newer, Newest, Older, Oldest) :-
     write('<div class="nav-rows">'), nl,
     write('<div class="nav-bar">'), nl,
-    emit_nav_group(Repo, Cat, Name),
     emit_version_group(Entry, ActiveType, Newer, Newest, Older, Oldest),
+    emit_graphs_group(Entry, ActiveType),
     write('</div>'), nl,
     write('<div class="nav-bar">'), nl,
-    emit_graphs_group(Entry, ActiveType),
     emit_cli_group(Entry, ActiveType),
     emit_legacy_group(Entry, ActiveType),
     write('</div>'), nl,
     write('</div>'), nl.
-
-
-%! navtheme:emit_nav_group(+Repo, +Cat, +Name) is det.
-%
-% Emit the navigation group with repository, category, and package links.
-
-navtheme:emit_nav_group(Repo, Cat, Name) :-
-    write('  <div class="nav-group">'), nl,
-    write('    <span class="nav-group-label">nav</span>'), nl,
-    format('    <a class="nav-link" href="../index.html">~w</a>~n', [Repo]),
-    format('    <a class="nav-link" href="./index.html">~w</a>~n', [Cat]),
-    format('    <a class="nav-link" href="./~w.html">~w</a>~n', [Name, Name]),
-    write('  </div>'), nl.
 
 
 %! navtheme:emit_version_group(+Entry, +ActiveType, +Newer, +Newest, +Older, +Oldest) is det.
@@ -181,7 +252,6 @@ navtheme:emit_legacy_group(Entry, ActiveType) :-
 navtheme:emit_type_link(_Entry, Type, Label, Type) :-
     !,
     format('    <a class="nav-link active">~w</a>~n', [Label]).
-
 navtheme:emit_type_link(Entry, Type, Label, _) :-
     format('    <a class="nav-link" href="../~w-~w.html">~w</a>~n',
            [Entry, Type, Label]).
@@ -194,50 +264,29 @@ navtheme:emit_type_link(Entry, Type, Label, _) :-
 navtheme:emit_version_link('', Label, _) :-
     !,
     format('    <a class="nav-link disabled">~w</a>~n', [Label]).
-
 navtheme:emit_version_link(Entry, Label, Type) :-
     format('    <a class="nav-link" href="../~w-~w.html" title="~w">~w</a>~n',
            [Entry, Type, Entry, Label]).
 
 
 % -----------------------------------------------------------------------------
-%  HTML: theme toggle button
-% -----------------------------------------------------------------------------
-
-%! navtheme:emit_theme_btn
-%
-% Emit the day/night theme toggle button.
-
-navtheme:emit_theme_btn :-
-    write('<button class="theme-btn" id="theme-btn" onclick="toggleTheme()">&#9790;</button>'), nl.
-
-
-% -----------------------------------------------------------------------------
 %  JavaScript: theme toggle and persistence
 % -----------------------------------------------------------------------------
 
-%! navtheme:emit_theme_script(+StorageKey)
+%! navtheme:emit_theme_script is det.
 %
-% Emit the theme toggle JavaScript with localStorage persistence under the
-% given key.
+% Emit the png-theme toggle. Light sets data-theme="light"; dark removes
+% the attribute, matching the handbook contract.
 
-navtheme:emit_theme_script(StorageKey) :-
+navtheme:emit_theme_script :-
     write('<script>'), nl,
     write('function toggleTheme() {'), nl,
     write('  const html = document.documentElement;'), nl,
-    write('  const cur = html.getAttribute("data-theme") || "dark";'), nl,
-    write('  const next = cur === "dark" ? "light" : "dark";'), nl,
-    write('  html.setAttribute("data-theme", next);'), nl,
-    write('  document.getElementById("theme-btn").innerHTML = next === "light" ? "&#9788;" : "&#9790;";'), nl,
-    format('  localStorage.setItem("~w", next);~n', [StorageKey]),
+    write('  const light = html.getAttribute("data-theme") === "light";'), nl,
+    write('  if (light) html.removeAttribute("data-theme");'), nl,
+    write('  else html.setAttribute("data-theme", "light");'), nl,
+    write('  try { localStorage.setItem("png-theme", light ? "dark" : "light"); } catch (e) {}'), nl,
     write('}'), nl,
-    write('(function() {'), nl,
-    format('  const saved = localStorage.getItem("~w");~n', [StorageKey]),
-    write('  if (saved) {'), nl,
-    write('    document.documentElement.setAttribute("data-theme", saved);'), nl,
-    write('    document.getElementById("theme-btn").innerHTML = saved === "light" ? "&#9788;" : "&#9790;";'), nl,
-    write('  }'), nl,
-    write('})();'), nl,
     write('</script>'), nl.
 
 
@@ -290,6 +339,7 @@ navtheme:js_escape_atom(In, Out) :-
     atom_codes(In, Codes),
     navtheme:js_escape_codes(Codes, OutCodes),
     atom_codes(Out, OutCodes).
+
 
 navtheme:js_escape_codes([], []).
 navtheme:js_escape_codes([0'\\|T], [0'\\, 0'\\ |R]) :- !, navtheme:js_escape_codes(T, R).
