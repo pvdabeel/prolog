@@ -4,14 +4,10 @@ A declarative reasoning engine for software configuration, applied to Gentoo Lin
 
 ## Reasoning engine
 
-portage-ng is a declarative reasoning engine for large-scale software
-configurations like Gentoo Linux.  Implemented in Prolog, an artificial
-intelligence programming language, it produces build plans that are formal
-proofs -- recording which rule justified each package and under what
-constraints.  When no fully valid plan exists, it makes explicit assumptions and
-presents them as actionable suggestions as part of the plan: enabling or
-disabling specific USE flags, keywording specific ebuilds, unmasking packages,
-and so on.
+Assembling thousands of interdependent components with user-specified feature
+selections is configuration management, not logistics — it calls for
+reasoning, not graph traversal. The result: no graph-traversal errors to
+decipher, but actionable plans where others fail.
 
 ## Highlights
 
@@ -49,17 +45,6 @@ portage-ng --mode standalone --sync
 For the full command reference, see the
 [`portage-ng(1)` manpage](Documentation/Manpage/portage-ng.1.md).
 
-## Screenshots
-
-![Build plan](Documentation/Images/proof.png)
-![Merge plan](Documentation/Images/plan.png)
-![Gantt chart](Documentation/Images/gantt.png)
-![Dependency graph](Documentation/Images/depgraph.png)
-![Detail view](Documentation/Images/detail.png)
-![Package search](Documentation/Images/search.png)
-![Bug search](Documentation/Images/bugs.png)
-![Upstream version check](Documentation/Images/upstream.png)
-
 ## Handbook
 
 The portage-ng handbook is available as a
@@ -71,7 +56,3 @@ The portage-ng handbook is available as a
 - **Part III** -- Features (CLI, building, LLM integration, distributed proving, upstream bugs)
 - **Part IV** -- Foundations (contextual logic programming, context terms, resolver comparison, dependency ordering)
 - **Part V** -- Development (testing, performance, contributing)
-
-## License
-
-BSD 2-Clause.  See [`LICENSE`](LICENSE).
