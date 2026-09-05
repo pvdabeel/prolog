@@ -1,6 +1,6 @@
 # <img src="Documentation/Images/icon.svg" alt="" width="28" height="28" align="absmiddle" style="vertical-align:middle"> portage-ng
 
-A declarative reasoning engine for software configuration, applied to Gentoo Linux.
+portage-ng is a declarative reasoning engine for large scale software configurations, applied to Gentoo Linux. It uses logical reasoning to produce a plan, recording which rule justified each package and under what constraints.
 
 [portage-ng.ai](https://portage-ng.ai)
 
