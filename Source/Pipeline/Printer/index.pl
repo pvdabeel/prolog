@@ -84,13 +84,24 @@ index:print_package_index(Repository, Category, Name) :-
 
 emit_page_open(Repo, Cat, Name, Prefix, Count, Unit) :-
     index_title(Repo, Cat, Name, Title),
+    index_unit_label(Count, Unit, Label),
     navtheme:emit_doctype,
     navtheme:emit_head_open(Title, Prefix),
     navtheme:emit_head_close,
     navtheme:emit_body_open('page-index'),
     navtheme:emit_top_bar(Prefix, Repo, Cat, Name),
     navtheme:emit_main_open,
-    format('<h1>~w <span class="count">(~w ~w)</span></h1>~n', [Title, Count, Unit]).
+    format('<h1>~w <span class="count">(~w ~w)</span></h1>~n', [Title, Count, Label]).
+
+
+%! index_unit_label(+Count, +Plural, -Label) is det.
+%
+% Singular heading unit when Count is 1 (version, package, category).
+
+index_unit_label(1, versions, version) :- !.
+index_unit_label(1, packages, package) :- !.
+index_unit_label(1, categories, category) :- !.
+index_unit_label(_, Unit, Unit).
 
 
 emit_page_close :-

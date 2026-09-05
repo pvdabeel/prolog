@@ -588,7 +588,7 @@ terminal:emit_terminal_stats(Type, timing_display(WallSec, CompareNg)) :-
     (   CompareNg \== none,
         Type = emerge
     ->  format_wall_seconds(CompareNg, NgStr),
-        format(string(Dd), '~w s <span class="vs-portage-ng">vs. <span class="wall-time-sec">~w s</span> for portage-ng</span>', [WStr, NgStr])
+        format(string(Dd), '<span class="wall-time-sec">~w s</span> <span class="vs-portage-ng">vs. <span class="wall-time-sec">~w s</span> for portage-ng</span>', [WStr, NgStr])
     ;   format(string(Dd), '~w s', [WStr])
     ),
     emit_stat_row_dd('Wall time', Dd),

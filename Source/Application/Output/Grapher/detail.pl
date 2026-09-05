@@ -310,8 +310,8 @@ emit_controls_row :-
     write('    <button class="phase-tab" data-phase="both" onclick="switchPhase(\'both\',this)" title="Declared in both install and run">Both<span class="badge" id="badge-both">0</span></button>'), nl,
     write('  </div>'), nl,
     write('  <div class="view-toggle">'), nl,
-    write('    <button class="view-btn active" onclick="switchView(\'tree\',this)">&#9776; Tree</button>'), nl,
-    write('    <button class="view-btn" onclick="switchView(\'graph\',this)">&#9675; Graph</button>'), nl,
+    write('    <button class="view-btn" onclick="switchView(\'tree\',this)">&#9776; Metadata</button>'), nl,
+    write('    <button class="view-btn active" onclick="switchView(\'graph\',this)">&#9675; Graph</button>'), nl,
     write('  </div>'), nl,
     write('</div>'), nl.
 
@@ -384,7 +384,7 @@ emit_script(Repo, Entry, Cat, Name, Ver, InstallTree, RunTree, BothTree) :-
 
 emit_js_state :-
     write('let currentPhase = "install";'), nl,
-    write('let currentView = "tree";'), nl,
+    write('let currentView = "graph";'), nl,
     write('let gZoom = 1;'), nl,
     write('let isPanning = false, panStart = {x:0,y:0}, vbStart = {x:0,y:0};'), nl.
 
@@ -484,9 +484,9 @@ emit_js_build_tree_html :-
     write('      if (node.strength !== "no") {'), nl,
     write('        h += "<span class=\\"pkg-blocker " + node.strength + "\\">" + node.strength + " blocker</span>";'), nl,
     write('      }'), nl,
-    write('      h += "<span class=\\"candidates-toggle\\" onclick=\\"toggleCandidates(this)\\">" + nc + " candidate" + (nc!==1?"s":"") + " <span class=\\"arrow\\">&#9656;</span></span>";'), nl,
+    write('      h += "<span class=\\"candidates-toggle\\" onclick=\\"toggleCandidates(this)\\">" + nc + " candidate" + (nc!==1?"s":"") + " <span class=\\"arrow\\">&#9662;</span></span>";'), nl,
     write('      h += "</div>";'), nl,
-    write('      h += "<div class=\\"candidates-list\\">";'), nl,
+    write('      h += "<div class=\\"candidates-list open\\">";'), nl,
     write('      (node.candidates||[]).forEach(c => {'), nl,
     write('        h += "<div class=\\"candidate-item\\">";'), nl,
     write('        h += "<a href=\\"../" + c.id + "-detail.html\\">" + escHTML(c.id) + "</a>";'), nl,
@@ -801,5 +801,5 @@ emit_js_init :-
     write('    const el = document.getElementById("badge-" + p);'), nl,
     write('    if (el) el.textContent = countDeps(depData[p] || []);'), nl,
     write('  });'), nl,
-    write('  renderTree();'), nl,
+    write('  renderGraph();'), nl,
     write('})();'), nl.
