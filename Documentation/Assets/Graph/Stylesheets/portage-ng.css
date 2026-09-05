@@ -162,7 +162,7 @@ body {
 }
 
 body.page-terminal {
-  padding: calc(var(--top-h) + 24px) 32px 56px;
+  padding: var(--top-h) 32px 56px;
 }
 
 html.embedded body {
@@ -170,7 +170,7 @@ html.embedded body {
 }
 
 html.embedded body.page-terminal {
-  padding: 24px 32px 56px;
+  padding: 16px 32px 56px;
 }
 
 ::-webkit-scrollbar { width: 8px; height: 8px; }
@@ -428,6 +428,11 @@ body.page-deptree .legend-swatch { width: 14px; height: 14px; border-radius: 3px
 /* ================================================================
    PAGE: gantt
    ================================================================ */
+
+body.page-gantt {
+  padding: var(--top-h) 32px 16px;
+}
+html.embedded body.page-gantt { padding: 16px 32px; }
 
 .global-use { display: flex; align-items: center; gap: 6px; margin: 0 0 12px; flex-wrap: wrap; }
 .global-use-label {
