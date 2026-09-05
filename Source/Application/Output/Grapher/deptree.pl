@@ -195,7 +195,6 @@ deptree:emit_html(Target, TypeTrees) :-
     navtheme:emit_top_bar('../', Repo, Cat, Name, Ver),
     navtheme:emit_main_open,
     navtheme:emit_page_head_open,
-    emit_subtitle_placeholder,
     version_neighbours(Repo, Entry, Newer, Newest, Older, Oldest),
     navtheme:emit_nav_bar(Repo, Entry, Cat, Name, deptree, Newer, Newest, Older, Oldest, Ver),
     navtheme:emit_page_head_close,
@@ -209,14 +208,6 @@ deptree:emit_html(Target, TypeTrees) :-
     navtheme:emit_main_close,
     navtheme:emit_theme_script,
     navtheme:emit_body_close.
-
-
-% -----------------------------------------------------------------------------
-%  HTML emission - document structure
-% -----------------------------------------------------------------------------
-
-emit_subtitle_placeholder :-
-    write('<p class="subtitle" id="subtitle"></p>'), nl.
 
 
 % -----------------------------------------------------------------------------
@@ -426,8 +417,12 @@ emit_js_build_layout :-
     write('  const tree = getTree();'), nl,
     write('  if (!tree || !tree.nodes.length) return empty;'), nl,
     write('  const childMap = {}, nodeMap = {};'), nl,
-    write('  tree.nodes.forEach(n => { nodeMap[n.id] = n; childMap[n.id] = []; });'), nl,
-    write('  tree.edges.forEach(e => { if (childMap[e.from]) childMap[e.from].push(e.to); });'), nl,
+    write('  const parentMap = {};'), nl,
+    write('  tree.nodes.forEach(n => { nodeMap[n.id] = n; childMap[n.id] = []; parentMap[n.id] = []; });'), nl,
+    write('  tree.edges.forEach(e => {'), nl,
+    write('    if (childMap[e.from]) childMap[e.from].push(e.to);'), nl,
+    write('    if (parentMap[e.to]) parentMap[e.to].push(e.from);'), nl,
+    write('  });'), nl,
     write('  const hiddenSet = new Set();'), nl,
     write('  function markHidden(id) { (childMap[id]||[]).forEach(c => { hiddenSet.add(c); markHidden(c); }); }'), nl,
     write('  collapsed.forEach(id => markHidden(id));'), nl,
@@ -469,38 +464,54 @@ emit_js_build_layout :-
     write('        : {x: along, y: d * LAYER_H + CARD_H / 2 + 24};'), nl,
     write('    });'), nl,
     write('  }'), nl,
+    write('  function barycenter(ids, neighbors) {'), nl,
+    write('    ids.forEach(id => {'), nl,
+    write('      const ns = (neighbors[id]||[]).filter(n => !hiddenSet.has(n) && positions[n]);'), nl,
+    write('      if (ns.length) positions[id][axis] = ns.reduce((s, n) => s + positions[n][axis], 0) / ns.length;'), nl,
+    write('    });'), nl,
+    write('  }'), nl,
     write('  for (let pass = 0; pass < 4; pass++) {'), nl,
     write('    for (let d = maxDepth; d >= 0; d--) {'), nl,
     write('      const ids = layers[d] || [];'), nl,
-    write('      ids.forEach(id => {'), nl,
-    write('        const children = (childMap[id]||[]).filter(c => !hiddenSet.has(c) && positions[c]);'), nl,
-    write('        if (children.length > 0) {'), nl,
-    write('          positions[id][axis] = children.reduce((s, c) => s + positions[c][axis], 0) / children.length;'), nl,
-    write('        }'), nl,
-    write('      });'), nl,
-    write('      spreadLayer(ids, positions, axis, size);'), nl,
+    write('      barycenter(ids, childMap);'), nl,
+    write('      packLayer(ids, positions, axis, size);'), nl,
     write('    }'), nl,
     write('    for (let d = 0; d <= maxDepth; d++) {'), nl,
     write('      const ids = layers[d] || [];'), nl,
-    write('      ids.forEach(id => {'), nl,
-    write('        const children = (childMap[id]||[]).filter(c => !hiddenSet.has(c) && positions[c]);'), nl,
-    write('        if (children.length > 0) {'), nl,
-    write('          positions[id][axis] = children.reduce((s, c) => s + positions[c][axis], 0) / children.length;'), nl,
-    write('        }'), nl,
-    write('      });'), nl,
-    write('      spreadLayer(ids, positions, axis, size);'), nl,
+    write('      barycenter(ids, parentMap);'), nl,
+    write('      packLayer(ids, positions, axis, size);'), nl,
     write('    }'), nl,
     write('  }'), nl,
+    write('  alignLayers(layers, maxDepth, positions, axis, tree.root);'), nl,
     write('  return {positions, hiddenSet, childMap, nodeMap, rankdir, maxDepth};'), nl,
     write('}'), nl.
 
 emit_js_resolve_overlaps :-
-    write('function spreadLayer(ids, positions, axis, size) {'), nl,
+    write('function packLayer(ids, positions, axis, size) {'), nl,
     write('  if (!ids || ids.length <= 1) return;'), nl,
+    write('  ids.sort((a, b) => {'), nl,
+    write('    const d = positions[a][axis] - positions[b][axis];'), nl,
+    write('    return d !== 0 ? d : (a < b ? -1 : 1);'), nl,
+    write('  });'), nl,
+    write('  let cursor = positions[ids[0]][axis];'), nl,
     write('  for (let i = 1; i < ids.length; i++) {'), nl,
-    write('    const prev = positions[ids[i-1]], curr = positions[ids[i]];'), nl,
-    write('    const min = prev[axis] + size + MIN_GAP;'), nl,
-    write('    if (curr[axis] < min) curr[axis] = min;'), nl,
+    write('    cursor += size + MIN_GAP;'), nl,
+    write('    positions[ids[i]][axis] = cursor;'), nl,
+    write('  }'), nl,
+    write('}'), nl,
+    write('function alignLayers(layers, maxDepth, positions, axis, rootId) {'), nl,
+    write('  if (!positions[rootId]) return;'), nl,
+    write('  const target = positions[rootId][axis];'), nl,
+    write('  for (let d = 0; d <= maxDepth; d++) {'), nl,
+    write('    const ids = layers[d] || [];'), nl,
+    write('    if (!ids.length) continue;'), nl,
+    write('    let lo = Infinity, hi = -Infinity;'), nl,
+    write('    ids.forEach(id => {'), nl,
+    write('      const v = positions[id][axis];'), nl,
+    write('      if (v < lo) lo = v; if (v > hi) hi = v;'), nl,
+    write('    });'), nl,
+    write('    const shift = target - (lo + hi) / 2;'), nl,
+    write('    if (shift) ids.forEach(id => { positions[id][axis] += shift; });'), nl,
     write('  }'), nl,
     write('}'), nl.
 
@@ -523,8 +534,8 @@ emit_js_precompute_descendants :-
 emit_js_render :-
     write('function render() {'), nl,
     write('  const tree = getTree();'), nl,
-    write('  if (!tree || !tree.nodes.length) { svg.innerHTML = ""; document.getElementById("subtitle").textContent = "No dependencies"; return; }'), nl,
-    write('  const {positions, hiddenSet, childMap, nodeMap, rankdir, maxDepth} = buildLayout();'), nl,
+    write('  if (!tree || !tree.nodes.length) { svg.innerHTML = ""; return; }'), nl,
+    write('  const {positions, hiddenSet, childMap, nodeMap, rankdir} = buildLayout();'), nl,
     write('  const descCounts = precomputeDescendants(childMap);'), nl,
     write('  fitView(positions);'), nl,
     write('  const parts = [];'), nl,
@@ -539,7 +550,6 @@ emit_js_render :-
     emit_js_render_nodes,
     write('  parts.push("</g>");'), nl,
     write('  svg.innerHTML = parts.join("");'), nl,
-    emit_js_render_stats,
     write('}'), nl,
     emit_js_event_delegation.
 
@@ -622,15 +632,6 @@ emit_js_render_nodes :-
     write('    parts.push(s);'), nl,
     write('  });'), nl.
 
-emit_js_render_stats :-
-    write('  let visN = 0, visE = 0;'), nl,
-    write('  tree.nodes.forEach(n => { if (!hiddenSet.has(n.id) && positions[n.id]) visN++; });'), nl,
-    write('  tree.edges.forEach(e => { if (!hiddenSet.has(e.to) && positions[e.from] && positions[e.to]) visE++; });'), nl,
-    write('  const levels = Object.keys(positions).length ? maxDepth + 1 : 0;'), nl,
-    write('  const total = tree.nodes.length;'), nl,
-    write('  let sub = `${visN} nodes \\u00b7 ${visE} edges \\u00b7 ${levels} levels`;'), nl,
-    write('  if (visN < total) sub += ` (${total} total)`;'), nl,
-    write('  document.getElementById("subtitle").textContent = sub;'), nl.
 
 emit_js_event_delegation :-
     write('const nodeIndex = {};'), nl,

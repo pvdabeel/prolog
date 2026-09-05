@@ -107,9 +107,10 @@ navtheme:emit_main_close :-
 
 %! navtheme:emit_top_bar(+Prefix, +Repo, +Cat, +Name) is det.
 %
-% Emit the fixed brand + crumb + theme-toggle bar. Cat and Name may be
-% '' on repository and category index pages. Prefix is the relative path
-% to the repository index ('' at repo root, '../' in a category directory).
+% Emit the fixed brand + crumb + theme-toggle bar. The clocking mark
+% links to https://portage-ng.ai. Cat and Name may be '' on repository
+% and category index pages. Prefix is the relative path to the repository
+% index ('' at repo root, '../' in a category directory).
 
 navtheme:emit_top_bar(Prefix, Repo, Cat, Name) :-
     navtheme:emit_top_bar(Prefix, Repo, Cat, Name, '').
@@ -123,7 +124,7 @@ navtheme:emit_top_bar(Prefix, Repo, Cat, Name) :-
 navtheme:emit_top_bar(Prefix, Repo, Cat, Name, Ver) :-
     navtheme:html_escape(Repo, RepoE),
     write('<header class="docs-top">'), nl,
-    format('  <a class="brand" href="~windex.html">', [Prefix]),
+    write('  <a class="brand" href="https://portage-ng.ai">'),
     emit_brand_svg,
     write(' portage-ng</a>'), nl,
     write('  <span class="crumb">'), nl,

@@ -456,34 +456,6 @@ gantt:manifest_size(Repo, Entry, Filename, Size) :-
 
 
 % -----------------------------------------------------------------------------
-%  Download size aggregation
-% -----------------------------------------------------------------------------
-
-%! gantt:collect_download_totals(+Grid, +Repo, -TotalBytes, -CachedBytes)
-%
-% Sum manifest sizes across all grid packages. CachedBytes counts only files
-% that are locally present in the distfiles directory.
-
-gantt:collect_download_totals(Grid, Repo, TotalBytes, CachedBytes) :-
-    findall(Size-Cached,
-        (   member(pkg(_, Repo, Entry, _, _, _, _), Grid),
-            query:search(src_uri(uri(_, _, Local)), Repo://Entry),
-            manifest_size(Repo, Entry, Local, Size),
-            (distfiles:present(Local) -> Cached = Size ; Cached = 0)
-        ),
-        Pairs),
-    foldl(sum_pair, Pairs, 0-0, TotalBytes-CachedBytes).
-
-%! gantt:sum_pair(+Pair, +Acc, -Acc1) is det.
-%
-% Fold helper: accumulate size and cached-size pairs.
-
-gantt:sum_pair(S-C, T0-C0, T1-C1) :-
-    T1 is T0 + S,
-    C1 is C0 + C.
-
-
-% -----------------------------------------------------------------------------
 %  HTML emission - main
 % -----------------------------------------------------------------------------
 
@@ -496,8 +468,6 @@ gantt:emit_html(Target, Grid, Deps, NumSteps, HasPre) :-
     Target = Repo://Entry,
     cache:ordered_entry(Repo, Entry, Cat, Name, Version),
     version_domain:display_atom(Version, Ver),
-    length(Grid, PkgCount),
-    collect_download_totals(Grid, Repo, TotalBytes, CachedBytes),
     (HasPre == true -> MinStep = 0 ; MinStep = 1),
     format(atom(Title), '~w/~w-~w &mdash; Execution Plan', [Cat, Name, Ver]),
     navtheme:emit_doctype,
@@ -507,7 +477,6 @@ gantt:emit_html(Target, Grid, Deps, NumSteps, HasPre) :-
     navtheme:emit_top_bar('../', Repo, Cat, Name, Ver),
     navtheme:emit_main_open,
     navtheme:emit_page_head_open,
-    emit_subtitle(PkgCount, NumSteps, TotalBytes, CachedBytes),
     deptree:version_neighbours(Repo, Entry, Newer, Newest, Older, Oldest),
     navtheme:emit_nav_bar(Repo, Entry, Cat, Name, gantt, Newer, Newest, Older, Oldest, Ver),
     navtheme:emit_page_head_close,
@@ -530,21 +499,6 @@ gantt:emit_html(Target, Grid, Deps, NumSteps, HasPre) :-
 % -----------------------------------------------------------------------------
 %  HTML emission - document structure
 % -----------------------------------------------------------------------------
-
-%! gantt:emit_subtitle(+PkgCount, +NumSteps, +TotalBytes, +CachedBytes) is det.
-%
-% Emit the summary subtitle with package count, steps, and download sizes.
-
-gantt:emit_subtitle(PkgCount, NumSteps, TotalBytes, CachedBytes) :-
-    format_size(TotalBytes, TotalStr),
-    format_size(CachedBytes, CachedStr),
-    format('<p class="subtitle">~w packages &middot; ~w steps &middot; ', [PkgCount, NumSteps]),
-    format('download ~w', [TotalStr]),
-    (   CachedBytes > 0
-    ->  format(' (~w cached)', [CachedStr])
-    ;   true
-    ),
-    write('</p>'), nl.
 
 %! gantt:emit_global_use(+Flags) is det.
 %
@@ -579,10 +533,12 @@ gantt:emit_filters :-
     write('    <button class="filter-btn active" data-action="reinstall" onclick="toggleFilter(this)">:reinstall</button>'), nl,
     write('    <button class="filter-btn active" data-action="downgrade" onclick="toggleFilter(this)">:downgrade</button>'), nl,
     write('    <button class="filter-btn active" data-action="run" onclick="toggleFilter(this)">run</button>'), nl,
+    write('    <span class="sep" aria-hidden="true"></span>'), nl,
     write('    <button class="filter-btn active" data-action="unmask" onclick="toggleFilter(this)">unmask</button>'), nl,
     write('    <button class="filter-btn active" data-action="keyword" onclick="toggleFilter(this)">keyword</button>'), nl,
     write('    <button class="filter-btn active" data-action="useflag" onclick="toggleFilter(this)">useflag</button>'), nl,
     write('    <button class="filter-btn active" data-action="license" onclick="toggleFilter(this)">license</button>'), nl,
+    write('    <span class="sep" aria-hidden="true"></span>'), nl,
     write('    <button class="filter-btn active" data-action="bdepend" onclick="toggleFilter(this)">BDEPEND</button>'), nl,
     write('    <button class="filter-btn active" data-action="depend" onclick="toggleFilter(this)">DEPEND</button>'), nl,
     write('    <button class="filter-btn active" data-action="rdepend" onclick="toggleFilter(this)">RDEPEND</button>'), nl,
