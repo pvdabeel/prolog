@@ -5,9 +5,10 @@
   In-page navigation, Shared components, then page-specific blocks
   (deptree, gantt, detail, terminal, index).
 
-  Each page sets a body class (page-deptree, page-gantt, etc.) so that
-  conflicting rules can be scoped when needed. Light is the default
-  (html[data-theme="light"]); dark is :root with the attribute removed.
+  Each page sets a body class (page-deptree, page-gantt, page-404, etc.)
+  so that conflicting rules can be scoped when needed. Light is the
+  default (html[data-theme="light"]); dark is :root with the attribute
+  removed.
 
   Author:   Pieter Van den Abeele
   Copyright (c) 2005-2026, Pieter Van den Abeele
@@ -954,3 +955,86 @@ html.embedded .alpha-bar { top: 0; }
 .alpha-link.disabled { color: var(--text3); cursor: default; border-color: transparent; background: none; }
 .alpha-link.disabled:hover { background: none; color: var(--text3); }
 .anchor { display: block; padding-top: 40px; margin-top: -40px; pointer-events: none; }
+
+/* ================================================================
+   PAGE: 404 (handbook-style prove/assumption snippet)
+   ================================================================ */
+
+body.page-404 {
+  padding: 0;
+  min-height: 100vh;
+}
+
+.nf {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 24px;
+}
+
+.nf-code {
+  font-family: var(--mono);
+  font-size: 15px;
+  color: var(--text-2);
+  background: #0d0f16;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  padding: 22px 28px;
+  text-align: left;
+  margin: 0 0 30px;
+}
+
+.nf-code .p { color: var(--green); font-weight: 700; }
+.nf-code .e { color: #ff8896; }
+html[data-theme="light"] .nf-code { background: #ffffff; }
+html[data-theme="light"] .nf-code .e { color: #d33c4e; }
+
+body.page-404 h1 { margin: 0 0 10px; font-size: 28px; }
+body.page-404 h1 .glyph {
+  background: linear-gradient(90deg, var(--violet), var(--green));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+body.page-404 p { color: var(--text-2); margin: 0 0 28px; }
+
+.cta-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 20px;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  text-decoration: none;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+  cursor: pointer;
+}
+.btn:hover { text-decoration: none; transform: translateY(-1px); }
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--violet), #9d7bfa);
+  color: #fff;
+  box-shadow: 0 4px 24px rgba(124, 92, 240, 0.35);
+}
+.btn-primary:hover { box-shadow: 0 6px 32px rgba(124, 92, 240, 0.5); color: #fff; }
+
+.btn-ghost {
+  border-color: var(--border-strong);
+  background: var(--bg2);
+  color: var(--text);
+}
+.btn-ghost:hover { border-color: var(--violet); color: var(--text); }

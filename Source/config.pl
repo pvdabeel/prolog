@@ -725,6 +725,15 @@ config:graph_include_emerge(false).
 config:graph_html_type([detail,deptree,gantt,merge,fetchonly,info,emerge]).
 
 
+%! config:graph_site_url(?Url)
+%
+% Public origin of the generated graph site, with no trailing slash.
+% `--graph` writes robots.txt and sitemap.xml against this host
+% (default https://ebuild.portage-ng.ai). Override per host if needed.
+
+config:graph_site_url('https://ebuild.portage-ng.ai').
+
+
 %! config:graph_dependency_type(?List)
 %
 % Legacy: dependency types for which DOT graphs can be produced.
