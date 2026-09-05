@@ -2,6 +2,8 @@
 
 A declarative reasoning engine for software configuration, applied to Gentoo Linux.
 
+[portage-ng.ai](https://portage-ng.ai)
+
 ## Reasoning engine
 
 Assembling thousands of interdependent components with user-specified feature
@@ -15,7 +17,7 @@ decipher, but actionable plans where others fail.
 - Multiple solutions and variant exploration
 - Progressive relaxation with actionable suggestions
 - Wave planning with optimal parallelism and SCC scheduling
-- Builder-to-prover feedback: undeclared build dependencies discovered at build time are learned and the plan is re-derived, never patched
+- Builder-to-prover feedback: undeclared build dependencies discovered at build time are learned
 - Semantic search, LLM integration, distributed proving
 - Portage-compatible execution and pre-upgrade snapshots
 - Domain-agnostic reasoning core -- Gentoo-specific logic is a pluggable rules layer
