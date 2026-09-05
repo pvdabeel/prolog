@@ -575,9 +575,29 @@ body.page-gantt .legend-swatch { width: 12px; height: 12px; border-radius: 2px; 
    PAGE: detail
    ================================================================ */
 
+body.page-detail {
+  overflow: hidden; display: flex; flex-direction: column;
+  height: 100vh; padding: var(--top-h) 32px 16px;
+}
+html.embedded body.page-detail { padding: 16px 32px; }
+body.page-detail .graph-main {
+  flex: 1; min-height: 0; display: flex; flex-direction: column;
+}
+body.page-detail .page-head { flex-shrink: 0; }
+body.page-detail .term {
+  flex: 1; min-height: 0;
+  display: flex; flex-direction: column;
+}
+body.page-detail .term-body {
+  flex: 1; min-height: 0;
+  display: flex; flex-direction: column;
+  padding: 12px 14px 14px;
+}
+
 .controls-row {
   display: flex; justify-content: space-between; align-items: center;
   padding: 0 0 10px; border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
 }
 .phase-tabs { display: flex; gap: 4px; }
 .phase-tab {
@@ -613,6 +633,7 @@ body.page-gantt .legend-swatch { width: 12px; height: 12px; border-radius: 2px; 
 .tree-toolbar {
   display: flex; gap: 6px; padding: 8px 0;
   border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
 }
 .tree-toolbar button {
   padding: 3px 10px; background: var(--surface);
@@ -623,6 +644,9 @@ body.page-gantt .legend-swatch { width: 12px; height: 12px; border-radius: 2px; 
 .tree-toolbar button:hover { color: var(--text); border-color: var(--accent); }
 
 .tree-container { padding: 12px 0; overflow-y: auto; max-height: calc(100vh - 260px); }
+body.page-detail .tree-container {
+  flex: 1; min-height: 0; max-height: none;
+}
 .tree-node { margin: 0; }
 .tree-children { padding-left: 24px; position: relative; }
 .tree-children::before {
@@ -688,7 +712,7 @@ body.page-gantt .legend-swatch { width: 12px; height: 12px; border-radius: 2px; 
 .tree-empty { padding: 20px; color: var(--text2); font-style: italic; }
 
 body.page-detail .graph-container {
-  display: none; width: 100%; height: calc(100vh - 260px);
+  display: none; width: 100%; flex: 1; min-height: 0;
   position: relative; overflow: hidden;
   border: 1px solid var(--border); border-radius: var(--radius);
   background: var(--surface2); margin-top: 8px;
@@ -700,9 +724,9 @@ body.page-detail .graph-container svg { width: 100%; height: 100%; }
 body.page-detail .graph-container svg text { font-family: var(--sans); }
 
 body.page-detail .legend {
-  display: flex; gap: 14px; padding: 10px 0; font-size: 12px;
+  display: flex; gap: 14px; padding: 10px 0 0; font-size: 12px;
   align-items: center; flex-wrap: wrap; border-top: 1px solid var(--border);
-  margin-top: 8px;
+  margin-top: 8px; flex-shrink: 0;
 }
 .legend-title { font-weight: 600; color: var(--text2); }
 body.page-detail .legend-item { display: flex; align-items: center; gap: 4px; color: var(--text2); }

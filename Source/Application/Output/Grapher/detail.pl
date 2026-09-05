@@ -43,8 +43,10 @@ detail:graph(Repository://Entry) :-
 
 %! detail:collect_dep_tree(+Repo, +Entry, -InstallTree, -RunTree, -BothTree)
 %
-% Collect dependency expression trees split by phase. Install-only, run-only,
-% and shared (both) dependency sets are each converted to nested tree terms.
+% Collect dependency expression trees by phase. Install and Run are the
+% full trees for that phase. Both is the intersection: expressions
+% declared in install *and* run (phase slot ignored so DEPEND and
+% RDEPEND copies of the same atom match).
 
 collect_dep_tree(Repository, Entry, InstallTree, RunTree, BothTree) :-
     (   query:search(all(dependency(C, install)), Repository://Entry)
@@ -57,11 +59,36 @@ collect_dep_tree(Repository, Entry, InstallTree, RunTree, BothTree) :-
     ),
     list_to_ord_set(C, OC),
     list_to_ord_set(R, OR),
-    ord_intersection(OC, OR, Both, InstallOnly),
-    ord_intersection(OR, OC, _, RunOnly),
-    maplist(build_tree(Repository), InstallOnly, InstallTree),
-    maplist(build_tree(Repository), RunOnly, RunTree),
+    maplist(phase_neutral, OC, NeutralC0),
+    maplist(phase_neutral, OR, NeutralR0),
+    list_to_ord_set(NeutralC0, NeutralC),
+    list_to_ord_set(NeutralR0, NeutralR),
+    ord_intersection(NeutralC, NeutralR, Both),
+    maplist(build_tree(Repository), OC, InstallTree),
+    maplist(build_tree(Repository), OR, RunTree),
     maplist(build_tree(Repository), Both, BothTree).
+
+
+%! detail:phase_neutral(+Dep, -Neutral) is det.
+%
+% Drop the parse-phase argument of package_dependency/8 (install vs run)
+% and the parent ebuild slot of use_conditional_group/4 so the same
+% declared atom compares equal across phases.
+
+phase_neutral(package_dependency(_, B, C, P, Op, V, S, U),
+              package_dependency(any, B, C, P, Op, V, S, U)) :- !.
+phase_neutral(use_conditional_group(Pol, Use, _, Deps),
+              use_conditional_group(Pol, Use, any, Neutral)) :-
+  !,
+  maplist(phase_neutral, Deps, Neutral).
+phase_neutral(Term, Neutral) :-
+  Term =.. [Functor, Deps],
+  memberchk(Functor, [any_of_group, all_of_group,
+                      exactly_one_of_group, at_most_one_of_group]),
+  !,
+  maplist(phase_neutral, Deps, NeutralDeps),
+  Neutral =.. [Functor, NeutralDeps].
+phase_neutral(Term, Term).
 
 
 %! detail:build_tree(+Repo, +DepExpr, -Tree)
@@ -247,12 +274,12 @@ emit_html(Target, InstallTree, RunTree, BothTree) :-
     navtheme:emit_head_open(Title, '../'),
     navtheme:emit_head_close,
     navtheme:emit_body_open('page-detail'),
-    navtheme:emit_top_bar('../', Repo, Cat, Name),
+    navtheme:emit_top_bar('../', Repo, Cat, Name, Ver),
     navtheme:emit_main_open,
     navtheme:emit_page_head_open,
     emit_subtitle,
     deptree:version_neighbours(Repo, Entry, Newer, Newest, Older, Oldest),
-    navtheme:emit_nav_bar(Repo, Entry, Cat, Name, detail, Newer, Newest, Older, Oldest),
+    navtheme:emit_nav_bar(Repo, Entry, Cat, Name, detail, Newer, Newest, Older, Oldest, Ver),
     navtheme:emit_page_head_close,
     navtheme:emit_term_open('portage-ng detail'),
     emit_controls_row,
@@ -278,9 +305,9 @@ emit_subtitle :-
 emit_controls_row :-
     write('<div class="controls-row">'), nl,
     write('  <div class="phase-tabs">'), nl,
-    write('    <button class="phase-tab active" data-phase="install" onclick="switchPhase(\'install\',this)">Install<span class="badge" id="badge-install">0</span></button>'), nl,
-    write('    <button class="phase-tab" data-phase="run" onclick="switchPhase(\'run\',this)">Run<span class="badge" id="badge-run">0</span></button>'), nl,
-    write('    <button class="phase-tab" data-phase="both" onclick="switchPhase(\'both\',this)">Install &amp; Run<span class="badge" id="badge-both">0</span></button>'), nl,
+    write('    <button class="phase-tab active" data-phase="install" onclick="switchPhase(\'install\',this)" title="DEPEND, BDEPEND, CDEPEND">Install<span class="badge" id="badge-install">0</span></button>'), nl,
+    write('    <button class="phase-tab" data-phase="run" onclick="switchPhase(\'run\',this)" title="RDEPEND, IDEPEND">Run<span class="badge" id="badge-run">0</span></button>'), nl,
+    write('    <button class="phase-tab" data-phase="both" onclick="switchPhase(\'both\',this)" title="Declared in both install and run">Both<span class="badge" id="badge-both">0</span></button>'), nl,
     write('  </div>'), nl,
     write('  <div class="view-toggle">'), nl,
     write('    <button class="view-btn active" onclick="switchView(\'tree\',this)">&#9776; Tree</button>'), nl,
@@ -396,7 +423,13 @@ emit_js_tree_renderer :-
     write('function renderTree() {'), nl,
     write('  const data = depData[currentPhase] || [];'), nl,
     write('  const el = document.getElementById("tree-container");'), nl,
-    write('  if (!data.length) { el.innerHTML = "<div class=\\"tree-empty\\">No dependencies for this phase.</div>"; updateSubtitle(); return; }'), nl,
+    write('  if (!data.length) {'), nl,
+    write('    const empty = currentPhase === "both"'), nl,
+    write('      ? "No dependencies declared in both install and run."'), nl,
+    write('      : "No dependencies for this phase.";'), nl,
+    write('    el.innerHTML = "<div class=\\"tree-empty\\">" + empty + "</div>";'), nl,
+    write('    updateSubtitle(); return;'), nl,
+    write('  }'), nl,
     write('  el.innerHTML = buildTreeHTML(data);'), nl,
     write('  updateSubtitle();'), nl,
     write('}'), nl,

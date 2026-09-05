@@ -112,13 +112,22 @@ navtheme:emit_main_close :-
 % to the repository index ('' at repo root, '../' in a category directory).
 
 navtheme:emit_top_bar(Prefix, Repo, Cat, Name) :-
+    navtheme:emit_top_bar(Prefix, Repo, Cat, Name, '').
+
+
+%! navtheme:emit_top_bar(+Prefix, +Repo, +Cat, +Name, +Ver) is det.
+%
+% As emit_top_bar/4, with Ver the ebuild version shown as the last crumb
+% ('' omits it — index pages).
+
+navtheme:emit_top_bar(Prefix, Repo, Cat, Name, Ver) :-
     navtheme:html_escape(Repo, RepoE),
     write('<header class="docs-top">'), nl,
     format('  <a class="brand" href="~windex.html">', [Prefix]),
     emit_brand_svg,
     write(' portage-ng</a>'), nl,
     write('  <span class="crumb">'), nl,
-    emit_crumb(Prefix, RepoE, Cat, Name),
+    emit_crumb(Prefix, RepoE, Cat, Name, Ver),
     write('  </span>'), nl,
     write('  <div class="top-right">'), nl,
     emit_theme_toggle,
@@ -126,23 +135,25 @@ navtheme:emit_top_bar(Prefix, Repo, Cat, Name) :-
     write('</header>'), nl.
 
 
-%! navtheme:emit_crumb(+Prefix, +RepoEscaped, +Cat, +Name) is det.
+%! navtheme:emit_crumb(+Prefix, +RepoEscaped, +Cat, +Name, +Ver) is det.
 %
 % Emit the mono crumb trail. Earlier segments are links; the last is
-% the current page.
+% the current page. Ver, when non-empty, is the current segment so the
+% package name stays a link to the package index.
 
-navtheme:emit_crumb(_Prefix, RepoE, '', '') :-
+navtheme:emit_crumb(_Prefix, RepoE, '', '', _) :-
     !,
     write('    <span class="crumb-sep">/</span>'), nl,
     format('    <span class="crumb-current">~w</span>~n', [RepoE]).
-navtheme:emit_crumb(Prefix, RepoE, Cat, '') :-
+navtheme:emit_crumb(Prefix, RepoE, Cat, '', _) :-
     !,
     navtheme:html_escape(Cat, CatE),
     write('    <span class="crumb-sep">/</span>'), nl,
     format('    <a href="~windex.html">~w</a>~n', [Prefix, RepoE]),
     write('    <span class="crumb-sep">/</span>'), nl,
     format('    <span class="crumb-current">~w</span>~n', [CatE]).
-navtheme:emit_crumb(Prefix, RepoE, Cat, Name) :-
+navtheme:emit_crumb(Prefix, RepoE, Cat, Name, '') :-
+    !,
     navtheme:html_escape(Cat, CatE),
     navtheme:html_escape(Name, NameE),
     write('    <span class="crumb-sep">/</span>'), nl,
@@ -150,7 +161,19 @@ navtheme:emit_crumb(Prefix, RepoE, Cat, Name) :-
     write('    <span class="crumb-sep">/</span>'), nl,
     format('    <a href="./index.html">~w</a>~n', [CatE]),
     write('    <span class="crumb-sep">/</span>'), nl,
-    format('    <a href="./~w.html">~w</a>~n', [NameE, NameE]).
+    format('    <span class="crumb-current">~w</span>~n', [NameE]).
+navtheme:emit_crumb(Prefix, RepoE, Cat, Name, Ver) :-
+    navtheme:html_escape(Cat, CatE),
+    navtheme:html_escape(Name, NameE),
+    navtheme:html_escape(Ver, VerE),
+    write('    <span class="crumb-sep">/</span>'), nl,
+    format('    <a href="~windex.html">~w</a>~n', [Prefix, RepoE]),
+    write('    <span class="crumb-sep">/</span>'), nl,
+    format('    <a href="./index.html">~w</a>~n', [CatE]),
+    write('    <span class="crumb-sep">/</span>'), nl,
+    format('    <a href="./~w.html">~w</a>~n', [NameE, NameE]),
+    write('    <span class="crumb-sep">/</span>'), nl,
+    format('    <span class="crumb-current">~w</span>~n', [VerE]).
 
 
 %! navtheme:emit_brand_svg is det.
@@ -226,10 +249,18 @@ navtheme:emit_term_close :-
 % Emit the in-page tab bar: version, graph types, CLI, and legacy in one
 % wrapping row. Repo/Cat/Name live in the top-bar crumb.
 
-navtheme:emit_nav_bar(_Repo, Entry, _Cat, _Name, ActiveType, Newer, Newest, Older, Oldest) :-
+navtheme:emit_nav_bar(Repo, Entry, Cat, Name, ActiveType, Newer, Newest, Older, Oldest) :-
+    navtheme:emit_nav_bar(Repo, Entry, Cat, Name, ActiveType, Newer, Newest, Older, Oldest, '').
+
+
+%! navtheme:emit_nav_bar(+Repo, +Entry, +Cat, +Name, +ActiveType, +Newer, +Newest, +Older, +Oldest, +Ver)
+%
+% As emit_nav_bar/9, with Ver shown between the version arrows.
+
+navtheme:emit_nav_bar(_Repo, Entry, _Cat, _Name, ActiveType, Newer, Newest, Older, Oldest, Ver) :-
     write('<div class="nav-rows">'), nl,
     write('<div class="nav-bar">'), nl,
-    emit_version_group(Entry, ActiveType, Newer, Newest, Older, Oldest),
+    emit_version_group(Entry, ActiveType, Newer, Newest, Older, Oldest, Ver),
     emit_graphs_group(Entry, ActiveType),
     emit_cli_group(Entry, ActiveType),
     emit_legacy_group(Entry, ActiveType),
@@ -237,18 +268,30 @@ navtheme:emit_nav_bar(_Repo, Entry, _Cat, _Name, ActiveType, Newer, Newest, Olde
     write('</div>'), nl.
 
 
-%! navtheme:emit_version_group(+Entry, +ActiveType, +Newer, +Newest, +Older, +Oldest) is det.
+%! navtheme:emit_version_group(+Entry, +ActiveType, +Newer, +Newest, +Older, +Oldest, +Ver) is det.
 %
-% Emit the version navigation group with newest/newer/older/oldest links.
+% Emit the version navigation group: newest/newer, the current version,
+% older/oldest.
 
-navtheme:emit_version_group(_Entry, ActiveType, Newer, Newest, Older, Oldest) :-
+navtheme:emit_version_group(_Entry, ActiveType, Newer, Newest, Older, Oldest, Ver) :-
     write('  <div class="nav-group">'), nl,
     write('    <span class="nav-group-label">version</span>'), nl,
     emit_version_link(Newest, '&laquo;', ActiveType),
     emit_version_link(Newer,  '&lsaquo;', ActiveType),
+    emit_version_current(Ver),
     emit_version_link(Older,  '&rsaquo;', ActiveType),
     emit_version_link(Oldest, '&raquo;', ActiveType),
     write('  </div>'), nl.
+
+
+%! navtheme:emit_version_current(+Ver) is det.
+%
+% Emit the current ebuild version in the version tab group.
+
+navtheme:emit_version_current('') :- !.
+navtheme:emit_version_current(Ver) :-
+    navtheme:html_escape(Ver, VerE),
+    format('    <span class="nav-link active">~w</span>~n', [VerE]).
 
 
 %! navtheme:emit_graphs_group(+Entry, +ActiveType) is det.
