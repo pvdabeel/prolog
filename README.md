@@ -1,4 +1,4 @@
-# ::- portage-ng
+# <img src="Documentation/Images/icon.svg" alt="" width="32" height="32"> portage-ng
 
 A declarative reasoning engine for software configuration, applied to Gentoo Linux.
 
