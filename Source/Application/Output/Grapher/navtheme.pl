@@ -176,18 +176,32 @@ navtheme:emit_theme_toggle :-
 %  HTML: in-page type / version tabs
 % -----------------------------------------------------------------------------
 
+%! navtheme:emit_page_head_open is det.
+%
+% Open the page-head band that holds the subtitle and in-page tabs on one row.
+
+navtheme:emit_page_head_open :-
+    write('<div class="page-head">'), nl.
+
+
+%! navtheme:emit_page_head_close is det.
+%
+% Close the page-head band.
+
+navtheme:emit_page_head_close :-
+    write('</div>'), nl.
+
+
 %! navtheme:emit_nav_bar(+Repo, +Entry, +Cat, +Name, +ActiveType, +Newer, +Newest, +Older, +Oldest)
 %
-% Emit the two-row in-page tab bar. Row 1 has version and graph types,
-% row 2 has CLI and legacy groups. Repo/Cat/Name live in the top-bar crumb.
+% Emit the in-page tab bar: version, graph types, CLI, and legacy in one
+% wrapping row. Repo/Cat/Name live in the top-bar crumb.
 
 navtheme:emit_nav_bar(_Repo, Entry, _Cat, _Name, ActiveType, Newer, Newest, Older, Oldest) :-
     write('<div class="nav-rows">'), nl,
     write('<div class="nav-bar">'), nl,
     emit_version_group(Entry, ActiveType, Newer, Newest, Older, Oldest),
     emit_graphs_group(Entry, ActiveType),
-    write('</div>'), nl,
-    write('<div class="nav-bar">'), nl,
     emit_cli_group(Entry, ActiveType),
     emit_legacy_group(Entry, ActiveType),
     write('</div>'), nl,
