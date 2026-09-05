@@ -279,7 +279,8 @@ test(assumption_reason_type_unknown_fails, [fail]) :-
 :- begin_tests(fetchonly_print_filter).
 
 fo_cleanup :-
-  retractall(preference:local_flag(fetchonly)).
+  retractall(preference:local_flag(fetchonly)),
+  retractall(preference:scoped_flag(fetchonly)).
 
 test(hides_install,
      [setup(fo_cleanup), cleanup(fo_cleanup)]) :-
@@ -311,5 +312,20 @@ test(footer_omits_merge_actions,
   S.installs == 0,
   S.runs == 0,
   S.actions == 1.
+
+test(scoped_flag_is_thread_local,
+     [setup(fo_cleanup), cleanup(fo_cleanup)]) :-
+  message_queue_create(Q),
+  thread_create(
+    preference:with_local_flag(fetchonly,
+      ( thread_send_message(Q, inside),
+        thread_get_message(Q, done)
+      )),
+    Id, []),
+  thread_get_message(Q, inside),
+  plan:printable_element(_, rule(r://'p-1':install?{[]}, [])),
+  thread_send_message(Q, done),
+  thread_join(Id, true),
+  message_queue_destroy(Q).
 
 :- end_tests(fetchonly_print_filter).

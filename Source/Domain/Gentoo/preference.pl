@@ -55,6 +55,7 @@ Materialized preference state is written to `Knowledge/preference.qlf` via
 :- dynamic preference:local_env_use/1.
 :- dynamic preference:local_accept_keywords/1.
 :- dynamic preference:local_flag/1.
+:- thread_local preference:scoped_flag/1.
 
 % -- Per-package USE overrides --
 %    Storage predicates; query via dispatchers of the same name without local_.
@@ -615,25 +616,29 @@ preference:raw_keyword_matches_(RawKW, K) :-
 % Returns active interface flags (deep, emptytree, etc.).
 % In standalone mode, set by interface.  In client-server mode,
 % injected as thread-local clauses by the Pengines sandbox.
+% preference:with_local_flag/2 asserts a per-thread scoped_flag/1 so
+% parallel `--graph` writers cannot leak `--fetchonly` into a sibling
+% merge print.
 
 preference:flag(Flag) :-
-  ( preference:pengine_module(M) ->
-      M:local_flag(Flag)
+  ( preference:scoped_flag(Flag)
+  ; preference:pengine_module(M)
+  -> M:local_flag(Flag)
   ; preference:local_flag(Flag)
   ).
 
 
 %! preference:with_local_flag(+Flag, :Goal) is det.
 %
-% Asserts preference:local_flag(Flag) for the duration of Goal. Used by
-% graph writers and tests that print or execute a :run plan under
-% `--fetchonly` without going through interface:process_flags/0.
+% Asserts a thread-local scoped_flag(Flag) for the duration of Goal.
+% Used by graph writers and tests that print or execute a :run plan
+% under `--fetchonly` without going through interface:process_flags/0.
 
 :- meta_predicate preference:with_local_flag(+, 0).
 
 preference:with_local_flag(Flag, Goal) :-
   setup_call_cleanup(
-    asserta(preference:local_flag(Flag), Ref),
+    asserta(preference:scoped_flag(Flag), Ref),
     Goal,
     erase(Ref)).
 

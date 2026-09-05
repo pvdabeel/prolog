@@ -254,7 +254,8 @@ eapi_repo_registered :-
 :- begin_tests(fetchonly_execute_filter).
 
 fo_cleanup :-
-  retractall(preference:local_flag(fetchonly)).
+  retractall(preference:local_flag(fetchonly)),
+  retractall(preference:scoped_flag(fetchonly)).
 
 test(keeps_download,
      [setup(fo_cleanup), cleanup(fo_cleanup)]) :-

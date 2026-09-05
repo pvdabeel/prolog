@@ -530,7 +530,8 @@ plan:print_element(State,rule(Repository://Entry:Action?{Context},_)) :-
   plan:print_blocker_note_if_any(State, Action, Repository, Entry),
   plan:print_newuse_note_if_any(Action, Context),
   message:color(normal),
-  useflags:print_config(Repository://Entry:Action?{Context}).
+  useflags:print_config(Repository://Entry:Action?{Context}),
+  !.
 
 
 % --------------------------------------------------------------
@@ -1032,7 +1033,7 @@ plan:print_first_in_step(State,[Rule|Rest],Count,NewCount) :-
   write(' └─'),
   message:bubble(darkgray,StepNewCount),
   write('─┤ '),
-  plan:print_element(State,Rule),
+  plan:print_element_safe(State,Rule),
   plan:print_next_in_step(State,Rest).
 
 plan:print_first_in_step(State,[_|Rest],Count,NewCount) :-
@@ -1049,12 +1050,25 @@ plan:print_next_in_step(State,[Rule|Rest]) :-
   !,
   nl,
   write('             │ '),
-  plan:print_element(State,Rule),
+  plan:print_element_safe(State,Rule),
   plan:print_next_in_step(State,Rest).
 
 plan:print_next_in_step(State,[_|Rest]) :-
   !,
   plan:print_next_in_step(State,Rest).
+
+
+%! plan:print_element_safe(+State, +Rule) is det.
+%
+% Print one plan element. A failure or exception in print_element/2
+% must not abort the rest of the step (or the footer): --graph writes
+% plans through tell/1, where line_position/2 can throw, and a single
+% bad config line used to drop every later action from the page.
+
+plan:print_element_safe(State, Rule) :-
+  catch(plan:print_element(State, Rule), _, fail),
+  !.
+plan:print_element_safe(_, _).
 
 
 %! plan:print_footer(+Plan, +ModelAVL, +PrintedSteps, +PreActions)

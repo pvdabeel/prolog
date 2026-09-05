@@ -397,10 +397,17 @@ useflags:print_config_item_aligned(Ctx, Key, Keyflags, Assumed) :-
   upcase_atom(Key, KeyU),
   message:bubble(darkgray,KeyU),
   message:print(' = "'),
-  config:printing_tty_size(_, TermWidth),
-  line_position(current_output, StartCol),
-  useflags:collect_all_flags(Keyflags, Assumed, AllFlags),
-  useflags:print_flags_wrapped(Ctx, AllFlags, StartCol, TermWidth),
+  catch(
+      ( config:printing_tty_size(_, TermWidth),
+        line_position(current_output, StartCol),
+        useflags:collect_all_flags(Keyflags, Assumed, AllFlags),
+        useflags:print_flags_wrapped(Ctx, AllFlags, StartCol, TermWidth)
+      ),
+      error(io_error(check, stream(_)), _),
+      ( useflags:collect_all_flags(Keyflags, Assumed, AllFlags),
+        useflags:print_flags_unwrapped(Ctx, AllFlags)
+      )
+  ),
   message:print('"').
 
 
