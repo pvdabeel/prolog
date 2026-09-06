@@ -338,12 +338,13 @@ interface:require_digest_password :-
 %! interface:init_tty
 %
 % Initialize TTY-related features (editline, history). Safe to call when
-% stdout is redirected; silently skips when not on a real terminal.
+% stdout is redirected or when library(editline) is not available (SWI
+% built without libedit); silently skips in both cases.
 
 interface:init_tty :-
   ( stream_property(user_input, tty(true)),
     stream_property(user_output, tty(true))
-  -> ensure_loaded(library('editline')),
+  -> catch(ensure_loaded(library('editline')), _, true),
      catch(prolog_history(enable), _, true)
   ; true
   ).
