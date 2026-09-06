@@ -337,10 +337,11 @@ interface:require_digest_password :-
 
 %! interface:init_tty
 %
-% Initialize TTY-related features (line editor, history). Prefers
-% library(editline) and falls back to library(readline). Safe to call
-% when stdout is redirected or when neither editor is available;
-% silently skips in both cases.
+% Load a command-line editor when running on a TTY. Prefers
+% library(editline) and falls back to library(readline), then
+% enables persistent history. Does not call rl_wrap/el_wrap:
+% GNU readline's wrap before prolog/0 leaves the toplevel blocked
+% with no prompt on this SWI build.
 
 interface:init_tty :-
   ( stream_property(user_input, tty(true)),
@@ -353,24 +354,15 @@ interface:init_tty :-
 
 %! interface:init_line_editor is det.
 %
-% Load a command-line editor and wrap user_input. SWI's packaged
-% readline/editline QLF may have been compiled without a TTY, in
-% which case the library's :- initialization wrap never ran and
-% loading the module alone leaves history disabled.
+% Load library(editline) or library(readline). The library's own
+% initialization wrap, when present in the QLF, is what attaches
+% the editor; we do not wrap explicitly.
 
 interface:init_line_editor :-
   catch(ensure_loaded(library('editline')), _, fail),
-  ( current_prolog_flag(readline, editline)
-  -> true
-  ; catch(editline:el_wrap, _, true)
-  ),
   !.
 interface:init_line_editor :-
   catch(ensure_loaded(library('readline')), _, fail),
-  ( current_prolog_flag(readline, readline)
-  -> true
-  ; catch(readline:rl_wrap, _, true)
-  ),
   !.
 interface:init_line_editor.
 
