@@ -345,13 +345,34 @@ interface:require_digest_password :-
 interface:init_tty :-
   ( stream_property(user_input, tty(true)),
     stream_property(user_output, tty(true))
-  -> ( catch(ensure_loaded(library('editline')), _, fail)
-     -> true
-     ;  catch(ensure_loaded(library('readline')), _, true)
-     ),
+  -> interface:init_line_editor,
      catch(prolog_history(enable), _, true)
   ; true
   ).
+
+
+%! interface:init_line_editor is det.
+%
+% Load a command-line editor and wrap user_input. SWI's packaged
+% readline/editline QLF may have been compiled without a TTY, in
+% which case the library's :- initialization wrap never ran and
+% loading the module alone leaves history disabled.
+
+interface:init_line_editor :-
+  catch(ensure_loaded(library('editline')), _, fail),
+  ( current_prolog_flag(readline, editline)
+  -> true
+  ; catch(editline:el_wrap, _, true)
+  ),
+  !.
+interface:init_line_editor :-
+  catch(ensure_loaded(library('readline')), _, fail),
+  ( current_prolog_flag(readline, readline)
+  -> true
+  ; catch(readline:rl_wrap, _, true)
+  ),
+  !.
+interface:init_line_editor.
 
 
 %! interface:init_working_dir is det.
