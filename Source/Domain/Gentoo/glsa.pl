@@ -13,10 +13,12 @@ Gentoo Linux Security Advisory knowledge store.
 
 Parses advisories from a Portage tree's `metadata/glsa/` directory into
 Prolog facts (optionally qcompiled as `Knowledge/glsa.qlf`, following the
-profile-cache pattern).  Advisories are *not* a package repository: entry
-identity remains CPVN on portage/pkg/binpkg.  This module is a sibling
-knowledge artifact queried via `glsa:search/2`, with thin bridges into
-package `query:search` (`vulnerable/1`, `glsa/1`).
+profile-cache pattern).  Raw `github.com/gentoo/gentoo` trees omit that
+directory; `--sync` clones `config:glsa_remote/1` into it.  Advisories
+are *not* a package repository: entry identity remains CPVN on
+portage/pkg/binpkg.  This module is a sibling knowledge artifact queried
+via `glsa:search/2`, with thin bridges into package `query:search`
+(`vulnerable/1`, `glsa/1`).
 
 Security computed sets (`@security`, …) expand through `sets:expand/2` by
 calling `glsa:security_atoms/2`, which joins these facts against the VDB
@@ -41,21 +43,35 @@ semantics by default).
 %  Configuration and paths
 % -----------------------------------------------------------------------------
 
-%! glsa:directory(-Dir) is semidet.
+%! glsa:source_dir(-Dir) is semidet.
 %
-% Returns the on-disk GLSA directory. Prefers `config:glsa_dir/1`, else
+% Target path for GLSA XML. Prefers `config:glsa_dir/1`, else
 % `$PORTDIR/metadata/glsa` from the registered portage repository.
 
-glsa:directory(Dir) :-
+glsa:source_dir(Dir) :-
   current_predicate(config:glsa_dir/1),
-  config:glsa_dir(Dir0),
-  !,
-  Dir = Dir0.
-glsa:directory(Dir) :-
+  config:glsa_dir(Dir),
+  !.
+glsa:source_dir(Dir) :-
   catch(portage:get_location(Root), _, fail),
-  !,
-  atomic_list_concat([Root, '/metadata/glsa'], Dir),
+  atomic_list_concat([Root, '/metadata/glsa'], Dir).
+
+
+%! glsa:directory(-Dir) is semidet.
+%
+% Succeeds when the on-disk GLSA directory already exists.
+
+glsa:directory(Dir) :-
+  glsa:source_dir(Dir),
   exists_directory(Dir).
+
+
+%! glsa:git_dir(+Dir, -GitDir) is det.
+%
+% Git metadata directory inside a GLSA checkout.
+
+glsa:git_dir(Dir, GitDir) :-
+  atomic_list_concat([Dir, '/.git'], GitDir).
 
 
 %! glsa:injected_file(-File) is det.
@@ -110,18 +126,55 @@ glsa:cache_available :-
 %! glsa:cache_save is det.
 %
 % Parse `metadata/glsa/` and serialize facts to Knowledge/glsa.qlf.
-% No-ops with a notice when the GLSA directory is missing.
+% Raw git trees omit that directory; `--sync` then clones
+% `config:glsa_remote/1` into the source path. No-ops with a notice
+% when the directory is still missing after that attempt.
 
 glsa:cache_save :-
-  ( glsa:directory(Dir) ->
-      nl,
-      message:header(['Syncing security advisories']), nl,
+  nl,
+  message:header(['Syncing security advisories']), nl,
+  ( glsa:ensure_directory(Dir) ->
       glsa:parse_directory(Dir, Advisories, Packages, Ranges),
       glsa:write_cache(Advisories, Packages, Ranges),
       length(Advisories, N),
       format('% Updated ~w security advisories~n', [N])
   ; format(user_error, '% glsa:cache_save — no metadata/glsa directory, skipping.~n', [])
   ).
+
+
+%! glsa:ensure_directory(-Dir) is semidet.
+%
+% Resolve a usable GLSA XML directory. An existing git checkout is
+% pulled; an rsync-populated tree is left as-is; a missing directory
+% is cloned from `config:glsa_remote/1`.
+
+glsa:ensure_directory(Dir) :-
+  glsa:source_dir(Dir),
+  exists_directory(Dir),
+  glsa:git_dir(Dir, GitDir),
+  exists_directory(GitDir),
+  !,
+  glsa:sync_git(Dir),
+  exists_directory(Dir).
+glsa:ensure_directory(Dir) :-
+  glsa:source_dir(Dir),
+  exists_directory(Dir),
+  !.
+glsa:ensure_directory(Dir) :-
+  glsa:source_dir(Dir),
+  glsa:sync_git(Dir),
+  exists_directory(Dir).
+
+
+%! glsa:sync_git(+Dir) is det.
+%
+% Clone or pull the official GLSA git repo into Dir.
+
+glsa:sync_git(Dir) :-
+  config:glsa_remote(Remote),
+  file_directory_name(Dir, Parent),
+  ( exists_directory(Parent) -> true ; make_directory_path(Parent) ),
+  script:exec_streaming(sync, [git, Remote, Dir], []).
 
 
 %! glsa:cache_load is semidet.

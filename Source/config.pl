@@ -312,6 +312,15 @@ config:set_dir(Dir) :-
 % config:glsa_dir('/path/to/metadata/glsa').
 
 
+%! config:glsa_remote(-Url)
+%
+% Git remote used by `--sync` when `$PORTDIR/metadata/glsa` is missing
+% (raw `github.com/gentoo/gentoo` trees omit GLSAs; rsync / gentoo-mirror
+% trees already ship them). Official low-volume data repo.
+
+config:glsa_remote('https://anongit.gentoo.org/git/data/glsa.git').
+
+
 %! config:glsa_injected_file(-File)
 %
 % Path of the glsa_injected applied-ID file (Portage PRIVATE_PATH equivalent).
