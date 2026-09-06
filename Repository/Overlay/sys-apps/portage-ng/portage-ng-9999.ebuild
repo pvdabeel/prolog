@@ -17,11 +17,13 @@ IUSE="graph"
 
 PROPERTIES="live"
 
-# SWI-Prolog provides the runtime. Optional components required by
-# portage-ng (see Documentation/Handbook/02-doc-installation.md):
-# ssl, pcre, cli (editline), gmp.
+# SWI-Prolog provides the runtime. Components required by portage-ng
+# (see Documentation/Handbook/02-doc-installation.md): ssl, pcre, gmp.
+# Line editing is optional: SWI USE=cli (libedit) or USE=readline
+# (GNU readline) enables --shell history. Neither is required for
+# --pretend / --merge.
 RDEPEND="
-	>=dev-lang/swi-prolog-10.0.0[cli,gmp,pcre,ssl]
+	>=dev-lang/swi-prolog-10.0.0[gmp,pcre,ssl]
 	>=app-shells/bash-5
 	dev-libs/openssl
 	dev-vcs/git

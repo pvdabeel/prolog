@@ -10,7 +10,7 @@ metadata extraction, and distfile verification.
 
 | **Dependency** | **Minimum version** | **Purpose** |
 |:---|:---|:---|
-| **SWI-Prolog** | 10.0.0 | Runtime interpreter.  Must be built with SSL, PCRE, editline, HTTP, crypto, and pengines support. |
+| **SWI-Prolog** | 10.0.0 | Runtime interpreter.  Must be built with SSL, PCRE, HTTP, crypto, and pengines support.  Line editing (libedit or GNU readline) is optional; see below. |
 | **bash** | 5 | Metadata extraction via `ebuild-depend.sh` and helper scripts. |
 | **git** | any | Repository syncing (`--sync` with git protocol), version display. |
 | **curl** | any | Mirror/distfile downloads, HTTP-based repository sync. |
@@ -55,8 +55,15 @@ components are enabled (they are usually built by default):
 - **OpenSSL** — required for `library(crypto)`, `library(ssl)`,
   `library(http/http_ssl_plugin)`
 - **PCRE** — required for `library(pcre)` (used in EAPI parsing)
-- **GNU Readline / Editline** — required for `library(editline)`
-  (interactive shell)
+- **libedit or GNU readline** — optional.  Needed only for `--shell`
+  line editing and history.  portage-ng loads `library(editline)` first
+  and falls back to `library(readline)`.  `--shell` still starts if
+  neither is present; up-arrow history is then unavailable.
+  `--pretend` and `--merge` do not need either library.
+  On Gentoo these are `dev-libs/libedit` (BSD libedit; SWI `USE=cli`)
+  or `sys-libs/readline` (SWI `USE=readline`).  Do not confuse BSD
+  libedit with `dev-libs/editline` (Minix editline), which SWI does
+  not use.
 - **libgmp** — required for arbitrary-precision arithmetic
 - **zlib** — required for qcompiled file support (`Knowledge/kb.qlf`)
 
